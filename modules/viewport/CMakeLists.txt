@@ -1,0 +1,33 @@
+add_library(
+    elf3d_viewport
+    STATIC
+        include/elf3d/viewport/offscreen_viewport.h
+        src/offscreen_viewport.cpp
+)
+add_library(elf3d::viewport ALIAS elf3d_viewport)
+
+target_compile_features(elf3d_viewport PUBLIC cxx_std_20)
+target_include_directories(
+    elf3d_viewport
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_link_libraries(
+    elf3d_viewport
+    PUBLIC
+        elf3d_graphics
+        elf3d_math
+        elf3d_core
+)
+set_target_properties(
+    elf3d_viewport
+    PROPERTIES
+        FOLDER "Elf3D/Internal"
+        POSITION_INDEPENDENT_CODE ON
+)
+
+elf3d_enable_warnings(elf3d_viewport)
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

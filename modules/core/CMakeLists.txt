@@ -1,0 +1,23 @@
+add_library(
+    elf3d_core
+    STATIC
+        include/elf3d/core/version_data.h
+        src/version_data.cpp
+)
+add_library(elf3d::core ALIAS elf3d_core)
+
+target_compile_features(elf3d_core PUBLIC cxx_std_20)
+target_include_directories(
+    elf3d_core
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/include
+)
+set_target_properties(
+    elf3d_core
+    PROPERTIES
+        FOLDER "Elf3D/Internal"
+        POSITION_INDEPENDENT_CODE ON
+)
+
+elf3d_enable_warnings(elf3d_core)

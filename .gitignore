@@ -1,0 +1,6 @@
+/out/
+/.vs/
+/CMakeUserPresets.json
+/imgui.ini
+*.user
+*.suo
