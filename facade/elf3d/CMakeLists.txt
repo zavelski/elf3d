@@ -19,6 +19,18 @@ target_link_libraries(
         elf3d_math
         elf3d_graphics
         elf3d_backend_opengl
+        elf3d_assets
+        elf3d_scene
+        elf3d_interaction
+        elf3d_navigation
+        elf3d_picking
+        elf3d_tool_selection
+        elf3d_tool_visibility
+        elf3d_tool_measurement
+        elf3d_tool_clipping
+        elf3d_clipping
+        elf3d_gltf
+        elf3d_renderer
         elf3d_viewport
 )
 set_target_properties(

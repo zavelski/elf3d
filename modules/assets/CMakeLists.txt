@@ -1,0 +1,29 @@
+add_library(
+    elf3d_assets
+    STATIC
+        include/elf3d/assets/handle_access.h
+        include/elf3d/assets/storage.h
+        src/storage.cpp
+)
+add_library(elf3d::assets ALIAS elf3d_assets)
+
+target_compile_features(elf3d_assets PUBLIC cxx_std_20)
+target_include_directories(
+    elf3d_assets
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(elf3d_assets PUBLIC elf3d_math elf3d_core)
+set_target_properties(
+    elf3d_assets
+    PROPERTIES
+        FOLDER "Elf3D/Internal"
+        POSITION_INDEPENDENT_CODE ON
+)
+
+elf3d_enable_warnings(elf3d_assets)
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

@@ -13,7 +13,7 @@ target_include_directories(
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-target_link_libraries(elf3d_graphics PUBLIC elf3d_core)
+target_link_libraries(elf3d_graphics PUBLIC elf3d_clipping elf3d_core)
 set_target_properties(
     elf3d_graphics
     PROPERTIES

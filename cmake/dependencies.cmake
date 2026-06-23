@@ -8,6 +8,9 @@ set(ELF3D_IMGUI_BRANCH "docking")
 set(ELF3D_IMGUI_COMMIT_SHA "036bf939b6f8d74ad76bcf926b757c56e68c54ff")
 set(ELF3D_GLFW_VERSION "3.4")
 set(ELF3D_GLFW_COMMIT_SHA "a74efa0d5628b74adc0426af4c5710e287fa7c2c")
+set(ELF3D_CGLTF_VERSION "1.15")
+set(ELF3D_CGLTF_COMMIT_SHA "360db1a95480fe102ae9c69b27c5d101167ff5ba")
+set(ELF3D_STB_COMMIT_SHA "31c1ad37456438565541f4919958214b6e762fb4")
 
 set(GLM_BUILD_LIBRARY OFF CACHE BOOL "" FORCE)
 set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -21,6 +24,26 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(glm)
+
+FetchContent_Declare(
+    cgltf
+    GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+    GIT_TAG ${ELF3D_CGLTF_COMMIT_SHA}
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
+
+FetchContent_MakeAvailable(cgltf)
+
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG ${ELF3D_STB_COMMIT_SHA}
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
+
+FetchContent_MakeAvailable(stb)
 
 add_library(
     elf3d_third_party_glad

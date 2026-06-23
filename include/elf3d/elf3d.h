@@ -4,9 +4,16 @@
 #include <elf3d/core/api.h>
 #include <elf3d/core/result.h>
 #include <elf3d/core/version.h>
+#include <elf3d/clipping.h>
 #include <elf3d/graphics.h>
+#include <elf3d/measurement.h>
+#include <elf3d/navigation.h>
+#include <elf3d/picking.h>
+#include <elf3d/scene.h>
+#include <elf3d/selection.h>
 #include <elf3d/viewport.h>
 
+#include <filesystem>
 #include <memory>
 
 namespace elf3d {
@@ -38,6 +45,11 @@ class ELF3D_API Engine {
     [[nodiscard]] bool graphics_initialized() const noexcept;
 
     [[nodiscard]] Result<std::unique_ptr<Viewport>> create_viewport(Extent2D initial_extent);
+    // The Engine must outlive every Scene and Viewport created from it.
+    [[nodiscard]] Result<std::unique_ptr<Scene>> create_scene();
+    // Loading is synchronous. The existing scene, if any, is not modified.
+    [[nodiscard]] Result<std::unique_ptr<Scene>> load_scene(const std::filesystem::path &path,
+                                                            const SceneLoadOptions &options = {});
 
     // Native texture access is non-owning and requires the owning graphics
     // thread with a compatible host OpenGL context current.

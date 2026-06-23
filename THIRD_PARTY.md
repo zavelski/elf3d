@@ -55,3 +55,35 @@ The upstream license notice is preserved in `third_party/licenses/glm-copying.tx
 
 The generator was invoked with `--api gl:core=4.1 --extensions " " --reproducible c`.
 The upstream license notice is preserved in `third_party/licenses/glad-LICENSE.txt`.
+
+## cgltf
+
+- Official repository: <https://github.com/jkuhlmann/cgltf.git>
+- Stable release: `v1.15`
+- Pinned commit: `360db1a95480fe102ae9c69b27c5d101167ff5ba`
+- Release inspected: 2026-06-22
+- License: MIT
+- Integration: CMake FetchContent plus a dedicated `elf3d_third_party_cgltf`
+  static target
+- Scope: private dependency of the internal `elf3d_gltf` target only
+
+`CGLTF_IMPLEMENTATION` is defined in exactly one private project source file,
+`modules/gltf/src/cgltf_implementation.cpp`. cgltf headers and types do not
+propagate through Elf3D public interfaces. The upstream license notice is
+preserved in `third_party/licenses/cgltf-LICENSE.txt`.
+
+## stb
+
+- Official repository: <https://github.com/nothings/stb.git>
+- Pinned commit: `31c1ad37456438565541f4919958214b6e762fb4`
+- Revision inspected: 2026-06-22 (commit dated 2026-04-15)
+- License: MIT or public domain, at the user's choice
+- Integration: CMake FetchContent plus a dedicated `elf3d_third_party_stb` static target
+- Enabled decoder formats: PNG and JPEG only
+- Scope: private implementation dependency of the internal `elf3d_image` target only
+
+`STB_IMAGE_IMPLEMENTATION` is defined in exactly one private project source file,
+`modules/image/src/stb_image_implementation.cpp`. The same file limits stb_image
+to PNG and JPEG. stb headers and types do not propagate through Elf3D public
+interfaces. The upstream license notice is preserved in
+`third_party/licenses/stb-LICENSE.txt`.

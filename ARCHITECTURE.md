@@ -410,6 +410,10 @@ GLM types and configuration must not become part of the public DLL ABI.
 
 The public Elf3D API uses Elf3D-owned value types.
 
+The project convention is that one world-space unit equals one meter. Systems
+that report physical distances use meters as their canonical value and may
+leave display-unit formatting to the host or a narrow tool helper.
+
 ### 9.3 `elf3d_scene`
 
 `elf3d_scene` owns the logical scene representation.
@@ -434,6 +438,35 @@ backend.
 
 The scene must not depend on the renderer.
 
+The scene must not own or depend on Viewport clipping state. Scene visibility
+and Viewport clipping are separate filters that are composed by higher-level
+Viewport operations.
+
+### 9.3.1 `elf3d_clipping`
+
+`elf3d_clipping` provides neutral low-level clipping data and algorithms.
+
+Responsibilities include:
+
+- section-plane normalization and half-space evaluation;
+- world-axis-aligned clipping-box validation;
+- combined point-filter evaluation;
+- conservative bounds classification;
+- conservative clipped-bounds calculation;
+- fixed-size renderer-friendly clipping data.
+
+It may depend on `elf3d_core` and `elf3d_math`.
+
+It must not depend on:
+
+- Scene;
+- Renderer;
+- Picking;
+- Viewport tool state;
+- Dear ImGui;
+- GLFW;
+- native graphics APIs.
+
 ### 9.4 `elf3d_assets`
 
 `elf3d_assets` owns engine-side asset data and resource descriptors.
@@ -449,6 +482,13 @@ Expected responsibilities include:
 - CPU-side resource preparation.
 
 Asset ownership and GPU resource ownership are separate concerns.
+
+### 9.4.1 `elf3d_image`
+
+`elf3d_image` performs bounded PNG/JPEG decoding into Elf3D-owned RGBA8
+values. It isolates stb_image, has no glTF dependency, and exposes no stb types.
+glTF resolves encoded image sources and calls this module; Assets owns the
+resulting decoded pixels.
 
 ### 9.5 `elf3d_gltf`
 
@@ -540,6 +580,29 @@ Several viewports may display the same scene.
 
 A viewport does not require shared ownership of its scene.
 
+Persistent entity visibility belongs to `Scene` and affects every viewport that
+observes that scene. Temporary subtree isolation belongs to one `Viewport`; it
+does not rewrite Scene visibility and does not affect other viewports. Renderer,
+picking, visible-bounds queries, and navigation fitting consume a neutral
+visibility filter so they share the same visible-in-viewport definition.
+
+Point-to-point measurement state also belongs to one `Viewport`. Measurement
+anchors reference Scene geometry through stable scene, entity, mesh, primitive,
+triangle, and barycentric identifiers; they do not own the Scene or copy mesh
+geometry. The renderer consumes only neutral overlay line and marker primitives
+produced from resolved measurement state. Dear ImGui, when present, renders the
+screen-space measurement label in the host layer after projecting the
+measurement midpoint through the public Viewport API.
+
+Section and clipping state also belongs to one `Viewport`. A Viewport may own
+one optional world-space section plane, up to three world-axis-aligned clipping
+boxes, retained-side policy, helper visibility, helper styling, and a clipping
+revision. Scene visibility, Viewport isolation, and Viewport clipping are
+independent; Renderer, Picking, Measurement, visible-bounds queries, and camera
+fit/reset consume one neutral clipping filter after visibility and isolation
+are resolved. Clipping does not modify Scene hierarchy, Scene visibility, mesh
+geometry, material data, picking BVHs, or measurement anchors.
+
 ### 9.10 `elf3d_interaction`
 
 `elf3d_interaction` defines common interaction concepts used by navigation and
@@ -615,6 +678,19 @@ A tool must not create application GUI.
 The host application may create Dear ImGui panels that configure and display the
 state of an engine tool.
 
+The initial distance-measurement tool is a built-in static module. It stores one
+in-progress or completed point-to-point measurement per Viewport, derives
+anchors from existing picking results, resolves current world positions through
+Scene and Asset queries, reports canonical distances in meters, and generates
+backend-neutral overlay data. It must not depend on Dear ImGui, GLFW, OpenGL, or
+private renderer implementation types.
+
+The initial section/clipping tool is also a built-in static module. It owns only
+Viewport clipping state and commands, initializes boxes from current visible
+Scene bounds without retaining Scene ownership, and generates backend-neutral
+helper overlay primitives. Renderer and Picking consume only the neutral
+`elf3d_clipping` filter; they must not depend on the clipping tool module.
+
 ### 9.14 Module and plugin infrastructure
 
 Module registration and runtime plugin loading are separate concerns.
@@ -671,6 +747,9 @@ Mandatory dependency rules:
 - scene and assets must not depend on glTF;
 - `renderer` may read scene and asset data;
 - renderer-specific types must not leak back into Scene;
+- scene must not depend on clipping;
+- renderer and picking may depend on neutral `elf3d_clipping`;
+- renderer and picking must not depend on `elf3d_tool_clipping`;
 - graphics abstraction must not contain Scene policy;
 - native backend types must remain inside backend boundaries;
 - navigation and tools must not depend on Dear ImGui;
@@ -865,16 +944,24 @@ The initial rendering implementation should be deliberately small:
 - depth testing;
 - indexed triangles;
 - node transforms;
-- basic normals;
+- normals and `TEXCOORD_0`;
 - base-color factor and texture;
-- one simple directional light;
+- metallic-roughness factors and texture;
+- one compact directional-light metallic-roughness PBR shader;
 - ambient contribution;
 - back-face culling;
 - viewport resize;
 - background clear.
 
-Full PBR, shadows, image-based lighting, advanced transparency, animation, and
-post-processing are later features.
+Viewport clipping is implemented as fixed-size world-space clipping state:
+Renderer broad-phase culls fully rejected model-primitive bounds, intersecting
+geometry remains submitted, and the existing material shader discards fragments
+that fail the neutral clipping filter. Clipping changes must not rewrite Scene
+geometry, mutate materials, rebuild picking BVHs, or recreate immutable GPU mesh
+and texture resources.
+
+Image-based lighting, advanced material extensions, shadows, transparency,
+animation, and post-processing are later features.
 
 ## 17. Input Model
 
@@ -934,6 +1021,13 @@ Only one exclusive viewport tool is normally active at a time.
 Passive features such as selection highlighting or diagnostics may coexist with
 an active tool.
 
+The initial active Viewport tool set is deliberately small: selection and
+distance measurement. Navigation keeps priority over active tools for orbit,
+pan, and zoom; a plain click below the drag threshold is routed to the active
+tool on release. Clipping is a persistent per-Viewport feature rather than an
+exclusive pointer tool; its public commands may be driven by a host panel while
+ordinary navigation, selection, and measurement remain explicit.
+
 The first likely tool modules are:
 
 1. selection;
@@ -979,6 +1073,8 @@ The initial glTF scope should include:
 - `TEXCOORD_0`;
 - base-color factor;
 - base-color texture.
+- metallic and roughness factors;
+- metallic-roughness texture.
 
 Animation, skins, morph targets, compression extensions, KTX2, and advanced
 material extensions are introduced separately.
@@ -1427,6 +1523,9 @@ Add:
 
 Add:
 
+- `elf3d_assets`;
+- `elf3d_scene`;
+- `elf3d_renderer`;
 - `Scene`;
 - entity or node hierarchy;
 - transforms;
@@ -1439,7 +1538,6 @@ Add:
 
 Add:
 
-- `elf3d_assets`;
 - `elf3d_gltf`;
 - cgltf integration;
 - `.gltf` and `.glb` loading;
@@ -1481,12 +1579,21 @@ Add:
 
 Add:
 
-- common tool contract;
 - measurement tool as a built-in static module;
 - overlay rendering;
 - viewer controls.
 
-### Stage 7: Plugin experiment
+### Stage 7: Section and clipping
+
+Add:
+
+- neutral clipping math and fixed-size filter data;
+- one section plane and up to three axis-aligned clipping boxes per Viewport;
+- shader clipping and Renderer broad-phase rejection;
+- clipping-aware Picking, Selection, Measurement, visible bounds, fit, and reset;
+- helper overlays and public viewer controls.
+
+### Stage 8: Plugin experiment
 
 After the tool contract is stable:
 

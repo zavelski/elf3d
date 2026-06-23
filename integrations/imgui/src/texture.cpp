@@ -37,4 +37,27 @@ Result<void> image(const NativeTextureView &texture, Float2 display_size) noexce
     return {};
 }
 
+Result<void> draw_image(const NativeTextureView &texture, Float2 top_left_screen_position,
+                        Float2 display_size) noexcept {
+    if (texture.api != NativeGraphicsApi::opengl) {
+        return Error{ErrorCode::backend_mismatch,
+                     "The Dear ImGui integration requires an OpenGL native texture"};
+    }
+    if (!texture.is_valid()) {
+        return Error{ErrorCode::texture_unavailable,
+                     "The native texture view is invalid or unavailable"};
+    }
+    if (display_size.x <= 0.0F || display_size.y <= 0.0F) {
+        return {};
+    }
+
+    const ImTextureID texture_id = to_imgui_texture_id<ImTextureID>(texture.value);
+    ImGui::GetWindowDrawList()->AddImage(
+        texture_id, ImVec2{top_left_screen_position.x, top_left_screen_position.y},
+        ImVec2{top_left_screen_position.x + display_size.x,
+               top_left_screen_position.y + display_size.y},
+        ImVec2{0.0F, 1.0F}, ImVec2{1.0F, 0.0F});
+    return {};
+}
+
 } // namespace elf3d::imgui

@@ -47,5 +47,55 @@ int main() {
         return 5;
     }
 
+    elf3d::Transform rotated_transform;
+    rotated_transform.rotation =
+        elf3d::Quaternion{0.0F, std::sin(0.7853981634F), 0.0F, std::cos(0.7853981634F)};
+    const elf3d::math::Vector4 rotated = elf3d::math::transform_matrix(rotated_transform) *
+                                         elf3d::math::Vector4{0.0F, 0.0F, -1.0F, 0.0F};
+    if (!nearly_equal(rotated.x, -1.0F) || !nearly_equal(rotated.y, 0.0F) ||
+        !nearly_equal(rotated.z, 0.0F)) {
+        return 6;
+    }
+
+    elf3d::Transform camera_transform;
+    camera_transform.translation = {0.0F, 0.0F, 3.0F};
+    camera_transform.scale = {2.0F, 3.0F, 4.0F};
+    const elf3d::Result<elf3d::math::Matrix4> view =
+        elf3d::math::camera_view_matrix(elf3d::math::transform_matrix(camera_transform));
+    if (!view) {
+        return 7;
+    }
+    const elf3d::math::Vector4 camera_space_origin =
+        view.value() * elf3d::math::Vector4{0.0F, 0.0F, 0.0F, 1.0F};
+    if (!nearly_equal(camera_space_origin.x, 0.0F) || !nearly_equal(camera_space_origin.y, 0.0F) ||
+        !nearly_equal(camera_space_origin.z, -3.0F)) {
+        return 8;
+    }
+
+    const elf3d::Result<elf3d::math::Matrix4> projection =
+        elf3d::math::perspective_matrix(1.5707963268F, 1.0F, 1.0F, 10.0F);
+    if (!projection || !nearly_equal(projection.value()[0][0], 1.0F) ||
+        !nearly_equal(projection.value()[1][1], 1.0F) ||
+        !nearly_equal(projection.value()[2][3], -1.0F)) {
+        return 9;
+    }
+    const elf3d::math::Vector4 near_clip =
+        projection.value() * elf3d::math::Vector4{0.0F, 0.0F, -1.0F, 1.0F};
+    const elf3d::math::Vector4 far_clip =
+        projection.value() * elf3d::math::Vector4{0.0F, 0.0F, -10.0F, 1.0F};
+    if (!nearly_equal(near_clip.z / near_clip.w, -1.0F) ||
+        !nearly_equal(far_clip.z / far_clip.w, 1.0F)) {
+        return 10;
+    }
+
+    elf3d::Transform scaled_transform;
+    scaled_transform.scale = {2.0F, 4.0F, 5.0F};
+    const elf3d::Result<elf3d::math::Matrix3> normals =
+        elf3d::math::normal_matrix(elf3d::math::transform_matrix(scaled_transform));
+    if (!normals || !nearly_equal(normals.value()[0][0], 0.5F) ||
+        !nearly_equal(normals.value()[1][1], 0.25F) || !nearly_equal(normals.value()[2][2], 0.2F)) {
+        return 11;
+    }
+
     return 0;
 }

@@ -1,0 +1,5 @@
+add_executable(elf3d_clipping_test clipping_test.cpp)
+target_link_libraries(elf3d_clipping_test PRIVATE elf3d_clipping)
+set_target_properties(elf3d_clipping_test PROPERTIES FOLDER "Elf3D/Tests")
+elf3d_enable_warnings(elf3d_clipping_test)
+add_test(NAME elf3d.clipping COMMAND elf3d_clipping_test)
