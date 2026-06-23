@@ -5,19 +5,22 @@ validated.
 
 Applicable version: 0.1.0
 
-Document status: Verified from CMake presets, test targets, and Goal 3/4
-validation on 2026-06-23.
+Document status: Living testing guide, updated for public CI and release
+packaging preparation on 2026-06-23.
 
-Last verified Git commit: `8504068`
+Last verified Git commit: pending final publication validation
 
-Implementation source paths: `CMakePresets.json`, `tests`,
+Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
+`.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
 `modules/*/tests`, `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`
 
-Known limitations: No CI workflow is present. Manual viewer interaction and
-visual rendering were not validated during the recorded automated runs.
+Known limitations: GitHub Actions workflows have been added for public
+publication, but remote CI has not been verified until the repository is pushed.
+Manual viewer interaction and visual rendering must be validated separately.
 
 Related documents: `MODULE_MAP.md`, `USER_GUIDE.md`,
-`PERFORMANCE_BASELINE.md`, `audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`
+`PERFORMANCE_BASELINE.md`, `audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
+`releases/0.1.0/RELEASE_ARTIFACTS.md`
 
 ## Environment
 
@@ -53,6 +56,11 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtens
 
 The matching `ctest.exe` is in the same directory.
 
+The Debug and Release presets use separate build directories:
+
+- `out/build/windows-debug`
+- `out/build/windows-release`
+
 ## Test Targets
 
 | CTest name | Executable | Coverage |
@@ -76,6 +84,41 @@ The matching `ctest.exe` is in the same directory.
 
 Debug and Release both passed 16 of 16 tests after the Goal 4 lifetime fix.
 Goal 7 repeated Debug and Release configure/build/CTest successfully.
+
+## GitHub Actions
+
+The public CI workflow is `.github/workflows/ci.yml`.
+
+It runs on Windows x64 and uses the checked-in CMake presets:
+
+- `windows-debug`
+- `windows-release`
+
+Each job configures, builds, and runs CTest. Remote CI must be verified after
+publication before the GitHub Release is created.
+
+The release workflow is `.github/workflows/release.yml`. It runs on `v*` tags
+and manual dispatch, verifies the 0.1.0 version, configures and builds Release,
+runs CTest, creates the Windows viewer package, uploads workflow artifacts, and
+creates a GitHub Release for tag-triggered runs when no release already exists.
+
+## Release Packaging
+
+Local package command after a successful Release build:
+
+```powershell
+.\scripts\package_release.ps1 -Version 0.1.0
+```
+
+Expected outputs:
+
+```text
+out/release/elf3d-viewer-0.1.0-windows-x64.zip
+out/release/SHA256SUMS.txt
+```
+
+SDK packaging is deferred for 0.1.0 because install/export rules and an
+external consumer validation workflow are not yet implemented.
 
 ## Public Header Self-Containment
 

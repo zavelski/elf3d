@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest a focused Elf3D capability.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Use case
+      description: Describe the workflow or limitation this feature would address.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful vertical slice.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Public API
+        - glTF import
+        - Rendering
+        - Viewport/navigation
+        - Picking/selection
+        - Measurement/clipping
+        - Viewer
+        - Build/CI/packaging
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: model
+    attributes:
+      label: Model characteristics, if relevant
+      description: Do not upload confidential, customer-owned, or license-ambiguous models.
+      placeholder: "Format, geometry size, materials, textures, extensions"
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation expectations
+      placeholder: "Tests, viewer checks, performance needs, platform requirements"

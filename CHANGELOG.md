@@ -3,13 +3,9 @@
 All notable project changes are recorded here when they are relevant to a
 release baseline.
 
-## 0.1.0 - Release Candidate Audit Snapshot
+## 0.1.0 - Public Release Baseline
 
-Release decision: Not ready due to release blockers.
-
-Elf3D 0.1.0 has a validated local audit branch baseline, but it has not been
-merged to `develop`, copied to `main`, or tagged as `v0.1.0`. Manual visual
-viewer validation remains incomplete.
+Elf3D 0.1.0 is the first audited public visualization baseline.
 
 ### Implemented
 
@@ -40,6 +36,9 @@ viewer validation remains incomplete.
 - Added the living `PROJECT_STATE_EN.md` baseline.
 - Added audit, validation, remediation, and release-readiness records.
 - Added documentation maintenance policy and update checklist.
+- Added public repository documentation, contribution guidance, security
+  reporting guidance, issue templates, and pull-request template.
+- Added the MIT project license while preserving separate third-party notices.
 
 ### Validation
 
@@ -53,7 +52,7 @@ viewer validation remains incomplete.
   `tests/fixtures/textured_pbr.gltf`, remained alive for five seconds, and were
   intentionally terminated by the smoke script.
 
-### Known Issues and Limitations
+### Known Limitations
 
 - Manual visual viewer validation has not been performed; rendering
   correctness, navigation, picking, selection, visibility, isolation,

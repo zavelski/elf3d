@@ -12,8 +12,8 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`
 
-Known limitations: This index is not a release snapshot. The 0.1.0
-release-candidate snapshot is under `releases/0.1.0/`.
+Known limitations: This index is not a release snapshot. The 0.1.0 release
+records are under `releases/0.1.0/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 `audits/ELF3D_0.1.0_AUDIT.md`
@@ -40,6 +40,8 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `releases/0.1.0/VALIDATION_SUMMARY.md`
 - `releases/0.1.0/KNOWN_LIMITATIONS.md`
 - `releases/0.1.0/RELEASE_CHECKLIST.md`
+- `releases/0.1.0/PUBLICATION_PRECHECK.md`
+- `releases/0.1.0/PUBLIC_CONTENT_AUDIT.md`
 
 ## Audit Documents
 
@@ -51,6 +53,6 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 ## Current Release Readiness
 
-0.1.0 is not tagged yet. The Goal 7 decision is
-`Not ready due to release blockers` because manual visual viewer validation has
-not been performed. Goal 8 must not be executed until that blocker is closed.
+Publication readiness is tracked in `releases/0.1.0/RELEASE_CHECKLIST.md` and
+`releases/0.1.0/PUBLICATION_PRECHECK.md`. Do not publish from local state unless
+the final checklist records `GO — ready for public publication`.
