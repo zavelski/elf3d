@@ -19,13 +19,12 @@ libraries, OpenGL is isolated in the backend, Dear ImGui and GLFW are confined
 to the viewer and optional ImGui integration layer, and public headers do not
 expose ImGui, GLFW, GLM, cgltf, GLAD, or OpenGL object types.
 
-The repository is not release-ready in the current audit environment. Two
-release gates are blocked before a 0.1.0 tag can be justified:
+The repository is not release-ready yet. Two release gates are blocked before a
+0.1.0 tag can be justified:
 
 - The requested `PROJECT_STATE_EN.md` baseline is absent, so the claimed state
   cannot be compared to the repository.
-- CMake is not installed or not on `PATH` in this environment, so configure,
-  build, CTest, warning review, and viewer launch validation could not be run.
+- The scene cache-release lifetime hazard in AUD-003 remains unresolved.
 
 The most important implementation risk is lifetime enforcement around
 `Scene` destruction. The public contract says the creating `Engine` must
@@ -40,6 +39,10 @@ The rest of the audited slice is generally consistent with the stated 0.1.0
 scope: static glTF geometry, opaque metallic-roughness material rendering,
 off-screen OpenGL viewport rendering, CPU picking, selection, distance
 measurement, scene visibility, viewport isolation, and clipping.
+
+Build and automated test validation passed in Goal 3 after locating Visual
+Studio's bundled CMake/CTest executables. Manual visual viewer validation has
+not been performed.
 
 Release gate: **blocked**.
 
@@ -60,8 +63,9 @@ that name exists anywhere under `Z:/Elf3D`.
 
 ## 3. Methodology
 
-The audit used static inspection because the configured CMake validation path
-is unavailable in this environment.
+The initial audit used static inspection. Goal 3 then performed configure,
+build, automated test, and non-interactive viewer startup validation with the
+Visual Studio bundled CMake and CTest executables.
 
 Reviewed sources:
 
@@ -88,16 +92,20 @@ Static checks performed:
 - Reviewed declared tests and their target coverage.
 - Attempted the documented configure command.
 
-Validation attempted:
+Validation executed:
 
 ```powershell
-cmake --preset windows-debug
-Get-Command cmake -All
-where.exe cmake
+cmake --fresh --preset windows-debug
+cmake --build --preset windows-debug
+ctest --preset windows-debug --output-on-failure
+cmake --fresh --preset windows-release
+cmake --build --preset windows-release
+ctest --preset windows-release --output-on-failure
 ```
 
-All CMake discovery/configure attempts failed because `cmake` is not available
-on `PATH`.
+The shell did not have `cmake` or `ctest` on `PATH`, but Visual Studio's bundled
+CMake 3.31.6 and CTest 3.31.6 were found and used by absolute path. The full
+validation record is in `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`.
 
 ## 4. Confirmed Architecture
 
@@ -235,7 +243,7 @@ Declared CTest coverage includes:
 - viewport lifetime
 - glTF importer
 
-These tests could not be executed in this environment because CMake is missing.
+These tests passed in both Debug and Release during Goal 3 validation.
 
 ## 6. Discrepancy Register
 
@@ -260,25 +268,27 @@ These tests could not be executed in this environment because CMake is missing.
 - Suggested stage: Goal 4/5 documentation remediation
 - Suggested commit: `docs: add verified Elf3D 0.1.0 project state`
 
-### AUD-002: Build and Test Validation Blocked
+### AUD-002: CMake/CTest Were Not on PATH During Initial Audit
 
-- Severity: Critical
-- Classification: Unverified / release blocker
+- Severity: Informational
+- Classification: Resolved validation environment issue
 - Affected files: `CMakePresets.json`, all configured targets
 - Expected: Configure, build affected targets, run relevant tests, inspect
   warnings, and launch the viewer when required.
-- Actual: `cmake` is not available in the current environment.
-- Evidence: `cmake --preset windows-debug`, `Get-Command cmake -All`, and
-  `where.exe cmake` failed with command-not-found results.
-- Risk: Compilation errors, warnings, CTest failures, runtime OpenGL failures,
-  and viewer regressions may exist but remain undetected.
-- Recommended correction: Run the documented preset workflow from a Visual
-  Studio Developer PowerShell or another environment with CMake 3.25+ and
-  Visual Studio 2022 C++ tools installed.
+- Actual: `cmake` and `ctest` were not on this PowerShell `PATH`, but Visual
+  Studio's bundled CMake/CTest executables existed under the VS installation and
+  were usable by absolute path.
+- Evidence: `where.exe cmake` and `where.exe ctest` failed; the executables were
+  found at `C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/`.
+  Debug and Release configure/build/CTest then passed using those paths.
+- Risk: Developers using a plain shell may see command-not-found failures even
+  when Visual Studio CMake is installed.
+- Recommended correction: Optionally document how to use Visual Studio's bundled
+  CMake or recommend launching a VS Developer PowerShell with CMake on `PATH`.
 - Should code change: No
-- Should docs change: No, unless prerequisites are incomplete after validation
-- Suggested stage: Goal 3 validation
-- Suggested commit: none unless validation finds code or documentation issues
+- Should docs change: Optional
+- Suggested stage: Goal 5 testing documentation
+- Suggested commit: `docs: document Visual Studio bundled CMake usage`
 
 ### AUD-003: Scene Cache-Release Callback Has Dangling-Context Failure Mode
 
@@ -415,8 +425,9 @@ These tests could not be executed in this environment because CMake is missing.
   release notes, supported feature matrix, known limitations, validation matrix,
   and user-visible API/lifetime notes.
 - Actual: `README.md`, `ARCHITECTURE.md`, `CODING_POLICY.md`, and
-  `THIRD_PARTY.md` are present and useful, but there is no verified project
-  state document, release notes, validation report, or focused API/usage guide.
+  `THIRD_PARTY.md` are present and useful, and Goal 3 added an audit
+  validation matrix. There is still no verified project-state document,
+  release notes, release snapshot, or focused API/usage guide.
 - Evidence: Repository inventory lists no release-specific docs beyond the
   newly added audit inventory.
 - Risk: Users cannot distinguish confirmed 0.1.0 behavior from future design
@@ -430,16 +441,15 @@ These tests could not be executed in this environment because CMake is missing.
 
 ## 7. Release Blockers
 
-The following items block a 0.1.0 release tag from this audit environment:
+The following items block a 0.1.0 release tag at this point:
 
 - AUD-001: Missing `PROJECT_STATE_EN.md` or equivalent verified state baseline.
-- AUD-002: Configure/build/test/viewer validation could not be executed because
-  CMake is unavailable.
 - AUD-003: Scene release callback lifetime hazard should be fixed or explicitly
   accepted before release because it sits on the public ownership boundary.
 
 AUD-004 may also block release if the intended 0.1.0 public API promises
 host-visible import warnings rather than temporary `std::clog` diagnostics.
+Manual visual viewer validation also remains required before a release tag.
 
 ## 8. Non-Blocking Issues
 
@@ -495,8 +505,7 @@ The following issues do not block a 0.1.0 release if documented accurately:
    This should produce a verified project-state document, release notes,
    feature matrix, known limitations, ABI/lifetime notes, and validation matrix.
 
-4. Run the full validation workflow in an environment with CMake and Visual
-   Studio C++ tools:
+4. Rerun the full validation workflow after remediation:
 
 ```powershell
 cmake --preset windows-debug
