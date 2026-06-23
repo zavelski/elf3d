@@ -49,6 +49,12 @@ rules are defined in `docs/DOCUMENTATION_POLICY.md` and
 is recorded under `docs/releases/0.1.0/`; it is not tagged because manual visual
 viewer validation remains incomplete.
 
+## License
+
+Elf3D original source code is licensed under the MIT License. See `LICENSE`.
+Third-party components remain governed by their own licenses and notices, which
+are documented separately in `THIRD_PARTY.md`.
+
 ## Graphics initialization and lifetime
 
 The host creates and makes an OpenGL 4.1 core context current, then passes a

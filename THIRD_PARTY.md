@@ -4,6 +4,10 @@ Dependencies are fetched from their official repositories by CMake FetchContent
 and pinned to reproducible revisions. Project warning-as-error settings are not
 applied to their implementation files.
 
+Elf3D original source code is licensed under the MIT License in the root
+`LICENSE` file. Third-party components listed here remain governed by their own
+licenses and are not relicensed as Elf3D source code.
+
 ## Dear ImGui
 
 - Official repository: <https://github.com/ocornut/imgui.git>
