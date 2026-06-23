@@ -223,5 +223,15 @@ int main() {
     loaded.reset();
     std::filesystem::remove_all(directory, filesystem_error);
 
+    std::unique_ptr<elf3d::Engine> lifetime_engine = std::make_unique<elf3d::Engine>();
+    elf3d::Result<std::unique_ptr<elf3d::Scene>> late_scene_result =
+        lifetime_engine->create_scene();
+    if (!late_scene_result) {
+        return 14;
+    }
+    std::unique_ptr<elf3d::Scene> late_scene = std::move(late_scene_result).value();
+    lifetime_engine.reset();
+    late_scene.reset();
+
     return 0;
 }

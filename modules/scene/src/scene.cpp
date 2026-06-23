@@ -61,25 +61,39 @@ std::uint64_t SceneHierarchySnapshot::visibility_revision() const noexcept {
     return impl_ != nullptr ? impl_->visibility_revision : 0;
 }
 
+Scene::ReleaseContext::ReleaseContext(std::weak_ptr<void> context,
+                                      ReleaseCallback callback) noexcept
+    : context_(std::move(context)), callback_(callback) {}
+
+void Scene::ReleaseContext::release(SceneId scene) const noexcept {
+    if (callback_ == nullptr) {
+        return;
+    }
+    const std::shared_ptr<void> context = context_.lock();
+    if (context == nullptr) {
+        return;
+    }
+    callback_(context, scene);
+}
+
 class Scene::Impl final {
   public:
-    Impl(SceneId id, ReleaseCallback release_callback, void *release_context) noexcept
-        : storage(id), release_callback(release_callback), release_context(release_context) {}
+    Impl(SceneId id, std::shared_ptr<ReleaseContext> release_context) noexcept
+        : storage(id), release_context(std::move(release_context)) {}
 
     ~Impl() {
-        if (release_callback != nullptr) {
-            release_callback(release_context, storage.id());
+        if (release_context != nullptr) {
+            release_context->release(storage.id());
         }
     }
 
     scene::Storage storage;
-    ReleaseCallback release_callback = nullptr;
-    void *release_context = nullptr;
+    std::shared_ptr<ReleaseContext> release_context;
 };
 
 Result<std::unique_ptr<Scene>> Scene::create(std::uintptr_t engine_token, std::uint64_t scene_value,
-                                             ReleaseCallback release_callback,
-                                             void *release_context) noexcept {
+                                             std::shared_ptr<ReleaseContext> release_context)
+    noexcept {
     if (engine_token == 0 || scene_value == 0) {
         return Error{ErrorCode::invalid_argument,
                      "Scene creation requires a valid engine identity"};
@@ -87,7 +101,7 @@ Result<std::unique_ptr<Scene>> Scene::create(std::uintptr_t engine_token, std::u
     try {
         const SceneId id = detail::SceneHandleAccess::create_scene(engine_token, scene_value);
         return std::unique_ptr<Scene>{
-            new Scene{std::make_unique<Impl>(id, release_callback, release_context)}};
+            new Scene{std::make_unique<Impl>(id, std::move(release_context))}};
     } catch (...) {
         return Error{ErrorCode::unexpected_exception,
                      "Scene creation failed while allocating storage"};

@@ -196,12 +196,24 @@ class ELF3D_API Scene final {
     friend class scene::Access;
 
     class Impl;
-    using ReleaseCallback = void (*)(void *context, SceneId scene) noexcept;
+    class ReleaseContext final {
+      public:
+        using ReleaseCallback =
+            void (*)(const std::shared_ptr<void> &context, SceneId scene) noexcept;
+
+        ReleaseContext(std::weak_ptr<void> context, ReleaseCallback callback) noexcept;
+        void release(SceneId scene) const noexcept;
+
+      private:
+        std::weak_ptr<void> context_;
+        ReleaseCallback callback_ = nullptr;
+    };
+
     explicit Scene(std::unique_ptr<Impl> impl) noexcept;
     [[nodiscard]] static Result<std::unique_ptr<Scene>> create(std::uintptr_t engine_token,
                                                                std::uint64_t scene_value,
-                                                               ReleaseCallback release_callback,
-                                                               void *release_context) noexcept;
+                                                               std::shared_ptr<ReleaseContext>
+                                                                   release_context) noexcept;
 
     std::unique_ptr<Impl> impl_;
 };
