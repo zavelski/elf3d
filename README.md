@@ -40,6 +40,13 @@ The engine library has no dependency on Dear ImGui or GLFW. GLM is internal to
 `elf3d_backend_opengl`. The host application owns the window, event loop,
 OpenGL context, Dear ImGui context, GUI, and frame presentation.
 
+## Documentation
+
+The verified technical documentation set starts at `docs/README.md`. The living
+project-state baseline is `PROJECT_STATE_EN.md`. Documentation maintenance
+rules are defined in `docs/DOCUMENTATION_POLICY.md` and
+`docs/DOCUMENTATION_UPDATE_CHECKLIST.md`.
+
 ## Graphics initialization and lifetime
 
 The host creates and makes an OpenGL 4.1 core context current, then passes a

@@ -6,7 +6,7 @@ Applicable version: 0.1.0
 
 Document status: Living index, created from the 0.1.0 audit branch.
 
-Last verified Git commit: `8504068`
+Last verified Git commit: `145bbdd`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
@@ -30,6 +30,8 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `PERFORMANCE_BASELINE.md`: measurement status and benchmark procedure.
 - `ROADMAP.md`: release blockers, 0.1.x corrections, future candidates.
 - `USER_GUIDE.md`: actual viewer usage and limitations.
+- `DOCUMENTATION_POLICY.md`: documentation ownership and review rules.
+- `DOCUMENTATION_UPDATE_CHECKLIST.md`: task checklist for documentation updates.
 
 ## Audit Documents
 
@@ -43,4 +45,4 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 0.1.0 is not tagged yet. Remaining gates are release snapshot preparation,
 manual viewer validation, release checklist completion, and the final release
-decision in Goals 6 and 7.
+decision in Goal 7.
