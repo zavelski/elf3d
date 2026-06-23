@@ -19,12 +19,11 @@ libraries, OpenGL is isolated in the backend, Dear ImGui and GLFW are confined
 to the viewer and optional ImGui integration layer, and public headers do not
 expose ImGui, GLFW, GLM, cgltf, GLAD, or OpenGL object types.
 
-The repository is not release-ready yet. The remaining release gates are
-documentation and manual validation gates:
+The repository is not release-ready yet. The remaining release gates are final
+release preparation and manual validation gates:
 
-- The requested `PROJECT_STATE_EN.md` baseline is absent, so the claimed state
-  cannot be compared to the repository.
-- The verified release documentation set and release snapshot are incomplete.
+- `PROJECT_STATE_EN.md` has been created after the audit, but the immutable
+  0.1.0 release snapshot is not yet complete.
 - Manual visual viewer validation has not been performed.
 
 The highest-risk implementation finding was lifetime enforcement around
@@ -249,23 +248,25 @@ These tests passed in both Debug and Release during Goal 3 validation.
 ### AUD-001: Missing Claimed-State Baseline
 
 - Severity: Critical
-- Classification: Missing artifact / release blocker
+- Classification: Corrected documentation gap
 - Affected files: `PROJECT_STATE_EN.md`
 - Expected: The audit request references `PROJECT_STATE_EN.md` as the claimed
   repository state to compare against the actual repository.
-- Actual: No `PROJECT_STATE_EN.md` file exists under `Z:/Elf3D`.
+- Previous actual: No `PROJECT_STATE_EN.md` file existed under `Z:/Elf3D`.
 - Evidence: `rg --files -g 'PROJECT_STATE*'` and a recursive filesystem search
   returned no matches.
-- Risk: The audit cannot prove whether the repository matches its intended
+- Correction: Goal 5 created `PROJECT_STATE_EN.md` from the verified repository
+  inventory, audit, remediation, and validation records.
+- Risk before correction: The audit could not prove whether the repository matches its intended
   release baseline. Release notes or tags based on an absent baseline would be
   ungrounded.
-- Recommended correction: Create a verified `PROJECT_STATE_EN.md` from the
-  inventory and audit results, or update the release process to name the real
-  baseline artifact.
+- Recommended correction: Completed for the living project-state document.
+  Goal 7 still needs to create the immutable release snapshot under
+  `docs/releases/0.1.0/`.
 - Should code change: No
-- Should docs change: Yes
-- Suggested stage: Goal 4/5 documentation remediation
-- Suggested commit: `docs: add verified Elf3D 0.1.0 project state`
+- Should docs change: Completed for Goal 5; release snapshot remains pending
+- Suggested stage: Goal 5 documentation, Goal 7 release snapshot
+- Suggested commit: Goal 5 documentation commit
 
 ### AUD-002: CMake/CTest Were Not on PATH During Initial Audit
 
@@ -345,8 +346,9 @@ These tests passed in both Debug and Release during Goal 3 validation.
   warning callback in `SceneLoadOptions`, or explicitly document `std::clog`
   warning behavior as a temporary 0.1.0 limitation.
 - Should code change: Preferred yes
-- Should docs change: Yes if not fixed for 0.1.0
-- Suggested stage: Goal 4 or Goal 5
+- Should docs change: Completed for 0.1.0 limitation documentation; code
+  enhancement remains deferred
+- Suggested stage: Goal 5 documentation; future API revision if needed
 - Suggested commit: `feat: expose scene import warnings through the public API`
 
 ### AUD-005: `baseColorFactor` Alpha Is Not Imported Despite Broad README Wording
@@ -367,12 +369,13 @@ These tests passed in both Debug and Release during Goal 3 validation.
   alpha is forced to `1.0`; README says `baseColorFactor` without qualification.
 - Risk: Host applications inspecting material descriptions may believe glTF
   alpha was preserved. Documentation overstates the imported material subset.
-- Recommended correction: For 0.1.0, update docs to say RGB `baseColorFactor`
-  is imported and alpha is ignored/opaque. Alternatively import the alpha value
-  into `MaterialDescription` while documenting that rendering remains opaque.
+- Recommended correction: Completed in Goal 5 documentation by stating that
+  RGB `baseColorFactor` is imported and alpha is ignored/opaque. Alternatively,
+  a future implementation may import the alpha value while documenting that
+  rendering remains opaque.
 - Should code change: Optional
-- Should docs change: Yes
-- Suggested stage: Goal 5 documentation
+- Should docs change: Completed
+- Suggested stage: Goal 5 documentation, completed
 - Suggested commit: `docs: clarify opaque glTF base color alpha behavior`
 
 ### AUD-006: C++ DLL Compatibility Expectations Are Not Explicit Enough
@@ -391,12 +394,11 @@ These tests passed in both Debug and Release during Goal 3 validation.
   `std::optional`, `std::span`, `std::string_view`, and `Result<T>`.
 - Risk: Consumers may assume toolchain-independent ABI compatibility that the
   API does not provide.
-- Recommended correction: Add release documentation that defines supported
-  compiler/runtime compatibility for 0.1.0 and identifies any future C ABI as a
-  separate design.
+- Recommended correction: Completed in Goal 5 documentation for the living docs.
+  Goal 7 release snapshot should carry the same ABI note.
 - Should code change: No for 0.1.0
-- Should docs change: Yes
-- Suggested stage: Goal 5 documentation
+- Should docs change: Completed for living docs
+- Suggested stage: Goal 5 documentation, completed; Goal 7 release snapshot
 - Suggested commit: `docs: state Elf3D 0.1.0 C++ ABI compatibility limits`
 
 ### AUD-007: GPU Resource Destruction Depends on Host Shutdown Order
@@ -414,14 +416,14 @@ These tests passed in both Debug and Release during Goal 3 validation.
   deletion; README and public comments require context-current destruction.
 - Risk: Incorrect host shutdown can leak GL resources. The current behavior
   avoids invalid GL calls, but it can hide the shutdown error.
-- Recommended correction: Keep the current contract, add a release-note
-  limitation, and consider debug diagnostics for skipped GL deletion later.
+- Recommended correction: Completed in Goal 5 living documentation. Goal 7
+  release notes should carry the same shutdown limitation.
 - Should code change: Optional
-- Should docs change: Yes
-- Suggested stage: Goal 5 documentation
+- Should docs change: Completed for living docs
+- Suggested stage: Goal 5 documentation, completed; Goal 7 release snapshot
 - Suggested commit: `docs: document OpenGL resource shutdown requirements`
 
-### AUD-008: Release Documentation Set Is Incomplete
+### AUD-008: Release Snapshot Is Incomplete
 
 - Severity: Medium
 - Classification: Missing release documentation
@@ -430,26 +432,26 @@ These tests passed in both Debug and Release during Goal 3 validation.
   release notes, supported feature matrix, known limitations, validation matrix,
   and user-visible API/lifetime notes.
 - Actual: `README.md`, `ARCHITECTURE.md`, `CODING_POLICY.md`, and
-  `THIRD_PARTY.md` are present and useful, and Goal 3 added an audit
-  validation matrix. There is still no verified project-state document,
-  release notes, release snapshot, or focused API/usage guide.
+  `THIRD_PARTY.md` are present and useful. Goal 3 added an audit validation
+  matrix, and Goal 5 added the living technical documentation set plus
+  `PROJECT_STATE_EN.md`. The immutable 0.1.0 release snapshot and release notes
+  are still pending Goal 7.
 - Evidence: Repository inventory lists no release-specific docs beyond the
   newly added audit inventory.
 - Risk: Users cannot distinguish confirmed 0.1.0 behavior from future design
   intent, and release reviewers cannot trace validation status.
-- Recommended correction: Add the Goal 5 documentation set after remediation
-  and validation.
+- Recommended correction: Create the Goal 7 release snapshot under
+  `docs/releases/0.1.0/` and add `CHANGELOG.md`.
 - Should code change: No
 - Should docs change: Yes
-- Suggested stage: Goal 5 documentation
-- Suggested commit: `docs: add Elf3D 0.1.0 release documentation`
+- Suggested stage: Goal 7 release preparation
+- Suggested commit: `release: prepare Elf3D 0.1.0`
 
 ## 7. Release Blockers
 
 The following items block a 0.1.0 release tag at this point:
 
-- AUD-001: Missing `PROJECT_STATE_EN.md` or equivalent verified state baseline.
-- AUD-008: Verified release documentation and release snapshot are incomplete.
+- AUD-008: The immutable 0.1.0 release snapshot and release notes are incomplete.
 
 AUD-004 may also block release if the intended 0.1.0 public API promises
 host-visible import warnings rather than temporary `std::clog` diagnostics.
@@ -462,7 +464,7 @@ The following issues do not block a 0.1.0 release if documented accurately:
 - AUD-005: glTF base color alpha is ignored/opaque.
 - AUD-006: C++ DLL ABI compatibility limits need explicit release wording.
 - AUD-007: OpenGL resource destruction requires correct host shutdown order.
-- AUD-008: Release documentation set is incomplete until Goal 5.
+- AUD-008: Release snapshot remains incomplete until Goal 7.
 
 ## 9. Documentation Mismatches
 
@@ -475,7 +477,9 @@ The following issues do not block a 0.1.0 release if documented accurately:
   documented limitation.
 - The 0.1.0 C++ ABI compatibility expectations are not stated plainly enough
   for consumers of a DLL.
-- The requested `PROJECT_STATE_EN.md` does not exist.
+- The requested `PROJECT_STATE_EN.md` was absent during the initial audit and
+  has since been created as a living project-state document; the release
+  snapshot remains pending Goal 7.
 
 ## 10. Deferred Design Questions
 
@@ -501,9 +505,9 @@ The following issues do not block a 0.1.0 release if documented accurately:
    path and tests. If not, document `std::clog` warning behavior as a temporary
    limitation.
 
-2. Update documentation for AUD-001, AUD-003, AUD-005, AUD-006, AUD-007, and AUD-008.
-   This should produce a verified project-state document, release notes,
-   feature matrix, known limitations, ABI/lifetime notes, and validation matrix.
+2. Complete release preparation documentation for AUD-008.
+   This should produce release notes, an immutable release snapshot, known
+   limitations, ABI/lifetime notes, and a release checklist.
 
 3. Rerun the full validation workflow after documentation and any remaining
    remediation:
