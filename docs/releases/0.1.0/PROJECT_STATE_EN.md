@@ -1,20 +1,20 @@
 # Elf3D 0.1.0 Release Snapshot Project State
 
-Purpose: Immutable release-candidate snapshot of the verified Elf3D 0.1.0
-project state.
+Purpose: Publication-prep snapshot of the verified Elf3D 0.1.0 project state.
 
 Applicable version: 0.1.0
 
-Document status: Release snapshot, not a living document.
+Document status: Publication-prep release snapshot.
 
-Last verified implementation commit before release snapshot: `79fd4bc`
+Last verified implementation commit before current validation: `eeb39cd`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
-`CMakePresets.json`, `README.md`, `THIRD_PARTY.md`
+`CMakePresets.json`, `README.md`, `LICENSE`, `THIRD_PARTY.md`, `.github`,
+`scripts`
 
-Known limitations: The release is not tagged because manual visual viewer
-validation has not been performed.
+Known limitations: The release is not tagged or published because full manual
+viewer interaction validation has not been performed.
 
 Related documents: `AUDIT_SUMMARY.md`, `VALIDATION_SUMMARY.md`,
 `KNOWN_LIMITATIONS.md`, `RELEASE_CHECKLIST.md`, `../../../PROJECT_STATE_EN.md`
@@ -25,11 +25,11 @@ Related documents: `AUDIT_SUMMARY.md`, `VALIDATION_SUMMARY.md`,
 - Public library: `elf3d.dll`
 - Optional integration: `elf3d_imgui`
 - Reference app: `elf3d_viewer`
-- Release-candidate branch: `audit/0.1.0`
+- Release-preparation branch: `audit/0.1.0`
 - Pre-audit checkpoint: `f8fe3a827bc81dadb461e58bdbe846958dab346a`
-- Remotes during audit: none configured
-- Tags during audit: none present
-- Release decision: Not ready due to release blockers
+- Remotes during publication precheck: none configured
+- Tags during publication precheck: none present
+- Release decision: `NO-GO — publication blocked`
 
 ## Implemented Vertical Slice
 
@@ -73,27 +73,28 @@ Completed on 2026-06-23:
 - Release configure/build passed.
 - Release CTest passed 16 of 16.
 - Public header self-containment check passed for all public headers under
-  `include/elf3d`.
-- Debug viewer process started with `tests/fixtures/textured_pbr.gltf` and
-  remained alive for five seconds.
-- Release viewer process started with `tests/fixtures/textured_pbr.gltf` and
-  remained alive for five seconds.
+  `include/elf3d` during earlier audit validation.
+- Debug and Release viewer processes opened `tests/fixtures/textured_pbr.gltf`
+  and exited cleanly through the window close path.
+- Release viewer screenshot showed the project-owned fixture rendered.
+- Windows viewer ZIP package and checksum were created and inspected.
+- Extracted packaged viewer started outside the build tree and exited cleanly.
 
 Not validated:
 
-- manual visual rendering correctness
-- manual navigation, picking, selection, measurement, clipping interaction
-- normal user-driven viewer shutdown
-- performance benchmark metrics
+- full manual viewer navigation, picking, selection, visibility, isolation,
+  measurement, clipping, reload, close-scene, and failed-load interaction
+  coverage
+- performance measurements
 - external model corpus
-- CI
+- remote CI
+- public clone test
 
 ## Release Decision
 
-`Not ready due to release blockers`
+`NO-GO — publication blocked`
 
 Remaining blocker:
 
-- Manual visual viewer validation has not been performed. The viewer process
-  smoke test does not prove rendering correctness, interaction behavior, or
-  normal user-driven shutdown.
+- Full manual viewer interaction validation has not been performed. The viewer
+  smoke test and screenshot do not prove the complete GUI interaction matrix.

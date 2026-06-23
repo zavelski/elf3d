@@ -1,61 +1,72 @@
 # Elf3D 0.1.0 Release Checklist
 
-Purpose: Record the release-readiness decision for the Elf3D 0.1.0 release
-candidate.
+Purpose: Record the release-readiness decision for publishing Elf3D 0.1.0.
 
 Applicable version: 0.1.0
 
-Document status: Release snapshot checklist.
+Document status: Publication release checklist.
 
-Last verified implementation commit before release snapshot: `79fd4bc`
+Last verified implementation commit: `eeb39cdb2a9e92e61001a00d11cbe1880716f921`
 
 Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
-`include/elf3d`, `modules`, `facade/elf3d`, `apps/viewer`, `tests`,
+`.github/workflows`, `scripts/package_release.ps1`, `include/elf3d`,
+`modules`, `facade/elf3d`, `apps/viewer`, `tests`, `LICENSE`,
 `THIRD_PARTY.md`, `docs`
 
-Known limitations: The checklist blocks release because manual visual viewer
-validation has not been performed.
+Known limitations: Public publication is blocked until the full manual viewer
+interaction matrix is completed and recorded.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
-`VALIDATION_SUMMARY.md`, `KNOWN_LIMITATIONS.md`
+`VALIDATION_SUMMARY.md`, `KNOWN_LIMITATIONS.md`, `PUBLICATION_PRECHECK.md`,
+`PUBLIC_CONTENT_AUDIT.md`, `RELEASE_ARTIFACTS.md`
 
 ## Decision
 
-`Not ready due to release blockers`
+`NO-GO — publication blocked`
 
-Do not execute Goal 8. Do not merge to `develop`, create `main`, or create the
-annotated `v0.1.0` tag while the blocker below remains.
+Do not create `v0.1.0`, push branches or tags, create the GitHub Release, or
+upload release assets while the blocker below remains.
 
 ## Checklist
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Clean Git state before release docs | Passed | `git status --short --ignored` showed only ignored `imgui.ini` and `out/`. |
-| Version consistency | Passed | CMake project version, runtime version data, public API test, viewer About path, and docs refer to `0.1.0`. |
-| Debug configure | Passed | `cmake --fresh --preset windows-debug`. |
-| Debug build | Passed | `cmake --build --preset windows-debug`; no warning diagnostics observed. |
+| Public content audit | Passed | `PUBLIC_CONTENT_AUDIT.md` found no content blockers. |
+| Project license | Passed | Root `LICENSE` is standard MIT with `Copyright (c) 2026 Serge Zavelski`; README identifies MIT. |
+| Third-party licenses | Passed | `THIRD_PARTY.md` and `third_party/licenses/` preserve dependency notices separately. |
+| Clean tracked-file hygiene | Passed | Build outputs and local runtime files are ignored; no tracked large/generated binaries found. |
+| Version consistency | Passed | CMake, runtime version data, public API test, docs, package filenames, and release notes use `0.1.0`. |
+| Debug configure | Passed | Fresh `windows-debug` preset configured. |
+| Debug build | Passed | `cmake --build --preset windows-debug`. |
 | Debug tests | Passed | `ctest --preset windows-debug --output-on-failure`; 16/16 passed. |
-| Release configure | Passed | `cmake --fresh --preset windows-release`. |
-| Release build | Passed | `cmake --build --preset windows-release`; no warning diagnostics observed. |
+| Release configure | Passed with local workaround | Fresh `windows-release` preset configured after temporary per-process Git safe-directory entries for generated FetchContent checkouts on `Z:`. |
+| Release build | Passed | `cmake --build --preset windows-release`. |
 | Release tests | Passed | `ctest --preset windows-release --output-on-failure`; 16/16 passed. |
-| Public-header self-containment | Passed | All public headers under `include/elf3d` compiled individually as forced includes with MSVC C++20, `/permissive-`, `/W4`, `/WX`. |
-| Viewer smoke test | Passed with limitation | Debug and Release viewers stayed alive for five seconds with `tests/fixtures/textured_pbr.gltf`, then were intentionally terminated. |
-| glTF fixture loading | Partially verified | Viewer process accepted the fixture path and remained alive; visual rendering was not inspected. |
-| OpenGL shutdown | Not verified | Smoke test terminated the process; normal user-driven shutdown was not validated. |
-| Documentation completeness | Passed | Required path check covered 43 paths; Markdown link check covered 31 Markdown files. |
-| Known limitations | Passed | Documented in `KNOWN_LIMITATIONS.md` and `CHANGELOG.md`. |
-| Audit blockers | Blocked | Manual visual viewer validation remains incomplete. |
-| License files | Passed by audit | `THIRD_PARTY.md` records pinned dependencies and license notice files. |
-| Tag readiness | Failed | Release decision is `Not ready due to release blockers`. |
+| Viewer smoke test | Passed with limitation | Debug and Release viewers opened the project-owned fixture and exited with code 0 after `CloseMainWindow()`. |
+| Visual fixture rendering | Passed with limitation | Screenshot showed the fixture rendered in the Release viewer. |
+| Manual viewer interaction matrix | Not tested | Navigation, picking, selection, visibility, isolation, measurement, and clipping were not manually exercised end to end. |
+| OpenGL shutdown | Partially verified | Window close path returned exit code 0 for Debug, Release, and packaged Release viewer. |
+| Release archive inspection | Passed | ZIP file contents matched `RELEASE_ARTIFACTS.md`. |
+| Checksums | Passed | `SHA256SUMS.txt` generated and verified against the ZIP. |
+| SDK package | Not applicable | Deferred for 0.1.0; no SDK archive is produced. |
+| Documentation | Passed with limitation | Public docs, release notes, CI docs, and package docs were updated; older audit docs remain historical. |
+| Remote repository safety | Not tested | GitHub repository inspection not run because local decision is no-go. |
+| Tag correctness | Not tested | `v0.1.0` is not created while no-go remains. |
+| GitHub CI | Not tested | Workflows are committed locally but not run remotely. |
+| GitHub Release | Not tested | Release not created. |
+| Clone test | Not tested | Public repository not published. |
 
 ## Remaining Blocker
 
-- Manual visual viewer validation has not been performed. Required manual
-  coverage: startup and shutdown, procedural cube rendering, fixture rendering,
-  failed-load preservation, orbit, pan, wheel dolly, fit, reset, picking,
-  selection, hierarchy visibility, isolation, distance measurement, section
-  plane, clipping boxes, reload, close scene, and OpenGL shutdown behavior.
+- Full manual viewer interaction validation has not been performed. Required
+  coverage: failed-load preservation, orbit, pan, wheel dolly, fit, reset,
+  picking, selection, hierarchy visibility, isolation, distance measurement,
+  section plane, clipping boxes, reload, and close scene.
 
-## Goal 8 Status
+## Publication Status
 
-Goal 8 is intentionally not executed.
+Publication is intentionally stopped before Goal 7. The local preparation
+commits are preserved. Resume publication only after the remaining manual
+viewer interaction validation is completed and this checklist records:
+
+`GO — ready for public publication`

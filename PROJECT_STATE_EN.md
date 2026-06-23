@@ -1,25 +1,27 @@
 # Elf3D 0.1.0 Project State
 
-Purpose: Verified project-state baseline for the current 0.1.0 audit branch.
+Purpose: Verified project-state baseline for the current 0.1.0 publication
+preparation branch.
 
 Applicable version: 0.1.0
 
-Document status: Living project-state document created because the requested
-`PROJECT_STATE_EN.md` was absent during Goal 1.
+Document status: Living project-state document.
 
-Last verified implementation commit before release snapshot: `79fd4bc`
+Last verified implementation commit before current validation: `eeb39cd`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
-`CMakePresets.json`, `README.md`, `THIRD_PARTY.md`
+`CMakePresets.json`, `README.md`, `LICENSE`, `THIRD_PARTY.md`, `.github`,
+`scripts`
 
-Known limitations: The immutable release snapshot exists under
-`docs/releases/0.1.0/`, but the release is not tagged because manual visual
-viewer validation has not been performed.
+Known limitations: Release records exist under `docs/releases/0.1.0/`, but the
+release is not tagged or published because full manual viewer interaction
+validation has not been performed.
 
 Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
-`docs/releases/0.1.0/PROJECT_STATE_EN.md`
+`docs/releases/0.1.0/PROJECT_STATE_EN.md`,
+`docs/releases/0.1.0/RELEASE_CHECKLIST.md`
 
 ## Repository State
 
@@ -27,11 +29,12 @@ Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 - Public library: `elf3d.dll`
 - Optional integration: `elf3d_imgui`
 - Reference app: `elf3d_viewer`
-- Current audit branch: `audit/0.1.0`
+- Current preparation branch: `audit/0.1.0`
 - Pre-audit checkpoint: `f8fe3a827bc81dadb461e58bdbe846958dab346a`
-- Latest documentation policy commit before release snapshot: `79fd4bc`
-- Remotes: none configured during audit
-- Tags: none present during audit
+- Latest local publication-prep commit before validation: `eeb39cd`
+- Remotes: none configured during publication precheck
+- Tags: none present during publication precheck
+- Release decision: `NO-GO — publication blocked`
 
 ## Implemented Vertical Slice
 
@@ -72,26 +75,31 @@ Confirmed boundaries:
 
 Completed validation:
 
-- Debug configure/build passed.
+- Debug configure/build passed in a fresh `windows-debug` tree.
 - Debug CTest passed 16 of 16.
-- Release configure/build passed.
+- Release configure/build passed in a separate `windows-release` tree.
 - Release CTest passed 16 of 16.
-- Debug viewer process started with `tests/fixtures/textured_pbr.gltf` and
-  remained alive for five seconds.
-- Release viewer process started with `tests/fixtures/textured_pbr.gltf` and
-  remained alive for five seconds.
+- Debug viewer opened `tests/fixtures/textured_pbr.gltf` and exited with code 0
+  after `CloseMainWindow()`.
+- Release viewer opened `tests/fixtures/textured_pbr.gltf`, rendered the
+  fixture in a captured screenshot, and exited with code 0 after
+  `CloseMainWindow()`.
+- `elf3d-viewer-0.1.0-windows-x64.zip` and `SHA256SUMS.txt` were created and
+  inspected.
+- The packaged viewer opened from an extracted ZIP directory and exited with
+  code 0 after `CloseMainWindow()`.
 - Public headers compiled individually as forced includes with MSVC C++20,
-  `/permissive-`, `/W4`, and `/WX`.
-- The release snapshot was created under `docs/releases/0.1.0/`.
+  `/permissive-`, `/W4`, and `/WX` during earlier audit validation.
+- Publication-prep release records were updated under `docs/releases/0.1.0/`.
 
 Not yet validated:
 
-- manual visual rendering correctness
-- manual navigation, picking, selection, measurement, clipping interaction
-- normal user-driven viewer shutdown
+- full manual navigation, picking, selection, measurement, clipping, reload,
+  close-scene, and failed-load interaction coverage
 - performance benchmark metrics
 - external model corpus
-- CI
+- remote CI
+- public clone test
 
 ## Remediated Audit Items
 
@@ -102,10 +110,12 @@ Not yet validated:
 
 ## Remaining Release Work
 
-- Manually validate the viewer.
+- Complete full manual viewer interaction validation.
 - Decide whether import warnings remain `std::clog` diagnostics for 0.1.x or
   need a public report API.
-- Create `v0.1.0` only if no release blockers remain.
+- Create `main`, update `develop`, and create `v0.1.0` only if no release
+  blockers remain.
+- Configure and verify `origin` only after a local `GO` decision.
 
 ## Known Limitations
 

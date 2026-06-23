@@ -1,29 +1,29 @@
 # Elf3D 0.1.0 Known Limitations
 
 Purpose: Record supported boundaries and known limitations for the 0.1.0
-release candidate.
+publication candidate.
 
 Applicable version: 0.1.0
 
-Document status: Release snapshot summary.
+Document status: Publication limitation register.
 
-Last verified implementation commit before release snapshot: `79fd4bc`
+Last verified implementation commit: `eeb39cdb2a9e92e61001a00d11cbe1880716f921`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `apps/viewer`, `docs/GLTF_SUPPORT.md`, `docs/RENDERING_PIPELINE.md`,
 `docs/LIFETIME_AND_THREADING.md`
 
-Known limitations: This document is itself the limitation register for the
-release candidate.
+Known limitations: This document is itself the limitation register.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `VALIDATION_SUMMARY.md`, `RELEASE_CHECKLIST.md`
 
-## Release Blocker
+## Publication Blocker
 
-- Manual visual viewer validation has not been performed. The release candidate
-  must not be integrated into `develop`, copied to `main`, or tagged until a
-  human verifies rendering, interaction, and normal shutdown behavior.
+- Full manual viewer interaction validation has not been performed. The viewer
+  starts, renders the project-owned fixture, and shuts down normally through
+  the window close path, but the complete GUI interaction matrix has not been
+  exercised for publication.
 
 ## Public API and ABI
 
@@ -69,7 +69,6 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
   physically based renderer.
 - No shadow maps, environment lighting, post-processing, transparency sorting,
   or multi-backend abstraction is release-ready.
-- Visual correctness has not been manually verified for the release candidate.
 
 ## Viewport and Tools
 
@@ -78,11 +77,12 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 - One section plane and up to three axis-aligned clipping boxes per viewport.
 - Navigation is mouse-based; no touch, gamepad, first-person, or keyboard
   navigation mode is implemented.
-- Tool behavior is covered by unit/component tests but not by manual viewer
-  validation in this release-candidate pass.
+- Tool behavior is covered by unit/component tests but not by complete manual
+  viewer interaction validation in this publication-prep pass.
 
-## Performance and CI
+## Packaging, CI, and Performance
 
+- SDK packaging is deferred for 0.1.0.
+- GitHub Actions workflows are committed locally but have not run remotely.
 - No benchmark numbers are claimed for 0.1.0.
-- No CI workflow was found or executed.
 - No external model corpus was validated.

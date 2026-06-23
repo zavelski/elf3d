@@ -7,15 +7,15 @@ Applicable version: 0.1.0
 
 Document status: Publication precheck record.
 
-Last verified implementation commit: `898d60fbd4928111f13f77f6c92c0d8d3c92292b`
+Last verified implementation commit: `eeb39cdb2a9e92e61001a00d11cbe1880716f921`
 
 Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `README.md`, `LICENSE`, `THIRD_PARTY.md`, `include/elf3d`, `modules`,
 `facade/elf3d`, `integrations/imgui`, `apps/viewer`, `tests`, `docs`
 
 Known limitations: This record was created before public publication, before
-final release validation, before creating `main`, before creating `v0.1.0`, and
-before configuring a GitHub remote.
+creating `main`, before creating `v0.1.0`, and before configuring a GitHub
+remote. It was updated after local build/test/package validation.
 
 Related documents: `PUBLIC_CONTENT_AUDIT.md`, `RELEASE_CHECKLIST.md`,
 `VALIDATION_SUMMARY.md`, `KNOWN_LIMITATIONS.md`, `../../../PROJECT_STATE_EN.md`
@@ -32,7 +32,7 @@ Related documents: `PUBLIC_CONTENT_AUDIT.md`, `RELEASE_CHECKLIST.md`,
 
 | Branch | State |
 | --- | --- |
-| `audit/0.1.0` | Present at `898d60fbd4928111f13f77f6c92c0d8d3c92292b`. |
+| `audit/0.1.0` | Present at `eeb39cdb2a9e92e61001a00d11cbe1880716f921` before final validation-record updates. |
 | `develop` | Present at `f8fe3a827bc81dadb461e58bdbe846958dab346a`. |
 | `main` | Missing locally at precheck time. |
 
@@ -58,7 +58,7 @@ public-release preparation changes were then made locally:
 - updated `THIRD_PARTY.md` to keep third-party licenses separate from the Elf3D
   project license.
 
-These changes must be committed before final publication validation.
+These changes were committed before final publication validation.
 
 ## Remote State
 
@@ -109,13 +109,10 @@ Current blockers before public publication:
 - local annotated `v0.1.0` tag is missing;
 - no GitHub remote is configured;
 - GitHub repository `zavelski/elf3d` has not been inspected or created;
-- GitHub Actions CI workflow is not yet present or verified remotely;
-- release packaging workflow and local release artifacts are not yet present or
-  verified;
-- final clean Debug and Release validation for this publication preparation has
-  not yet been run;
-- existing release-candidate checklist records manual visual viewer validation
-  as incomplete.
+- full manual viewer interaction validation remains incomplete;
+- GitHub Actions CI has not been run remotely;
+- tag-triggered release workflow has not been run remotely;
+- public clone test has not been run.
 
 ## Release-Readiness Conclusion
 
