@@ -19,21 +19,20 @@ libraries, OpenGL is isolated in the backend, Dear ImGui and GLFW are confined
 to the viewer and optional ImGui integration layer, and public headers do not
 expose ImGui, GLFW, GLM, cgltf, GLAD, or OpenGL object types.
 
-The repository is not release-ready yet. Two release gates are blocked before a
-0.1.0 tag can be justified:
+The repository is not release-ready yet. The remaining release gates are
+documentation and manual validation gates:
 
 - The requested `PROJECT_STATE_EN.md` baseline is absent, so the claimed state
   cannot be compared to the repository.
-- The scene cache-release lifetime hazard in AUD-003 remains unresolved.
+- The verified release documentation set and release snapshot are incomplete.
+- Manual visual viewer validation has not been performed.
 
-The most important implementation risk is lifetime enforcement around
-`Scene` destruction. The public contract says the creating `Engine` must
-outlive every `Scene`, but `Scene` stores a raw callback context pointing at
-`Engine::Impl`. If a host violates the documented destruction order, `Scene`
-destruction can call through a dangling pointer while trying to release
-renderer and picking caches. This is a contract violation by the host, but it
-is also a sharp DLL-boundary ownership failure mode and should be fixed or
-explicitly accepted before release.
+The highest-risk implementation finding was lifetime enforcement around
+`Scene` destruction. Goal 4 corrected that path by replacing the raw engine
+callback context with a private weak release context. Destroying a `Scene` after
+its `Engine` is still outside the documented host ownership order, but it no
+longer dereferences a freed `Engine::Impl` while releasing renderer and picking
+caches.
 
 The rest of the audited slice is generally consistent with the stated 0.1.0
 scope: static glTF geometry, opaque metallic-roughness material rendering,
@@ -290,34 +289,40 @@ These tests passed in both Debug and Release during Goal 3 validation.
 - Suggested stage: Goal 5 testing documentation
 - Suggested commit: `docs: document Visual Studio bundled CMake usage`
 
-### AUD-003: Scene Cache-Release Callback Has Dangling-Context Failure Mode
+### AUD-003: Scene Cache-Release Callback Had Dangling-Context Failure Mode
 
 - Severity: High
-- Classification: Ownership/lifetime risk
+- Classification: Corrected ownership/lifetime risk
 - Affected files: `include/elf3d/elf3d.h`, `include/elf3d/scene.h`,
   `facade/elf3d/src/engine.cpp`, `modules/scene/src/scene.cpp`
 - Expected: Objects created by Elf3D have explicit ownership and destruction
   rules across the DLL boundary, and invalid destruction order should not turn
   into a use-after-free hazard when a safer local mechanism is practical.
-- Actual: `Scene::Impl` stores a `ReleaseCallback` and raw `void*` context.
+- Previous actual: `Scene::Impl` stored a `ReleaseCallback` and raw `void*` context.
   `Engine::create_scene` passes `Engine::Impl*` as that context. `Scene::Impl`
   invokes the callback from its destructor to release renderer and picking
   caches. If a host destroys the `Engine` before a `Scene`, the documented
   contract has been violated, but the scene still contains a stale pointer.
-- Evidence: `Engine::create_scene` passes `impl_.get()` to `Scene::create`;
-  `Scene::Impl::~Impl` calls `release_callback(release_context, storage.id())`.
-- Risk: A host lifetime bug can become a crash or memory corruption during
+- Correction: Commit `7957aee` replaces the raw callback context with a private
+  `Scene::ReleaseContext` that stores a weak state token. Scene destruction
+  releases renderer and picking caches only when the engine release state is
+  still alive.
+- Evidence: `Engine::create_scene` now passes `impl_->scene_release_context` to
+  `Scene::create`; `Scene::Impl::~Impl` calls `release_context->release`, which
+  locks a weak state token before invoking the cache-release callback.
+- Risk before correction: A host lifetime bug could become a crash or memory corruption during
   scene destruction. The behavior is especially risky because the public API is
   intended to cross a DLL boundary.
-- Recommended correction: Replace the raw callback context with a small
-  reference-counted release state, weak release token, or other mechanism that
-  makes late `Scene` destruction a safe no-op after engine teardown. Add a test
-  covering out-of-contract destruction order if the chosen design makes it
-  safe, or document that the behavior is intentionally undefined.
-- Should code change: Preferred yes
-- Should docs change: Possibly, depending on accepted contract
+- Remaining risk: The documented ownership rule still requires hosts to destroy
+  `Scene` and `Viewport` objects before the creating `Engine`. The new public
+  lifetime smoke is not sanitizer-backed coverage for every invalid lifetime
+  sequence.
+- Recommended correction: Completed for 0.1.0. Keep the host ownership rule in
+  release documentation.
+- Should code change: Completed
+- Should docs change: Yes, document the ownership rule and the safer failure mode
 - Suggested stage: Goal 4 remediation
-- Suggested commit: `fix: make scene cache release lifetime-safe`
+- Suggested commit: Completed as `7957aee` (`fix: make scene cache release lifetime-safe`)
 
 ### AUD-004: Import Warnings Are Logged Instead of Returned
 
@@ -444,8 +449,7 @@ These tests passed in both Debug and Release during Goal 3 validation.
 The following items block a 0.1.0 release tag at this point:
 
 - AUD-001: Missing `PROJECT_STATE_EN.md` or equivalent verified state baseline.
-- AUD-003: Scene release callback lifetime hazard should be fixed or explicitly
-  accepted before release because it sits on the public ownership boundary.
+- AUD-008: Verified release documentation and release snapshot are incomplete.
 
 AUD-004 may also block release if the intended 0.1.0 public API promises
 host-visible import warnings rather than temporary `std::clog` diagnostics.
@@ -477,9 +481,9 @@ The following issues do not block a 0.1.0 release if documented accurately:
 
 - Should `Engine::load_scene` keep returning only `Scene`, or should 0.1.x add
   a `SceneLoadResult` with warnings and import statistics?
-- Should `Scene` cache-release on destruction be best-effort and safe after
-  engine destruction, or should violating Engine-before-Scene lifetime remain
-  explicitly undefined?
+- Should release documentation describe Scene destruction after Engine teardown
+  as a best-effort safe no-op, or keep it strictly as an out-of-contract host
+  lifetime violation despite the safer implementation?
 - Should material alpha be stored even while the renderer remains opaque-only,
   or should material descriptions deliberately normalize alpha to `1.0F` until
   alpha rendering exists?
@@ -492,20 +496,17 @@ The following issues do not block a 0.1.0 release if documented accurately:
 
 ## 11. Recommended Remediation Sequence
 
-1. Fix or formally accept AUD-003.
-   Preferred correction: make scene cache release lifetime-safe without
-   requiring renderer or picking ownership to leak through the public API.
-
-2. Decide AUD-004.
+1. Decide AUD-004.
    If warning visibility is in scope for 0.1.0, add a public warning/report
    path and tests. If not, document `std::clog` warning behavior as a temporary
    limitation.
 
-3. Update documentation for AUD-001, AUD-005, AUD-006, AUD-007, and AUD-008.
+2. Update documentation for AUD-001, AUD-003, AUD-005, AUD-006, AUD-007, and AUD-008.
    This should produce a verified project-state document, release notes,
    feature matrix, known limitations, ABI/lifetime notes, and validation matrix.
 
-4. Rerun the full validation workflow after remediation:
+3. Rerun the full validation workflow after documentation and any remaining
+   remediation:
 
 ```powershell
 cmake --preset windows-debug
@@ -516,11 +517,11 @@ cmake --build --preset windows-release
 ctest --preset windows-release
 ```
 
-5. Launch `elf3d_viewer` after a successful build and manually verify:
+4. Launch `elf3d_viewer` after a successful build and manually verify:
    startup cube rendering, model load, failed-load preservation, navigation,
    picking/selection, measurement, clipping, hierarchy visibility, reload, and
    close-scene behavior.
 
-6. Only after remediation, documentation, build/test success, manual viewer
+5. Only after remediation, documentation, build/test success, manual viewer
    validation, clean diff review, and release-condition review should an
    annotated `v0.1.0` tag be created.
