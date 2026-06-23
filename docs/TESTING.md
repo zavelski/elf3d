@@ -75,6 +75,13 @@ The matching `ctest.exe` is in the same directory.
 | `elf3d.public_api_lifetime` | `elf3d_public_api_test` | public API smoke, version, load, lifetime |
 
 Debug and Release both passed 16 of 16 tests after the Goal 4 lifetime fix.
+Goal 7 repeated Debug and Release configure/build/CTest successfully.
+
+## Public Header Self-Containment
+
+Goal 7 compiled every public header under `include/elf3d` individually as a
+forced include using MSVC C++20, `/permissive-`, `/W4`, and `/WX`. This checks
+that each public header can be included first by a host translation unit.
 
 ## Fixtures
 

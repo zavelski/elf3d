@@ -1,11 +1,11 @@
-# Elf3D 0.1.0 Project State
+# Elf3D 0.1.0 Release Snapshot Project State
 
-Purpose: Verified project-state baseline for the current 0.1.0 audit branch.
+Purpose: Immutable release-candidate snapshot of the verified Elf3D 0.1.0
+project state.
 
 Applicable version: 0.1.0
 
-Document status: Living project-state document created because the requested
-`PROJECT_STATE_EN.md` was absent during Goal 1.
+Document status: Release snapshot, not a living document.
 
 Last verified implementation commit before release snapshot: `79fd4bc`
 
@@ -13,13 +13,11 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`, `README.md`, `THIRD_PARTY.md`
 
-Known limitations: The immutable release snapshot exists under
-`docs/releases/0.1.0/`, but the release is not tagged because manual visual
-viewer validation has not been performed.
+Known limitations: The release is not tagged because manual visual viewer
+validation has not been performed.
 
-Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
-`docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
-`docs/releases/0.1.0/PROJECT_STATE_EN.md`
+Related documents: `AUDIT_SUMMARY.md`, `VALIDATION_SUMMARY.md`,
+`KNOWN_LIMITATIONS.md`, `RELEASE_CHECKLIST.md`, `../../../PROJECT_STATE_EN.md`
 
 ## Repository State
 
@@ -27,11 +25,11 @@ Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 - Public library: `elf3d.dll`
 - Optional integration: `elf3d_imgui`
 - Reference app: `elf3d_viewer`
-- Current audit branch: `audit/0.1.0`
+- Release-candidate branch: `audit/0.1.0`
 - Pre-audit checkpoint: `f8fe3a827bc81dadb461e58bdbe846958dab346a`
-- Latest documentation policy commit before release snapshot: `79fd4bc`
-- Remotes: none configured during audit
-- Tags: none present during audit
+- Remotes during audit: none configured
+- Tags during audit: none present
+- Release decision: Not ready due to release blockers
 
 ## Implemented Vertical Slice
 
@@ -55,9 +53,7 @@ Elf3D 0.1.0 implements:
 - one section plane and up to three axis-aligned clipping boxes per viewport
 - Dear ImGui/GLFW reference viewer
 
-## Architecture Boundaries
-
-Confirmed boundaries:
+## Confirmed Boundaries
 
 - `elf3d` does not depend on Dear ImGui or GLFW.
 - Dear ImGui and GLFW are limited to `elf3d_imgui`, its third-party target, and
@@ -70,21 +66,20 @@ Confirmed boundaries:
 
 ## Validation State
 
-Completed validation:
+Completed on 2026-06-23:
 
 - Debug configure/build passed.
 - Debug CTest passed 16 of 16.
 - Release configure/build passed.
 - Release CTest passed 16 of 16.
+- Public header self-containment check passed for all public headers under
+  `include/elf3d`.
 - Debug viewer process started with `tests/fixtures/textured_pbr.gltf` and
   remained alive for five seconds.
 - Release viewer process started with `tests/fixtures/textured_pbr.gltf` and
   remained alive for five seconds.
-- Public headers compiled individually as forced includes with MSVC C++20,
-  `/permissive-`, `/W4`, and `/WX`.
-- The release snapshot was created under `docs/releases/0.1.0/`.
 
-Not yet validated:
+Not validated:
 
 - manual visual rendering correctness
 - manual navigation, picking, selection, measurement, clipping interaction
@@ -93,30 +88,12 @@ Not yet validated:
 - external model corpus
 - CI
 
-## Remediated Audit Items
+## Release Decision
 
-- AUD-002: CMake/CTest not on shell `PATH` was resolved by using Visual
-  Studio's bundled CMake/CTest.
-- AUD-003: Scene cache release no longer stores a raw `Engine::Impl*`; commit
-  `7957aee` introduced a private weak release context.
+`Not ready due to release blockers`
 
-## Remaining Release Work
+Remaining blocker:
 
-- Manually validate the viewer.
-- Decide whether import warnings remain `std::clog` diagnostics for 0.1.x or
-  need a public report API.
-- Create `v0.1.0` only if no release blockers remain.
-
-## Known Limitations
-
-- C++ DLL ABI requires compatible compiler/standard library/runtime.
-- No stable C ABI.
-- No runtime plugin ABI.
-- Only OpenGL 4.1 backend.
-- Opaque rendering only.
-- glTF alpha factor, alpha mask, and alpha blend are not rendered.
-- No animations, skins, morphs, compression extensions, KTX2, cameras, lights,
-  normal maps, occlusion, or emissive material support.
-- One selected entity and one distance measurement per viewport.
-- Clipping boxes are axis aligned.
-- Scene mutation and rendering are single-threaded.
+- Manual visual viewer validation has not been performed. The viewer process
+  smoke test does not prove rendering correctness, interaction behavior, or
+  normal user-driven shutdown.

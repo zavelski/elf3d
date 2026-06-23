@@ -45,7 +45,9 @@ OpenGL context, Dear ImGui context, GUI, and frame presentation.
 The verified technical documentation set starts at `docs/README.md`. The living
 project-state baseline is `PROJECT_STATE_EN.md`. Documentation maintenance
 rules are defined in `docs/DOCUMENTATION_POLICY.md` and
-`docs/DOCUMENTATION_UPDATE_CHECKLIST.md`.
+`docs/DOCUMENTATION_UPDATE_CHECKLIST.md`. The 0.1.0 release-candidate snapshot
+is recorded under `docs/releases/0.1.0/`; it is not tagged because manual visual
+viewer validation remains incomplete.
 
 ## Graphics initialization and lifetime
 

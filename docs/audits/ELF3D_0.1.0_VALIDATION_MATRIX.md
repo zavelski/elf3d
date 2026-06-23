@@ -20,6 +20,9 @@ started non-interactively with the project-owned glTF fixture in both Debug and
 Release and stayed alive for five seconds before being terminated by the smoke
 script.
 
+Goal 7 repeated clean Debug and Release validation, added public-header
+self-containment checks, and verified release documentation paths/links.
+
 Manual visual and interaction validation was not performed. Rendering
 correctness, navigation, picking, selection, visibility, measurement, clipping,
 normal user shutdown, and visual quality remain unverified by human inspection.
@@ -199,10 +202,42 @@ The following items were confirmed by source inspection during the audit:
 - No screenshot or pixel-readback validation was performed.
 - No CI workflow was found or executed.
 - No benchmark or performance measurement was performed.
-- No public-header self-containment command beyond the configured tests was run.
 - No external model corpus was used.
-- The out-of-contract case where a `Scene` outlives its creating `Engine` is not
-  covered by tests and remains a high-risk audit item.
+
+## Goal 7 Release-Candidate Validation Addendum
+
+Date: 2026-06-23
+
+Implementation commit before release snapshot: `79fd4bc`
+
+Additional commands executed:
+
+```powershell
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --fresh --preset windows-debug
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --build --preset windows-debug
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe' --preset windows-debug --output-on-failure
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --fresh --preset windows-release
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --build --preset windows-release
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe' --preset windows-release --output-on-failure
+```
+
+Goal 7 results:
+
+| Area | Result |
+| --- | --- |
+| Debug configure/build | Passed, no warning diagnostics observed. |
+| Debug CTest | Passed 16/16. |
+| Release configure/build | Passed, no warning diagnostics observed. |
+| Release CTest | Passed 16/16. |
+| Debug viewer smoke | Process stayed alive five seconds with `tests/fixtures/textured_pbr.gltf`, then was intentionally terminated. |
+| Release viewer smoke | Process stayed alive five seconds with `tests/fixtures/textured_pbr.gltf`, then was intentionally terminated. |
+| Public headers | All public headers under `include/elf3d` compiled individually as forced includes with MSVC C++20, `/permissive-`, `/W4`, `/WX`. |
+| Documentation paths and links | 43 required paths existed; Markdown links in 31 Markdown files resolved. |
+
+Release decision: `Not ready due to release blockers`.
+
+Remaining release blocker: manual visual viewer validation has not been
+performed.
 
 ## Commands Executed
 

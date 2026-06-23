@@ -6,7 +6,7 @@ Applicable version: 0.1.0
 
 Document status: Living roadmap derived from audit findings and current code.
 
-Last verified Git commit: `8504068`
+Last verified implementation commit before release snapshot: `79fd4bc`
 
 Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_REMEDIATION_LOG.md`, `README.md`, `modules`,
@@ -27,12 +27,12 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Static glTF/GLB importer | Load real model files. | cgltf, image decoder, scene builder. | Supports bounded static triangle assets. | Unsupported glTF features must be clear. | glTF importer tests. |
 | Picking, selection, measurement, clipping | Provide interactive visualization tools. | Viewport, scene, renderer filters. | Reference viewer can inspect geometry. | Manual behavior needs visual validation. | Tool tests plus viewer validation. |
 | Safe scene cache release context | Remove raw engine pointer hazard. | Goal 4 remediation. | Late scene destruction is a safe no-op instead of raw pointer dereference. | Still not a license to violate host ownership order. | Public lifetime smoke and CTest. |
+| Release snapshot and checklist | Make 0.1.0 auditable. | Goals 5-7 docs. | Prevents false release claims. | Tag must not be created before manual viewer validation. | Release checklist review. |
 
 ## Release Blockers
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
-| Release snapshot and checklist | Make 0.1.0 auditable. | Goals 5-7 docs. | Prevents false release claims. | Tag must not be created before completion. | Release checklist review. |
 | Manual viewer validation | Verify the actual user-facing rendering/tool path. | Built Debug/Release viewer. | Confirms graphics and interaction behavior. | Requires graphical environment and human inspection. | Manual checklist in `TESTING.md`. |
 | Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature `v0.1.0`. | None if blocker list is respected. | Goal 7 release decision. |
 

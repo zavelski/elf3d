@@ -4,16 +4,16 @@ Purpose: Index the verified Elf3D technical documentation set.
 
 Applicable version: 0.1.0
 
-Document status: Living index, created from the 0.1.0 audit branch.
+Document status: Living index, updated from the 0.1.0 audit branch.
 
-Last verified Git commit: `145bbdd`
+Last verified implementation commit before release snapshot: `79fd4bc`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`
 
-Known limitations: This index is not a release snapshot. Release-specific
-copies belong under `docs/releases/<version>/`.
+Known limitations: This index is not a release snapshot. The 0.1.0
+release-candidate snapshot is under `releases/0.1.0/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 `audits/ELF3D_0.1.0_AUDIT.md`
@@ -33,6 +33,14 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `DOCUMENTATION_POLICY.md`: documentation ownership and review rules.
 - `DOCUMENTATION_UPDATE_CHECKLIST.md`: task checklist for documentation updates.
 
+## Release Snapshot
+
+- `releases/0.1.0/PROJECT_STATE_EN.md`
+- `releases/0.1.0/AUDIT_SUMMARY.md`
+- `releases/0.1.0/VALIDATION_SUMMARY.md`
+- `releases/0.1.0/KNOWN_LIMITATIONS.md`
+- `releases/0.1.0/RELEASE_CHECKLIST.md`
+
 ## Audit Documents
 
 - `audits/ELF3D_0.1.0_REPOSITORY_INVENTORY.md`
@@ -43,6 +51,6 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 ## Current Release Readiness
 
-0.1.0 is not tagged yet. Remaining gates are release snapshot preparation,
-manual viewer validation, release checklist completion, and the final release
-decision in Goal 7.
+0.1.0 is not tagged yet. The Goal 7 decision is
+`Not ready due to release blockers` because manual visual viewer validation has
+not been performed. Goal 8 must not be executed until that blocker is closed.

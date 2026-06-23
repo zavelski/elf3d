@@ -73,12 +73,13 @@ after each correction group.
 ## Deferred Findings
 
 - AUD-001: Missing project-state baseline. Corrected in Goal 5 by creating
-  `PROJECT_STATE_EN.md`; immutable release snapshot remains pending Goal 7.
+  `PROJECT_STATE_EN.md`; Goal 7 created the immutable release snapshot under
+  `docs/releases/0.1.0/`.
 - AUD-004: Public import-warning reporting. Deferred as an API enhancement for
   a future revision unless release review requires it for 0.1.0; document
   current `std::clog` behavior for 0.1.0.
 - AUD-005: glTF base-color alpha behavior. Correct in documentation.
 - AUD-006: C++ DLL ABI compatibility wording. Correct in documentation.
 - AUD-007: OpenGL shutdown requirements. Correct in documentation.
-- AUD-008: Living documentation set corrected in Goal 5; immutable release
-  snapshot remains pending Goal 7.
+- AUD-008: Living documentation set corrected in Goal 5; Goal 7 created
+  `CHANGELOG.md` and the immutable release snapshot.

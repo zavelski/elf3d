@@ -19,11 +19,9 @@ libraries, OpenGL is isolated in the backend, Dear ImGui and GLFW are confined
 to the viewer and optional ImGui integration layer, and public headers do not
 expose ImGui, GLFW, GLM, cgltf, GLAD, or OpenGL object types.
 
-The repository is not release-ready yet. The remaining release gates are final
-release preparation and manual validation gates:
+The repository is not release-ready yet. The release snapshot and changelog
+exist, but the manual validation gate is still open:
 
-- `PROJECT_STATE_EN.md` has been created after the audit, but the immutable
-  0.1.0 release snapshot is not yet complete.
 - Manual visual viewer validation has not been performed.
 
 The highest-risk implementation finding was lifetime enforcement around
@@ -38,9 +36,9 @@ scope: static glTF geometry, opaque metallic-roughness material rendering,
 off-screen OpenGL viewport rendering, CPU picking, selection, distance
 measurement, scene visibility, viewport isolation, and clipping.
 
-Build and automated test validation passed in Goal 3 after locating Visual
-Studio's bundled CMake/CTest executables. Manual visual viewer validation has
-not been performed.
+Build and automated test validation passed in Goal 3 and again in Goal 7 after
+locating Visual Studio's bundled CMake/CTest executables. Manual visual viewer
+validation has not been performed.
 
 Release gate: **blocked**.
 
@@ -56,8 +54,9 @@ Release gate: **blocked**.
 - Runtime version data: `modules/core/src/version_data.cpp` returns `0.1.0`
 - Public version test: `tests/public_api_test.cpp` expects `0.1.0`
 
-`PROJECT_STATE_EN.md` was requested as a baseline artifact, but no file with
-that name exists anywhere under `Z:/Elf3D`.
+`PROJECT_STATE_EN.md` was absent during the initial audit. Goal 5 created the
+living project-state document, and Goal 7 created the immutable release
+snapshot under `docs/releases/0.1.0/`.
 
 ## 3. Methodology
 
@@ -260,11 +259,10 @@ These tests passed in both Debug and Release during Goal 3 validation.
 - Risk before correction: The audit could not prove whether the repository matches its intended
   release baseline. Release notes or tags based on an absent baseline would be
   ungrounded.
-- Recommended correction: Completed for the living project-state document.
-  Goal 7 still needs to create the immutable release snapshot under
-  `docs/releases/0.1.0/`.
+- Recommended correction: Completed for the living project-state document and
+  the immutable release snapshot under `docs/releases/0.1.0/`.
 - Should code change: No
-- Should docs change: Completed for Goal 5; release snapshot remains pending
+- Should docs change: Completed for Goal 5 and Goal 7
 - Suggested stage: Goal 5 documentation, Goal 7 release snapshot
 - Suggested commit: Goal 5 documentation commit
 
@@ -423,39 +421,43 @@ These tests passed in both Debug and Release during Goal 3 validation.
 - Suggested stage: Goal 5 documentation, completed; Goal 7 release snapshot
 - Suggested commit: `docs: document OpenGL resource shutdown requirements`
 
-### AUD-008: Release Snapshot Is Incomplete
+### AUD-008: Release Snapshot Was Incomplete Before Goal 7
 
 - Severity: Medium
-- Classification: Missing release documentation
+- Classification: Resolved release documentation gap
 - Affected files: `docs/`, `README.md`
 - Expected: A release candidate should include a verified project state,
   release notes, supported feature matrix, known limitations, validation matrix,
   and user-visible API/lifetime notes.
-- Actual: `README.md`, `ARCHITECTURE.md`, `CODING_POLICY.md`, and
+- Previous actual: `README.md`, `ARCHITECTURE.md`, `CODING_POLICY.md`, and
   `THIRD_PARTY.md` are present and useful. Goal 3 added an audit validation
   matrix, and Goal 5 added the living technical documentation set plus
   `PROJECT_STATE_EN.md`. The immutable 0.1.0 release snapshot and release notes
-  are still pending Goal 7.
+  were still pending before Goal 7.
+- Correction: Goal 7 added `CHANGELOG.md` and the release snapshot under
+  `docs/releases/0.1.0/`.
 - Evidence: Repository inventory lists no release-specific docs beyond the
   newly added audit inventory.
 - Risk: Users cannot distinguish confirmed 0.1.0 behavior from future design
   intent, and release reviewers cannot trace validation status.
-- Recommended correction: Create the Goal 7 release snapshot under
-  `docs/releases/0.1.0/` and add `CHANGELOG.md`.
+- Recommended correction: Completed by creating the Goal 7 release snapshot
+  under `docs/releases/0.1.0/` and adding `CHANGELOG.md`.
 - Should code change: No
-- Should docs change: Yes
+- Should docs change: Completed
 - Suggested stage: Goal 7 release preparation
-- Suggested commit: `release: prepare Elf3D 0.1.0`
+- Suggested commit: Goal 7 release-readiness documentation commit
 
 ## 7. Release Blockers
 
 The following items block a 0.1.0 release tag at this point:
 
-- AUD-008: The immutable 0.1.0 release snapshot and release notes are incomplete.
+- Manual visual viewer validation has not been performed. The process smoke
+  test does not prove rendering correctness, interaction behavior, or normal
+  user-driven shutdown.
 
-AUD-004 may also block release if the intended 0.1.0 public API promises
-host-visible import warnings rather than temporary `std::clog` diagnostics.
-Manual visual viewer validation also remains required before a release tag.
+AUD-004 remains a documented 0.1.x API candidate rather than a 0.1.0 release
+blocker unless project policy changes to require programmatic import-warning
+reporting before the first tag.
 
 ## 8. Non-Blocking Issues
 
@@ -464,7 +466,8 @@ The following issues do not block a 0.1.0 release if documented accurately:
 - AUD-005: glTF base color alpha is ignored/opaque.
 - AUD-006: C++ DLL ABI compatibility limits need explicit release wording.
 - AUD-007: OpenGL resource destruction requires correct host shutdown order.
-- AUD-008: Release snapshot remains incomplete until Goal 7.
+- AUD-004: Import warnings are written to `std::clog` instead of returned
+  through the public API.
 
 ## 9. Documentation Mismatches
 
@@ -479,7 +482,7 @@ The following issues do not block a 0.1.0 release if documented accurately:
   for consumers of a DLL.
 - The requested `PROJECT_STATE_EN.md` was absent during the initial audit and
   has since been created as a living project-state document; the release
-  snapshot remains pending Goal 7.
+  snapshot was created in Goal 7.
 
 ## 10. Deferred Design Questions
 
@@ -505,8 +508,8 @@ The following issues do not block a 0.1.0 release if documented accurately:
    path and tests. If not, document `std::clog` warning behavior as a temporary
    limitation.
 
-2. Complete release preparation documentation for AUD-008.
-   This should produce release notes, an immutable release snapshot, known
+2. Release preparation documentation for AUD-008 is complete.
+   Goal 7 produced release notes, an immutable release snapshot, known
    limitations, ABI/lifetime notes, and a release checklist.
 
 3. Rerun the full validation workflow after documentation and any remaining
