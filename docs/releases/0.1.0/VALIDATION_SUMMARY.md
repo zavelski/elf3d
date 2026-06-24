@@ -14,11 +14,10 @@ Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `scripts/package_release.ps1`, `tests`, `modules/*/tests`,
 `tests/fixtures/textured_pbr.gltf`, `docs/releases/0.1.0`
 
-Known limitations: Viewer interaction validation is still incomplete. The
-viewer was launched, rendered the project-owned fixture, captured to a
-screenshot, and closed normally, but navigation, picking, selection,
-visibility, isolation, measurement, and clipping were not manually exercised
-end to end in the GUI.
+Known limitations: Manual interaction validation was user-performed on the
+packaged Windows Release viewer and is not automated. Remote GitHub CI,
+GitHub Release validation, public clone testing, external model corpus
+validation, and performance measurements have not yet run.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `KNOWN_LIMITATIONS.md`, `RELEASE_CHECKLIST.md`, `RELEASE_ARTIFACTS.md`
@@ -79,6 +78,39 @@ window-handle checks, `CloseMainWindow()`, and exit-code checks.
 | Release package | Passed | `elf3d-viewer-0.1.0-windows-x64.zip` and `SHA256SUMS.txt` created. |
 | Archive inspection | Passed | ZIP contents matched the planned viewer package file list. |
 | Packaged viewer smoke | Passed | Extracted package opened from outside the build tree and exited with code 0. |
+| Manual viewer interaction matrix | Passed | User manually validated the packaged Windows Release viewer. This was not an automated test. |
+
+## Manual Interaction Matrix
+
+The following packaged Windows Release viewer scenarios were manually tested
+by the user and passed:
+
+- orbit navigation
+- pan navigation
+- wheel zoom
+- Fit to Scene
+- Reset View
+- Viewport picking
+- object selection and highlighting
+- synchronization between Viewport selection and Scene Hierarchy
+- Hide Selected
+- Show Selected
+- Show All
+- inherited hierarchy visibility
+- Isolate Selected
+- Exit Isolation
+- point-to-point distance measurement
+- measurement stability during camera navigation
+- section-plane clipping
+- retained-side switching
+- clipping boxes
+- Clear Clipping
+- rejection of clipped geometry by picking
+- Reload
+- Close Scene
+- loading a Scene after Close Scene
+- failed-load preservation of the previously active Scene
+- normal viewer shutdown
 
 ## CTest Totals
 
@@ -107,10 +139,6 @@ SHA-256:
 
 ## Not Verified
 
-- Full manual viewer interaction matrix:
-  navigation, picking, selection, hierarchy visibility, isolation,
-  measurement, section plane controls, clipping boxes, reload, close scene, and
-  failed-load preservation.
 - Remote GitHub Actions CI.
 - Tag-triggered release workflow on GitHub.
 - Public clone test.
@@ -119,9 +147,9 @@ SHA-256:
 
 ## Release Validation Decision
 
-`NO-GO — publication blocked`
+`GO — ready for public publication`
 
-Local build, tests, package creation, archive inspection, and limited viewer
-smoke passed. Public publication remains blocked because full manual viewer
-interaction validation has not been completed and remote CI/release validation
-cannot be run until after a later `GO` decision.
+Local build, tests, package creation, archive inspection, limited viewer
+smoke, packaged viewer smoke, and user-performed packaged viewer interaction
+validation passed. Continue with final local validation and publication steps;
+restore no-go if any required validation fails.

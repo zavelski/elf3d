@@ -13,8 +13,10 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `CMakePresets.json`, `README.md`, `LICENSE`, `THIRD_PARTY.md`, `.github`,
 `scripts`
 
-Known limitations: The release is not tagged or published because full manual
-viewer interaction validation has not been performed.
+Known limitations: The release is ready for public publication after
+user-performed packaged viewer interaction validation. It is not yet tagged or
+published because final local validation, branch integration, remote CI,
+GitHub Release verification, and public clone validation still need to run.
 
 Related documents: `AUDIT_SUMMARY.md`, `VALIDATION_SUMMARY.md`,
 `KNOWN_LIMITATIONS.md`, `RELEASE_CHECKLIST.md`, `../../../PROJECT_STATE_EN.md`
@@ -29,7 +31,7 @@ Related documents: `AUDIT_SUMMARY.md`, `VALIDATION_SUMMARY.md`,
 - Pre-audit checkpoint: `f8fe3a827bc81dadb461e58bdbe846958dab346a`
 - Remotes during publication precheck: none configured
 - Tags during publication precheck: none present
-- Release decision: `NO-GO — publication blocked`
+- Release decision: `GO — ready for public publication`
 
 ## Implemented Vertical Slice
 
@@ -79,12 +81,13 @@ Completed on 2026-06-23:
 - Release viewer screenshot showed the project-owned fixture rendered.
 - Windows viewer ZIP package and checksum were created and inspected.
 - Extracted packaged viewer started outside the build tree and exited cleanly.
+- User-performed manual validation on the packaged Windows Release viewer
+  passed for navigation, picking, selection, hierarchy synchronization,
+  visibility, isolation, measurement, clipping, reload, close-scene,
+  failed-load preservation, and normal shutdown.
 
 Not validated:
 
-- full manual viewer navigation, picking, selection, visibility, isolation,
-  measurement, clipping, reload, close-scene, and failed-load interaction
-  coverage
 - performance measurements
 - external model corpus
 - remote CI
@@ -92,9 +95,9 @@ Not validated:
 
 ## Release Decision
 
-`NO-GO — publication blocked`
+`GO — ready for public publication`
 
-Remaining blocker:
+Remaining publication validation:
 
-- Full manual viewer interaction validation has not been performed. The viewer
-  smoke test and screenshot do not prove the complete GUI interaction matrix.
+- Final local validation after the `GO` decision, branch integration, annotated
+  tag creation, remote CI, GitHub Release verification, and public clone test.

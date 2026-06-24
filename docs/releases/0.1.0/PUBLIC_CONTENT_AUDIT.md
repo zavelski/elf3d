@@ -132,7 +132,8 @@ Content blockers:
 
 - none found in the scanned repository content.
 
-Publication blockers outside content scope remain recorded in
+Publication steps outside content scope remain recorded in
 `PUBLICATION_PRECHECK.md`, including missing `main`, missing `v0.1.0`, missing
-remote, missing CI/release packaging validation, and incomplete manual visual
-viewer validation.
+remote, missing remote CI/release validation, and missing public clone
+validation. Manual packaged viewer interaction validation was completed after
+the original content audit.

@@ -13,17 +13,22 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `apps/viewer`, `docs/GLTF_SUPPORT.md`, `docs/RENDERING_PIPELINE.md`,
 `docs/LIFETIME_AND_THREADING.md`
 
-Known limitations: This document is itself the limitation register.
+Known limitations: This document is itself the limitation register. No local
+publication blocker remains after user-performed packaged viewer interaction
+validation; remote CI, GitHub Release, and public clone validation have not yet
+run.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `VALIDATION_SUMMARY.md`, `RELEASE_CHECKLIST.md`
 
-## Publication Blocker
+## Publication Validation Status
 
-- Full manual viewer interaction validation has not been performed. The viewer
-  starts, renders the project-owned fixture, and shuts down normally through
-  the window close path, but the complete GUI interaction matrix has not been
-  exercised for publication.
+- User-performed packaged Windows Release viewer interaction validation passed
+  for navigation, picking, selection, hierarchy synchronization, visibility,
+  isolation, measurement, clipping, reload, close-scene, failed-load
+  preservation, and normal shutdown.
+- Remote GitHub CI, GitHub Release verification, and public clone validation
+  have not yet run because publication has not started.
 
 ## Public API and ABI
 
@@ -77,8 +82,8 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 - One section plane and up to three axis-aligned clipping boxes per viewport.
 - Navigation is mouse-based; no touch, gamepad, first-person, or keyboard
   navigation mode is implemented.
-- Tool behavior is covered by unit/component tests but not by complete manual
-  viewer interaction validation in this publication-prep pass.
+- Tool behavior is covered by unit/component tests and user-performed packaged
+  viewer interaction validation. That interaction validation is not automated.
 
 ## Packaging, CI, and Performance
 

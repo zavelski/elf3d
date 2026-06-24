@@ -14,6 +14,8 @@ Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 
 Known limitations: This roadmap is not a promise of delivery. Candidate and
 exploratory items require separate design, implementation, and validation.
+Manual viewer validation for the 0.1.0 publication baseline has been completed
+by the user on the packaged Windows Release viewer.
 
 Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 `PERFORMANCE_BASELINE.md`, `TESTING.md`
@@ -29,12 +31,13 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Safe scene cache release context | Remove raw engine pointer hazard. | Goal 4 remediation. | Late scene destruction is a safe no-op instead of raw pointer dereference. | Still not a license to violate host ownership order. | Public lifetime smoke and CTest. |
 | Release snapshot and checklist | Make 0.1.0 auditable. | Goals 5-7 docs. | Prevents false release claims. | Tag must not be created before manual viewer validation. | Release checklist review. |
 
-## Release Blockers
+## Release Completion Gates
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
-| Manual viewer validation | Verify the actual user-facing rendering/tool path. | Built Debug/Release viewer. | Confirms graphics and interaction behavior. | Requires graphical environment and human inspection. | Manual checklist in `TESTING.md`. |
-| Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature `v0.1.0`. | None if blocker list is respected. | Goal 7 release decision. |
+| Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Completed by the user for the 0.1.0 publication baseline. |
+| Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature `v0.1.0`. | None if required validation remains respected. | `GO — ready for public publication`. |
+| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Remote CI, GitHub Release verification, and public clone test. |
 
 ## 0.1.x Candidate Corrections
 

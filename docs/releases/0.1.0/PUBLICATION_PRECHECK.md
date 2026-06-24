@@ -15,7 +15,8 @@ Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 
 Known limitations: This record was created before public publication, before
 creating `main`, before creating `v0.1.0`, and before configuring a GitHub
-remote. It was updated after local build/test/package validation.
+remote. It was updated after local build/test/package validation and
+user-performed packaged viewer interaction validation.
 
 Related documents: `PUBLIC_CONTENT_AUDIT.md`, `RELEASE_CHECKLIST.md`,
 `VALIDATION_SUMMARY.md`, `KNOWN_LIMITATIONS.md`, `../../../PROJECT_STATE_EN.md`
@@ -101,22 +102,24 @@ Located during precheck:
 - `docs/releases/0.1.0/`
 - existing audit, remediation, validation, and release-candidate records
 
-## Publication Blockers
+## Remaining Publication Steps
 
-Current blockers before public publication:
+Current required steps before declaring public publication complete:
 
 - local `main` branch is missing;
 - local annotated `v0.1.0` tag is missing;
 - no GitHub remote is configured;
 - GitHub repository `zavelski/elf3d` has not been inspected or created;
-- full manual viewer interaction validation remains incomplete;
+- final local validation after the `GO` decision has not been rerun;
 - GitHub Actions CI has not been run remotely;
 - tag-triggered release workflow has not been run remotely;
 - public clone test has not been run.
 
 ## Release-Readiness Conclusion
 
-`NO-GO — publication blocked`
+`GO — ready for public publication`
 
-Do not publish until the blockers above are remediated, final local validation
-passes, and a later checklist records `GO — ready for public publication`.
+Manual interaction validation has been completed by the user on the packaged
+Windows Release viewer. Continue with the remaining publication steps above,
+and restore the release decision to no-go if final local validation, remote CI,
+release verification, or public clone validation fails.

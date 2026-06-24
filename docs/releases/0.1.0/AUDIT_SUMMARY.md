@@ -21,8 +21,9 @@ Related documents: `PROJECT_STATE_EN.md`, `VALIDATION_SUMMARY.md`,
 ## Result
 
 The audited implementation is architecturally coherent for a local 0.1.0
-candidate, but the release is not ready to tag because manual visual viewer
-validation is still missing.
+candidate. Manual visual viewer validation was missing at the time of the
+audit, and was later completed by the user on the packaged Windows Release
+viewer; see `VALIDATION_SUMMARY.md` and `RELEASE_CHECKLIST.md`.
 
 ## Confirmed Architecture
 
@@ -56,7 +57,8 @@ validation is still missing.
 | --- | --- | --- |
 | AUD-004 | Deferred | Import warnings remain `std::clog` diagnostics in 0.1.0 candidate docs; public warning reporting is a 0.1.x candidate. |
 
-## Remaining Release Blocker
+## Remaining Publication Validation
 
-- Manual visual viewer validation has not been performed. This blocks
-  `develop` integration, `main` creation, and `v0.1.0` tagging.
+- Final local validation after the `GO` decision, branch integration, annotated
+  tag creation, remote CI, GitHub Release verification, and public clone test
+  remain to be completed before publication can be reported as successful.

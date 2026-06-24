@@ -14,9 +14,11 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `CMakePresets.json`, `README.md`, `LICENSE`, `THIRD_PARTY.md`, `.github`,
 `scripts`
 
-Known limitations: Release records exist under `docs/releases/0.1.0/`, but the
-release is not tagged or published because full manual viewer interaction
-validation has not been performed.
+Known limitations: Release records exist under `docs/releases/0.1.0/`, and the
+release is ready for public publication after user-performed packaged viewer
+interaction validation. It is not yet tagged or published because final local
+validation, branch integration, remote CI, GitHub Release verification, and
+public clone validation still need to run.
 
 Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
@@ -34,7 +36,7 @@ Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 - Latest local publication-prep commit before validation: `eeb39cd`
 - Remotes: none configured during publication precheck
 - Tags: none present during publication precheck
-- Release decision: `NO-GO — publication blocked`
+- Release decision: `GO — ready for public publication`
 
 ## Implemented Vertical Slice
 
@@ -88,14 +90,16 @@ Completed validation:
   inspected.
 - The packaged viewer opened from an extracted ZIP directory and exited with
   code 0 after `CloseMainWindow()`.
+- User-performed manual validation on the packaged Windows Release viewer
+  passed for navigation, picking, selection, hierarchy synchronization,
+  visibility, isolation, measurement, clipping, reload, close-scene,
+  failed-load preservation, and normal shutdown.
 - Public headers compiled individually as forced includes with MSVC C++20,
   `/permissive-`, `/W4`, and `/WX` during earlier audit validation.
 - Publication-prep release records were updated under `docs/releases/0.1.0/`.
 
 Not yet validated:
 
-- full manual navigation, picking, selection, measurement, clipping, reload,
-  close-scene, and failed-load interaction coverage
 - performance benchmark metrics
 - external model corpus
 - remote CI
@@ -110,12 +114,12 @@ Not yet validated:
 
 ## Remaining Release Work
 
-- Complete full manual viewer interaction validation.
 - Decide whether import warnings remain `std::clog` diagnostics for 0.1.x or
   need a public report API.
-- Create `main`, update `develop`, and create `v0.1.0` only if no release
-  blockers remain.
-- Configure and verify `origin` only after a local `GO` decision.
+- Run final local validation, integrate `audit/0.1.0` into `develop`, create
+  `main`, and create annotated `v0.1.0` only while validation remains green.
+- Configure and verify `origin`, publish the release baseline, verify remote
+  CI, create the GitHub Release, and run the public clone test.
 
 ## Known Limitations
 

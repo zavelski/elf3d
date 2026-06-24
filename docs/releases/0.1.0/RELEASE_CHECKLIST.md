@@ -13,8 +13,9 @@ Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `modules`, `facade/elf3d`, `apps/viewer`, `tests`, `LICENSE`,
 `THIRD_PARTY.md`, `docs`
 
-Known limitations: Public publication is blocked until the full manual viewer
-interaction matrix is completed and recorded.
+Known limitations: No local publication blocker remains after the
+user-performed packaged viewer interaction validation. Remote repository, CI,
+release, and clone-test validation remain pending publication steps.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `VALIDATION_SUMMARY.md`, `KNOWN_LIMITATIONS.md`, `PUBLICATION_PRECHECK.md`,
@@ -22,10 +23,12 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 
 ## Decision
 
-`NO-GO — publication blocked`
+`GO — ready for public publication`
 
-Do not create `v0.1.0`, push branches or tags, create the GitHub Release, or
-upload release assets while the blocker below remains.
+Proceed with final local validation, branch integration, GitHub publication,
+remote CI verification, release creation, and public clone validation. If any
+required validation fails, restore the release decision to no-go before
+continuing publication.
 
 ## Checklist
 
@@ -44,29 +47,41 @@ upload release assets while the blocker below remains.
 | Release tests | Passed | `ctest --preset windows-release --output-on-failure`; 16/16 passed. |
 | Viewer smoke test | Passed with limitation | Debug and Release viewers opened the project-owned fixture and exited with code 0 after `CloseMainWindow()`. |
 | Visual fixture rendering | Passed with limitation | Screenshot showed the fixture rendered in the Release viewer. |
-| Manual viewer interaction matrix | Not tested | Navigation, picking, selection, visibility, isolation, measurement, and clipping were not manually exercised end to end. |
+| Manual viewer interaction matrix | Passed | User-performed validation on the packaged Windows Release viewer covered navigation, picking, selection, hierarchy synchronization, visibility, isolation, measurement, clipping, reload, close-scene, failed-load preservation, and normal shutdown. |
 | OpenGL shutdown | Partially verified | Window close path returned exit code 0 for Debug, Release, and packaged Release viewer. |
 | Release archive inspection | Passed | ZIP file contents matched `RELEASE_ARTIFACTS.md`. |
 | Checksums | Passed | `SHA256SUMS.txt` generated and verified against the ZIP. |
 | SDK package | Not applicable | Deferred for 0.1.0; no SDK archive is produced. |
 | Documentation | Passed with limitation | Public docs, release notes, CI docs, and package docs were updated; older audit docs remain historical. |
-| Remote repository safety | Not tested | GitHub repository inspection not run because local decision is no-go. |
-| Tag correctness | Not tested | `v0.1.0` is not created while no-go remains. |
-| GitHub CI | Not tested | Workflows are committed locally but not run remotely. |
-| GitHub Release | Not tested | Release not created. |
-| Clone test | Not tested | Public repository not published. |
+| Remote repository safety | Pending publication step | GitHub repository inspection has not run yet. |
+| Tag correctness | Pending publication step | `v0.1.0` has not been created yet. |
+| GitHub CI | Pending publication step | Workflows are committed locally but have not run remotely. |
+| GitHub Release | Pending publication step | Release has not been created yet. |
+| Clone test | Pending publication step | Public repository has not been published yet. |
 
-## Remaining Blocker
+## Manual Viewer Interaction Validation
 
-- Full manual viewer interaction validation has not been performed. Required
-  coverage: failed-load preservation, orbit, pan, wheel dolly, fit, reset,
-  picking, selection, hierarchy visibility, isolation, distance measurement,
-  section plane, clipping boxes, reload, and close scene.
+User-performed validation on the packaged Windows Release viewer passed:
+orbit navigation, pan navigation, wheel zoom, Fit to Scene, Reset View,
+Viewport picking, object selection and highlighting, Viewport selection to
+Scene Hierarchy synchronization, Hide Selected, Show Selected, Show All,
+inherited hierarchy visibility, Isolate Selected, Exit Isolation,
+point-to-point distance measurement, measurement stability during camera
+navigation, section-plane clipping, retained-side switching, clipping boxes,
+Clear Clipping, rejection of clipped geometry by picking, Reload, Close Scene,
+loading a Scene after Close Scene, failed-load preservation of the previously
+active Scene, and normal viewer shutdown.
+
+This was manual GUI validation performed by the user, not an automated test.
+
+## Remaining Local Blockers
+
+None recorded.
 
 ## Publication Status
 
-Publication is intentionally stopped before Goal 7. The local preparation
-commits are preserved. Resume publication only after the remaining manual
-viewer interaction validation is completed and this checklist records:
+Local publication readiness is confirmed. Continue the publication sequence
+only while final local validation, branch integration, remote CI, GitHub
+Release creation, and public clone validation continue to pass.
 
 `GO — ready for public publication`

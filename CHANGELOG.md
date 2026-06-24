@@ -49,15 +49,20 @@ Elf3D 0.1.0 is the first audited public visualization baseline.
 - Public headers compiled individually as forced includes with MSVC C++20,
   `/permissive-`, `/W4`, and `/WX`.
 - Debug and Release `elf3d_viewer` processes launched with
-  `tests/fixtures/textured_pbr.gltf`, remained alive for five seconds, and were
-  intentionally terminated by the smoke script.
+  `tests/fixtures/textured_pbr.gltf` and exited cleanly through the window
+  close path.
+- The packaged Windows Release viewer was manually validated by the user for
+  navigation, picking, selection, hierarchy synchronization, visibility,
+  isolation, measurement, clipping, reload, close-scene, failed-load
+  preservation, and normal shutdown.
 
 ### Known Limitations
 
-- Manual visual viewer validation has not been performed; rendering
-  correctness, navigation, picking, selection, visibility, isolation,
-  measurement, clipping, and normal viewer shutdown remain unverified by human
-  inspection.
+- Manual packaged viewer interaction validation was user-performed for the
+  0.1.0 publication baseline; it is not automated.
+- Remote GitHub CI, GitHub Release verification, public clone validation,
+  external model corpus testing, and performance measurements are not recorded
+  in this changelog entry.
 - The public DLL surface is a C++ API requiring compatible compiler, standard
   library, and CRT settings. There is no stable C ABI in 0.1.0.
 - Import warnings are written to `std::clog`; the public scene-load result does
