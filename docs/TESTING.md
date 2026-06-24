@@ -1,27 +1,26 @@
 # Testing
 
-Purpose: Document how Elf3D 0.1.0 is configured, built, tested, and manually
+Purpose: Document how Elf3D 0.2.0 is configured, built, tested, and manually
 validated.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
 Document status: Living testing guide, updated for public CI and release
-packaging preparation on 2026-06-23.
+packaging preparation on 2026-06-24.
 
-Last verified Git commit: pending final publication validation
+Last verified Git commit: pending 0.2.0 release source commit
 
 Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
 `.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
 `modules/*/tests`, `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`
 
-Known limitations: Corrected GitHub Actions branch CI has been verified on the
-public repository. Tag-triggered release workflow verification is still part of
-publication. Manual viewer interaction and visual rendering must be validated
-separately.
+Known limitations: Corrected GitHub Actions branch CI and tag-triggered release
+workflow were verified on the public repository. Manual viewer interaction and
+visual rendering must be validated separately.
 
 Related documents: `MODULE_MAP.md`, `USER_GUIDE.md`,
 `PERFORMANCE_BASELINE.md`, `audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
-`releases/0.1.0/RELEASE_ARTIFACTS.md`
+`releases/0.2.0/RELEASE_ARTIFACTS.md`
 
 ## Environment
 
@@ -99,26 +98,50 @@ Each job configures, builds, and runs CTest. The corrected branch workflow was
 verified on public `develop` and `main` pushes before tag publication.
 
 The release workflow is `.github/workflows/release.yml`. It runs on `v*` tags
-and manual dispatch, verifies the 0.1.0 version, configures and builds Release,
+and manual dispatch, verifies the 0.2.0 version, configures and builds Release,
 runs CTest, creates the Windows viewer package, uploads workflow artifacts, and
 creates a GitHub Release for tag-triggered runs when no release already exists.
+The `v0.2.0` tag-triggered release run is recorded under
+`docs/releases/0.2.0/`.
 
 ## Release Packaging
 
 Local package command after a successful Release build:
 
 ```powershell
-.\scripts\package_release.ps1 -Version 0.1.0
+.\scripts\package_release.ps1 -Version 0.2.0
 ```
 
 Expected outputs:
 
 ```text
-out/release/elf3d-viewer-0.1.0-windows-x64.zip
+out/release/elf3d-viewer-0.2.0-windows-x64.zip
 out/release/SHA256SUMS.txt
 ```
 
-SDK packaging is deferred for 0.1.0 because install/export rules and an
+The package script requires the post-build viewer `assets` directory and copies
+it into the ZIP. Archive inspection for current releases must confirm:
+
+```text
+assets/font/DroidSans.ttf
+assets/icon/open.png
+assets/icon/reload.png
+assets/icon/fit_view.png
+assets/icon/reset_camera.png
+assets/icon/select.png
+assets/icon/measure.png
+assets/icon/clipping_panel.png
+assets/icon/section_plane.png
+assets/icon/add_clipping_box.png
+assets/icon/clear_clipping.png
+assets/icon/hide_selected.png
+assets/icon/show_selected.png
+assets/icon/isolate_selected.png
+assets/icon/show_all.png
+assets/icon/reset_layout.png
+```
+
+SDK packaging is deferred for 0.2.0 because install/export rules and an
 external consumer validation workflow are not yet implemented.
 
 ## Public Header Self-Containment
@@ -157,13 +180,14 @@ Before release, manually validate:
 - procedural cube renders
 - `tests/fixtures/textured_pbr.gltf` loads and renders
 - failed load preserves current scene
-- orbit, pan, wheel dolly, fit, reset
-- picking and selection
+- orbit, X/right/middle pan, wheel/Z-drag dolly, dynamic examine pivot, fit, reset
+- GPU-first picking, Ctrl-click selection, and Shift-click hide
 - hierarchy selection and visibility
 - isolation and exit isolation
 - distance measurement placement, preview, clear, and cancel
 - section plane and clipping boxes
 - clipping helpers
+- Droid Sans font, generated toolbar icons, and light viewer panel/status style
 - reload and close scene
 - OpenGL shutdown without visible errors
 

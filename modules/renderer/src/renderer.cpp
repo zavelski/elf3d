@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <optional>
@@ -200,6 +202,49 @@ template <std::size_t Size> std::array<float, Size> matrix_values(const float *v
     return result;
 }
 
+[[nodiscard]] std::optional<GpuPickHit>
+make_gpu_pick_hit(const RenderList &list, const RenderItem &item, graphics::PickingPixel pixel,
+                  Extent2D extent, Float2 position_pixels) noexcept {
+    if (!pixel.hit || extent.width == 0 || extent.height == 0 || !std::isfinite(pixel.depth) ||
+        pixel.depth < 0.0F || pixel.depth >= 1.0F) {
+        return std::nullopt;
+    }
+    const math::Matrix4 view_projection = list.projection_matrix * list.view_matrix;
+    const float determinant = glm::determinant(view_projection);
+    if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001F) {
+        return std::nullopt;
+    }
+    const math::Matrix4 inverse_view_projection = glm::inverse(view_projection);
+    const float ndc_x =
+        2.0F * (position_pixels.x + 0.5F) / static_cast<float>(extent.width) - 1.0F;
+    const float ndc_y =
+        1.0F - 2.0F * (position_pixels.y + 0.5F) / static_cast<float>(extent.height);
+    const float ndc_z = pixel.depth * 2.0F - 1.0F;
+    const math::Vector4 world =
+        inverse_view_projection * math::Vector4{ndc_x, ndc_y, ndc_z, 1.0F};
+    if (!std::isfinite(world.w) || std::abs(world.w) <= 0.000001F) {
+        return std::nullopt;
+    }
+    const math::Vector3 world_position{world.x / world.w, world.y / world.w, world.z / world.w};
+    if (!std::isfinite(world_position.x) || !std::isfinite(world_position.y) ||
+        !std::isfinite(world_position.z)) {
+        return std::nullopt;
+    }
+    const math::Vector3 camera{list.camera_world_position.x, list.camera_world_position.y,
+                               list.camera_world_position.z};
+    const float world_distance = glm::length(world_position - camera);
+    if (!std::isfinite(world_distance) || world_distance < 0.0F) {
+        return std::nullopt;
+    }
+    return GpuPickHit{item.entity,
+                      item.mesh,
+                      pixel.primitive_index,
+                      pixel.triangle_index,
+                      math::to_float3(world_position),
+                      pixel.depth,
+                      world_distance};
+}
+
 } // namespace
 
 Result<RenderList> build_render_list(const scene::Storage &scene_storage, EntityId camera,
@@ -276,7 +321,9 @@ build_render_list(const scene::Storage &scene_storage, EntityId camera, Extent2D
             }
             const float determinant = glm::determinant(math::Matrix3{model.value()});
             const bool orientation_reversed = determinant < 0.0F;
-            for (const ModelPrimitiveBinding &primitive : record->model->primitives) {
+            for (std::uint32_t primitive_index = 0;
+                 primitive_index < record->model->primitives.size(); ++primitive_index) {
+                const ModelPrimitiveBinding &primitive = record->model->primitives[primitive_index];
                 const Result<const assets::MeshAsset *> mesh_result =
                     scene_storage.assets().mesh(primitive.mesh);
                 if (!mesh_result) {
@@ -297,7 +344,7 @@ build_render_list(const scene::Storage &scene_storage, EntityId camera, Extent2D
                     }
                 }
                 list.items.push_back(RenderItem{record->id, primitive.mesh, primitive.material,
-                                                model.value(), normals.value(),
+                                                primitive_index, model.value(), normals.value(),
                                                 orientation_reversed});
             }
         }
@@ -310,6 +357,18 @@ build_render_list(const scene::Storage &scene_storage, EntityId camera, Extent2D
 
 void apply_clipping_description(const clipping::ClippingFilter &filter,
                                 graphics::DrawIndexedDescription &draw) noexcept {
+    draw.clipping_section_plane_enabled = filter.section_plane_enabled;
+    draw.clipping_section_plane_normal = filter.section_plane_normal;
+    draw.clipping_section_plane_offset = filter.section_plane_offset;
+    draw.clipping_retain_positive_half_space = filter.retain_positive_half_space;
+    draw.clipping_box_count = filter.enabled_box_count;
+    for (std::uint32_t index = 0; index < filter.enabled_box_count; ++index) {
+        draw.clipping_boxes[index] = filter.boxes[index];
+    }
+}
+
+void apply_clipping_description(const clipping::ClippingFilter &filter,
+                                graphics::PickingDrawDescription &draw) noexcept {
     draw.clipping_section_plane_enabled = filter.section_plane_enabled;
     draw.clipping_section_plane_normal = filter.section_plane_normal;
     draw.clipping_section_plane_offset = filter.section_plane_offset;
@@ -495,6 +554,118 @@ Renderer::render(const scene::Storage &scene_storage, EntityId camera,
     }
     statistics.unique_gpu_textures = static_cast<std::uint64_t>(texture_cache_.size());
     return statistics;
+}
+
+Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage &scene_storage, EntityId camera,
+                                         graphics::PickingTarget &target, Float2 position_pixels,
+                                         const scene::VisibilityFilter &visibility,
+                                         const clipping::ClippingFilter &clipping_filter) {
+    if (detail::SceneHandleAccess::engine_token(scene_storage.id()) != engine_token_) {
+        return Error{ErrorCode::foreign_engine_object,
+                     "The scene was created by a different Elf3D engine instance"};
+    }
+    if (!device_) {
+        return Error{ErrorCode::graphics_shutdown, "Renderer graphics resources are unavailable"};
+    }
+
+    const Extent2D extent = target.extent();
+    if (extent.width == 0 || extent.height == 0) {
+        return GpuPickResult{};
+    }
+    if (!std::isfinite(position_pixels.x) || !std::isfinite(position_pixels.y) ||
+        position_pixels.x < 0.0F || position_pixels.y < 0.0F ||
+        position_pixels.x >= static_cast<float>(extent.width) ||
+        position_pixels.y >= static_cast<float>(extent.height)) {
+        return Error{ErrorCode::invalid_viewport_position,
+                     "Picking coordinates are outside the viewport extent"};
+    }
+
+    Result<RenderList> list_result =
+        build_render_list(scene_storage, camera, extent, visibility, clipping_filter);
+    if (!list_result) {
+        return list_result.error();
+    }
+    RenderList &list = list_result.value();
+    if (list.items.empty()) {
+        return GpuPickResult{};
+    }
+    if (list.items.size() >
+        static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()) - 1U) {
+        return Error{ErrorCode::resource_limit_exceeded,
+                     "GPU picking cannot encode the number of visible render items"};
+    }
+
+    GpuPickResult result;
+    const Result<void> clear_result = target.clear();
+    if (!clear_result) {
+        return clear_result.error();
+    }
+
+    std::vector<std::size_t> item_indices;
+    item_indices.reserve(list.items.size() + 1U);
+    item_indices.push_back(0U);
+
+    const auto pass_start = std::chrono::steady_clock::now();
+    for (std::size_t item_index = 0; item_index < list.items.size(); ++item_index) {
+        const RenderItem &item = list.items[item_index];
+        const Result<const assets::MeshAsset *> mesh_result =
+            scene_storage.assets().mesh(item.mesh);
+        if (!mesh_result) {
+            return mesh_result.error();
+        }
+        const Result<const assets::MaterialAsset *> material_result =
+            scene_storage.assets().material(item.material);
+        if (!material_result) {
+            return material_result.error();
+        }
+        Result<graphics::StaticMesh *> gpu_mesh_result =
+            cached_mesh(scene_storage.id(), item.mesh, *mesh_result.value());
+        if (!gpu_mesh_result) {
+            return gpu_mesh_result.error();
+        }
+
+        item_indices.push_back(item_index);
+        graphics::PickingDrawDescription draw;
+        draw.model_matrix = matrix_values<16>(glm::value_ptr(item.model_matrix));
+        draw.view_matrix = matrix_values<16>(glm::value_ptr(list.view_matrix));
+        draw.projection_matrix = matrix_values<16>(glm::value_ptr(list.projection_matrix));
+        draw.object_id = static_cast<std::uint32_t>(item_indices.size() - 1U);
+        draw.primitive_index = item.primitive_index;
+        draw.double_sided = material_result.value()->description.double_sided;
+        draw.front_face_clockwise = item.orientation_reversed;
+        apply_clipping_description(clipping_filter, draw);
+        const Result<void> draw_result =
+            device_->draw_picking_indexed(target, *gpu_mesh_result.value(), draw);
+        if (!draw_result) {
+            return draw_result.error();
+        }
+        ++result.draw_calls;
+    }
+    const auto pass_end = std::chrono::steady_clock::now();
+    result.picking_pass_time_microseconds =
+        static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(pass_end - pass_start).count());
+
+    const auto read_start = std::chrono::steady_clock::now();
+    Result<graphics::PickingPixel> pixel_result =
+        device_->read_picking_pixel(target, position_pixels);
+    const auto read_end = std::chrono::steady_clock::now();
+    result.readback_time_microseconds =
+        static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count());
+    if (!pixel_result) {
+        return pixel_result.error();
+    }
+    result.pixels_read = 1;
+
+    const graphics::PickingPixel pixel = pixel_result.value();
+    if (!pixel.hit || pixel.object_id == 0U || pixel.object_id >= item_indices.size()) {
+        return result;
+    }
+
+    const std::size_t item_index = item_indices[pixel.object_id];
+    result.hit = make_gpu_pick_hit(list, list.items[item_index], pixel, extent, position_pixels);
+    return result;
 }
 
 void Renderer::release_scene(SceneId scene_id) noexcept {

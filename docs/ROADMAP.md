@@ -1,12 +1,12 @@
 # Roadmap
 
-Purpose: Track committed, candidate, and exploratory work after the 0.1.0 audit.
+Purpose: Track committed, candidate, and exploratory work after the 0.2.0 release.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
 Document status: Living roadmap derived from audit findings and current code.
 
-Last verified implementation commit before release snapshot: `79fd4bc`
+Last verified implementation commit before release snapshot: pending 0.2.0 release source commit
 
 Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_REMEDIATION_LOG.md`, `README.md`, `modules`,
@@ -14,8 +14,9 @@ Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 
 Known limitations: This roadmap is not a promise of delivery. Candidate and
 exploratory items require separate design, implementation, and validation.
-Manual viewer validation for the 0.1.0 publication baseline has been completed
-by the user on the packaged Windows Release viewer.
+Manual viewer validation for the 0.1.0 publication baseline was completed by
+the user on the packaged Windows Release viewer. 0.2.0 release validation is
+tracked under `docs/releases/0.2.0/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 `PERFORMANCE_BASELINE.md`, `TESTING.md`
@@ -31,13 +32,21 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Safe scene cache release context | Remove raw engine pointer hazard. | Goal 4 remediation. | Late scene destruction is a safe no-op instead of raw pointer dereference. | Still not a license to violate host ownership order. | Public lifetime smoke and CTest. |
 | Release snapshot and checklist | Make 0.1.0 auditable. | Goals 5-7 docs. | Prevents false release claims. | Tag must not be created before manual viewer validation. | Release checklist review. |
 
+## Committed for 0.2.0
+
+| Item | Motivation | Dependency | Benefit | Risk | Validation |
+| --- | --- | --- | --- | --- | --- |
+| GPU-first picking | Reduce full CPU traversal for ordinary surface picks. | Renderer picking framebuffer and CPU refinement. | Viewer selection can use the visible render pass candidate before CPU fallback. | Readback and refinement must stay consistent with visibility and clipping. | Picking, renderer, viewport tests plus viewer smoke. |
+| Low.3D-inspired viewer refresh | Improve reference viewer usability and visual parity with current Low.3D. | Dear ImGui integration and viewer assets. | Droid Sans font, light panels, generated toolbar PNG icons, compact status strip, right-side dock layout. | Viewer assets must be packaged and licensed. | Debug/Release build, package inspection, viewer screenshot smoke. |
+| Repository-local publish/release skills | Make GitHub publication and release gates repeatable. | `.agents/skills`, GitHub CLI, existing CMake presets. | Safer ordinary publishing and named releases. | Tooling is procedural and depends on local auth. | Skill docs and release workflow validation. |
+
 ## Release Completion Gates
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
 | Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Completed by the user for the 0.1.0 publication baseline. |
 | Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature `v0.1.0`. | None if required validation remains respected. | `GO — ready for public publication`. |
-| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Corrected branch CI passed; tag-triggered GitHub Release verification and public clone test remain. |
+| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Completed for `v0.1.0`: branch CI, tag-triggered GitHub Release, asset download/checksum verification, and public clone test passed. |
 
 ## 0.1.x Candidate Corrections
 
@@ -48,7 +57,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Debug diagnostics for skipped GL deletes | Make shutdown mistakes visible. | Backend policy decision. | Easier host integration debugging. | Low-level logging policy must stay clean. | Backend tests where possible plus manual shutdown. |
 | Public header self-containment test | Verify include quality. | Build script/test addition. | Catches missing includes. | More test target maintenance. | CTest target. |
 
-## Proposed 0.2.0 Scope Candidates
+## Proposed 0.3.x Scope Candidates
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
@@ -68,7 +77,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 - Background loading or render threading.
 - CI with graphics-capable smoke tests.
 
-## Explicitly Deferred or Rejected for 0.1.0
+## Explicitly Deferred or Rejected for Current Scope
 
 - ECS.
 - Global event bus.

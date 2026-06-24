@@ -3,6 +3,42 @@
 All notable project changes are recorded here when they are relevant to a
 release baseline.
 
+## 0.2.0 - Viewer Interaction And Low.3D UI Refresh
+
+Elf3D 0.2.0 extends the viewer/testbed slice with GPU-assisted interaction and
+a refreshed Low.3D-inspired Windows viewer interface.
+
+### Implemented
+
+- Added GPU-first viewport picking with CPU triangle confirmation and CPU BVH
+  fallback.
+- Added scene hierarchy reporting, persistent entity visibility, viewport
+  isolation, selection details, measurement anchors, and clipping helpers to the
+  public viewer workflow.
+- Refreshed the Dear ImGui viewer style with Droid Sans, light pale panels,
+  compact status bar styling, a Low.3D-like right-side dock layout, and generated
+  original PNG toolbar icons.
+- Added packaged viewer assets under `assets/font` and `assets/icon`, plus
+  release-package checks that require those assets.
+- Added Codex workflow documentation and local release/publish helper skills
+  under `.agents/skills`.
+
+### Validation
+
+- Debug and Release configure/build/CTest are release gates for this version.
+- The Windows viewer package includes Droid Sans and all generated toolbar
+  icons.
+- Final validation results are recorded in `docs/releases/0.2.0/` after the
+  release gates pass.
+
+### Known Limitations
+
+- Windows/OpenGL remains the only validated platform/backend.
+- The public DLL surface remains a C++ API and not a stable C ABI.
+- Rendering is opaque-only. glTF alpha mask and alpha blend are not rendered.
+- Animations, skins, morph targets, cameras, lights, compression extensions,
+  KTX2, runtime plugins, and SDK packaging remain unsupported.
+
 ## 0.1.0 - Public Release Baseline
 
 Elf3D 0.1.0 is the first audited public visualization baseline.

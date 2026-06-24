@@ -14,11 +14,10 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `CMakePresets.json`, `README.md`, `LICENSE`, `THIRD_PARTY.md`, `.github`,
 `scripts`
 
-Known limitations: The release is ready for public tag publication after
-user-performed packaged viewer interaction validation, final local validation,
-branch integration, and successful corrected branch CI. Tag-triggered release
-workflow verification, GitHub Release verification, and public clone validation
-still need to run.
+Known limitations: The release was publicly published after user-performed
+packaged viewer interaction validation, final local validation, branch
+integration, corrected branch CI, tag-triggered release workflow verification,
+GitHub Release asset verification, and public clone validation passed.
 
 Related documents: `AUDIT_SUMMARY.md`, `VALIDATION_SUMMARY.md`,
 `KNOWN_LIMITATIONS.md`, `RELEASE_CHECKLIST.md`, `../../../PROJECT_STATE_EN.md`
@@ -90,12 +89,15 @@ Completed on 2026-06-23:
   passed for navigation, picking, selection, hierarchy synchronization,
   visibility, isolation, measurement, clipping, reload, close-scene,
   failed-load preservation, and normal shutdown.
+- Tag-triggered GitHub Release workflow passed on `windows-2022`, created the
+  public `v0.1.0` GitHub Release, and uploaded verified release assets.
+- Fresh public clone of `https://github.com/zavelski/elf3d.git` checked out
+  `v0.1.0`, configured, built, and passed Debug and Release CTest 16/16.
 
 Not validated:
 
 - performance measurements
 - external model corpus
-- public clone test
 
 ## Release Decision
 
@@ -103,5 +105,6 @@ Not validated:
 
 Remaining publication validation:
 
-- Annotated tag publication, tag-triggered release workflow verification,
-  GitHub Release verification, and public clone test.
+- Keep the published `v0.1.0` tag unchanged.
+- Use post-publication documentation on `develop` for additional release
+  records.

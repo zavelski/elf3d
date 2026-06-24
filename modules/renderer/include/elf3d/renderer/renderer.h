@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -19,6 +20,7 @@ struct RenderItem {
     EntityId entity;
     MeshHandle mesh;
     MaterialHandle material;
+    std::uint32_t primitive_index = 0;
     math::Matrix4 model_matrix{1.0F};
     math::Matrix3 normal_matrix{1.0F};
     bool orientation_reversed = false;
@@ -32,6 +34,24 @@ struct RenderList {
     std::uint64_t clipping_bounds_tested = 0;
     std::uint64_t clipping_bounds_rejected = 0;
     std::uint64_t clipping_bounds_intersecting = 0;
+};
+
+struct GpuPickHit {
+    EntityId entity;
+    MeshHandle mesh;
+    std::uint32_t primitive_index = 0;
+    std::uint32_t triangle_index = 0;
+    Float3 world_position;
+    float depth = 1.0F;
+    float world_distance = 0.0F;
+};
+
+struct GpuPickResult {
+    std::optional<GpuPickHit> hit;
+    std::uint64_t draw_calls = 0;
+    std::uint64_t pixels_read = 0;
+    std::uint64_t picking_pass_time_microseconds = 0;
+    std::uint64_t readback_time_microseconds = 0;
 };
 
 [[nodiscard]] Result<RenderList> build_render_list(const scene::Storage &scene, EntityId camera,
@@ -66,6 +86,10 @@ class Renderer final {
            Color4 clear_color, const BasicLighting &lighting, const ViewportRenderOptions &options,
            const scene::VisibilityFilter &visibility,
            const clipping::ClippingFilter &clipping_filter);
+    [[nodiscard]] Result<GpuPickResult>
+    gpu_pick(const scene::Storage &scene, EntityId camera, graphics::PickingTarget &target,
+             Float2 position_pixels, const scene::VisibilityFilter &visibility,
+             const clipping::ClippingFilter &clipping_filter);
     void release_scene(SceneId scene) noexcept;
 
   private:

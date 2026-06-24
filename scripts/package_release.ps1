@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.1.0",
+    [string]$Version = "0.2.0",
     [ValidateSet("Release")]
     [string]$Configuration = "Release",
     [string]$BuildDir = "out/build/windows-release",
@@ -45,11 +45,41 @@ if (-not (Test-Path -LiteralPath $buildRoot)) {
 $binDir = Join-Path $buildRoot "bin/$Configuration"
 $viewerExe = Join-Path $binDir "elf3d_viewer.exe"
 $engineDll = Join-Path $binDir "elf3d.dll"
+$assetsDir = Join-Path $binDir "assets"
 
 $requiredFiles = @($viewerExe, $engineDll, (Join-Path $repoRoot "LICENSE"), (Join-Path $repoRoot "THIRD_PARTY.md"))
 foreach ($file in $requiredFiles) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         throw "Required release file not found: $file"
+    }
+}
+$requiredAssetDirs = @($assetsDir, (Join-Path $assetsDir "font"), (Join-Path $assetsDir "icon"))
+foreach ($directory in $requiredAssetDirs) {
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+        throw "Required release asset directory not found: $directory"
+    }
+}
+$requiredAssets = @(
+    (Join-Path $assetsDir "font/DroidSans.ttf"),
+    (Join-Path $assetsDir "icon/open.png"),
+    (Join-Path $assetsDir "icon/reload.png"),
+    (Join-Path $assetsDir "icon/fit_view.png"),
+    (Join-Path $assetsDir "icon/reset_camera.png"),
+    (Join-Path $assetsDir "icon/select.png"),
+    (Join-Path $assetsDir "icon/measure.png"),
+    (Join-Path $assetsDir "icon/clipping_panel.png"),
+    (Join-Path $assetsDir "icon/section_plane.png"),
+    (Join-Path $assetsDir "icon/add_clipping_box.png"),
+    (Join-Path $assetsDir "icon/clear_clipping.png"),
+    (Join-Path $assetsDir "icon/hide_selected.png"),
+    (Join-Path $assetsDir "icon/show_selected.png"),
+    (Join-Path $assetsDir "icon/isolate_selected.png"),
+    (Join-Path $assetsDir "icon/show_all.png"),
+    (Join-Path $assetsDir "icon/reset_layout.png")
+)
+foreach ($asset in $requiredAssets) {
+    if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
+        throw "Required release asset not found: $asset"
     }
 }
 
@@ -71,6 +101,7 @@ New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 
 Copy-Item -LiteralPath $viewerExe -Destination $stageRoot
 Copy-Item -LiteralPath $engineDll -Destination $stageRoot
+Copy-Item -LiteralPath $assetsDir -Destination (Join-Path $stageRoot "assets") -Recurse
 Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $repoRoot "THIRD_PARTY.md") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $repoRoot "third_party/licenses") `
@@ -84,6 +115,8 @@ Run:
 
 You can open .gltf or .glb files from File > Open, pass a model path as the
 first command-line argument, or drop a model file onto the viewer window.
+The packaged assets directory contains the viewer font and toolbar icons and
+must remain beside elf3d_viewer.exe.
 
 Requirements:
   Windows x64
@@ -94,7 +127,7 @@ Elf3D original source code is licensed under the MIT License. See LICENSE.
 Third-party components remain governed by their own notices. See THIRD_PARTY.md
 and third_party_licenses/.
 
-Known 0.1.0 limitations include opaque-only rendering, no animation, no skins,
+Known limitations include opaque-only rendering, no animation, no skins,
 no morph targets, no compression extensions, no KTX2, no stable C ABI, and no
 validated Linux or macOS build.
 "@

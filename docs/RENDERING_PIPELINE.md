@@ -1,14 +1,14 @@
 # Rendering Pipeline
 
-Purpose: Document the verified Elf3D 0.1.0 renderer, OpenGL backend, color
+Purpose: Document the verified Elf3D 0.2.0 renderer, OpenGL backend, color
 policy, caches, and limitations.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
 Document status: Verified from renderer/backend source, tests, and validation
-on 2026-06-23.
+on 2026-06-24.
 
-Last verified Git commit: `8504068`
+Last verified Git commit: pending 0.2.0 release source commit
 
 Implementation source paths: `modules/graphics`, `modules/backend_opengl`,
 `modules/renderer`, `modules/viewport`, `facade/elf3d/src/engine.cpp`,
@@ -46,7 +46,7 @@ while the compatible context is still current.
 
 ## Off-Screen Render Target
 
-Each viewport owns an off-screen framebuffer:
+Each viewport owns an off-screen color framebuffer:
 
 - color attachment: `GL_RGBA8`
 - depth attachment: `GL_DEPTH_COMPONENT24` renderbuffer
@@ -55,6 +55,14 @@ Each viewport owns an off-screen framebuffer:
 
 The host presents the viewport color texture through `NativeTextureView`, often
 through `elf3d_imgui` in the reference viewer.
+
+Each viewport also owns a private picking framebuffer used only for GPU-first
+surface picking:
+
+- ID attachment: `GL_RGBA32UI`
+- depth attachment: `GL_DEPTH_COMPONENT24` renderbuffer
+- framebuffer is recreated on resize with the color target
+- the backend reads one ID/depth pixel for each picking request
 
 ## Render Preparation
 
@@ -113,15 +121,33 @@ Measurement and clipping helpers are rendered through neutral overlay line and
 point-marker primitives. Overlay primitives are produced by tool controllers,
 not by ImGui, and then drawn by the backend.
 
+## Picking Pass
+
+The renderer reuses render-list construction for GPU picking, including
+persistent visibility, viewport isolation, material sidedness, front-face
+orientation, and clipping filters. Each visible primitive is drawn with a
+nonzero object ID and its model primitive index. The picking fragment shader
+writes object ID, primitive index, and `gl_PrimitiveID` to the integer target
+after applying the same section-plane and clipping-box discard rules as the
+visible material shader.
+
+The viewport maps the readback ID to a scene entity, mesh, primitive, and
+triangle candidate, then asks the CPU picking service to refine that single
+triangle against the public viewport ray. If the GPU path fails or the candidate
+cannot be confirmed, the viewport falls back to the full CPU BVH picker.
+
 ## Statistics
 
 `RenderStatistics` reports draw calls, triangles, vertices, indices, texture
 bindings, GPU texture uploads, current unique GPU texture count, overlay counts,
 and clipping broad-phase counters.
 
+`PickingStatistics` reports GPU picking requests, hits, misses, picking draw
+calls, pixels read, pass/readback timing, CPU refinements, and CPU fallbacks in
+addition to the existing CPU BVH counters.
+
 ## Validation
 
-Debug and Release builds passed. `elf3d.renderer` passed in both configurations.
-The viewer process started with the project-owned glTF fixture in both Debug
-and Release and stayed alive for five seconds. Manual visual rendering
-validation remains required before release.
+Debug and Release builds and CTest are part of the 0.2.0 release gate. The
+exact local, CI, and viewer smoke results are recorded under
+`docs/releases/0.2.0/`.

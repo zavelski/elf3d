@@ -9,6 +9,7 @@ enum class PointerButton {
     none,
     left,
     middle,
+    right,
 };
 
 struct ViewportInteractionFrame {
@@ -16,6 +17,8 @@ struct ViewportInteractionFrame {
     bool left_released = false;
     bool middle_pressed = false;
     bool middle_released = false;
+    bool right_pressed = false;
+    bool right_released = false;
 
     bool drag_started = false;
     bool drag_active = false;
@@ -43,6 +46,7 @@ class ViewportInteractionState final {
   private:
     bool previous_left_down_ = false;
     bool previous_middle_down_ = false;
+    bool previous_right_down_ = false;
     bool pending_left_click_ = false;
     Float2 pending_left_press_position_pixels_;
     PointerButton active_button_ = PointerButton::none;

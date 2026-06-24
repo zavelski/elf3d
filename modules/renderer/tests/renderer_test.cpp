@@ -33,6 +33,27 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
     int clear_count = 0;
 };
 
+class FakePickingTarget final : public elf3d::graphics::PickingTarget {
+  public:
+    [[nodiscard]] elf3d::Extent2D extent() const noexcept override {
+        return extent_value;
+    }
+    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) override {
+        extent_value = extent;
+        return {};
+    }
+    [[nodiscard]] elf3d::Result<void> clear() override {
+        ++clear_count;
+        return {};
+    }
+    [[nodiscard]] bool is_valid() const noexcept override {
+        return extent_value.width != 0 && extent_value.height != 0;
+    }
+
+    elf3d::Extent2D extent_value{640, 360};
+    int clear_count = 0;
+};
+
 class FakeMesh final : public elf3d::graphics::StaticMesh {
   public:
     FakeMesh(std::uint32_t vertices, std::uint32_t indices, int *destruction_count) noexcept
@@ -77,6 +98,12 @@ class FakeDevice final : public elf3d::graphics::Device {
     create_render_target(elf3d::Extent2D) override {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument, "Not used"};
     }
+    [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::PickingTarget>>
+    create_picking_target(elf3d::Extent2D initial_extent) override {
+        auto target = std::make_unique<FakePickingTarget>();
+        target->extent_value = initial_extent;
+        return std::unique_ptr<elf3d::graphics::PickingTarget>{std::move(target)};
+    }
     [[nodiscard]] elf3d::Result<elf3d::NativeTextureView>
     native_texture_view(elf3d::TextureHandle) const override {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument, "Not used"};
@@ -115,17 +142,31 @@ class FakeDevice final : public elf3d::graphics::Device {
         overlay_marker_count += static_cast<int>(description.markers.size());
         return {};
     }
+    [[nodiscard]] elf3d::Result<void>
+    draw_picking_indexed(elf3d::graphics::PickingTarget &, elf3d::graphics::StaticMesh &,
+                         const elf3d::graphics::PickingDrawDescription &description) override {
+        ++picking_draw_count;
+        picking_draws.push_back(description);
+        return {};
+    }
+    [[nodiscard]] elf3d::Result<elf3d::graphics::PickingPixel>
+    read_picking_pixel(elf3d::graphics::PickingTarget &, elf3d::Float2) override {
+        return picking_pixel;
+    }
 
     int upload_count = 0;
     int draw_count = 0;
     int overlay_draw_count = 0;
+    int picking_draw_count = 0;
     int overlay_line_count = 0;
     int overlay_marker_count = 0;
     int mesh_destruction_count = 0;
     int texture_upload_count = 0;
     int texture_destruction_count = 0;
+    elf3d::graphics::PickingPixel picking_pixel;
     std::vector<elf3d::graphics::Texture2DDescription> texture_descriptions;
     std::vector<elf3d::graphics::DrawIndexedDescription> draws;
+    std::vector<elf3d::graphics::PickingDrawDescription> picking_draws;
 };
 
 [[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.0001F) noexcept {
@@ -213,6 +254,25 @@ int main() {
         !device->draws[0].front_face_clockwise || device->draws[0].double_sided ||
         !device->draws[1].front_face_clockwise || !device->draws[1].double_sided) {
         return 4;
+    }
+
+    FakePickingTarget picking_target;
+    device->picking_pixel = elf3d::graphics::PickingPixel{2U, 1U, 0U, 0.5F, true};
+    const elf3d::scene::VisibilityFilter visibility =
+        elf3d::scene::make_visibility_filter(scene, std::nullopt).value();
+    const auto gpu_pick = renderer.value()->gpu_pick(
+        scene, camera.value(), picking_target, {319.5F, 179.5F}, visibility,
+        elf3d::clipping::disabled_filter());
+    if (!gpu_pick || !gpu_pick.value().hit.has_value() || gpu_pick.value().draw_calls != 2 ||
+        gpu_pick.value().pixels_read != 1 || picking_target.clear_count != 1 ||
+        device->picking_draw_count != 2 || device->picking_draws.size() != 2 ||
+        device->picking_draws[0].object_id != 1U || device->picking_draws[0].primitive_index != 0U ||
+        device->picking_draws[1].object_id != 2U || device->picking_draws[1].primitive_index != 1U ||
+        gpu_pick.value().hit->entity != model.value() ||
+        gpu_pick.value().hit->mesh != mesh.value() ||
+        gpu_pick.value().hit->primitive_index != 1U ||
+        gpu_pick.value().hit->triangle_index != 0U) {
+        return 45;
     }
 
     const auto shared_model = scene.create_model(mesh.value(), material.value());

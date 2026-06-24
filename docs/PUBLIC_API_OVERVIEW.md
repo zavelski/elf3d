@@ -1,18 +1,18 @@
 # Public API Overview
 
-Purpose: Describe the verified Elf3D 0.1.0 public C++ API and host integration
+Purpose: Describe the verified Elf3D 0.2.0 public C++ API and host integration
 contract.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
-Document status: Verified against public headers and validation on 2026-06-23.
+Document status: Verified against public headers and validation on 2026-06-24.
 
-Last verified Git commit: `8504068`
+Last verified Git commit: pending 0.2.0 release source commit
 
 Implementation source paths: `include/elf3d`, `facade/elf3d/src/engine.cpp`,
 `tests/public_api_test.cpp`
 
-Known limitations: This is a C++ API, not a stable C ABI. The 0.1.0 DLL surface
+Known limitations: This is a C++ API, not a stable C ABI. The 0.2.0 DLL surface
 uses standard library types and is intended for compatible compiler, standard
 library, and MSVC runtime configurations.
 
@@ -116,7 +116,7 @@ not own the logical scene.
 - clear color and basic directional lighting
 - orbit/pan/dolly navigation
 - fit and reset to visible content
-- CPU picking rays and pick queries
+- picking rays and viewport pick queries
 - single selection per viewport
 - persistent scene visibility commands for the selected entity
 - per-viewport isolation
@@ -139,11 +139,11 @@ Normal absence uses `std::optional`, for example no pick hit or no selected
 entity.
 
 Import warnings currently go to `std::clog` from `Engine::load_scene()`. They
-are not returned through a public load report in 0.1.0.
+are not returned through a public load report in 0.2.0.
 
 ## Thread and ABI Notes
 
-Scene mutation and rendering are single-threaded in 0.1.0. Viewport creation,
+Scene mutation and rendering are single-threaded in 0.2.0. Viewport creation,
 resize, render, native texture access, and destruction are graphics-thread
 operations and require a compatible current OpenGL context.
 

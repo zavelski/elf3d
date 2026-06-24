@@ -147,6 +147,42 @@ int main() {
         !bounds_visible(fixture.scene, fixture.camera, {800, 600})) {
         return 2;
     }
+    const elf3d::Float3 pivot_target{2.0F, 1.0F, 0.0F};
+    const elf3d::Float3 position_before_pivot = camera_position(fixture.scene, fixture.camera);
+    const elf3d::Float3 forward_before_pivot = camera_forward(fixture.scene, fixture.camera);
+    if (!navigation.set_pivot(fixture.scene, fixture.camera, pivot_target)) {
+        return 28;
+    }
+    const elf3d::NavigationSnapshot dynamic_pivot = navigation.snapshot();
+    if (!nearly_equal(dynamic_pivot.pivot, pivot_target) ||
+        !nearly_equal(camera_position(fixture.scene, fixture.camera), position_before_pivot) ||
+        !nearly_equal(camera_forward(fixture.scene, fixture.camera), forward_before_pivot) ||
+        !(dynamic_pivot.distance > 0.0F)) {
+        return 29;
+    }
+    elf3d::ViewportInput pivot_input = hovered_input();
+    pivot_input.left_button_down = true;
+    pivot_input.pointer_position_pixels = {10.0F, 10.0F};
+    static_cast<void>(
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, pivot_input, click_threshold));
+    pivot_input.pointer_position_pixels = {20.0F, 10.0F};
+    pivot_input.pointer_delta_pixels = {10.0F, 0.0F};
+    static_cast<void>(
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, pivot_input, click_threshold));
+    pivot_input.pointer_position_pixels = {30.0F, 10.0F};
+    pivot_input.pointer_delta_pixels = {10.0F, 0.0F};
+    if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, pivot_input,
+                           click_threshold) ||
+        !camera_looks_at(fixture.scene, fixture.camera, pivot_target)) {
+        return 30;
+    }
+    pivot_input.left_button_down = false;
+    pivot_input.pointer_delta_pixels = {};
+    static_cast<void>(
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, pivot_input, click_threshold));
+    if (!navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
+        return 31;
+    }
     if (!navigation.fit_to_scene(fixture.scene, fixture.camera, {360, 800}) ||
         !bounds_visible(fixture.scene, fixture.camera, {360, 800})) {
         return 3;
@@ -206,7 +242,7 @@ int main() {
     const elf3d::Float3 before_forward = camera_forward(fixture.scene, fixture.camera);
     input = hovered_input();
     input.left_button_down = true;
-    input.shift_down = true;
+    input.x_down = true;
     static_cast<void>(
         navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
     input.pointer_delta_pixels = {80.0F, 40.0F};
@@ -220,11 +256,29 @@ int main() {
         return 13;
     }
     input.left_button_down = false;
+    input.x_down = false;
     input.pointer_delta_pixels = {};
     static_cast<void>(
         navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
 
     const float distance_before_zoom = navigation.snapshot().distance;
+    input = hovered_input();
+    input.left_button_down = true;
+    input.z_down = true;
+    static_cast<void>(
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
+    input.pointer_delta_pixels = {0.0F, -80.0F};
+    if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold) ||
+        !(navigation.snapshot().distance < distance_before_zoom)) {
+        return 32;
+    }
+    input.left_button_down = false;
+    input.z_down = false;
+    input.pointer_delta_pixels = {};
+    static_cast<void>(
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
+
+    const float distance_before_wheel_zoom = navigation.snapshot().distance;
     input = hovered_input();
     input.wheel_delta = 1.0F;
     if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold)) {
@@ -239,7 +293,7 @@ int main() {
     input.wheel_delta = 20.0F;
     static_cast<void>(
         navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
-    if (!(distance_after_zoom_in < distance_before_zoom) ||
+    if (!(distance_after_zoom_in < distance_before_wheel_zoom) ||
         !(distance_after_zoom_out > distance_after_zoom_in) ||
         !nearly_equal(navigation.snapshot().distance, distance_after_zoom_out)) {
         return 15;

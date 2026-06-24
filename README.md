@@ -5,7 +5,7 @@
 Elf3D is a modular C++20 3D visualization engine for loading, rendering, and
 interactively inspecting glTF 2.0 scenes in desktop applications.
 
-Current version: 0.1.0.
+Current version: 0.2.0.
 
 Maturity: first public baseline. The project is useful as an embeddable
 Windows/OpenGL visualization slice and reference viewer, but it is not a
@@ -13,7 +13,7 @@ complete game engine, editor, or stable cross-toolchain binary SDK.
 
 Validated baseline: Windows desktop x64, Visual Studio 2022, dynamic MSVC
 runtime, and OpenGL 4.1 core profile. Linux and macOS are architectural goals,
-but they are not validated platforms for 0.1.0.
+but they are not validated platforms for 0.2.0.
 
 ## Features
 
@@ -24,8 +24,8 @@ but they are not validated platforms for 0.1.0.
 - Scene hierarchy, transforms, cameras, mesh/material/image assets, and bounds.
 - OpenGL 4.1 off-screen viewport rendering with opaque metallic-roughness
   shading.
-- Orbit, pan, wheel dolly, fit, and reset navigation.
-- CPU picking, one selected entity per viewport, visibility, and isolation.
+- Orbit, pan, wheel/drag dolly, dynamic examine pivot, fit, and reset navigation.
+- GPU-first picking with CPU refinement/fallback, one selected entity per viewport, visibility, and isolation.
 - One point-to-point distance measurement per viewport.
 - One section plane and up to three axis-aligned clipping boxes per viewport.
 
@@ -46,7 +46,7 @@ optional ImGui integration target.
 
 ## glTF Scope
 
-Elf3D 0.1.0 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
+Elf3D 0.2.0 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
 images, node hierarchy, TRS and matrix transforms, reusable meshes, triangle
 primitives, indexed and non-indexed geometry, positions, normals, `TEXCOORD_0`,
 base-color textures, metallic/roughness factors, metallic-roughness textures,
@@ -97,6 +97,11 @@ After a Debug build:
 
 Open a model from `File > Open...`, pass a `.gltf` or `.glb` path as the first
 command-line argument, or drop a model file onto the viewer window.
+
+The build copies viewer assets beside the executable under `assets/`. Keep
+`assets/font/DroidSans.ttf` and `assets/icon/*.png` with `elf3d_viewer.exe`;
+they provide the Droid Sans UI font and generated toolbar icons used by the
+light Low.3D-inspired viewer style.
 
 Project-owned fixture:
 
@@ -169,12 +174,14 @@ docs/                   Technical documentation and release records
 - [Performance baseline](docs/PERFORMANCE_BASELINE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [User guide](docs/USER_GUIDE.md)
-- [Release records](docs/releases/0.1.0/)
+- [Release records](docs/releases/0.2.0/)
+- [Previous 0.1.0 release records](docs/releases/0.1.0/)
 
 ## Release
 
-The 0.1.0 release is published from tag `v0.1.0` as
-[Elf3D 0.1.0](https://github.com/zavelski/elf3d/releases/tag/v0.1.0).
+The 0.2.0 release is published from tag `v0.2.0` as
+[Elf3D 0.2.0](https://github.com/zavelski/elf3d/releases/tag/v0.2.0).
+The previous 0.1.0 release remains available from tag `v0.1.0`.
 
 ## Contributing
 

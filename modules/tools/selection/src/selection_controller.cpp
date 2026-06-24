@@ -72,6 +72,26 @@ SelectionController::select_at(picking::PickingService &picking, const scene::St
     return hit_;
 }
 
+Result<std::optional<PickHit>>
+SelectionController::select_hit(const scene::Storage &scene, const std::optional<PickHit> &hit) {
+    if (!enabled_) {
+        return std::optional<PickHit>{};
+    }
+    if (!hit.has_value()) {
+        clear();
+        return std::optional<PickHit>{};
+    }
+
+    const Result<const scene::EntityRecord *> record = scene.entity(hit->entity);
+    if (!record) {
+        return record.error();
+    }
+    selected_scene_ = scene.id();
+    entity_ = hit->entity;
+    hit_ = hit.value();
+    return hit_;
+}
+
 Result<void> SelectionController::set_selected_entity(const scene::Storage &scene,
                                                       EntityId entity) {
     const Result<const scene::EntityRecord *> record = scene.entity(entity);

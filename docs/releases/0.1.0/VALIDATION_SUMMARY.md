@@ -16,9 +16,8 @@ Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `tests/fixtures/textured_pbr.gltf`, `docs/releases/0.1.0`
 
 Known limitations: Manual interaction validation was user-performed on the
-packaged Windows Release viewer and is not automated. Tag-triggered GitHub
-Release validation, public clone testing, external model corpus validation,
-and performance measurements have not yet run.
+packaged Windows Release viewer and is not automated. External model corpus
+validation and performance measurements have not run.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `KNOWN_LIMITATIONS.md`, `RELEASE_CHECKLIST.md`, `RELEASE_ARTIFACTS.md`
@@ -82,6 +81,9 @@ window-handle checks, `CloseMainWindow()`, and exit-code checks.
 | Archive inspection | Passed | ZIP contents matched the planned viewer package file list. |
 | Packaged viewer smoke | Passed | Extracted final package opened from the extracted package directory and exited with code 0 after `CloseMainWindow()`. |
 | GitHub branch CI | Passed | Corrected `develop` and `main` CI ran on `windows-2022`, used `actions/checkout@v6`, configured with MSVC/Visual Studio 2022, built, and passed 16/16 tests in Debug and Release. |
+| Tag-triggered release workflow | Passed | GitHub Actions run `28084521674` ran on `windows-2022`, used `actions/checkout@v6`, built Release, passed 16/16 CTest tests, packaged assets, and created the GitHub Release. |
+| Published release assets | Passed | Downloaded assets from GitHub Release `v0.1.0`; `SHA256SUMS.txt` matched the downloaded viewer ZIP hash `8eabbe62bf8aaf7a0209b22196654b5a725fe83e9b111ac48093daa2b1ea3507`. |
+| Public clone test | Passed with environment note | Fresh public clone checked out `v0.1.0`, configured, built, and passed Debug and Release CTest 16/16. The successful clone build ran under `%TEMP%`, producing only path-related MSBuild `MSB8029` warnings. |
 | Manual viewer interaction matrix | Passed | User manually validated the packaged Windows Release viewer. This was not an automated test. |
 
 ## Manual Interaction Matrix
@@ -143,8 +145,6 @@ SHA-256:
 
 ## Not Verified
 
-- Tag-triggered release workflow on GitHub.
-- Public clone test.
 - External model corpus.
 - Benchmark or performance measurements.
 

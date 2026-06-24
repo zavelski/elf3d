@@ -29,6 +29,26 @@ Do not silently reinterpret an architectural rule to make a local change easier.
 If a task genuinely requires an architectural exception, keep it local,
 document the reason, and report it clearly.
 
+## Git and GitHub Workflow Routing
+
+Ordinary requests to create a commit on GitHub, publish current work, commit and
+push, or synchronize a completed ordinary change invoke `$elf3d-publish-change`.
+Ordinary publication means validation, documentation review, logical commits,
+push, and CI verification; it never implies a version release.
+
+Explicit named-version release requests invoke `$elf3d-release`. Ordinary
+development must not be committed directly to `main`. Release completion
+requires remote `main` and `develop` to have identical head commits. Release
+tags point to the validated release source commit and are never moved for later
+documentation. Post-release documentation must be synchronized into both
+branches.
+
+Never force-push and never move a published tag. Stop on secrets, private
+models, remote conflicts, failing tests, or authentication issues. Living
+documentation changes together with implementation. Historical release
+snapshots remain immutable except for explicitly designated post-release
+reports.
+
 ## Project Model
 
 Elf3D is a portable C++20 3D visualization engine.

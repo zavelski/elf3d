@@ -265,6 +265,25 @@ Result<void> Viewport::update_navigation(Scene &scene, EntityId camera,
     }
 }
 
+Result<void> Viewport::set_examine_pivot(Scene &scene, EntityId camera,
+                                         Float3 world_position) {
+    if (impl_ == nullptr || impl_->viewport == nullptr) {
+        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
+    }
+
+    try {
+        scene::Storage *storage = scene::Access::storage(scene);
+        if (storage == nullptr) {
+            return Error{ErrorCode::invalid_argument,
+                         "Viewport pivot update requires a live scene"};
+        }
+        return impl_->viewport->set_examine_pivot(*storage, camera, world_position);
+    } catch (...) {
+        return Error{ErrorCode::unexpected_exception,
+                     "Viewport pivot update threw an exception"};
+    }
+}
+
 Result<void> Viewport::fit_to_scene(Scene &scene, EntityId camera) {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};

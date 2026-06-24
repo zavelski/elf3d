@@ -42,6 +42,8 @@ class OffscreenViewport final {
 
     [[nodiscard]] Result<void> update_navigation(scene::Storage &scene, EntityId camera,
                                                  const ViewportInput &input);
+    [[nodiscard]] Result<void> set_examine_pivot(scene::Storage &scene, EntityId camera,
+                                                 Float3 world_position);
     [[nodiscard]] Result<void> fit_to_scene(scene::Storage &scene, EntityId camera);
     [[nodiscard]] Result<void> reset_view(scene::Storage &scene, EntityId camera);
     [[nodiscard]] Result<void> synchronize_navigation(const scene::Storage &scene, EntityId camera);
@@ -125,12 +127,18 @@ class OffscreenViewport final {
     OffscreenViewport(std::shared_ptr<graphics::Device> device,
                       std::shared_ptr<renderer::Renderer> renderer,
                       std::shared_ptr<picking::PickingService> picking,
-                      std::unique_ptr<graphics::RenderTarget> render_target) noexcept;
+                      std::unique_ptr<graphics::RenderTarget> render_target,
+                      std::unique_ptr<graphics::PickingTarget> picking_target) noexcept;
+    [[nodiscard]] Result<std::optional<PickHit>>
+    pick_gpu_first(const scene::Storage &scene, EntityId camera, Float2 position_pixels,
+                   const PickOptions &options, const scene::VisibilityFilter &visibility,
+                   const clipping::ClippingFilter &clipping_filter);
 
     std::shared_ptr<graphics::Device> device_;
     std::shared_ptr<renderer::Renderer> renderer_;
     std::shared_ptr<picking::PickingService> picking_;
     std::unique_ptr<graphics::RenderTarget> render_target_;
+    std::unique_ptr<graphics::PickingTarget> picking_target_;
     navigation::OrbitNavigationController navigation_;
     tools::selection::SelectionController selection_;
     tools::visibility::VisibilityController visibility_;
@@ -146,6 +154,7 @@ class OffscreenViewport final {
     Color4 clear_color_{0.08F, 0.16F, 0.28F, 1.0F};
     BasicLighting lighting_;
     RenderStatistics statistics_;
+    PickingStatistics gpu_picking_statistics_;
 };
 
 } // namespace elf3d::viewport
