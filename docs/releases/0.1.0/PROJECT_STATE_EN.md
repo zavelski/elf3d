@@ -6,7 +6,8 @@ Applicable version: 0.1.0
 
 Document status: Publication-prep release snapshot.
 
-Last verified implementation commit before current validation: `eeb39cd`
+Last verified implementation commit before final validation-record update:
+`f4d7d8e`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
@@ -79,8 +80,11 @@ Completed on 2026-06-23:
 - Debug and Release viewer processes opened `tests/fixtures/textured_pbr.gltf`
   and exited cleanly through the window close path.
 - Release viewer screenshot showed the project-owned fixture rendered.
-- Windows viewer ZIP package and checksum were created and inspected.
-- Extracted packaged viewer started outside the build tree and exited cleanly.
+- Windows viewer ZIP package and checksum were regenerated and inspected after
+  the final Release build; the final viewer ZIP SHA-256 is
+  `81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a`.
+- Extracted final packaged viewer started outside the build tree and exited
+  cleanly after `CloseMainWindow()`.
 - User-performed manual validation on the packaged Windows Release viewer
   passed for navigation, picking, selection, hierarchy synchronization,
   visibility, isolation, measurement, clipping, reload, close-scene,

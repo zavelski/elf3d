@@ -6,7 +6,8 @@ Applicable version: 0.1.0
 
 Document status: Release artifact validation record.
 
-Last verified implementation commit: `eeb39cdb2a9e92e61001a00d11cbe1880716f921`
+Last verified implementation commit before final validation-record update:
+`f4d7d8ea46eb4ea63017f891b746376d35ffdfa5`
 
 Implementation source paths: `scripts/package_release.ps1`,
 `.github/workflows/release.yml`, `apps/viewer`, `facade/elf3d`, `LICENSE`,
@@ -23,7 +24,7 @@ Related documents: `GITHUB_RELEASE_NOTES.md`, `RELEASE_CHECKLIST.md`,
 
 | Asset | Size | SHA-256 |
 | --- | ---: | --- |
-| `elf3d-viewer-0.1.0-windows-x64.zip` | 923,591 bytes | `7da7950c91fbabfa60ac35b7e2d4aa7f1387762ed587096aa5ebd86613ed72e5` |
+| `elf3d-viewer-0.1.0-windows-x64.zip` | 923,591 bytes | `81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a` |
 | `SHA256SUMS.txt` | 102 bytes | Contains checksum for the viewer ZIP. |
 
 GitHub automatically provides source archives for the `v0.1.0` tag. Duplicate
@@ -58,7 +59,7 @@ developer machine.
 
 ## Packaged Viewer Smoke
 
-The ZIP was extracted under `out/validation/package-run`. The extracted
+The final ZIP was extracted under `out/validation/package-run`. The extracted
 `elf3d_viewer.exe` was launched with `tests/fixtures/textured_pbr.gltf` from
 outside the build tree, created a window, and exited with code 0 after
 `CloseMainWindow()`.

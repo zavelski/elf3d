@@ -6,7 +6,8 @@ Applicable version: 0.1.0
 
 Document status: Publication release checklist.
 
-Last verified implementation commit: `eeb39cdb2a9e92e61001a00d11cbe1880716f921`
+Last verified implementation commit before final validation-record update:
+`f4d7d8ea46eb4ea63017f891b746376d35ffdfa5`
 
 Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `.github/workflows`, `scripts/package_release.ps1`, `include/elf3d`,
@@ -39,10 +40,10 @@ continuing publication.
 | Third-party licenses | Passed | `THIRD_PARTY.md` and `third_party/licenses/` preserve dependency notices separately. |
 | Clean tracked-file hygiene | Passed | Build outputs and local runtime files are ignored; no tracked large/generated binaries found. |
 | Version consistency | Passed | CMake, runtime version data, public API test, docs, package filenames, and release notes use `0.1.0`. |
-| Debug configure | Passed | Fresh `windows-debug` preset configured. |
+| Debug configure | Passed | Fresh `windows-debug` preset configured after the `GO` decision. |
 | Debug build | Passed | `cmake --build --preset windows-debug`. |
 | Debug tests | Passed | `ctest --preset windows-debug --output-on-failure`; 16/16 passed. |
-| Release configure | Passed with local workaround | Fresh `windows-release` preset configured after temporary per-process Git safe-directory entries for generated FetchContent checkouts on `Z:`. |
+| Release configure | Passed | Fresh `windows-release` preset configured after the `GO` decision. |
 | Release build | Passed | `cmake --build --preset windows-release`. |
 | Release tests | Passed | `ctest --preset windows-release --output-on-failure`; 16/16 passed. |
 | Viewer smoke test | Passed with limitation | Debug and Release viewers opened the project-owned fixture and exited with code 0 after `CloseMainWindow()`. |
@@ -50,7 +51,7 @@ continuing publication.
 | Manual viewer interaction matrix | Passed | User-performed validation on the packaged Windows Release viewer covered navigation, picking, selection, hierarchy synchronization, visibility, isolation, measurement, clipping, reload, close-scene, failed-load preservation, and normal shutdown. |
 | OpenGL shutdown | Partially verified | Window close path returned exit code 0 for Debug, Release, and packaged Release viewer. |
 | Release archive inspection | Passed | ZIP file contents matched `RELEASE_ARTIFACTS.md`. |
-| Checksums | Passed | `SHA256SUMS.txt` generated and verified against the ZIP. |
+| Checksums | Passed | `SHA256SUMS.txt` generated and verified against the ZIP: `81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a`. |
 | SDK package | Not applicable | Deferred for 0.1.0; no SDK archive is produced. |
 | Documentation | Passed with limitation | Public docs, release notes, CI docs, and package docs were updated; older audit docs remain historical. |
 | Remote repository safety | Pending publication step | GitHub repository inspection has not run yet. |

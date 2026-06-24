@@ -7,7 +7,8 @@ Applicable version: 0.1.0
 
 Document status: Publication validation summary.
 
-Last verified implementation commit: `eeb39cdb2a9e92e61001a00d11cbe1880716f921`
+Last verified implementation commit before final validation-record update:
+`f4d7d8ea46eb4ea63017f891b746376d35ffdfa5`
 
 Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `.github/workflows/ci.yml`, `.github/workflows/release.yml`,
@@ -40,6 +41,9 @@ above were used.
 
 ## Commands Executed
 
+Final local validation was rerun on 2026-06-24 after the manual interaction
+validation `GO` decision:
+
 ```powershell
 & 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --fresh --preset windows-debug
 & 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --build --preset windows-debug
@@ -50,13 +54,14 @@ above were used.
 .\scripts\package_release.ps1 -Version 0.1.0
 ```
 
-The first Release configure attempt failed on a local Git safety check while
-checking out a FetchContent dependency under `out/build/windows-release/_deps`
-on the `Z:` filesystem. The successful retry used temporary per-process
-`GIT_CONFIG_COUNT` environment entries for the generated dependency checkout
-directories; no repository files or global Git config were changed. The retry
-outlived the command timeout but completed and produced a valid
-`out/build/windows-release/CMakeCache.txt`.
+Both final fresh configure runs completed without temporary Git safe-directory
+overrides.
+
+One package regeneration attempt initially failed while removing the previous
+generated staging directory under `out/release`. No `elf3d_viewer` process was
+running, the generated staging path was confirmed under `out/release`, and a
+rerun of the same package command succeeded. The final assets listed below are
+from the successful package run.
 
 Viewer smoke and package smoke were run with PowerShell `Start-Process`,
 window-handle checks, `CloseMainWindow()`, and exit-code checks.
@@ -65,19 +70,19 @@ window-handle checks, `CloseMainWindow()`, and exit-code checks.
 
 | Area | Result | Notes |
 | --- | --- | --- |
-| Debug configure | Passed | Fresh preset configure completed. |
+| Debug configure | Passed | Fresh `windows-debug` preset configure completed after the `GO` decision. |
 | Debug build | Passed | Built `elf3d.dll`, internal libraries, tests, `elf3d_imgui`, and `elf3d_viewer.exe`. |
 | Debug warnings | None observed | Build output did not contain warning diagnostics. |
 | Debug tests | Passed | 16 passed, 0 failed, 0 skipped. |
-| Release configure | Passed with local workaround | Separate `out/build/windows-release` tree configured after temporary per-process Git safe-directory entries. |
+| Release configure | Passed | Fresh `windows-release` preset configure completed after the `GO` decision. |
 | Release build | Passed | Built Release targets in the separate Release tree. |
 | Release warnings | None observed | Build output did not contain warning diagnostics. |
 | Release tests | Passed | 16 passed, 0 failed, 0 skipped. |
 | Viewer smoke | Passed | Debug and Release viewers opened with `tests/fixtures/textured_pbr.gltf` and exited with code 0 after `CloseMainWindow()`. |
 | Screenshot visual check | Passed with limitation | Release screenshot showed the fixture rendered in the viewer. Interaction was not fully exercised. |
-| Release package | Passed | `elf3d-viewer-0.1.0-windows-x64.zip` and `SHA256SUMS.txt` created. |
+| Release package | Passed | `elf3d-viewer-0.1.0-windows-x64.zip` and `SHA256SUMS.txt` regenerated after the final Release build. |
 | Archive inspection | Passed | ZIP contents matched the planned viewer package file list. |
-| Packaged viewer smoke | Passed | Extracted package opened from outside the build tree and exited with code 0. |
+| Packaged viewer smoke | Passed | Extracted final package opened from outside the build tree and exited with code 0 after `CloseMainWindow()`. |
 | Manual viewer interaction matrix | Passed | User manually validated the packaged Windows Release viewer. This was not an automated test. |
 
 ## Manual Interaction Matrix
@@ -134,7 +139,7 @@ Release:
 SHA-256:
 
 ```text
-7da7950c91fbabfa60ac35b7e2d4aa7f1387762ed587096aa5ebd86613ed72e5  elf3d-viewer-0.1.0-windows-x64.zip
+81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a  elf3d-viewer-0.1.0-windows-x64.zip
 ```
 
 ## Not Verified

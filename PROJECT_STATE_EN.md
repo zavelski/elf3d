@@ -7,7 +7,8 @@ Applicable version: 0.1.0
 
 Document status: Living project-state document.
 
-Last verified implementation commit before current validation: `eeb39cd`
+Last verified implementation commit before final validation-record update:
+`f4d7d8e`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
@@ -33,7 +34,8 @@ Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 - Reference app: `elf3d_viewer`
 - Current preparation branch: `audit/0.1.0`
 - Pre-audit checkpoint: `f8fe3a827bc81dadb461e58bdbe846958dab346a`
-- Latest local publication-prep commit before validation: `eeb39cd`
+- Latest local publication-prep commit before final validation-record update:
+  `f4d7d8e`
 - Remotes: none configured during publication precheck
 - Tags: none present during publication precheck
 - Release decision: `GO — ready for public publication`
@@ -86,10 +88,11 @@ Completed validation:
 - Release viewer opened `tests/fixtures/textured_pbr.gltf`, rendered the
   fixture in a captured screenshot, and exited with code 0 after
   `CloseMainWindow()`.
-- `elf3d-viewer-0.1.0-windows-x64.zip` and `SHA256SUMS.txt` were created and
-  inspected.
-- The packaged viewer opened from an extracted ZIP directory and exited with
-  code 0 after `CloseMainWindow()`.
+- `elf3d-viewer-0.1.0-windows-x64.zip` and `SHA256SUMS.txt` were regenerated
+  and inspected after the final Release build; the final viewer ZIP SHA-256 is
+  `81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a`.
+- The final packaged viewer opened from an extracted ZIP directory and exited
+  with code 0 after `CloseMainWindow()`.
 - User-performed manual validation on the packaged Windows Release viewer
   passed for navigation, picking, selection, hierarchy synchronization,
   visibility, isolation, measurement, clipping, reload, close-scene,

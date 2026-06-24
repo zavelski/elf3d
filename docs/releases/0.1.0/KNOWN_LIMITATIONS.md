@@ -7,7 +7,8 @@ Applicable version: 0.1.0
 
 Document status: Publication limitation register.
 
-Last verified implementation commit: `eeb39cdb2a9e92e61001a00d11cbe1880716f921`
+Last verified implementation commit before final validation-record update:
+`f4d7d8ea46eb4ea63017f891b746376d35ffdfa5`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `apps/viewer`, `docs/GLTF_SUPPORT.md`, `docs/RENDERING_PIPELINE.md`,
