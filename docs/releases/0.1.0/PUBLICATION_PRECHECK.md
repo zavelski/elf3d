@@ -103,9 +103,10 @@ Located during precheck:
 - `docs/releases/0.1.0/`
 - existing audit, remediation, validation, and release-candidate records
 
-## Remaining Publication Steps
+## Remaining Publication Steps At Precheck Completion
 
-Current required steps before declaring public publication complete:
+Required steps before declaring public publication complete at precheck
+completion:
 
 - local `main` branch is missing;
 - local annotated `v0.1.0` tag is missing;

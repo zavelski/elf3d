@@ -6,8 +6,8 @@ Applicable version: 0.1.0
 
 Document status: Release artifact validation record.
 
-Last verified implementation commit before final validation-record update:
-`f4d7d8ea46eb4ea63017f891b746376d35ffdfa5`
+Last verified implementation commit before final package-record update:
+`a99bb1008882994d3127141019b049927cbc2c97`
 
 Implementation source paths: `scripts/package_release.ps1`,
 `.github/workflows/release.yml`, `apps/viewer`, `facade/elf3d`, `LICENSE`,
@@ -24,7 +24,7 @@ Related documents: `GITHUB_RELEASE_NOTES.md`, `RELEASE_CHECKLIST.md`,
 
 | Asset | Size | SHA-256 |
 | --- | ---: | --- |
-| `elf3d-viewer-0.1.0-windows-x64.zip` | 923,591 bytes | `81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a` |
+| `elf3d-viewer-0.1.0-windows-x64.zip` | 923,630 bytes | `1d39c50460e86083f448557ed6a7eddad3974d26b99e84e4c2cfc030c5265c92` |
 | `SHA256SUMS.txt` | 102 bytes | Contains checksum for the viewer ZIP. |
 
 GitHub automatically provides source archives for the `v0.1.0` tag. Duplicate
@@ -59,9 +59,9 @@ developer machine.
 
 ## Packaged Viewer Smoke
 
-The final ZIP was extracted under `out/validation/package-run`. The extracted
-`elf3d_viewer.exe` was launched with `tests/fixtures/textured_pbr.gltf` from
-outside the build tree, created a window, and exited with code 0 after
+The final ZIP was extracted under `out/validation/package-final-run`. The
+extracted `elf3d_viewer.exe` was launched from the extracted package directory
+without a model argument, created a window, and exited with code 0 after
 `CloseMainWindow()`.
 
 Running the extracted viewer created a local `imgui.ini` in the extracted

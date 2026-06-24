@@ -7,8 +7,8 @@ Applicable version: 0.1.0
 
 Document status: Publication limitation register.
 
-Last verified implementation commit before final validation-record update:
-`f4d7d8ea46eb4ea63017f891b746376d35ffdfa5`
+Last verified implementation commit before final package-record update:
+`a99bb1008882994d3127141019b049927cbc2c97`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `apps/viewer`, `docs/GLTF_SUPPORT.md`, `docs/RENDERING_PIPELINE.md`,
@@ -16,8 +16,8 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 
 Known limitations: This document is itself the limitation register. No local
 publication blocker remains after user-performed packaged viewer interaction
-validation; remote CI, GitHub Release, and public clone validation have not yet
-run.
+validation. Remote branch CI has passed; tag-triggered GitHub Release
+workflow, GitHub Release, and public clone validation have not yet run.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `VALIDATION_SUMMARY.md`, `RELEASE_CHECKLIST.md`
@@ -28,8 +28,9 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
   for navigation, picking, selection, hierarchy synchronization, visibility,
   isolation, measurement, clipping, reload, close-scene, failed-load
   preservation, and normal shutdown.
-- Remote GitHub CI, GitHub Release verification, and public clone validation
-  have not yet run because publication has not started.
+- Corrected remote branch CI passed on `develop` and `main`.
+- Tag-triggered GitHub Release workflow verification, GitHub Release
+  verification, and public clone validation have not yet run.
 
 ## Public API and ABI
 
@@ -89,6 +90,6 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 ## Packaging, CI, and Performance
 
 - SDK packaging is deferred for 0.1.0.
-- GitHub Actions workflows are committed locally but have not run remotely.
+- Corrected GitHub Actions branch CI passed on `windows-2022`.
 - No benchmark numbers are claimed for 0.1.0.
 - No external model corpus was validated.

@@ -37,7 +37,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | --- | --- | --- | --- | --- | --- |
 | Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Completed by the user for the 0.1.0 publication baseline. |
 | Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature `v0.1.0`. | None if required validation remains respected. | `GO — ready for public publication`. |
-| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Remote CI, GitHub Release verification, and public clone test. |
+| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Corrected branch CI passed; tag-triggered GitHub Release verification and public clone test remain. |
 
 ## 0.1.x Candidate Corrections
 

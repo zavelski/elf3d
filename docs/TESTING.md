@@ -14,9 +14,10 @@ Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
 `.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
 `modules/*/tests`, `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`
 
-Known limitations: GitHub Actions workflows have been added for public
-publication, but remote CI has not been verified until the repository is pushed.
-Manual viewer interaction and visual rendering must be validated separately.
+Known limitations: Corrected GitHub Actions branch CI has been verified on the
+public repository. Tag-triggered release workflow verification is still part of
+publication. Manual viewer interaction and visual rendering must be validated
+separately.
 
 Related documents: `MODULE_MAP.md`, `USER_GUIDE.md`,
 `PERFORMANCE_BASELINE.md`, `audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
@@ -94,8 +95,8 @@ It runs on Windows x64 and uses the checked-in CMake presets:
 - `windows-debug`
 - `windows-release`
 
-Each job configures, builds, and runs CTest. Remote CI must be verified after
-publication before the GitHub Release is created.
+Each job configures, builds, and runs CTest. The corrected branch workflow was
+verified on public `develop` and `main` pushes before tag publication.
 
 The release workflow is `.github/workflows/release.yml`. It runs on `v*` tags
 and manual dispatch, verifies the 0.1.0 version, configures and builds Release,

@@ -7,8 +7,8 @@ Applicable version: 0.1.0
 
 Document status: Living project-state document.
 
-Last verified implementation commit before final validation-record update:
-`f4d7d8e`
+Last verified implementation commit before final package-record update:
+`a99bb10`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
@@ -16,10 +16,10 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `scripts`
 
 Known limitations: Release records exist under `docs/releases/0.1.0/`, and the
-release is ready for public publication after user-performed packaged viewer
-interaction validation. It is not yet tagged or published because final local
-validation, branch integration, remote CI, GitHub Release verification, and
-public clone validation still need to run.
+release is ready for public tag publication after user-performed packaged
+viewer interaction validation, final local validation, branch integration, and
+successful corrected branch CI. Tag-triggered release workflow verification,
+GitHub Release verification, and public clone validation still need to run.
 
 Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
@@ -90,9 +90,9 @@ Completed validation:
   `CloseMainWindow()`.
 - `elf3d-viewer-0.1.0-windows-x64.zip` and `SHA256SUMS.txt` were regenerated
   and inspected after the final Release build; the final viewer ZIP SHA-256 is
-  `81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a`.
-- The final packaged viewer opened from an extracted ZIP directory and exited
-  with code 0 after `CloseMainWindow()`.
+  `1d39c50460e86083f448557ed6a7eddad3974d26b99e84e4c2cfc030c5265c92`.
+- The final packaged viewer opened from the extracted package directory and
+  exited with code 0 after `CloseMainWindow()`.
 - User-performed manual validation on the packaged Windows Release viewer
   passed for navigation, picking, selection, hierarchy synchronization,
   visibility, isolation, measurement, clipping, reload, close-scene,
@@ -105,7 +105,6 @@ Not yet validated:
 
 - performance benchmark metrics
 - external model corpus
-- remote CI
 - public clone test
 
 ## Remediated Audit Items
@@ -119,10 +118,10 @@ Not yet validated:
 
 - Decide whether import warnings remain `std::clog` diagnostics for 0.1.x or
   need a public report API.
-- Run final local validation, integrate `audit/0.1.0` into `develop`, create
-  `main`, and create annotated `v0.1.0` only while validation remains green.
-- Configure and verify `origin`, publish the release baseline, verify remote
-  CI, create the GitHub Release, and run the public clone test.
+- Publish the corrected annotated `v0.1.0` tag only while local validation,
+  remote branch CI, and release records remain green.
+- Verify the tag-triggered release workflow, verify the GitHub Release and
+  uploaded assets, and run the public clone test.
 
 ## Known Limitations
 

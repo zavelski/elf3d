@@ -6,8 +6,8 @@ Applicable version: 0.1.0
 
 Document status: Publication release checklist.
 
-Last verified implementation commit before final validation-record update:
-`f4d7d8ea46eb4ea63017f891b746376d35ffdfa5`
+Last verified implementation commit before final package-record update:
+`a99bb1008882994d3127141019b049927cbc2c97`
 
 Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `.github/workflows`, `scripts/package_release.ps1`, `include/elf3d`,
@@ -15,8 +15,9 @@ Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `THIRD_PARTY.md`, `docs`
 
 Known limitations: No local publication blocker remains after the
-user-performed packaged viewer interaction validation. Remote repository, CI,
-release, and clone-test validation remain pending publication steps.
+user-performed packaged viewer interaction validation. Remote repository and
+branch CI validation passed; tag-triggered release, GitHub Release, and
+clone-test validation remain pending publication steps.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `VALIDATION_SUMMARY.md`, `KNOWN_LIMITATIONS.md`, `PUBLICATION_PRECHECK.md`,
@@ -26,10 +27,10 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 
 `GO — ready for public publication`
 
-Proceed with final local validation, branch integration, GitHub publication,
-remote CI verification, release creation, and public clone validation. If any
-required validation fails, restore the release decision to no-go before
-continuing publication.
+Proceed with tag publication, tag-triggered release workflow verification,
+GitHub Release verification, and public clone validation. If any required
+validation fails, restore the release decision to no-go before continuing
+publication.
 
 ## Checklist
 
@@ -51,14 +52,14 @@ continuing publication.
 | Manual viewer interaction matrix | Passed | User-performed validation on the packaged Windows Release viewer covered navigation, picking, selection, hierarchy synchronization, visibility, isolation, measurement, clipping, reload, close-scene, failed-load preservation, and normal shutdown. |
 | OpenGL shutdown | Partially verified | Window close path returned exit code 0 for Debug, Release, and packaged Release viewer. |
 | Release archive inspection | Passed | ZIP file contents matched `RELEASE_ARTIFACTS.md`. |
-| Checksums | Passed | `SHA256SUMS.txt` generated and verified against the ZIP: `81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a`. |
+| Checksums | Passed | `SHA256SUMS.txt` generated and verified against the ZIP: `1d39c50460e86083f448557ed6a7eddad3974d26b99e84e4c2cfc030c5265c92`. |
 | SDK package | Not applicable | Deferred for 0.1.0; no SDK archive is produced. |
 | Documentation | Passed with limitation | Public docs, release notes, CI docs, and package docs were updated; older audit docs remain historical. |
-| Remote repository safety | Pending publication step | GitHub repository inspection has not run yet. |
-| Tag correctness | Pending publication step | `v0.1.0` has not been created yet. |
-| GitHub CI | Pending publication step | Workflows are committed locally but have not run remotely. |
+| Remote repository safety | Passed | GitHub repository `zavelski/elf3d` is public, `origin` points to it, and remote `main`/`develop` were inspected. |
+| Tag correctness | Pending publication step | Local annotated `v0.1.0` has been recreated for the corrected release commit; remote `v0.1.0` has not been pushed yet. |
+| GitHub CI | Passed | Corrected `develop` and `main` CI passed Debug and Release jobs on `windows-2022`. |
 | GitHub Release | Pending publication step | Release has not been created yet. |
-| Clone test | Pending publication step | Public repository has not been published yet. |
+| Clone test | Pending publication step | Fresh public clone from the published `v0.1.0` tag has not been run yet. |
 
 ## Manual Viewer Interaction Validation
 
@@ -82,7 +83,7 @@ None recorded.
 ## Publication Status
 
 Local publication readiness is confirmed. Continue the publication sequence
-only while final local validation, branch integration, remote CI, GitHub
-Release creation, and public clone validation continue to pass.
+only while local validation, remote branch CI, tag-triggered release workflow,
+GitHub Release creation, and public clone validation continue to pass.
 
 `GO — ready for public publication`

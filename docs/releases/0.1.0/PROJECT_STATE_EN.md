@@ -6,18 +6,19 @@ Applicable version: 0.1.0
 
 Document status: Publication-prep release snapshot.
 
-Last verified implementation commit before final validation-record update:
-`f4d7d8e`
+Last verified implementation commit before final package-record update:
+`a99bb10`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`, `README.md`, `LICENSE`, `THIRD_PARTY.md`, `.github`,
 `scripts`
 
-Known limitations: The release is ready for public publication after
-user-performed packaged viewer interaction validation. It is not yet tagged or
-published because final local validation, branch integration, remote CI,
-GitHub Release verification, and public clone validation still need to run.
+Known limitations: The release is ready for public tag publication after
+user-performed packaged viewer interaction validation, final local validation,
+branch integration, and successful corrected branch CI. Tag-triggered release
+workflow verification, GitHub Release verification, and public clone validation
+still need to run.
 
 Related documents: `AUDIT_SUMMARY.md`, `VALIDATION_SUMMARY.md`,
 `KNOWN_LIMITATIONS.md`, `RELEASE_CHECKLIST.md`, `../../../PROJECT_STATE_EN.md`
@@ -82,9 +83,9 @@ Completed on 2026-06-23:
 - Release viewer screenshot showed the project-owned fixture rendered.
 - Windows viewer ZIP package and checksum were regenerated and inspected after
   the final Release build; the final viewer ZIP SHA-256 is
-  `81e974d96616370232f5f5a425b05bbdad48ddfe967f73621ac6fdb8a52d610a`.
-- Extracted final packaged viewer started outside the build tree and exited
-  cleanly after `CloseMainWindow()`.
+  `1d39c50460e86083f448557ed6a7eddad3974d26b99e84e4c2cfc030c5265c92`.
+- Extracted final packaged viewer started from the extracted package directory
+  and exited cleanly after `CloseMainWindow()`.
 - User-performed manual validation on the packaged Windows Release viewer
   passed for navigation, picking, selection, hierarchy synchronization,
   visibility, isolation, measurement, clipping, reload, close-scene,
@@ -94,7 +95,6 @@ Not validated:
 
 - performance measurements
 - external model corpus
-- remote CI
 - public clone test
 
 ## Release Decision
@@ -103,5 +103,5 @@ Not validated:
 
 Remaining publication validation:
 
-- Final local validation after the `GO` decision, branch integration, annotated
-  tag creation, remote CI, GitHub Release verification, and public clone test.
+- Annotated tag publication, tag-triggered release workflow verification,
+  GitHub Release verification, and public clone test.
