@@ -23,6 +23,8 @@ class SelectionController final {
     select_at(picking::PickingService &picking, const scene::Storage &scene, EntityId camera,
               Extent2D extent, Float2 position_pixels, const scene::VisibilityFilter &visibility,
               const clipping::ClippingFilter &clipping_filter);
+    [[nodiscard]] Result<std::optional<PickHit>>
+    select_hit(const scene::Storage &scene, const std::optional<PickHit> &hit);
     [[nodiscard]] Result<void> set_selected_entity(const scene::Storage &scene, EntityId entity);
 
     void clear() noexcept;

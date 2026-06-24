@@ -21,6 +21,8 @@ class OrbitNavigationController final {
     [[nodiscard]] Result<NavigationUpdate>
     update(scene::Storage &scene, EntityId camera, Extent2D extent, const ViewportInput &input,
            float click_drag_threshold_pixels, const scene::VisibilityFilter &visibility);
+    [[nodiscard]] Result<void> set_pivot(scene::Storage &scene, EntityId camera,
+                                         Float3 world_position);
     [[nodiscard]] Result<void> fit_to_scene(scene::Storage &scene, EntityId camera,
                                             Extent2D extent);
     [[nodiscard]] Result<void> fit_to_scene(scene::Storage &scene, EntityId camera,

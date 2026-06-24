@@ -10,6 +10,8 @@ GraphicsPipeline::~GraphicsPipeline() = default;
 
 RenderTarget::~RenderTarget() = default;
 
+PickingTarget::~PickingTarget() = default;
+
 Device::~Device() = default;
 
 } // namespace elf3d::graphics

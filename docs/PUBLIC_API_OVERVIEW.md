@@ -116,7 +116,7 @@ not own the logical scene.
 - clear color and basic directional lighting
 - orbit/pan/dolly navigation
 - fit and reset to visible content
-- CPU picking rays and pick queries
+- picking rays and viewport pick queries
 - single selection per viewport
 - persistent scene visibility commands for the selected entity
 - per-viewport isolation

@@ -79,7 +79,8 @@ int main() {
 
     input.is_hovered = true;
     input.left_button_down = true;
-    input.shift_down = true;
+    input.shift_down = false;
+    input.x_down = true;
     frame = state.update(input, threshold);
     if (!frame.drag_started || frame.mode != elf3d::NavigationInteractionMode::pan) {
         return 11;
@@ -91,6 +92,7 @@ int main() {
 
     input.left_button_down = false;
     input.middle_button_down = false;
+    input.x_down = false;
     static_cast<void>(state.update(input, threshold));
     input.middle_button_down = true;
     frame = state.update(input, threshold);
@@ -101,6 +103,28 @@ int main() {
     frame = state.update(input, threshold);
     if (!frame.drag_ended || state.pointer_captured()) {
         return 14;
+    }
+
+    input.is_focused = true;
+    input.is_hovered = true;
+    input.middle_button_down = false;
+    input.right_button_down = false;
+    static_cast<void>(state.update(input, threshold));
+    input.right_button_down = true;
+    frame = state.update(input, threshold);
+    if (!frame.drag_started || frame.mode != elf3d::NavigationInteractionMode::pan) {
+        return 15;
+    }
+    input.right_button_down = false;
+    static_cast<void>(state.update(input, threshold));
+
+    input.left_button_down = false;
+    input.z_down = true;
+    static_cast<void>(state.update(input, threshold));
+    input.left_button_down = true;
+    frame = state.update(input, threshold);
+    if (!frame.drag_started || frame.mode != elf3d::NavigationInteractionMode::zoom) {
+        return 16;
     }
 
     return 0;

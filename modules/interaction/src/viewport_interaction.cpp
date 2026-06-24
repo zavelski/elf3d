@@ -10,6 +10,8 @@ namespace {
         return !input.left_button_down;
     case PointerButton::middle:
         return !input.middle_button_down;
+    case PointerButton::right:
+        return !input.right_button_down;
     case PointerButton::none:
         return false;
     }
@@ -32,6 +34,8 @@ ViewportInteractionState::update(const ViewportInput &input,
     frame.left_released = !input.left_button_down && previous_left_down_;
     frame.middle_pressed = input.middle_button_down && !previous_middle_down_;
     frame.middle_released = !input.middle_button_down && previous_middle_down_;
+    frame.right_pressed = input.right_button_down && !previous_right_down_;
+    frame.right_released = !input.right_button_down && previous_right_down_;
 
     if (!input.is_focused) {
         frame.drag_ended = active_button_ != PointerButton::none;
@@ -39,6 +43,7 @@ ViewportInteractionState::update(const ViewportInput &input,
         cancel();
         previous_left_down_ = input.left_button_down;
         previous_middle_down_ = input.middle_button_down;
+        previous_right_down_ = input.right_button_down;
         return frame;
     }
 
@@ -52,7 +57,13 @@ ViewportInteractionState::update(const ViewportInput &input,
         if (input.left_button_down && movement_squared > threshold_squared) {
             pending_left_click_ = false;
             active_button_ = PointerButton::left;
-            mode_ = NavigationInteractionMode::orbit;
+            if (input.x_down) {
+                mode_ = NavigationInteractionMode::pan;
+            } else if (input.z_down) {
+                mode_ = NavigationInteractionMode::zoom;
+            } else {
+                mode_ = NavigationInteractionMode::orbit;
+            }
             frame.drag_started = true;
         } else if (frame.left_released) {
             frame.click_released = input.is_hovered && movement_squared <= threshold_squared;
@@ -64,9 +75,13 @@ ViewportInteractionState::update(const ViewportInput &input,
 
     if (!pending_left_click_ && active_button_ == PointerButton::none && input.is_hovered) {
         if (frame.left_pressed) {
-            if (input.shift_down) {
+            if (input.x_down) {
                 active_button_ = PointerButton::left;
                 mode_ = NavigationInteractionMode::pan;
+                frame.drag_started = true;
+            } else if (input.z_down) {
+                active_button_ = PointerButton::left;
+                mode_ = NavigationInteractionMode::zoom;
                 frame.drag_started = true;
             } else {
                 pending_left_click_ = true;
@@ -74,6 +89,10 @@ ViewportInteractionState::update(const ViewportInput &input,
             }
         } else if (frame.middle_pressed) {
             active_button_ = PointerButton::middle;
+            mode_ = NavigationInteractionMode::pan;
+            frame.drag_started = true;
+        } else if (frame.right_pressed) {
+            active_button_ = PointerButton::right;
             mode_ = NavigationInteractionMode::pan;
             frame.drag_started = true;
         }
@@ -94,6 +113,7 @@ ViewportInteractionState::update(const ViewportInput &input,
 
     previous_left_down_ = input.left_button_down;
     previous_middle_down_ = input.middle_button_down;
+    previous_right_down_ = input.right_button_down;
     return frame;
 }
 

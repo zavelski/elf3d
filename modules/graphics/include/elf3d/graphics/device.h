@@ -90,6 +90,30 @@ struct DrawIndexedDescription {
     std::uint32_t clipping_box_count = 0;
 };
 
+struct PickingDrawDescription {
+    std::array<float, 16> model_matrix{};
+    std::array<float, 16> view_matrix{};
+    std::array<float, 16> projection_matrix{};
+    std::uint32_t object_id = 0;
+    std::uint32_t primitive_index = 0;
+    bool double_sided = false;
+    bool front_face_clockwise = false;
+    bool clipping_section_plane_enabled = false;
+    Float3 clipping_section_plane_normal{0.0F, 1.0F, 0.0F};
+    float clipping_section_plane_offset = 0.0F;
+    bool clipping_retain_positive_half_space = true;
+    std::array<Bounds3, maximum_clipping_boxes> clipping_boxes{};
+    std::uint32_t clipping_box_count = 0;
+};
+
+struct PickingPixel {
+    std::uint32_t object_id = 0;
+    std::uint32_t primitive_index = 0;
+    std::uint32_t triangle_index = 0;
+    float depth = 1.0F;
+    bool hit = false;
+};
+
 struct DrawOverlayDescription {
     std::array<float, 16> view_matrix{};
     std::array<float, 16> projection_matrix{};
@@ -160,6 +184,24 @@ class RenderTarget {
     RenderTarget() = default;
 };
 
+class PickingTarget {
+  public:
+    virtual ~PickingTarget();
+
+    PickingTarget(const PickingTarget &) = delete;
+    PickingTarget &operator=(const PickingTarget &) = delete;
+    PickingTarget(PickingTarget &&) = delete;
+    PickingTarget &operator=(PickingTarget &&) = delete;
+
+    [[nodiscard]] virtual Extent2D extent() const noexcept = 0;
+    [[nodiscard]] virtual Result<void> resize(Extent2D extent) = 0;
+    [[nodiscard]] virtual Result<void> clear() = 0;
+    [[nodiscard]] virtual bool is_valid() const noexcept = 0;
+
+  protected:
+    PickingTarget() = default;
+};
+
 class Device {
   public:
     virtual ~Device();
@@ -172,6 +214,8 @@ class Device {
     [[nodiscard]] virtual GraphicsBackend backend() const noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<RenderTarget>>
     create_render_target(Extent2D initial_extent) = 0;
+    [[nodiscard]] virtual Result<std::unique_ptr<PickingTarget>>
+    create_picking_target(Extent2D initial_extent) = 0;
     [[nodiscard]] virtual Result<NativeTextureView>
     native_texture_view(TextureHandle texture) const = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<StaticMesh>>
@@ -185,6 +229,11 @@ class Device {
                                                     const DrawIndexedDescription &description) = 0;
     [[nodiscard]] virtual Result<void> draw_overlay(RenderTarget &target,
                                                     const DrawOverlayDescription &description) = 0;
+    [[nodiscard]] virtual Result<void>
+    draw_picking_indexed(PickingTarget &target, StaticMesh &mesh,
+                         const PickingDrawDescription &description) = 0;
+    [[nodiscard]] virtual Result<PickingPixel> read_picking_pixel(PickingTarget &target,
+                                                                  Float2 position_pixels) = 0;
 
   protected:
     Device() = default;

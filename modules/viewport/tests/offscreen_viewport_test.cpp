@@ -61,6 +61,39 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
     elf3d::TextureHandle texture_handle_;
 };
 
+class FakePickingTarget final : public elf3d::graphics::PickingTarget {
+  public:
+    explicit FakePickingTarget(elf3d::Extent2D extent) noexcept : extent_(extent) {}
+
+    [[nodiscard]] elf3d::Extent2D extent() const noexcept override {
+        return extent_;
+    }
+
+    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) override {
+        if (extent == extent_) {
+            return {};
+        }
+        extent_ = extent;
+        ++resize_count;
+        return {};
+    }
+
+    [[nodiscard]] elf3d::Result<void> clear() override {
+        ++clear_count;
+        return {};
+    }
+
+    [[nodiscard]] bool is_valid() const noexcept override {
+        return extent_.width != 0 && extent_.height != 0;
+    }
+
+    int resize_count = 0;
+    int clear_count = 0;
+
+  private:
+    elf3d::Extent2D extent_;
+};
+
 class FakeDevice final : public elf3d::graphics::Device {
   public:
     [[nodiscard]] elf3d::GraphicsBackend backend() const noexcept override {
@@ -72,6 +105,13 @@ class FakeDevice final : public elf3d::graphics::Device {
         auto target = std::make_unique<FakeRenderTarget>(initial_extent);
         last_target = target.get();
         return std::unique_ptr<elf3d::graphics::RenderTarget>{std::move(target)};
+    }
+
+    [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::PickingTarget>>
+    create_picking_target(elf3d::Extent2D initial_extent) override {
+        auto target = std::make_unique<FakePickingTarget>(initial_extent);
+        last_picking_target = target.get();
+        return std::unique_ptr<elf3d::graphics::PickingTarget>{std::move(target)};
     }
 
     [[nodiscard]] elf3d::Result<elf3d::NativeTextureView>
@@ -129,8 +169,19 @@ class FakeDevice final : public elf3d::graphics::Device {
         latest_overlay_markers = static_cast<int>(description.markers.size());
         return {};
     }
+    [[nodiscard]] elf3d::Result<void>
+    draw_picking_indexed(elf3d::graphics::PickingTarget &, elf3d::graphics::StaticMesh &,
+                         const elf3d::graphics::PickingDrawDescription &) override {
+        return {};
+    }
+    [[nodiscard]] elf3d::Result<elf3d::graphics::PickingPixel>
+    read_picking_pixel(elf3d::graphics::PickingTarget &, elf3d::Float2) override {
+        return picking_pixel;
+    }
 
     FakeRenderTarget *last_target = nullptr;
+    FakePickingTarget *last_picking_target = nullptr;
+    elf3d::graphics::PickingPixel picking_pixel;
     int latest_overlay_lines = 0;
     int latest_overlay_markers = 0;
 };
@@ -217,16 +268,25 @@ int main() {
     click_input.is_focused = true;
     click_input.is_hovered = true;
     click_input.pointer_position_pixels = {319.5F, 179.5F};
+    device->picking_pixel = elf3d::graphics::PickingPixel{1U, 0U, 0U, 0.5F, true};
     click_input.left_button_down = true;
     if (!viewport->update_navigation(scene, camera_result.value(), click_input) ||
         viewport->has_selection()) {
         return 81;
     }
+    click_input.control_down = true;
     click_input.left_button_down = false;
     if (!viewport->update_navigation(scene, camera_result.value(), click_input) ||
         !viewport->has_selection() || viewport->selected_entity() != model.value()) {
         return 82;
     }
+    const elf3d::PickingStatistics pick_stats = viewport->picking_statistics();
+    if (pick_stats.latest_gpu_requests != 1 || pick_stats.latest_gpu_hits != 1 ||
+        pick_stats.latest_gpu_misses != 0 || pick_stats.latest_cpu_refinements != 1 ||
+        pick_stats.latest_cpu_fallbacks != 0 || pick_stats.latest_triangle_tests != 1) {
+        return 824;
+    }
+    click_input.control_down = false;
     if (!viewport->hide_selected(scene) || !viewport->has_selection() ||
         scene.entity_effective_visibility(model.value()).value()) {
         return 821;

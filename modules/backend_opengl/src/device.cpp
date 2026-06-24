@@ -302,6 +302,19 @@ void delete_objects(GLuint framebuffer, GLuint color_texture, GLuint depth_rende
     }
 }
 
+void delete_picking_objects(GLuint framebuffer, GLuint id_texture,
+                            GLuint depth_renderbuffer) noexcept {
+    if (depth_renderbuffer != 0) {
+        glDeleteRenderbuffers(1, &depth_renderbuffer);
+    }
+    if (id_texture != 0) {
+        glDeleteTextures(1, &id_texture);
+    }
+    if (framebuffer != 0) {
+        glDeleteFramebuffers(1, &framebuffer);
+    }
+}
+
 class OpenGLRenderTarget final : public graphics::RenderTarget {
   public:
     explicit OpenGLRenderTarget(std::shared_ptr<OpenGLDeviceState> state) noexcept
@@ -453,6 +466,141 @@ class OpenGLRenderTarget final : public graphics::RenderTarget {
     GLuint color_texture_ = 0;
     GLuint depth_renderbuffer_ = 0;
     TextureHandle color_texture_handle_;
+};
+
+class OpenGLPickingTarget final : public graphics::PickingTarget {
+  public:
+    explicit OpenGLPickingTarget(std::shared_ptr<OpenGLDeviceState> state) noexcept
+        : state_(std::move(state)) {}
+
+    ~OpenGLPickingTarget() override {
+        release();
+    }
+
+    [[nodiscard]] Extent2D extent() const noexcept override {
+        return extent_;
+    }
+
+    [[nodiscard]] Result<void> resize(Extent2D extent) override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+        if (extent == extent_) {
+            return {};
+        }
+        if (extent.width == 0 || extent.height == 0) {
+            release();
+            extent_ = extent;
+            return {};
+        }
+        if (!state_->supports(extent)) {
+            return Error{ErrorCode::invalid_viewport_dimensions,
+                         "Picking dimensions exceed the OpenGL texture-size limit"};
+        }
+
+        GLuint new_framebuffer = 0;
+        GLuint new_id_texture = 0;
+        GLuint new_depth_renderbuffer = 0;
+
+        {
+            AllocationStateGuard state_guard;
+
+            glGenFramebuffers(1, &new_framebuffer);
+            glGenTextures(1, &new_id_texture);
+            glGenRenderbuffers(1, &new_depth_renderbuffer);
+            if (new_framebuffer == 0 || new_id_texture == 0 ||
+                new_depth_renderbuffer == 0) {
+                delete_picking_objects(new_framebuffer, new_id_texture, new_depth_renderbuffer);
+                return Error{ErrorCode::framebuffer_creation_failed,
+                             "OpenGL failed to allocate picking framebuffer objects"};
+            }
+
+            glBindTexture(GL_TEXTURE_2D, new_id_texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, static_cast<GLsizei>(extent.width),
+                         static_cast<GLsizei>(extent.height), 0, GL_RGBA_INTEGER,
+                         GL_UNSIGNED_INT, nullptr);
+
+            glBindRenderbuffer(GL_RENDERBUFFER, new_depth_renderbuffer);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
+                                  static_cast<GLsizei>(extent.width),
+                                  static_cast<GLsizei>(extent.height));
+
+            glBindFramebuffer(GL_FRAMEBUFFER, new_framebuffer);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                   new_id_texture, 0);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+                                      new_depth_renderbuffer);
+            constexpr GLenum draw_buffer = GL_COLOR_ATTACHMENT0;
+            glDrawBuffers(1, &draw_buffer);
+
+            const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            if (status != GL_FRAMEBUFFER_COMPLETE) {
+                delete_picking_objects(new_framebuffer, new_id_texture, new_depth_renderbuffer);
+                return Error{ErrorCode::framebuffer_incomplete,
+                             "The OpenGL picking framebuffer is incomplete"};
+            }
+        }
+
+        release();
+        framebuffer_ = new_framebuffer;
+        id_texture_ = new_id_texture;
+        depth_renderbuffer_ = new_depth_renderbuffer;
+        extent_ = extent;
+        return {};
+    }
+
+    [[nodiscard]] Result<void> clear() override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+        if (!is_valid()) {
+            return {};
+        }
+
+        RenderStateGuard state_guard;
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_);
+        glViewport(0, 0, static_cast<GLsizei>(extent_.width), static_cast<GLsizei>(extent_.height));
+        glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_FRAMEBUFFER_SRGB);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glDepthMask(GL_TRUE);
+        const GLuint clear_ids[4]{0U, 0U, 0U, 0U};
+        glClearBufferuiv(GL_COLOR, 0, clear_ids);
+        const GLfloat clear_depth = 1.0F;
+        glClearBufferfv(GL_DEPTH, 0, &clear_depth);
+        return {};
+    }
+
+    [[nodiscard]] bool is_valid() const noexcept override {
+        return framebuffer_ != 0 && id_texture_ != 0 && depth_renderbuffer_ != 0 &&
+               extent_.width != 0 && extent_.height != 0;
+    }
+
+    [[nodiscard]] GLuint framebuffer() const noexcept {
+        return framebuffer_;
+    }
+
+  private:
+    void release() noexcept {
+        if (state_->can_destroy_objects()) {
+            delete_picking_objects(framebuffer_, id_texture_, depth_renderbuffer_);
+        }
+        framebuffer_ = 0;
+        id_texture_ = 0;
+        depth_renderbuffer_ = 0;
+    }
+
+    std::shared_ptr<OpenGLDeviceState> state_;
+    Extent2D extent_;
+    GLuint framebuffer_ = 0;
+    GLuint id_texture_ = 0;
+    GLuint depth_renderbuffer_ = 0;
 };
 
 std::string shader_log(GLuint object, bool program) {
@@ -718,6 +866,104 @@ struct OverlayUniformLocations {
     }
 };
 
+constexpr char picking_vertex_shader_source[] = R"glsl(#version 410 core
+layout(location = 0) in vec3 a_position;
+
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_projection;
+
+out vec3 v_world_position;
+
+void main()
+{
+    vec4 world_position = u_model * vec4(a_position, 1.0);
+    v_world_position = world_position.xyz;
+    gl_Position = u_projection * u_view * world_position;
+}
+)glsl";
+
+constexpr char picking_fragment_shader_source[] = R"glsl(#version 410 core
+in vec3 v_world_position;
+
+uniform uint u_pick_object_id;
+uniform uint u_pick_primitive_index;
+uniform bool u_clipping_section_plane_enabled;
+uniform vec3 u_clipping_section_plane_normal;
+uniform float u_clipping_section_plane_offset;
+uniform bool u_clipping_retain_positive_half_space;
+uniform int u_clipping_box_count;
+uniform vec3 u_clipping_box_minimums[3];
+uniform vec3 u_clipping_box_maximums[3];
+
+layout(location = 0) out uvec4 pick_ids;
+
+bool clipping_contains_point(vec3 world_position)
+{
+    const float tolerance = 0.00001;
+    if (u_clipping_section_plane_enabled) {
+        float signed_distance = dot(u_clipping_section_plane_normal, world_position) +
+                                u_clipping_section_plane_offset;
+        if (!u_clipping_retain_positive_half_space) {
+            signed_distance = -signed_distance;
+        }
+        if (signed_distance < -tolerance) {
+            return false;
+        }
+    }
+
+    if (u_clipping_box_count > 0) {
+        bool inside_box = false;
+        for (int index = 0; index < 3; ++index) {
+            if (index >= u_clipping_box_count) {
+                break;
+            }
+            vec3 minimums = u_clipping_box_minimums[index] - vec3(tolerance);
+            vec3 maximums = u_clipping_box_maximums[index] + vec3(tolerance);
+            if (all(greaterThanEqual(world_position, minimums)) &&
+                all(lessThanEqual(world_position, maximums))) {
+                inside_box = true;
+            }
+        }
+        if (!inside_box) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void main()
+{
+    if (!clipping_contains_point(v_world_position)) {
+        discard;
+    }
+    pick_ids = uvec4(u_pick_object_id, u_pick_primitive_index, uint(gl_PrimitiveID), 1u);
+}
+)glsl";
+
+struct PickingUniformLocations {
+    GLint model = -1;
+    GLint view = -1;
+    GLint projection = -1;
+    GLint object_id = -1;
+    GLint primitive_index = -1;
+    GLint clipping_section_plane_enabled = -1;
+    GLint clipping_section_plane_normal = -1;
+    GLint clipping_section_plane_offset = -1;
+    GLint clipping_retain_positive_half_space = -1;
+    GLint clipping_box_count = -1;
+    GLint clipping_box_minimums = -1;
+    GLint clipping_box_maximums = -1;
+
+    [[nodiscard]] bool valid() const noexcept {
+        return model >= 0 && view >= 0 && projection >= 0 && object_id >= 0 &&
+               primitive_index >= 0 && clipping_section_plane_enabled >= 0 &&
+               clipping_section_plane_normal >= 0 && clipping_section_plane_offset >= 0 &&
+               clipping_retain_positive_half_space >= 0 && clipping_box_count >= 0 &&
+               clipping_box_minimums >= 0 && clipping_box_maximums >= 0;
+    }
+};
+
 struct OverlayVertex {
     float x = 0.0F;
     float y = 0.0F;
@@ -834,6 +1080,7 @@ class OpenGLDevice final : public graphics::Device {
         : state_(std::move(state)) {}
 
     ~OpenGLDevice() override {
+        release_picking_resources();
         release_overlay_resources();
         state_->shut_down();
     }
@@ -859,6 +1106,26 @@ class OpenGLDevice final : public graphics::Device {
         } catch (...) {
             return Error{ErrorCode::unexpected_exception,
                          "OpenGL viewport target creation threw an exception"};
+        }
+    }
+
+    [[nodiscard]] Result<std::unique_ptr<graphics::PickingTarget>>
+    create_picking_target(Extent2D initial_extent) override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+
+        try {
+            auto target = std::make_unique<OpenGLPickingTarget>(state_);
+            const Result<void> resize_result = target->resize(initial_extent);
+            if (!resize_result) {
+                return resize_result.error();
+            }
+            return std::unique_ptr<graphics::PickingTarget>{std::move(target)};
+        } catch (...) {
+            return Error{ErrorCode::unexpected_exception,
+                         "OpenGL picking target creation threw an exception"};
         }
     }
 
@@ -1320,7 +1587,202 @@ class OpenGLDevice final : public graphics::Device {
         return {};
     }
 
+    [[nodiscard]] Result<void>
+    draw_picking_indexed(graphics::PickingTarget &target, graphics::StaticMesh &mesh,
+                         const graphics::PickingDrawDescription &description) override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+
+        auto *opengl_target = dynamic_cast<OpenGLPickingTarget *>(&target);
+        auto *opengl_mesh = dynamic_cast<OpenGLStaticMesh *>(&mesh);
+        if (opengl_target == nullptr || opengl_mesh == nullptr) {
+            return Error{ErrorCode::backend_mismatch,
+                         "Picking drawing requires resources created by the same OpenGL backend"};
+        }
+        if (!opengl_target->is_valid() || opengl_mesh->index_count() == 0 ||
+            description.object_id == 0) {
+            return {};
+        }
+
+        const Result<void> resources = ensure_picking_resources();
+        if (!resources) {
+            return resources.error();
+        }
+
+        RenderStateGuard state_guard;
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, opengl_target->framebuffer());
+        const Extent2D extent = opengl_target->extent();
+        glViewport(0, 0, static_cast<GLsizei>(extent.width), static_cast<GLsizei>(extent.height));
+        glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_FRAMEBUFFER_SRGB);
+        glDisable(GL_BLEND);
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_DEPTH_CLAMP);
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glDisable(GL_PRIMITIVE_RESTART);
+        glDisable(GL_RASTERIZER_DISCARD);
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
+        glDepthRange(0.0, 1.0);
+        if (description.double_sided) {
+            glDisable(GL_CULL_FACE);
+        } else {
+            glEnable(GL_CULL_FACE);
+        }
+        glCullFace(GL_BACK);
+        glFrontFace(description.front_face_clockwise ? GL_CW : GL_CCW);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glUseProgram(picking_program_);
+        glBindVertexArray(opengl_mesh->vertex_array());
+
+        glUniformMatrix4fv(picking_uniforms_.model, 1, GL_FALSE,
+                           description.model_matrix.data());
+        glUniformMatrix4fv(picking_uniforms_.view, 1, GL_FALSE,
+                           description.view_matrix.data());
+        glUniformMatrix4fv(picking_uniforms_.projection, 1, GL_FALSE,
+                           description.projection_matrix.data());
+        glUniform1ui(picking_uniforms_.object_id, description.object_id);
+        glUniform1ui(picking_uniforms_.primitive_index, description.primitive_index);
+        glUniform1i(picking_uniforms_.clipping_section_plane_enabled,
+                    description.clipping_section_plane_enabled ? 1 : 0);
+        glUniform3f(picking_uniforms_.clipping_section_plane_normal,
+                    description.clipping_section_plane_normal.x,
+                    description.clipping_section_plane_normal.y,
+                    description.clipping_section_plane_normal.z);
+        glUniform1f(picking_uniforms_.clipping_section_plane_offset,
+                    description.clipping_section_plane_offset);
+        glUniform1i(picking_uniforms_.clipping_retain_positive_half_space,
+                    description.clipping_retain_positive_half_space ? 1 : 0);
+        const std::uint32_t box_count =
+            std::min(description.clipping_box_count, maximum_clipping_boxes);
+        std::array<float, maximum_clipping_boxes * 3> clipping_box_minimums{};
+        std::array<float, maximum_clipping_boxes * 3> clipping_box_maximums{};
+        for (std::uint32_t index = 0; index < box_count; ++index) {
+            const Bounds3 &box = description.clipping_boxes[index];
+            const std::size_t base = static_cast<std::size_t>(index) * 3U;
+            clipping_box_minimums[base] = box.minimum.x;
+            clipping_box_minimums[base + 1U] = box.minimum.y;
+            clipping_box_minimums[base + 2U] = box.minimum.z;
+            clipping_box_maximums[base] = box.maximum.x;
+            clipping_box_maximums[base + 1U] = box.maximum.y;
+            clipping_box_maximums[base + 2U] = box.maximum.z;
+        }
+        glUniform1i(picking_uniforms_.clipping_box_count, static_cast<GLint>(box_count));
+        glUniform3fv(picking_uniforms_.clipping_box_minimums,
+                     static_cast<GLsizei>(maximum_clipping_boxes),
+                     clipping_box_minimums.data());
+        glUniform3fv(picking_uniforms_.clipping_box_maximums,
+                     static_cast<GLsizei>(maximum_clipping_boxes),
+                     clipping_box_maximums.data());
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(opengl_mesh->index_count()),
+                       GL_UNSIGNED_INT, nullptr);
+
+        if (glGetError() != GL_NO_ERROR) {
+            return Error{ErrorCode::draw_submission_failed,
+                         "OpenGL reported an error while submitting a picking draw"};
+        }
+        return {};
+    }
+
+    [[nodiscard]] Result<graphics::PickingPixel>
+    read_picking_pixel(graphics::PickingTarget &target, Float2 position_pixels) override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+
+        auto *opengl_target = dynamic_cast<OpenGLPickingTarget *>(&target);
+        if (opengl_target == nullptr) {
+            return Error{ErrorCode::backend_mismatch,
+                         "Picking readback requires an OpenGL picking target"};
+        }
+        if (!opengl_target->is_valid()) {
+            return graphics::PickingPixel{};
+        }
+
+        const Extent2D extent = opengl_target->extent();
+        if (!std::isfinite(position_pixels.x) || !std::isfinite(position_pixels.y) ||
+            position_pixels.x < 0.0F || position_pixels.y < 0.0F ||
+            position_pixels.x >= static_cast<float>(extent.width) ||
+            position_pixels.y >= static_cast<float>(extent.height)) {
+            return graphics::PickingPixel{};
+        }
+
+        RenderStateGuard state_guard;
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, opengl_target->framebuffer());
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        const GLint read_x = static_cast<GLint>(std::floor(position_pixels.x));
+        const GLint read_y = static_cast<GLint>(
+            static_cast<std::int64_t>(extent.height) - 1 -
+            static_cast<std::int64_t>(std::floor(position_pixels.y)));
+        GLuint ids[4]{0U, 0U, 0U, 0U};
+        GLfloat depth = 1.0F;
+        glReadPixels(read_x, read_y, 1, 1, GL_RGBA_INTEGER, GL_UNSIGNED_INT, ids);
+        glReadPixels(read_x, read_y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+        if (glGetError() != GL_NO_ERROR) {
+            return Error{ErrorCode::texture_unavailable,
+                         "OpenGL reported an error while reading the picking pixel"};
+        }
+
+        const bool hit = ids[0] != 0U && ids[3] != 0U && depth < 1.0F;
+        return graphics::PickingPixel{ids[0], ids[1], ids[2], depth, hit};
+    }
+
   private:
+    [[nodiscard]] Result<void> ensure_picking_resources() {
+        if (picking_program_ != 0) {
+            return {};
+        }
+
+        AllocationStateGuard allocation_guard;
+        Result<GLuint> vertex_result =
+            compile_shader(GL_VERTEX_SHADER, picking_vertex_shader_source);
+        if (!vertex_result) {
+            return vertex_result.error();
+        }
+        const GLuint vertex_shader = vertex_result.value();
+        Result<GLuint> fragment_result =
+            compile_shader(GL_FRAGMENT_SHADER, picking_fragment_shader_source);
+        if (!fragment_result) {
+            glDeleteShader(vertex_shader);
+            return fragment_result.error();
+        }
+        const GLuint fragment_shader = fragment_result.value();
+        Result<GLuint> program_result = link_program(vertex_shader, fragment_shader);
+        glDeleteShader(vertex_shader);
+        glDeleteShader(fragment_shader);
+        if (!program_result) {
+            return program_result.error();
+        }
+
+        const GLuint program = program_result.value();
+        const PickingUniformLocations uniforms{
+            glGetUniformLocation(program, "u_model"),
+            glGetUniformLocation(program, "u_view"),
+            glGetUniformLocation(program, "u_projection"),
+            glGetUniformLocation(program, "u_pick_object_id"),
+            glGetUniformLocation(program, "u_pick_primitive_index"),
+            glGetUniformLocation(program, "u_clipping_section_plane_enabled"),
+            glGetUniformLocation(program, "u_clipping_section_plane_normal"),
+            glGetUniformLocation(program, "u_clipping_section_plane_offset"),
+            glGetUniformLocation(program, "u_clipping_retain_positive_half_space"),
+            glGetUniformLocation(program, "u_clipping_box_count"),
+            glGetUniformLocation(program, "u_clipping_box_minimums[0]"),
+            glGetUniformLocation(program, "u_clipping_box_maximums[0]")};
+        if (!uniforms.valid()) {
+            glDeleteProgram(program);
+            return Error{ErrorCode::shader_linking_failed,
+                         "The picking shader is missing a required uniform"};
+        }
+        picking_program_ = program;
+        picking_uniforms_ = uniforms;
+        return {};
+    }
+
     [[nodiscard]] Result<void> ensure_overlay_resources() {
         if (overlay_program_ != 0 && overlay_vertex_array_ != 0 && overlay_vertex_buffer_ != 0) {
             return {};
@@ -1406,6 +1868,17 @@ class OpenGLDevice final : public graphics::Device {
         return {};
     }
 
+    void release_picking_resources() noexcept {
+        if (!state_->can_destroy_objects()) {
+            return;
+        }
+        if (picking_program_ != 0) {
+            glDeleteProgram(picking_program_);
+        }
+        picking_program_ = 0;
+        picking_uniforms_ = {};
+    }
+
     void release_overlay_resources() noexcept {
         if (!state_->can_destroy_objects()) {
             return;
@@ -1426,6 +1899,8 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     std::shared_ptr<OpenGLDeviceState> state_;
+    GLuint picking_program_ = 0;
+    PickingUniformLocations picking_uniforms_;
     GLuint overlay_program_ = 0;
     GLuint overlay_vertex_array_ = 0;
     GLuint overlay_vertex_buffer_ = 0;

@@ -91,3 +91,18 @@ preserved in `third_party/licenses/cgltf-LICENSE.txt`.
 to PNG and JPEG. stb headers and types do not propagate through Elf3D public
 interfaces. The upstream license notice is preserved in
 `third_party/licenses/stb-LICENSE.txt`.
+
+## Droid Sans
+
+- Official source: <https://android.googlesource.com/platform/frameworks/base/+/dba35c0/data/fonts/DroidSans.ttf>
+- Source revision inspected: `dba35c0`
+- Asset path: `apps/viewer/assets/font/DroidSans.ttf`
+- SHA-256: `4e2371bc0e4cf6983342e150412f140da79d674c9be0b56458401f581072ecd3`
+- License: Apache License 2.0
+- Integration: copied binary runtime font asset for `elf3d_viewer`
+- Scope: viewer UI font only; the Dear ImGui integration falls back to the
+  default font when the asset is unavailable
+
+The copied `DroidSans.ttf` file was verified to be byte-identical to the AOSP
+font at the revision above. The upstream Apache License 2.0 notice is preserved
+in `third_party/licenses/droidsans-APACHE-2.0.txt`.

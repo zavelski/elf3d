@@ -98,6 +98,8 @@ class ELF3D_API Viewport final {
 
     [[nodiscard]] Result<void> update_navigation(Scene &scene, EntityId camera,
                                                  const ViewportInput &input);
+    [[nodiscard]] Result<void> set_examine_pivot(Scene &scene, EntityId camera,
+                                                 Float3 world_position);
     [[nodiscard]] Result<void> fit_to_scene(Scene &scene, EntityId camera);
     [[nodiscard]] Result<void> reset_view(Scene &scene, EntityId camera);
     [[nodiscard]] Result<void> synchronize_navigation(const Scene &scene, EntityId camera);

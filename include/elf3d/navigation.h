@@ -22,6 +22,8 @@ struct ViewportInput {
     bool shift_down = false;
     bool control_down = false;
     bool alt_down = false;
+    bool x_down = false;
+    bool z_down = false;
 };
 
 struct OrbitNavigationSettings {
@@ -45,6 +47,7 @@ enum class NavigationInteractionMode {
     none,
     orbit,
     pan,
+    zoom,
 };
 
 struct NavigationSnapshot {

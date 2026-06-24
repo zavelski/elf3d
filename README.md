@@ -24,8 +24,8 @@ but they are not validated platforms for 0.1.0.
 - Scene hierarchy, transforms, cameras, mesh/material/image assets, and bounds.
 - OpenGL 4.1 off-screen viewport rendering with opaque metallic-roughness
   shading.
-- Orbit, pan, wheel dolly, fit, and reset navigation.
-- CPU picking, one selected entity per viewport, visibility, and isolation.
+- Orbit, pan, wheel/drag dolly, dynamic examine pivot, fit, and reset navigation.
+- GPU-first picking with CPU refinement/fallback, one selected entity per viewport, visibility, and isolation.
 - One point-to-point distance measurement per viewport.
 - One section plane and up to three axis-aligned clipping boxes per viewport.
 
@@ -97,6 +97,11 @@ After a Debug build:
 
 Open a model from `File > Open...`, pass a `.gltf` or `.glb` path as the first
 command-line argument, or drop a model file onto the viewer window.
+
+The build copies viewer assets beside the executable under `assets/`. Keep
+`assets/font/DroidSans.ttf` and `assets/icon/*.png` with `elf3d_viewer.exe`;
+they provide the Droid Sans UI font and generated toolbar icons used by the
+light Low.3D-inspired viewer style.
 
 Project-owned fixture:
 

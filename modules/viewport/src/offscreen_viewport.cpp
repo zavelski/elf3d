@@ -65,10 +65,16 @@ Result<std::unique_ptr<OffscreenViewport>> OffscreenViewport::create(
         if (!target_result) {
             return target_result.error();
         }
+        Result<std::unique_ptr<graphics::PickingTarget>> picking_target_result =
+            device->create_picking_target(initial_extent);
+        if (!picking_target_result) {
+            return picking_target_result.error();
+        }
 
         return std::unique_ptr<OffscreenViewport>{
             new OffscreenViewport{std::move(device), std::move(renderer), std::move(picking),
-                                  std::move(target_result).value()}};
+                                  std::move(target_result).value(),
+                                  std::move(picking_target_result).value()}};
     } catch (...) {
         return Error{ErrorCode::unexpected_exception, "Viewport creation threw an exception"};
     }
@@ -77,9 +83,10 @@ Result<std::unique_ptr<OffscreenViewport>> OffscreenViewport::create(
 OffscreenViewport::OffscreenViewport(std::shared_ptr<graphics::Device> device,
                                      std::shared_ptr<renderer::Renderer> renderer,
                                      std::shared_ptr<picking::PickingService> picking,
-                                     std::unique_ptr<graphics::RenderTarget> render_target) noexcept
+                                     std::unique_ptr<graphics::RenderTarget> render_target,
+                                     std::unique_ptr<graphics::PickingTarget> picking_target) noexcept
     : device_(std::move(device)), renderer_(std::move(renderer)), picking_(std::move(picking)),
-      render_target_(std::move(render_target)) {
+      render_target_(std::move(render_target)), picking_target_(std::move(picking_target)) {
     set_basic_lighting(BasicLighting{});
 }
 
@@ -94,7 +101,14 @@ Result<void> OffscreenViewport::resize(Extent2D extent) {
     if (extent == render_target_->extent()) {
         return {};
     }
-    return render_target_->resize(extent);
+    const Result<void> render_resize = render_target_->resize(extent);
+    if (!render_resize) {
+        return render_resize.error();
+    }
+    if (picking_target_ == nullptr) {
+        return {};
+    }
+    return picking_target_->resize(extent);
 }
 
 void OffscreenViewport::set_clear_color(Color4 color) noexcept {
@@ -130,6 +144,85 @@ BasicLighting OffscreenViewport::basic_lighting() const noexcept {
     return lighting_;
 }
 
+Result<std::optional<PickHit>>
+OffscreenViewport::pick_gpu_first(const scene::Storage &scene, EntityId camera,
+                                  Float2 position_pixels, const PickOptions &options,
+                                  const scene::VisibilityFilter &visibility,
+                                  const clipping::ClippingFilter &clipping_filter) {
+    gpu_picking_statistics_.latest_gpu_requests = 0;
+    gpu_picking_statistics_.latest_gpu_hits = 0;
+    gpu_picking_statistics_.latest_gpu_misses = 0;
+    gpu_picking_statistics_.latest_gpu_draw_calls = 0;
+    gpu_picking_statistics_.latest_gpu_pixels_read = 0;
+    gpu_picking_statistics_.latest_gpu_pass_time_microseconds = 0;
+    gpu_picking_statistics_.latest_gpu_readback_time_microseconds = 0;
+    gpu_picking_statistics_.latest_cpu_refinements = 0;
+    gpu_picking_statistics_.latest_cpu_fallbacks = 0;
+
+    if (picking_ == nullptr) {
+        return Error{ErrorCode::graphics_shutdown, "Viewport picking resources are unavailable"};
+    }
+
+    const auto cpu_fallback = [&]() -> Result<std::optional<PickHit>> {
+        ++gpu_picking_statistics_.latest_cpu_fallbacks;
+        ++gpu_picking_statistics_.lifetime_cpu_fallbacks;
+        return picking_->pick(scene, camera, extent(), position_pixels, options, visibility,
+                              clipping_filter);
+    };
+
+    if (renderer_ == nullptr || picking_target_ == nullptr) {
+        return cpu_fallback();
+    }
+    const Extent2D target_extent = extent();
+    if (target_extent.width == 0 || target_extent.height == 0) {
+        return std::optional<PickHit>{};
+    }
+    const Result<void> resize_result = picking_target_->resize(target_extent);
+    if (!resize_result) {
+        return cpu_fallback();
+    }
+
+    ++gpu_picking_statistics_.latest_gpu_requests;
+    ++gpu_picking_statistics_.lifetime_gpu_requests;
+    Result<renderer::GpuPickResult> gpu_result =
+        renderer_->gpu_pick(scene, camera, *picking_target_, position_pixels, visibility,
+                            clipping_filter);
+    if (!gpu_result) {
+        return cpu_fallback();
+    }
+
+    gpu_picking_statistics_.latest_gpu_draw_calls = gpu_result.value().draw_calls;
+    gpu_picking_statistics_.latest_gpu_pixels_read = gpu_result.value().pixels_read;
+    gpu_picking_statistics_.latest_gpu_pass_time_microseconds =
+        gpu_result.value().picking_pass_time_microseconds;
+    gpu_picking_statistics_.latest_gpu_readback_time_microseconds =
+        gpu_result.value().readback_time_microseconds;
+    if (!gpu_result.value().hit.has_value()) {
+        ++gpu_picking_statistics_.latest_gpu_misses;
+        ++gpu_picking_statistics_.lifetime_gpu_misses;
+        return std::optional<PickHit>{};
+    }
+
+    ++gpu_picking_statistics_.latest_gpu_hits;
+    ++gpu_picking_statistics_.lifetime_gpu_hits;
+    const renderer::GpuPickHit &gpu_hit = gpu_result.value().hit.value();
+    const picking::PickCandidate candidate{gpu_hit.entity, gpu_hit.mesh,
+                                           gpu_hit.primitive_index,
+                                           gpu_hit.triangle_index};
+    Result<std::optional<PickHit>> refined =
+        picking_->refine_candidate(scene, camera, target_extent, position_pixels, options,
+                                   visibility, clipping_filter, candidate);
+    if (!refined) {
+        return refined.error();
+    }
+    ++gpu_picking_statistics_.latest_cpu_refinements;
+    ++gpu_picking_statistics_.lifetime_cpu_refinements;
+    if (!refined.value().has_value()) {
+        return cpu_fallback();
+    }
+    return refined;
+}
+
 Result<void> OffscreenViewport::update_navigation(scene::Storage &scene, EntityId camera,
                                                   const ViewportInput &input) {
     selection_.validate_against(scene);
@@ -150,24 +243,42 @@ Result<void> OffscreenViewport::update_navigation(scene::Storage &scene, EntityI
     }
     if (navigation_result.value().click_position_pixels.has_value()) {
         const Float2 click_position = navigation_result.value().click_position_pixels.value();
-        if (active_tool_ == ViewportTool::selection && selection_.enabled()) {
-            Result<std::optional<PickHit>> selection_result = selection_.select_at(
-                *picking_, scene, camera, extent(), click_position, visibility.value(),
-                clipping_filter.value());
-            if (!selection_result) {
-                return selection_result.error();
-            }
-        } else if (active_tool_ == ViewportTool::distance_measurement) {
-            Result<std::optional<PickHit>> hit_result = picking_->pick(
-                scene, camera, extent(), click_position, PickOptions{}, visibility.value(),
-                clipping_filter.value());
-            if (!hit_result) {
-                return hit_result.error();
-            }
+        Result<std::optional<PickHit>> hit_result =
+            pick_gpu_first(scene, camera, click_position, PickOptions{}, visibility.value(),
+                           clipping_filter.value());
+        if (!hit_result) {
+            return hit_result.error();
+        }
+        if (active_tool_ == ViewportTool::distance_measurement) {
             if (hit_result.value().has_value()) {
                 Result<void> placed = measurement_.place_hit(scene, hit_result.value().value());
                 if (!placed) {
                     return placed.error();
+                }
+            }
+        } else {
+            if (input.shift_down && hit_result.value().has_value()) {
+                Result<void> hidden =
+                    scene.set_entity_visible(hit_result.value()->entity, false);
+                if (!hidden) {
+                    return hidden.error();
+                }
+                selection_.validate_against(scene);
+                return {};
+            }
+            if (hit_result.value().has_value()) {
+                Result<void> pivot =
+                    navigation_.set_pivot(scene, camera, hit_result.value()->world_position);
+                if (!pivot) {
+                    return pivot.error();
+                }
+            }
+            if (input.control_down && active_tool_ == ViewportTool::selection &&
+                selection_.enabled()) {
+                Result<std::optional<PickHit>> selection_result =
+                    selection_.select_hit(scene, hit_result.value());
+                if (!selection_result) {
+                    return selection_result.error();
                 }
             }
         }
@@ -184,7 +295,7 @@ Result<void> OffscreenViewport::update_navigation(scene::Storage &scene, EntityI
         measurement_.record_preview_pick(scene, visibility.value(), clipping_filter.value(),
                                          input.pointer_position_pixels);
         Result<std::optional<PickHit>> hit_result =
-            picking_->pick(scene, camera, extent(), input.pointer_position_pixels, PickOptions{},
+            pick_gpu_first(scene, camera, input.pointer_position_pixels, PickOptions{},
                            visibility.value(), clipping_filter.value());
         if (!hit_result) {
             return hit_result.error();
@@ -199,6 +310,11 @@ Result<void> OffscreenViewport::update_navigation(scene::Storage &scene, EntityI
         }
     }
     return {};
+}
+
+Result<void> OffscreenViewport::set_examine_pivot(scene::Storage &scene, EntityId camera,
+                                                  Float3 world_position) {
+    return navigation_.set_pivot(scene, camera, world_position);
 }
 
 Result<void> OffscreenViewport::fit_to_scene(scene::Storage &scene, EntityId camera) {
@@ -301,7 +417,7 @@ Result<std::optional<PickHit>> OffscreenViewport::pick(const scene::Storage &sce
     if (!clipping_filter) {
         return clipping_filter.error();
     }
-    return picking_->pick(scene, camera, extent(), position_pixels, options, visibility.value(),
+    return pick_gpu_first(scene, camera, position_pixels, options, visibility.value(),
                           clipping_filter.value());
 }
 
@@ -315,8 +431,13 @@ OffscreenViewport::select_at(const scene::Storage &scene, EntityId camera, Float
     if (!clipping_filter) {
         return clipping_filter.error();
     }
-    return selection_.select_at(*picking_, scene, camera, extent(), position_pixels,
-                                visibility.value(), clipping_filter.value());
+    Result<std::optional<PickHit>> hit_result =
+        pick_gpu_first(scene, camera, position_pixels, PickOptions{}, visibility.value(),
+                       clipping_filter.value());
+    if (!hit_result) {
+        return hit_result.error();
+    }
+    return selection_.select_hit(scene, hit_result.value());
 }
 
 Result<void> OffscreenViewport::set_selected_entity(const scene::Storage &scene, EntityId entity) {
@@ -367,7 +488,35 @@ SelectionSettings OffscreenViewport::selection_settings() const noexcept {
 }
 
 PickingStatistics OffscreenViewport::picking_statistics() const noexcept {
-    return picking_ != nullptr ? picking_->statistics() : PickingStatistics{};
+    PickingStatistics result = picking_ != nullptr ? picking_->statistics() : PickingStatistics{};
+    result.latest_gpu_requests = gpu_picking_statistics_.latest_gpu_requests;
+    result.latest_gpu_hits = gpu_picking_statistics_.latest_gpu_hits;
+    result.latest_gpu_misses = gpu_picking_statistics_.latest_gpu_misses;
+    result.latest_gpu_draw_calls = gpu_picking_statistics_.latest_gpu_draw_calls;
+    result.latest_gpu_pixels_read = gpu_picking_statistics_.latest_gpu_pixels_read;
+    result.latest_gpu_pass_time_microseconds =
+        gpu_picking_statistics_.latest_gpu_pass_time_microseconds;
+    result.latest_gpu_readback_time_microseconds =
+        gpu_picking_statistics_.latest_gpu_readback_time_microseconds;
+    result.latest_cpu_refinements = gpu_picking_statistics_.latest_cpu_refinements;
+    result.latest_cpu_fallbacks = gpu_picking_statistics_.latest_cpu_fallbacks;
+    if (result.latest_gpu_requests != 0 && result.latest_cpu_refinements == 0 &&
+        result.latest_cpu_fallbacks == 0) {
+        result.latest_instance_bounds_tests = 0;
+        result.latest_mesh_bounds_tests = 0;
+        result.latest_bvh_node_tests = 0;
+        result.latest_triangle_tests = 0;
+        result.latest_bvh_builds = 0;
+        result.latest_clipping_bounds_rejected = 0;
+        result.latest_clipping_hits_rejected = 0;
+        result.latest_clipping_hits_accepted = 0;
+    }
+    result.lifetime_gpu_requests = gpu_picking_statistics_.lifetime_gpu_requests;
+    result.lifetime_gpu_hits = gpu_picking_statistics_.lifetime_gpu_hits;
+    result.lifetime_gpu_misses = gpu_picking_statistics_.lifetime_gpu_misses;
+    result.lifetime_cpu_refinements = gpu_picking_statistics_.lifetime_cpu_refinements;
+    result.lifetime_cpu_fallbacks = gpu_picking_statistics_.lifetime_cpu_fallbacks;
+    return result;
 }
 
 Result<void> OffscreenViewport::begin_distance_measurement() {

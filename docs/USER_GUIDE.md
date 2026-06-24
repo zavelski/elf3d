@@ -7,7 +7,7 @@ Applicable version: 0.1.0
 Document status: Verified from viewer code and README; manual visual validation
 is still required before release.
 
-Last verified Git commit: `8504068`
+Last verified Git commit: pending local change
 
 Implementation source paths: `apps/viewer/src/main.cpp`, `integrations/imgui`,
 `include/elf3d`, `tests/fixtures/textured_pbr.gltf`
@@ -55,6 +55,20 @@ Model loading options:
 Loading is synchronous and can temporarily block the viewer UI. Failed loading
 keeps the current scene.
 
+## Viewer Style And Assets
+
+The viewer uses a light Low.3D-inspired Dear ImGui style with pale panels, grey
+title/tab bars, a white default 3D-view clear background, compact status strip,
+and generated PNG toolbar icons. The Debug, Release, and packaged viewer
+layouts expect an `assets` directory beside `elf3d_viewer.exe`:
+
+- `assets/font/DroidSans.ttf`
+- `assets/icon/*.png`
+
+If `DroidSans.ttf` is missing, the ImGui integration falls back to its default
+font. Missing toolbar PNGs leave blank fallback buttons, so release packages
+must include the full `assets` directory.
+
 ## 3D View
 
 The viewer starts with a procedural cube when no model is loaded. Imported
@@ -63,9 +77,14 @@ models render into an off-screen Elf3D viewport texture displayed by Dear ImGui.
 Controls:
 
 - left drag beyond click threshold: orbit
-- Shift + left drag: pan
+- X + left drag: pan
+- Z + left drag: dolly
 - middle drag: pan
+- right drag: pan
 - mouse wheel over the 3D view: dolly
+- plain surface click: set examine pivot
+- Ctrl + surface click: select
+- Shift + surface click: hide hit entity
 - `F`: fit visible content
 - `Home`: reset view
 - `S`: Select tool
@@ -90,12 +109,13 @@ Visibility commands:
 
 ## Selection
 
-The Select tool picks visible renderable model entities in the 3D view. The
-Selection panel shows selected entity information, triangle hit details when
-available, highlight settings, click threshold, and picking statistics.
+The Select tool picks visible renderable model entities in the 3D view with
+Ctrl + surface click. The Selection panel shows selected entity information,
+triangle hit details when available, highlight settings, click threshold, and
+picking statistics.
 
-Clicking empty background clears selection. Hidden, isolation-excluded, or
-clipped geometry is not pickable.
+Ctrl + clicking empty background clears selection. Hidden, isolation-excluded,
+or clipped geometry is not pickable.
 
 ## Measurement
 
@@ -155,5 +175,4 @@ context.
 - No alpha masking or blending.
 - No animations, skins, morphs, cameras, lights, compression extensions, or KTX2.
 - No scene editing, transform gizmos, undo/redo, multi-selection, or annotations.
-- No GPU ID-buffer picking.
 - No benchmarks recorded.
