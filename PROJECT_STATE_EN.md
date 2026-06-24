@@ -16,10 +16,10 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `scripts`
 
 Known limitations: Release records exist under `docs/releases/0.1.0/`, and the
-release is ready for public tag publication after user-performed packaged
-viewer interaction validation, final local validation, branch integration, and
-successful corrected branch CI. Tag-triggered release workflow verification,
-GitHub Release verification, and public clone validation still need to run.
+release was publicly published after user-performed packaged viewer interaction
+validation, final local validation, branch integration, corrected branch CI,
+tag-triggered release workflow verification, GitHub Release asset verification,
+and public clone validation passed.
 
 Related documents: `docs/README.md`, `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
@@ -97,6 +97,10 @@ Completed validation:
   passed for navigation, picking, selection, hierarchy synchronization,
   visibility, isolation, measurement, clipping, reload, close-scene,
   failed-load preservation, and normal shutdown.
+- Tag-triggered GitHub Release workflow passed on `windows-2022`, created the
+  public `v0.1.0` GitHub Release, and uploaded verified release assets.
+- Fresh public clone of `https://github.com/zavelski/elf3d.git` checked out
+  `v0.1.0`, configured, built, and passed Debug and Release CTest 16/16.
 - Public headers compiled individually as forced includes with MSVC C++20,
   `/permissive-`, `/W4`, and `/WX` during earlier audit validation.
 - Publication-prep release records were updated under `docs/releases/0.1.0/`.
@@ -105,7 +109,6 @@ Not yet validated:
 
 - performance benchmark metrics
 - external model corpus
-- public clone test
 
 ## Remediated Audit Items
 
@@ -118,10 +121,9 @@ Not yet validated:
 
 - Decide whether import warnings remain `std::clog` diagnostics for 0.1.x or
   need a public report API.
-- Publish the corrected annotated `v0.1.0` tag only while local validation,
-  remote branch CI, and release records remain green.
-- Verify the tag-triggered release workflow, verify the GitHub Release and
-  uploaded assets, and run the public clone test.
+- Keep the published `v0.1.0` tag unchanged.
+- Use post-publication documentation on `develop` for additional release
+  records.
 
 ## Known Limitations
 

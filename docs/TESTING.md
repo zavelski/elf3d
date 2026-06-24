@@ -14,10 +14,9 @@ Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
 `.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
 `modules/*/tests`, `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`
 
-Known limitations: Corrected GitHub Actions branch CI has been verified on the
-public repository. Tag-triggered release workflow verification is still part of
-publication. Manual viewer interaction and visual rendering must be validated
-separately.
+Known limitations: Corrected GitHub Actions branch CI and tag-triggered release
+workflow were verified on the public repository. Manual viewer interaction and
+visual rendering must be validated separately.
 
 Related documents: `MODULE_MAP.md`, `USER_GUIDE.md`,
 `PERFORMANCE_BASELINE.md`, `audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
@@ -102,6 +101,8 @@ The release workflow is `.github/workflows/release.yml`. It runs on `v*` tags
 and manual dispatch, verifies the 0.1.0 version, configures and builds Release,
 runs CTest, creates the Windows viewer package, uploads workflow artifacts, and
 creates a GitHub Release for tag-triggered runs when no release already exists.
+The `v0.1.0` tag-triggered release run passed and created the public GitHub
+Release.
 
 ## Release Packaging
 

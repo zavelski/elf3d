@@ -14,10 +14,8 @@ Implementation source paths: `CMakeLists.txt`, `CMakePresets.json`,
 `modules`, `facade/elf3d`, `apps/viewer`, `tests`, `LICENSE`,
 `THIRD_PARTY.md`, `docs`
 
-Known limitations: No local publication blocker remains after the
-user-performed packaged viewer interaction validation. Remote repository and
-branch CI validation passed; tag-triggered release, GitHub Release, and
-clone-test validation remain pending publication steps.
+Known limitations: Public publication validation passed. Remaining non-blocking
+limitations are recorded in `KNOWN_LIMITATIONS.md` and `PUBLICATION_REPORT.md`.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `VALIDATION_SUMMARY.md`, `KNOWN_LIMITATIONS.md`, `PUBLICATION_PRECHECK.md`,
@@ -27,10 +25,8 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 
 `GO — ready for public publication`
 
-Proceed with tag publication, tag-triggered release workflow verification,
-GitHub Release verification, and public clone validation. If any required
-validation fails, restore the release decision to no-go before continuing
-publication.
+Public publication completed on 2026-06-24. Do not move or recreate
+`v0.1.0` merely to add post-publication documentation.
 
 ## Checklist
 
@@ -56,10 +52,10 @@ publication.
 | SDK package | Not applicable | Deferred for 0.1.0; no SDK archive is produced. |
 | Documentation | Passed with limitation | Public docs, release notes, CI docs, and package docs were updated; older audit docs remain historical. |
 | Remote repository safety | Passed | GitHub repository `zavelski/elf3d` is public, `origin` points to it, and remote `main`/`develop` were inspected. |
-| Tag correctness | Pending publication step | Local annotated `v0.1.0` has been recreated for the corrected release commit; remote `v0.1.0` has not been pushed yet. |
+| Tag correctness | Passed | Remote annotated `v0.1.0` tag object `24c3357ab0ae4aa20bc6be8d3de6403e30158e00` peels to `53047abef3f7e7c31d82913c1e9642d5f1b0d294`. |
 | GitHub CI | Passed | Corrected `develop` and `main` CI passed Debug and Release jobs on `windows-2022`. |
-| GitHub Release | Pending publication step | Release has not been created yet. |
-| Clone test | Pending publication step | Fresh public clone from the published `v0.1.0` tag has not been run yet. |
+| GitHub Release | Passed | Public release `Elf3D 0.1.0` exists at `https://github.com/zavelski/elf3d/releases/tag/v0.1.0`; it is not draft or prerelease, and it is marked latest. |
+| Clone test | Passed | Fresh public clone checked out `v0.1.0`, configured, built, and passed Debug and Release CTest 16/16. |
 
 ## Manual Viewer Interaction Validation
 
@@ -82,8 +78,7 @@ None recorded.
 
 ## Publication Status
 
-Local publication readiness is confirmed. Continue the publication sequence
-only while local validation, remote branch CI, tag-triggered release workflow,
-GitHub Release creation, and public clone validation continue to pass.
+Public publication is complete. Post-publication documentation may be committed
+to `develop`, but the existing `v0.1.0` tag must remain unchanged.
 
 `GO — ready for public publication`

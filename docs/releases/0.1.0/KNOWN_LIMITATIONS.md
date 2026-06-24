@@ -16,8 +16,8 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 
 Known limitations: This document is itself the limitation register. No local
 publication blocker remains after user-performed packaged viewer interaction
-validation. Remote branch CI has passed; tag-triggered GitHub Release
-workflow, GitHub Release, and public clone validation have not yet run.
+validation. Public branch CI, tag-triggered GitHub Release workflow, GitHub
+Release asset verification, and public clone validation passed.
 
 Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 `VALIDATION_SUMMARY.md`, `RELEASE_CHECKLIST.md`
@@ -29,8 +29,8 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
   isolation, measurement, clipping, reload, close-scene, failed-load
   preservation, and normal shutdown.
 - Corrected remote branch CI passed on `develop` and `main`.
-- Tag-triggered GitHub Release workflow verification, GitHub Release
-  verification, and public clone validation have not yet run.
+- Tag-triggered GitHub Release workflow verification, GitHub Release asset
+  verification, and public clone validation passed.
 
 ## Public API and ABI
 
@@ -90,6 +90,7 @@ Related documents: `PROJECT_STATE_EN.md`, `AUDIT_SUMMARY.md`,
 ## Packaging, CI, and Performance
 
 - SDK packaging is deferred for 0.1.0.
-- Corrected GitHub Actions branch CI passed on `windows-2022`.
+- Corrected GitHub Actions branch CI and tag-triggered release workflow passed
+  on `windows-2022`.
 - No benchmark numbers are claimed for 0.1.0.
 - No external model corpus was validated.
