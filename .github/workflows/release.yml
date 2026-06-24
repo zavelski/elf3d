@@ -12,11 +12,11 @@ permissions:
 jobs:
   windows-viewer:
     name: Windows viewer package
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
