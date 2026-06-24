@@ -20,18 +20,35 @@ namespace elf3d {
 
 class Engine::Impl final {
   public:
-    Impl() = default;
+    class SceneReleaseState final {
+      public:
+        std::weak_ptr<renderer::Renderer> renderer;
+        std::weak_ptr<picking::PickingService> picking;
+    };
 
-    Impl(GraphicsBackend backend, std::shared_ptr<graphics::Device> device) noexcept
-        : backend(backend), device(std::move(device)) {}
+    Impl()
+        : scene_release_state(std::make_shared<SceneReleaseState>()),
+          scene_release_context(std::make_shared<Scene::ReleaseContext>(
+              std::weak_ptr<void>{scene_release_state}, &Impl::release_scene)) {}
 
-    static void release_scene(void *context, SceneId scene) noexcept {
-        auto *impl = static_cast<Impl *>(context);
-        if (impl != nullptr && impl->renderer != nullptr) {
-            impl->renderer->release_scene(scene);
+    Impl(GraphicsBackend backend, std::shared_ptr<graphics::Device> device) : Impl() {
+        this->backend = backend;
+        this->device = std::move(device);
+    }
+
+    static void release_scene(const std::shared_ptr<void> &context, SceneId scene) noexcept {
+        const std::shared_ptr<SceneReleaseState> state =
+            std::static_pointer_cast<SceneReleaseState>(context);
+        if (state == nullptr) {
+            return;
         }
-        if (impl != nullptr && impl->picking != nullptr) {
-            impl->picking->release_scene(scene);
+        const std::shared_ptr<renderer::Renderer> renderer = state->renderer.lock();
+        if (renderer != nullptr) {
+            renderer->release_scene(scene);
+        }
+        const std::shared_ptr<picking::PickingService> picking = state->picking.lock();
+        if (picking != nullptr) {
+            picking->release_scene(scene);
         }
     }
 
@@ -39,6 +56,8 @@ class Engine::Impl final {
     std::shared_ptr<graphics::Device> device;
     std::shared_ptr<renderer::Renderer> renderer;
     std::shared_ptr<picking::PickingService> picking;
+    std::shared_ptr<SceneReleaseState> scene_release_state;
+    std::shared_ptr<Scene::ReleaseContext> scene_release_context;
     std::uint64_t next_scene_value = 1;
 };
 
@@ -96,6 +115,8 @@ Result<std::unique_ptr<Engine>> Engine::create(const EngineConfiguration &config
         }
         impl->renderer = std::move(renderer_result).value();
         impl->picking = std::make_shared<picking::PickingService>();
+        impl->scene_release_state->renderer = impl->renderer;
+        impl->scene_release_state->picking = impl->picking;
         return std::unique_ptr<Engine>{new Engine{std::move(impl)}};
     } catch (...) {
         return Error{ErrorCode::unexpected_exception, "Elf3D engine creation threw an exception"};
@@ -140,7 +161,7 @@ Result<std::unique_ptr<Scene>> Engine::create_scene() {
 
     const std::uint64_t scene_value = impl_->next_scene_value++;
     return Scene::create(reinterpret_cast<std::uintptr_t>(impl_.get()), scene_value,
-                         &Impl::release_scene, impl_.get());
+                         impl_->scene_release_context);
 }
 
 Result<std::unique_ptr<Scene>> Engine::load_scene(const std::filesystem::path &path,

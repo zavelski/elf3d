@@ -23,7 +23,7 @@
       "displayName": "Windows x64 Release",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/out/build/windows-debug",
+      "binaryDir": "${sourceDir}/out/build/windows-release",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",

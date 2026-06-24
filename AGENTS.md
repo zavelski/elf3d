@@ -359,6 +359,50 @@ Update `README.md` for user-visible build, run, or feature changes.
 
 Update `THIRD_PARTY.md` whenever a dependency or pinned revision changes.
 
+## Documentation Maintenance Rules
+
+Documentation is part of the implementation. When a task changes behavior,
+interfaces, validation, or release status, update the corresponding
+documentation in the same task.
+
+Review documentation whenever a task affects:
+
+- public API;
+- exported symbols;
+- CMake targets;
+- module dependencies;
+- glTF support;
+- render passes;
+- shaders;
+- color space;
+- GPU caches;
+- Viewport input;
+- navigation;
+- Picking;
+- Selection;
+- visibility;
+- isolation;
+- Measurement;
+- clipping;
+- lifetime;
+- threading;
+- tests;
+- fixtures;
+- CI;
+- viewer behavior;
+- performance;
+- roadmap status.
+
+Use `docs/DOCUMENTATION_POLICY.md` and
+`docs/DOCUMENTATION_UPDATE_CHECKLIST.md` for review procedure.
+
+Code changes and corresponding documentation changes belong to the same task
+unless the user explicitly requests otherwise. Planned features must not be
+documented as implemented. Current technical documents must be checked against
+actual code, tests, and validation results before being updated. Released
+project-state snapshots must not be silently rewritten; create a new release
+snapshot or living-document update instead.
+
 ## Completion Report
 
 At the end of a task, report:

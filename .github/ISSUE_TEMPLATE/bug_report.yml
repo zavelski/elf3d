@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible Elf3D defect.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Elf3D version or commit
+      placeholder: "0.1.0 or commit SHA"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "Windows 11 x64"
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Toolchain and preset
+      placeholder: "Visual Studio 2022, MSVC 19.xx, cmake --preset windows-debug"
+    validations:
+      required: true
+  - type: input
+    id: graphics
+    attributes:
+      label: Graphics hardware and driver
+      placeholder: "GPU model, driver version, OpenGL version if known"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use a synthetic or redistributable model when a model is needed.
+      placeholder: "1. Build...\n2. Run...\n3. Open..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: model
+    attributes:
+      label: Model characteristics
+      description: Do not upload confidential, customer-owned, or license-ambiguous models.
+      placeholder: "Format, approximate size, texture formats, transparency, animation, skins, compression, extensions"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or diagnostics
+      description: Remove secrets, private paths, and customer identifiers before posting.
+      render: text

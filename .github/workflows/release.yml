@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-viewer:
+    name: Windows viewer package
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $version = "0.1.0"
+          $tag = "${{ github.ref_name }}"
+          if ("${{ github.ref_type }}" -eq "tag" -and $tag -ne "v$version") {
+            throw "This workflow currently packages Elf3D $version, but was triggered by $tag."
+          }
+          $cmake = Get-Content -LiteralPath CMakeLists.txt -Raw
+          if ($cmake -notmatch "VERSION\s+$version") {
+            throw "CMake project version does not match $version."
+          }
+
+      - name: Configure Release
+        run: cmake --preset windows-release
+
+      - name: Build Release
+        run: cmake --build --preset windows-release --parallel
+
+      - name: Test Release
+        run: ctest --preset windows-release --output-on-failure
+
+      - name: Package Release
+        shell: pwsh
+        run: ./scripts/package_release.ps1 -Version 0.1.0
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: elf3d-0.1.0-windows-release-assets
+          path: |
+            out/release/elf3d-viewer-0.1.0-windows-x64.zip
+            out/release/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (gh release view $tag *> $null) {
+            throw "GitHub Release $tag already exists; refusing to overwrite it."
+          }
+          gh release create $tag `
+            out/release/elf3d-viewer-0.1.0-windows-x64.zip `
+            out/release/SHA256SUMS.txt `
+            --title "Elf3D 0.1.0" `
+            --notes-file docs/releases/0.1.0/GITHUB_RELEASE_NOTES.md `
+            --latest
