@@ -320,6 +320,15 @@ OrbitNavigationController::update(scene::Storage &scene, EntityId camera, Extent
                 changed = true;
             }
         }
+    } else if (interaction.drag_active && interaction.mode == NavigationInteractionMode::zoom &&
+               delta.y != 0.0F) {
+        const float multiplier = std::exp(delta.y * settings_.zoom_sensitivity * 0.03F);
+        if (!std::isfinite(multiplier) || multiplier <= 0.0F) {
+            return Error{ErrorCode::invalid_viewport_input,
+                         "Viewport drag input produced an invalid zoom multiplier"};
+        }
+        distance_ = std::clamp(distance_ * multiplier, limits.minimum, limits.maximum);
+        changed = true;
     }
 
     if (!changed) {
@@ -330,6 +339,47 @@ OrbitNavigationController::update(scene::Storage &scene, EntityId camera, Extent
         return apply_result.error();
     }
     return update_result;
+}
+
+Result<void> OrbitNavigationController::set_pivot(scene::Storage &scene, EntityId camera,
+                                                  Float3 world_position) {
+    if (!math::is_finite(world_position)) {
+        return Error{ErrorCode::invalid_argument,
+                     "Navigation pivot requires a finite world-space position"};
+    }
+
+    const Result<void> sync = ensure_synchronized(scene, camera);
+    if (!sync) {
+        return sync.error();
+    }
+    const Result<CameraBasis> basis = camera_basis(scene, camera);
+    if (!basis) {
+        return basis.error();
+    }
+
+    math::Vector3 pivot = math::to_vector(world_position);
+    math::Vector3 direction = pivot - basis.value().position;
+    float distance = glm::length(direction);
+    if (!finite_vector(direction) || !std::isfinite(distance) ||
+        distance <= minimum_axis_length) {
+        direction = basis.value().forward;
+        distance = settings_.minimum_distance;
+        pivot = basis.value().position + direction * distance;
+    }
+
+    angles_from_direction(direction, yaw_radians_, pitch_radians_);
+    pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
+                                settings_.maximum_pitch_radians);
+
+    const BoundsInfo bounds = bounds_info(scene.world_bounds());
+    const DistanceLimits limits = effective_distance_limits(settings_, bounds);
+    distance_ = std::clamp(distance, limits.minimum, limits.maximum);
+    pivot_ = math::to_float3(pivot);
+    scene_ = scene.id();
+    camera_ = camera;
+    scene_revision_ = scene.revision();
+    has_valid_state_ = true;
+    return {};
 }
 
 Result<void> OrbitNavigationController::fit_to_scene(scene::Storage &scene, EntityId camera,

@@ -22,6 +22,13 @@ struct TriangleHit {
     Float3 geometric_normal;
 };
 
+struct PickCandidate {
+    EntityId entity;
+    MeshHandle mesh;
+    std::uint32_t primitive_index = 0;
+    std::uint32_t triangle_index = 0;
+};
+
 [[nodiscard]] bool is_valid_ray(const Ray3 &ray) noexcept;
 [[nodiscard]] bool intersect_ray_bounds(const Ray3 &ray, Bounds3 bounds,
                                         RayBoundsHit &hit) noexcept;
@@ -50,6 +57,12 @@ class PickingService final {
     pick(const scene::Storage &scene, EntityId camera, Extent2D extent, Float2 position_pixels,
          const PickOptions &options, const scene::VisibilityFilter &visibility,
          const clipping::ClippingFilter &clipping_filter);
+    [[nodiscard]] Result<std::optional<PickHit>>
+    refine_candidate(const scene::Storage &scene, EntityId camera, Extent2D extent,
+                     Float2 position_pixels, const PickOptions &options,
+                     const scene::VisibilityFilter &visibility,
+                     const clipping::ClippingFilter &clipping_filter,
+                     const PickCandidate &candidate);
     [[nodiscard]] Result<std::optional<PickHit>>
     pick_ray(const scene::Storage &scene, const Ray3 &ray, const PickOptions &options = {});
     [[nodiscard]] Result<std::optional<PickHit>>

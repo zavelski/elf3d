@@ -119,6 +119,28 @@ out/release/elf3d-viewer-0.1.0-windows-x64.zip
 out/release/SHA256SUMS.txt
 ```
 
+The package script requires the post-build viewer `assets` directory and copies
+it into the ZIP. Archive inspection for current releases must confirm:
+
+```text
+assets/font/DroidSans.ttf
+assets/icon/open.png
+assets/icon/reload.png
+assets/icon/fit_view.png
+assets/icon/reset_camera.png
+assets/icon/select.png
+assets/icon/measure.png
+assets/icon/clipping_panel.png
+assets/icon/section_plane.png
+assets/icon/add_clipping_box.png
+assets/icon/clear_clipping.png
+assets/icon/hide_selected.png
+assets/icon/show_selected.png
+assets/icon/isolate_selected.png
+assets/icon/show_all.png
+assets/icon/reset_layout.png
+```
+
 SDK packaging is deferred for 0.1.0 because install/export rules and an
 external consumer validation workflow are not yet implemented.
 
@@ -158,13 +180,14 @@ Before release, manually validate:
 - procedural cube renders
 - `tests/fixtures/textured_pbr.gltf` loads and renders
 - failed load preserves current scene
-- orbit, pan, wheel dolly, fit, reset
-- picking and selection
+- orbit, X/right/middle pan, wheel/Z-drag dolly, dynamic examine pivot, fit, reset
+- GPU-first picking, Ctrl-click selection, and Shift-click hide
 - hierarchy selection and visibility
 - isolation and exit isolation
 - distance measurement placement, preview, clear, and cancel
 - section plane and clipping boxes
 - clipping helpers
+- Droid Sans font, generated toolbar icons, and light viewer panel/status style
 - reload and close scene
 - OpenGL shutdown without visible errors
 

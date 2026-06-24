@@ -54,13 +54,15 @@ Elf3D 0.1.0 implements:
 - OpenGL 4.1 off-screen viewport rendering
 - opaque metallic-roughness directional-light shader path
 - GPU mesh and texture caches
+- GPU-first viewport picking with CPU triangle refinement and CPU BVH fallback
 - CPU picking with per-mesh BVH cache
-- viewport orbit/pan/wheel navigation, fit, and reset
+- viewport orbit/pan/zoom navigation, dynamic examine pivot, fit, and reset
 - single selection per viewport
 - scene visibility and viewport isolation
 - one distance measurement per viewport
 - one section plane and up to three axis-aligned clipping boxes per viewport
-- Dear ImGui/GLFW reference viewer
+- Dear ImGui/GLFW reference viewer with docking, Droid Sans UI font asset,
+  light Low.3D-inspired panels, generated PNG toolbar icons, and command toolbar
 
 ## Architecture Boundaries
 

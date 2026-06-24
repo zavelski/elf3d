@@ -48,8 +48,22 @@ struct PickingStatistics {
     std::uint64_t latest_clipping_bounds_rejected = 0;
     std::uint64_t latest_clipping_hits_rejected = 0;
     std::uint64_t latest_clipping_hits_accepted = 0;
+    std::uint64_t latest_gpu_requests = 0;
+    std::uint64_t latest_gpu_hits = 0;
+    std::uint64_t latest_gpu_misses = 0;
+    std::uint64_t latest_gpu_draw_calls = 0;
+    std::uint64_t latest_gpu_pixels_read = 0;
+    std::uint64_t latest_gpu_pass_time_microseconds = 0;
+    std::uint64_t latest_gpu_readback_time_microseconds = 0;
+    std::uint64_t latest_cpu_refinements = 0;
+    std::uint64_t latest_cpu_fallbacks = 0;
 
     std::uint64_t lifetime_bvh_builds = 0;
+    std::uint64_t lifetime_gpu_requests = 0;
+    std::uint64_t lifetime_gpu_hits = 0;
+    std::uint64_t lifetime_gpu_misses = 0;
+    std::uint64_t lifetime_cpu_refinements = 0;
+    std::uint64_t lifetime_cpu_fallbacks = 0;
     std::uint64_t cached_mesh_bvhs = 0;
 
     bool operator==(const PickingStatistics &) const = default;

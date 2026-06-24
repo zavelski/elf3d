@@ -2,8 +2,23 @@
 #include <elf3d/imgui/context.h>
 #include <elf3d/imgui/texture.h>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <imgui_internal.h>
+
+#if defined(_WIN32)
+#include <objbase.h>
+#include <wincodec.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -19,8 +34,14 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
+
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
 
 namespace {
 
@@ -73,6 +94,12 @@ struct ViewerState {
     bool show_imgui_demo = false;
     bool show_status_bar = true;
     bool show_about = false;
+    bool reset_dock_layout = false;
+    bool dock_layout_initialized = false;
+    bool apply_dock_layout = false;
+    ImGuiID dock_center_id = 0;
+    ImGuiID dock_right_id = 0;
+    ImGuiID dock_right_bottom_id = 0;
     bool request_open_modal = false;
     bool request_error_modal = false;
     std::array<char, 2048> open_path{};
@@ -80,7 +107,7 @@ struct ViewerState {
     bool drop_copy_failed = false;
     elf3d::Extent2D view_dimensions;
     bool framebuffer_valid = false;
-    std::array<float, 4> clear_color{0.08F, 0.16F, 0.28F, 1.0F};
+    std::array<float, 4> clear_color{1.0F, 1.0F, 1.0F, 1.0F};
     std::array<float, 4> cube_color{0.72F, 0.32F, 0.12F, 1.0F};
     elf3d::BasicLighting lighting;
     bool rotate_cube = true;
@@ -91,6 +118,8 @@ struct ViewerState {
     std::optional<LoadFailure> load_failure;
     bool application_focused = true;
     std::optional<elf3d::EntityId> last_revealed_hierarchy_selection;
+    float main_menu_height = 0.0F;
+    float toolbar_height = 0.0F;
 };
 
 struct ViewerScene {
@@ -151,6 +180,312 @@ struct ViewerCommands {
         result.push_back(static_cast<char>(character));
     }
     return result;
+}
+
+[[nodiscard]] std::filesystem::path executable_directory(int argument_count, char **arguments) {
+    if (argument_count > 0 && arguments != nullptr && arguments[0] != nullptr) {
+        std::error_code error;
+        const std::filesystem::path executable =
+            std::filesystem::absolute(path_from_utf8(arguments[0]), error);
+        if (!error && executable.has_parent_path()) {
+            return executable.parent_path();
+        }
+    }
+
+    std::error_code error;
+    const std::filesystem::path current = std::filesystem::current_path(error);
+    return error ? std::filesystem::path{"."} : current;
+}
+
+[[nodiscard]] std::filesystem::path viewer_asset_root(int argument_count, char **arguments) {
+    const std::filesystem::path executable_assets =
+        executable_directory(argument_count, arguments) / "assets";
+    std::error_code error;
+    if (std::filesystem::exists(executable_assets, error)) {
+        return executable_assets;
+    }
+
+    const std::filesystem::path source_assets = std::filesystem::current_path(error) /
+                                                "apps" / "viewer" / "assets";
+    if (!error && std::filesystem::exists(source_assets, error)) {
+        return source_assets;
+    }
+    return executable_assets;
+}
+
+template <typename TextureId> TextureId to_imgui_texture_id(std::uintptr_t value) noexcept {
+    if constexpr (std::is_pointer_v<TextureId>) {
+        return reinterpret_cast<TextureId>(value);
+    } else {
+        return static_cast<TextureId>(value);
+    }
+}
+
+struct DecodedImage {
+    std::vector<std::uint8_t> rgba;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
+#if defined(_WIN32)
+template <typename T> class ComPtr final {
+  public:
+    ComPtr() noexcept = default;
+    ~ComPtr() {
+        reset();
+    }
+
+    ComPtr(const ComPtr &) = delete;
+    ComPtr &operator=(const ComPtr &) = delete;
+
+    [[nodiscard]] T *get() const noexcept {
+        return pointer_;
+    }
+
+    [[nodiscard]] T **put() noexcept {
+        reset();
+        return &pointer_;
+    }
+
+    [[nodiscard]] T *operator->() const noexcept {
+        return pointer_;
+    }
+
+    void reset() noexcept {
+        if (pointer_ != nullptr) {
+            pointer_->Release();
+            pointer_ = nullptr;
+        }
+    }
+
+  private:
+    T *pointer_ = nullptr;
+};
+
+class ComInitialization final {
+  public:
+    ComInitialization() noexcept : result_{CoInitializeEx(nullptr, COINIT_MULTITHREADED)} {}
+
+    ~ComInitialization() {
+        if (SUCCEEDED(result_)) {
+            CoUninitialize();
+        }
+    }
+
+    [[nodiscard]] bool can_use_com() const noexcept {
+        return SUCCEEDED(result_) || result_ == RPC_E_CHANGED_MODE;
+    }
+
+  private:
+    HRESULT result_;
+};
+#endif
+
+[[nodiscard]] std::optional<DecodedImage> decode_png_rgba(
+    const std::filesystem::path &path) noexcept {
+#if defined(_WIN32)
+    const ComInitialization com;
+    if (!com.can_use_com()) {
+        return std::nullopt;
+    }
+
+    ComPtr<IWICImagingFactory> factory;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(factory.put())))) {
+        return std::nullopt;
+    }
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    if (FAILED(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
+                                                  WICDecodeMetadataCacheOnLoad,
+                                                  decoder.put()))) {
+        return std::nullopt;
+    }
+
+    ComPtr<IWICBitmapFrameDecode> frame;
+    if (FAILED(decoder->GetFrame(0, frame.put()))) {
+        return std::nullopt;
+    }
+
+    UINT width = 0;
+    UINT height = 0;
+    if (FAILED(frame->GetSize(&width, &height)) || width == 0 || height == 0) {
+        return std::nullopt;
+    }
+
+    ComPtr<IWICFormatConverter> converter;
+    if (FAILED(factory->CreateFormatConverter(converter.put()))) {
+        return std::nullopt;
+    }
+    if (FAILED(converter->Initialize(frame.get(), GUID_WICPixelFormat32bppRGBA,
+                                     WICBitmapDitherTypeNone, nullptr, 0.0,
+                                     WICBitmapPaletteTypeCustom))) {
+        return std::nullopt;
+    }
+
+    const std::size_t byte_count =
+        static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4U;
+    if (byte_count > static_cast<std::size_t>(std::numeric_limits<UINT>::max())) {
+        return std::nullopt;
+    }
+
+    DecodedImage decoded;
+    decoded.width = width;
+    decoded.height = height;
+    decoded.rgba.resize(byte_count);
+    const UINT stride = width * 4U;
+    if (FAILED(converter->CopyPixels(nullptr, stride, static_cast<UINT>(decoded.rgba.size()),
+                                     decoded.rgba.data()))) {
+        return std::nullopt;
+    }
+    return decoded;
+#else
+    (void)path;
+    return std::nullopt;
+#endif
+}
+
+class ToolbarTexture final {
+  public:
+    ToolbarTexture() noexcept = default;
+    ~ToolbarTexture() {
+        reset();
+    }
+
+    ToolbarTexture(const ToolbarTexture &) = delete;
+    ToolbarTexture &operator=(const ToolbarTexture &) = delete;
+
+    ToolbarTexture(ToolbarTexture &&other) noexcept {
+        *this = std::move(other);
+    }
+
+    ToolbarTexture &operator=(ToolbarTexture &&other) noexcept {
+        if (this != &other) {
+            reset();
+            texture_ = std::exchange(other.texture_, 0U);
+            width_ = std::exchange(other.width_, 0);
+            height_ = std::exchange(other.height_, 0);
+        }
+        return *this;
+    }
+
+    [[nodiscard]] bool upload(const DecodedImage &image) noexcept {
+        if (image.rgba.empty() || image.width == 0 || image.height == 0) {
+            return false;
+        }
+
+        reset();
+        unsigned int texture = 0;
+        glGenTextures(1, &texture);
+        if (texture == 0) {
+            return false;
+        }
+
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(image.width),
+                     static_cast<GLsizei>(image.height), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     image.rgba.data());
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        texture_ = texture;
+        width_ = static_cast<int>(image.width);
+        height_ = static_cast<int>(image.height);
+        return true;
+    }
+
+    void reset() noexcept {
+        if (texture_ != 0U) {
+            glDeleteTextures(1, &texture_);
+            texture_ = 0U;
+        }
+        width_ = 0;
+        height_ = 0;
+    }
+
+    [[nodiscard]] bool is_valid() const noexcept {
+        return texture_ != 0U && width_ > 0 && height_ > 0;
+    }
+
+    [[nodiscard]] ImTextureRef texture_ref() const noexcept {
+        return ImTextureRef{to_imgui_texture_id<ImTextureID>(
+            static_cast<std::uintptr_t>(texture_))};
+    }
+
+  private:
+    unsigned int texture_ = 0;
+    int width_ = 0;
+    int height_ = 0;
+};
+
+enum class ToolbarIcon : std::size_t {
+    open,
+    reload,
+    fit_view,
+    reset_camera,
+    select,
+    measure,
+    clipping_panel,
+    section_plane,
+    add_clipping_box,
+    clear_clipping,
+    hide_selected,
+    show_selected,
+    isolate_selected,
+    show_all,
+    reset_layout,
+    count,
+};
+
+struct ToolbarIconSpec {
+    ToolbarIcon icon;
+    const char *file_name;
+};
+
+constexpr std::array<ToolbarIconSpec, static_cast<std::size_t>(ToolbarIcon::count)>
+    toolbar_icon_specs{{
+        {ToolbarIcon::open, "open.png"},
+        {ToolbarIcon::reload, "reload.png"},
+        {ToolbarIcon::fit_view, "fit_view.png"},
+        {ToolbarIcon::reset_camera, "reset_camera.png"},
+        {ToolbarIcon::select, "select.png"},
+        {ToolbarIcon::measure, "measure.png"},
+        {ToolbarIcon::clipping_panel, "clipping_panel.png"},
+        {ToolbarIcon::section_plane, "section_plane.png"},
+        {ToolbarIcon::add_clipping_box, "add_clipping_box.png"},
+        {ToolbarIcon::clear_clipping, "clear_clipping.png"},
+        {ToolbarIcon::hide_selected, "hide_selected.png"},
+        {ToolbarIcon::show_selected, "show_selected.png"},
+        {ToolbarIcon::isolate_selected, "isolate_selected.png"},
+        {ToolbarIcon::show_all, "show_all.png"},
+        {ToolbarIcon::reset_layout, "reset_layout.png"},
+    }};
+
+struct ToolbarIcons {
+    std::array<ToolbarTexture, static_cast<std::size_t>(ToolbarIcon::count)> textures;
+
+    [[nodiscard]] const ToolbarTexture &at(ToolbarIcon icon) const noexcept {
+        return textures[static_cast<std::size_t>(icon)];
+    }
+};
+
+[[nodiscard]] ToolbarIcons load_toolbar_icons(const std::filesystem::path &asset_root) {
+    ToolbarIcons icons;
+    const std::filesystem::path icon_root = asset_root / "icon";
+    for (const ToolbarIconSpec &spec : toolbar_icon_specs) {
+        std::optional<DecodedImage> image = decode_png_rgba(icon_root / spec.file_name);
+        if (image.has_value()) {
+            const bool uploaded =
+                icons.textures[static_cast<std::size_t>(spec.icon)].upload(image.value());
+            (void)uploaded;
+        }
+    }
+    return icons;
 }
 
 elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
@@ -281,8 +616,10 @@ void glfw_drop_callback(GLFWwindow *window, int path_count, const char **paths) 
 void build_main_menu(GLFWwindow *window, ViewerState &state, const ViewerScene &scene,
                      elf3d::Viewport &engine_viewport, ViewerCommands &commands) {
     if (!ImGui::BeginMainMenuBar()) {
+        state.main_menu_height = ImGui::GetFrameHeight();
         return;
     }
+    state.main_menu_height = ImGui::GetWindowSize().y;
 
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Open...")) {
@@ -308,6 +645,9 @@ void build_main_menu(GLFWwindow *window, ViewerState &state, const ViewerScene &
         ImGui::MenuItem("Clipping", nullptr, &state.show_clipping_panel);
         ImGui::MenuItem("Dear ImGui Demo", nullptr, &state.show_imgui_demo);
         ImGui::MenuItem("Status Bar", nullptr, &state.show_status_bar);
+        if (ImGui::MenuItem("Reset Layout")) {
+            state.reset_dock_layout = true;
+        }
         ImGui::EndMenu();
     }
 
@@ -409,6 +749,218 @@ void build_main_menu(GLFWwindow *window, ViewerState &state, const ViewerScene &
     }
 
     ImGui::EndMainMenuBar();
+}
+
+void tooltip(const char *text) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+        ImGui::SetTooltip("%s", text);
+    }
+}
+
+bool toolbar_button(const ToolbarIcons &icons, ToolbarIcon icon, const char *id,
+                    const char *tooltip_text, float icon_size, bool active = false) {
+    const ToolbarTexture &texture = icons.at(icon);
+    const ImVec2 image_size{icon_size, icon_size};
+    const ImVec2 fallback_size{icon_size + 4.0F, icon_size + 4.0F};
+    const ImVec4 transparent{0.0F, 0.0F, 0.0F, 0.0F};
+    const ImVec4 hover{0.79F, 0.89F, 0.89F, 0.85F};
+    const ImVec4 selected{0.75F, 1.00F, 1.00F, 0.90F};
+
+    ImGui::PushID(id);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{2.0F, 2.0F});
+    ImGui::PushStyleColor(ImGuiCol_Button, active ? selected : transparent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, selected);
+    const bool pressed =
+        texture.is_valid()
+            ? ImGui::ImageButton("image", texture.texture_ref(), image_size, ImVec2{0.0F, 0.0F},
+                                 ImVec2{1.0F, 1.0F}, transparent)
+            : ImGui::Button("##missing-icon", fallback_size);
+    tooltip(tooltip_text);
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
+    ImGui::PopID();
+    return pressed;
+}
+
+void toolbar_separator() {
+    ImGui::SameLine();
+    ImGui::Dummy(ImVec2{2.0F, 1.0F});
+    ImGui::SameLine();
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine();
+    ImGui::Dummy(ImVec2{2.0F, 1.0F});
+    ImGui::SameLine();
+}
+
+void build_toolbar(ViewerState &state, const ToolbarIcons &icons, const ViewerScene &scene,
+                   elf3d::Viewport &engine_viewport, ViewerCommands &commands) {
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    state.toolbar_height = std::max(ImGui::GetFrameHeight() * 1.5F, state.main_menu_height * 1.6F);
+    const float icon_size = state.toolbar_height * 30.0F / 55.0F;
+    ImGui::SetNextWindowPos(ImVec2{viewport->Pos.x, viewport->Pos.y + state.main_menu_height});
+    ImGui::SetNextWindowSize(ImVec2{viewport->Size.x, state.toolbar_height});
+    ImGui::SetNextWindowViewport(viewport->ID);
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking |
+                                       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                       ImGuiWindowFlags_NoScrollbar;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{6.0F, 3.0F});
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{3.0F, 0.0F});
+    if (ImGui::Begin("##Elf3DToolbar", nullptr, flags)) {
+        if (toolbar_button(icons, ToolbarIcon::open, "open", "Open glTF or GLB", icon_size)) {
+            state.request_open_modal = true;
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!scene.is_imported());
+        if (toolbar_button(icons, ToolbarIcon::reload, "reload", "Reload current model",
+                           icon_size)) {
+            commands.reload = true;
+        }
+        ImGui::EndDisabled();
+        toolbar_separator();
+        ImGui::BeginDisabled(!has_nonzero_extent(state.view_dimensions));
+        if (toolbar_button(icons, ToolbarIcon::fit_view, "fit-view", "Fit visible content",
+                           icon_size)) {
+            commands.fit_to_scene = true;
+        }
+        ImGui::SameLine();
+        if (toolbar_button(icons, ToolbarIcon::reset_camera, "reset-camera", "Reset camera",
+                           icon_size)) {
+            commands.reset_view = true;
+        }
+        ImGui::EndDisabled();
+        toolbar_separator();
+        const elf3d::ViewportTool active_tool = engine_viewport.active_tool();
+        if (toolbar_button(icons, ToolbarIcon::select, "select", "Selection tool", icon_size,
+                           active_tool == elf3d::ViewportTool::selection)) {
+            commands.select_tool = true;
+        }
+        ImGui::SameLine();
+        if (toolbar_button(icons, ToolbarIcon::measure, "measure", "Distance measurement tool",
+                           icon_size,
+                           active_tool == elf3d::ViewportTool::distance_measurement)) {
+            commands.measure_tool = true;
+        }
+        toolbar_separator();
+        if (toolbar_button(icons, ToolbarIcon::clipping_panel, "clipping-panel", "Clipping panel",
+                           icon_size)) {
+            commands.show_clipping_panel = true;
+        }
+        ImGui::SameLine();
+        const elf3d::ClippingSnapshot clipping = engine_viewport.clipping_snapshot();
+        if (toolbar_button(icons, ToolbarIcon::section_plane, "section-plane",
+                           "Toggle section plane", icon_size, clipping.section_plane.enabled)) {
+            commands.enable_section_plane = true;
+        }
+        ImGui::SameLine();
+        if (toolbar_button(icons, ToolbarIcon::add_clipping_box, "add-clipping-box",
+                           "Add clipping box", icon_size)) {
+            commands.add_clipping_box_from_bounds = true;
+        }
+        ImGui::SameLine();
+        if (toolbar_button(icons, ToolbarIcon::clear_clipping, "clear-clipping",
+                           "Clear clipping", icon_size)) {
+            commands.clear_clipping = true;
+        }
+        toolbar_separator();
+        ImGui::BeginDisabled(!engine_viewport.has_selection());
+        if (toolbar_button(icons, ToolbarIcon::hide_selected, "hide-selected",
+                           "Hide selected entity", icon_size)) {
+            commands.hide_selected = true;
+        }
+        ImGui::SameLine();
+        if (toolbar_button(icons, ToolbarIcon::show_selected, "show-selected",
+                           "Show selected entity", icon_size)) {
+            commands.show_selected = true;
+        }
+        ImGui::SameLine();
+        if (toolbar_button(icons, ToolbarIcon::isolate_selected, "isolate-selected",
+                           "Isolate selected entity", icon_size)) {
+            commands.isolate_selected = true;
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (toolbar_button(icons, ToolbarIcon::show_all, "show-all", "Show all entities",
+                           icon_size)) {
+            commands.show_all = true;
+        }
+        toolbar_separator();
+        if (toolbar_button(icons, ToolbarIcon::reset_layout, "reset-layout", "Reset dock layout",
+                           icon_size)) {
+            state.reset_dock_layout = true;
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(2);
+}
+
+struct DockLayoutNodes {
+    ImGuiID center = 0;
+    ImGuiID right = 0;
+    ImGuiID right_bottom = 0;
+};
+
+[[nodiscard]] DockLayoutNodes initialize_default_dock_layout(ImGuiID dockspace_id,
+                                                             ImVec2 dockspace_size) {
+    ImGui::DockBuilderRemoveNode(dockspace_id);
+    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, dockspace_size);
+
+    ImGuiID center = dockspace_id;
+    ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.19F, nullptr, &center);
+    ImGuiID right_bottom =
+        ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.197F, nullptr, &right);
+
+    ImGui::DockBuilderDockWindow("3D View", center);
+    ImGui::DockBuilderDockWindow("Scene Hierarchy", right);
+    ImGui::DockBuilderDockWindow("Selection", right);
+    ImGui::DockBuilderDockWindow("Model Information", right_bottom);
+    ImGui::DockBuilderDockWindow("Measurement", right_bottom);
+    ImGui::DockBuilderDockWindow("Clipping", right_bottom);
+    ImGui::DockBuilderDockWindow("Navigation Settings", right_bottom);
+    ImGui::DockBuilderFinish(dockspace_id);
+    return DockLayoutNodes{center, right, right_bottom};
+}
+
+void set_default_dock(ImGuiID dock_id, bool force) {
+    if (dock_id != 0) {
+        ImGui::SetNextWindowDockID(dock_id, force ? ImGuiCond_Always : ImGuiCond_FirstUseEver);
+    }
+}
+
+ImGuiID build_main_dockspace(ViewerState &state) {
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    const float status_height = state.show_status_bar ? ImGui::GetFrameHeight() : 0.0F;
+    const float top = state.main_menu_height + state.toolbar_height;
+    const float height = std::max(1.0F, viewport->Size.y - top - status_height);
+    ImGui::SetNextWindowPos(ImVec2{viewport->Pos.x, viewport->Pos.y + top});
+    ImGui::SetNextWindowSize(ImVec2{viewport->Size.x, height});
+    ImGui::SetNextWindowViewport(viewport->ID);
+    constexpr ImGuiWindowFlags window_flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoNavFocus;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
+    ImGui::Begin("##Elf3DDockspaceHost", nullptr, window_flags);
+    const ImGuiID dockspace_id = ImGui::GetID("Elf3DDockspace");
+    if (state.reset_dock_layout || !state.dock_layout_initialized ||
+        ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
+        const ImVec2 dockspace_size = ImGui::GetContentRegionAvail();
+        if (dockspace_size.x > 0.0F && dockspace_size.y > 0.0F) {
+            const DockLayoutNodes nodes =
+                initialize_default_dock_layout(dockspace_id, dockspace_size);
+            state.dock_center_id = nodes.center;
+            state.dock_right_id = nodes.right;
+            state.dock_right_bottom_id = nodes.right_bottom;
+            state.reset_dock_layout = false;
+            state.dock_layout_initialized = true;
+            state.apply_dock_layout = true;
+        }
+    }
+    ImGui::DockSpace(dockspace_id, ImVec2{0.0F, 0.0F}, ImGuiDockNodeFlags_None);
+    ImGui::End();
+    ImGui::PopStyleVar();
+    return dockspace_id;
 }
 
 elf3d::GraphicsProcedure load_opengl_procedure(const char *name) {
@@ -619,6 +1171,8 @@ viewport_input_from_imgui(ImVec2 item_min, bool item_hovered, bool item_focused,
     input.shift_down = io.KeyShift;
     input.control_down = io.KeyCtrl;
     input.alt_down = io.KeyAlt;
+    input.x_down = ImGui::IsKeyDown(ImGuiKey_X);
+    input.z_down = ImGui::IsKeyDown(ImGuiKey_Z);
     return input;
 }
 
@@ -689,8 +1243,9 @@ void build_3d_view(ImGuiID dockspace_id, ViewerState &state, elf3d::Engine &engi
         return;
     }
 
-    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.055F, 0.06F, 0.07F, 1.0F});
+    set_default_dock(state.dock_center_id != 0 ? state.dock_center_id : dockspace_id,
+                     state.apply_dock_layout);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.94F, 0.94F, 0.94F, 1.0F});
     const bool is_visible = ImGui::Begin("3D View", &state.show_3d_view);
     ImGui::PopStyleColor();
 
@@ -852,7 +1407,8 @@ void build_model_information(ImGuiID dockspace_id, ViewerState &state, const Vie
     if (!state.show_model_information) {
         return;
     }
-    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
+    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
+                     state.apply_dock_layout);
     if (ImGui::Begin("Model Information", &state.show_model_information)) {
         const std::string source =
             scene.is_imported() ? path_to_utf8(scene.source_path) : "Procedural cube demo";
@@ -954,14 +1510,19 @@ void build_model_information(ImGuiID dockspace_id, ViewerState &state, const Vie
         return "Orbit";
     case elf3d::NavigationInteractionMode::pan:
         return "Pan";
+    case elf3d::NavigationInteractionMode::zoom:
+        return "Zoom";
     }
     return "None";
 }
 
-void build_navigation_settings_window(ViewerState &state, elf3d::Viewport &engine_viewport) {
+void build_navigation_settings_window(ImGuiID dockspace_id, ViewerState &state,
+                                      elf3d::Viewport &engine_viewport) {
     if (!state.show_navigation_settings) {
         return;
     }
+    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
+                     state.apply_dock_layout);
     if (ImGui::Begin("Navigation Settings", &state.show_navigation_settings)) {
         bool enabled = engine_viewport.navigation_enabled();
         if (ImGui::Checkbox("Enable Navigation", &enabled)) {
@@ -1023,7 +1584,8 @@ void build_selection_panel(ImGuiID dockspace_id, ViewerState &state, const Viewe
     if (!state.show_selection_panel) {
         return;
     }
-    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
+    set_default_dock(state.dock_right_id != 0 ? state.dock_right_id : dockspace_id,
+                     state.apply_dock_layout);
     if (ImGui::Begin("Selection", &state.show_selection_panel)) {
         bool enabled = engine_viewport.selection_enabled();
         if (ImGui::Checkbox("Enable Selection", &enabled)) {
@@ -1082,6 +1644,22 @@ void build_selection_panel(ImGuiID dockspace_id, ViewerState &state, const Viewe
 
         ImGui::Separator();
         const elf3d::PickingStatistics picking = engine_viewport.picking_statistics();
+        ImGui::Text("GPU pick requests: %llu",
+                    static_cast<unsigned long long>(picking.latest_gpu_requests));
+        ImGui::Text("GPU pick hits / misses: %llu / %llu",
+                    static_cast<unsigned long long>(picking.latest_gpu_hits),
+                    static_cast<unsigned long long>(picking.latest_gpu_misses));
+        ImGui::Text("GPU pick draw calls: %llu",
+                    static_cast<unsigned long long>(picking.latest_gpu_draw_calls));
+        ImGui::Text("GPU pixels read: %llu",
+                    static_cast<unsigned long long>(picking.latest_gpu_pixels_read));
+        ImGui::Text("GPU pass / readback: %llu / %llu us",
+                    static_cast<unsigned long long>(picking.latest_gpu_pass_time_microseconds),
+                    static_cast<unsigned long long>(picking.latest_gpu_readback_time_microseconds));
+        ImGui::Text("CPU refinements / fallbacks: %llu / %llu",
+                    static_cast<unsigned long long>(picking.latest_cpu_refinements),
+                    static_cast<unsigned long long>(picking.latest_cpu_fallbacks));
+        ImGui::Separator();
         ImGui::Text("Instance bounds tests: %llu",
                     static_cast<unsigned long long>(picking.latest_instance_bounds_tests));
         ImGui::Text("Mesh bounds tests: %llu",
@@ -1127,7 +1705,8 @@ void build_measurement_panel(ImGuiID dockspace_id, ViewerState &state, const Vie
     if (!state.show_measurement_panel) {
         return;
     }
-    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
+    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
+                     state.apply_dock_layout);
     if (ImGui::Begin("Measurement", &state.show_measurement_panel)) {
         const elf3d::ViewportTool active_tool = engine_viewport.active_tool();
         ImGui::Text("Active tool: %s", tool_name(active_tool));
@@ -1259,7 +1838,8 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerState &state, const Viewer
     if (!state.show_clipping_panel) {
         return;
     }
-    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
+    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
+                     state.apply_dock_layout);
     if (ImGui::Begin("Clipping", &state.show_clipping_panel)) {
         elf3d::ClippingSnapshot snapshot = engine_viewport.clipping_snapshot();
         const elf3d::Result<elf3d::Bounds3> visible_bounds =
@@ -1535,8 +2115,10 @@ void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerState &state, Viewe
     if (!state.show_scene_hierarchy) {
         return;
     }
-    ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Scene Hierarchy", &state.show_scene_hierarchy)) {
+    set_default_dock(state.dock_right_id != 0 ? state.dock_right_id : dockspace_id,
+                     state.apply_dock_layout);
+    const bool scene_panel_open = ImGui::Begin("Scene Hierarchy", &state.show_scene_hierarchy);
+    if (!scene_panel_open) {
         ImGui::End();
         return;
     }
@@ -1803,7 +2385,9 @@ void build_status_bar(const ViewerState &state, const elf3d::Engine &engine,
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking |
                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                        ImGuiWindowFlags_NoScrollbar;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{8.0F, 3.0F});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{8.0F, 2.0F});
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.86F, 0.86F, 0.86F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.00F, 0.00F, 0.00F, 1.00F});
     if (ImGui::Begin("##Elf3DStatusBar", nullptr, flags)) {
         const float fps = ImGui::GetIO().Framerate;
         const float frame_time_ms = fps > 0.0F ? 1000.0F / fps : 0.0F;
@@ -1846,6 +2430,7 @@ void build_status_bar(const ViewerState &state, const elf3d::Engine &engine,
             isolation_status.c_str(), clipping.c_str(), tool_status.c_str(), frame_time_ms, fps);
     }
     ImGui::End();
+    ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
 }
 
@@ -1936,6 +2521,8 @@ int run_viewer(int argument_count, char **arguments) {
     }
     glfwSwapInterval(1);
 
+    const std::filesystem::path asset_root = viewer_asset_root(argument_count, arguments);
+
     elf3d::EngineConfiguration engine_configuration;
     engine_configuration.opengl.load_procedure = load_opengl_procedure;
     elf3d::Result<std::unique_ptr<elf3d::Engine>> engine_result =
@@ -1964,13 +2551,18 @@ int run_viewer(int argument_count, char **arguments) {
     ViewerScene active_scene = std::move(demo_result).value();
 
     std::string imgui_error;
+    const std::string font_path_utf8 = path_to_utf8(asset_root / "font" / "DroidSans.ttf");
+    elf3d::imgui::ContextOptions imgui_options;
+    imgui_options.font_path_utf8 = font_path_utf8.c_str();
+    imgui_options.font_size_pixels = 20.0F;
     std::unique_ptr<elf3d::imgui::Context> imgui =
-        elf3d::imgui::Context::create(window.get(), glsl_version, imgui_error);
+        elf3d::imgui::Context::create(window.get(), glsl_version, imgui_options, imgui_error);
     if (!imgui) {
         std::cerr << imgui_error << '\n';
         return 1;
     }
 
+    ToolbarIcons toolbar_icons = load_toolbar_icons(asset_root);
     ViewerState state;
     glfwSetWindowUserPointer(window.get(), &state);
     glfwSetDropCallback(window.get(), glfw_drop_callback);
@@ -1988,7 +2580,8 @@ int run_viewer(int argument_count, char **arguments) {
 
         ViewerCommands commands;
         build_main_menu(window.get(), state, active_scene, *engine_viewport, commands);
-        const ImGuiID dockspace_id = ImGui::DockSpaceOverViewport();
+        build_toolbar(state, toolbar_icons, active_scene, *engine_viewport, commands);
+        const ImGuiID dockspace_id = build_main_dockspace(state);
 
         if (camera_shortcuts_available(state, active_scene, *engine_viewport)) {
             if (ImGui::IsKeyPressed(ImGuiKey_F)) {
@@ -2179,7 +2772,7 @@ int run_viewer(int argument_count, char **arguments) {
         build_3d_view(dockspace_id, state, *engine, *engine_viewport, active_scene);
         build_scene_hierarchy_panel(dockspace_id, state, active_scene, *engine_viewport);
         build_model_information(dockspace_id, state, active_scene);
-        build_navigation_settings_window(state, *engine_viewport);
+        build_navigation_settings_window(dockspace_id, state, *engine_viewport);
         build_selection_panel(dockspace_id, state, active_scene, *engine_viewport);
         build_measurement_panel(dockspace_id, state, active_scene, *engine_viewport);
         build_clipping_panel(dockspace_id, state, active_scene, *engine_viewport);
@@ -2189,6 +2782,7 @@ int run_viewer(int argument_count, char **arguments) {
         if (state.show_imgui_demo) {
             ImGui::ShowDemoWindow(&state.show_imgui_demo);
         }
+        state.apply_dock_layout = false;
 
         int framebuffer_width = 0;
         int framebuffer_height = 0;
