@@ -1,14 +1,14 @@
 # Rendering Pipeline
 
-Purpose: Document the verified Elf3D 0.1.0 renderer, OpenGL backend, color
+Purpose: Document the verified Elf3D 0.2.0 renderer, OpenGL backend, color
 policy, caches, and limitations.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
 Document status: Verified from renderer/backend source, tests, and validation
 on 2026-06-24.
 
-Last verified Git commit: pending local change
+Last verified Git commit: pending 0.2.0 release source commit
 
 Implementation source paths: `modules/graphics`, `modules/backend_opengl`,
 `modules/renderer`, `modules/viewport`, `facade/elf3d/src/engine.cpp`,
@@ -148,5 +148,6 @@ addition to the existing CPU BVH counters.
 
 ## Validation
 
-Debug and Release builds and CTest passed after these updates. Manual visual
-rendering validation remains pending in this local change.
+Debug and Release builds and CTest are part of the 0.2.0 release gate. The
+exact local, CI, and viewer smoke results are recorded under
+`docs/releases/0.2.0/`.

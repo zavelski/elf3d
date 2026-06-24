@@ -158,13 +158,36 @@ function Test-PackageOutput {
     } finally {
         $zip.Dispose()
     }
+    $normalizedEntries = $entries | ForEach-Object { $_ -replace "\\", "/" }
 
     foreach ($required in @("elf3d_viewer.exe", "elf3d.dll", "LICENSE", "THIRD_PARTY.md", "README.txt")) {
-        if (-not ($entries | Where-Object { $_ -eq $required })) {
+        if (-not ($normalizedEntries | Where-Object { $_ -eq $required })) {
             throw "Package is missing '$required'."
         }
     }
-    if (-not ($entries | Where-Object { $_ -like "third_party_licenses/*" })) {
+    foreach ($requiredAsset in @(
+            "assets/font/DroidSans.ttf",
+            "assets/icon/open.png",
+            "assets/icon/reload.png",
+            "assets/icon/fit_view.png",
+            "assets/icon/reset_camera.png",
+            "assets/icon/select.png",
+            "assets/icon/measure.png",
+            "assets/icon/clipping_panel.png",
+            "assets/icon/section_plane.png",
+            "assets/icon/add_clipping_box.png",
+            "assets/icon/clear_clipping.png",
+            "assets/icon/hide_selected.png",
+            "assets/icon/show_selected.png",
+            "assets/icon/isolate_selected.png",
+            "assets/icon/show_all.png",
+            "assets/icon/reset_layout.png"
+        )) {
+        if (-not ($normalizedEntries | Where-Object { $_ -eq $requiredAsset })) {
+            throw "Package is missing '$requiredAsset'."
+        }
+    }
+    if (-not ($normalizedEntries | Where-Object { $_ -like "third_party_licenses/*" })) {
         throw "Package is missing third_party_licenses contents."
     }
 

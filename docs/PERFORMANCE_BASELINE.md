@@ -1,14 +1,14 @@
 # Performance Baseline
 
-Purpose: Record measured and unmeasured performance status for Elf3D 0.1.0 and
+Purpose: Record measured and unmeasured performance status for Elf3D 0.2.0 and
 provide reproducible measurement procedures.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
 Document status: Baseline procedure only. No performance benchmark run has been
 performed.
 
-Last verified Git commit: `8504068`
+Last verified Git commit: pending 0.2.0 release source commit
 
 Implementation source paths: `apps/viewer`, `modules/gltf`, `modules/renderer`,
 `modules/picking`, `modules/scene`, `tests/fixtures/textured_pbr.gltf`
@@ -68,7 +68,7 @@ cmake --build --preset windows-release
 3. Launch the viewer with a fixed model:
 
 ```powershell
-.\out\build\windows-debug\bin\Release\elf3d_viewer.exe tests\fixtures\textured_pbr.gltf
+.\out\build\windows-release\bin\Release\elf3d_viewer.exe tests\fixtures\textured_pbr.gltf
 ```
 
 4. Record from the viewer:
@@ -90,6 +90,6 @@ cmake --build --preset windows-release
 
 ## Current Baseline Decision
 
-No performance claims should be made for 0.1.0 beyond the existence of renderer,
+No performance claims should be made for 0.2.0 beyond the existence of renderer,
 picking, and cache statistics. The first real performance baseline should be a
 future task after release documentation and manual validation are complete.

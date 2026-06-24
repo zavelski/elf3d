@@ -3,11 +3,11 @@
 Purpose: Provide a repeatable checklist for human developers and Codex when a
 task may affect Elf3D documentation.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
 Document status: Living checklist.
 
-Last verified Git commit: `145bbdd`
+Last verified Git commit: pending 0.2.0 release source commit
 
 Implementation source paths: `docs/DOCUMENTATION_POLICY.md`, `AGENTS.md`,
 `docs`, `README.md`

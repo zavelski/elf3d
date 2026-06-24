@@ -1,28 +1,28 @@
 # Module Map
 
-Purpose: Record the actual Elf3D 0.1.0 CMake targets, responsibilities, and
+Purpose: Record the actual Elf3D 0.2.0 CMake targets, responsibilities, and
 dependency direction.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
 Document status: Verified from CMake files and validation on 2026-06-24.
 
-Last verified Git commit: pending local change
+Last verified Git commit: pending 0.2.0 release source commit
 
 Implementation source paths: `CMakeLists.txt`, `cmake/dependencies.cmake`,
 `modules/*/CMakeLists.txt`, `modules/tools/*/CMakeLists.txt`,
 `facade/elf3d/CMakeLists.txt`, `integrations/imgui/CMakeLists.txt`,
 `apps/viewer/CMakeLists.txt`, `tests/CMakeLists.txt`
 
-Known limitations: There is no install/package target and no CI workflow in the
-verified repository state.
+Known limitations: There is no install/export SDK target. Windows viewer ZIP
+packaging is script-based.
 
 Related documents: `PUBLIC_API_OVERVIEW.md`, `RENDERING_PIPELINE.md`,
 `TESTING.md`
 
 ## Top-Level Build
 
-The root project is `Elf3D` version `0.1.0`. It requires CMake 3.25, C++20,
+The root project is `Elf3D` version `0.2.0`. It requires CMake 3.25, C++20,
 compiler extensions disabled, and MSVC dynamic runtime selection:
 
 - Debug: `/MDd`
@@ -116,5 +116,4 @@ elf3d_viewer
 
 - No install/export SDK package configuration is present. Windows viewer ZIP
   packaging is script-based and includes required runtime assets.
-- No CI target or workflow is present.
 - The public DLL is C++ ABI based; no C ABI or plugin ABI is implemented.

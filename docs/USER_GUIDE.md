@@ -1,20 +1,19 @@
 # User Guide
 
-Purpose: Explain how to use the actual Elf3D 0.1.0 reference viewer.
+Purpose: Explain how to use the actual Elf3D 0.2.0 reference viewer.
 
-Applicable version: 0.1.0
+Applicable version: 0.2.0
 
-Document status: Verified from viewer code and README; manual visual validation
-is still required before release.
+Document status: Verified from viewer code and README; release validation is
+recorded under `docs/releases/0.2.0/`.
 
-Last verified Git commit: pending local change
+Last verified Git commit: pending 0.2.0 release source commit
 
 Implementation source paths: `apps/viewer/src/main.cpp`, `integrations/imgui`,
 `include/elf3d`, `tests/fixtures/textured_pbr.gltf`
 
 Known limitations: This guide describes the current reference viewer, not a
-full editor. Viewer rendering and interactions have not yet been manually
-validated after Goal 4.
+full editor.
 
 Related documents: `VIEWPORT_AND_TOOLS.md`, `GLTF_SUPPORT.md`, `TESTING.md`,
 `LIFETIME_AND_THREADING.md`
@@ -30,7 +29,7 @@ After a Debug build:
 After a Release build:
 
 ```powershell
-.\out\build\windows-debug\bin\Release\elf3d_viewer.exe
+.\out\build\windows-release\bin\Release\elf3d_viewer.exe
 ```
 
 Open a model at startup:

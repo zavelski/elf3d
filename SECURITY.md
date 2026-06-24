@@ -2,8 +2,8 @@
 
 ## Supported Versions
 
-Elf3D 0.1.0 is the first public baseline. Security fixes are considered for the
-latest public release and the active development branch.
+Elf3D 0.2.0 is the current public baseline. Security fixes are considered for
+the latest public release and the active development branch.
 
 ## Reporting A Vulnerability
 
