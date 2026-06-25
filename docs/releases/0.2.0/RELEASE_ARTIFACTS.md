@@ -26,6 +26,13 @@ Related documents: `GITHUB_RELEASE_NOTES.md`, `RELEASE_CHECKLIST.md`,
 | `elf3d-viewer-0.2.0-windows-x64.zip` | 1,132,433 bytes | `8cdd519ccee832fb8705a307eba32e46759e8920fef37ea2993a0b85b599c3e4` |
 | `SHA256SUMS.txt` | 102 bytes | Contains checksum for the viewer ZIP. |
 
+## Assets Published On GitHub
+
+| Asset | Size | SHA-256 |
+| --- | ---: | --- |
+| `elf3d-viewer-0.2.0-windows-x64.zip` | 1,132,689 bytes | `ad2fceae8ff0af7d83521a92e3e1cd20407ac209900ba62b3d8e544fe7ad9021` |
+| `SHA256SUMS.txt` | 102 bytes | Contains checksum for the viewer ZIP. |
+
 GitHub automatically provides source archives for the `v0.2.0` tag. Duplicate
 source archives are not committed to Git and are not produced by the packaging
 script.
