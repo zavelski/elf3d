@@ -46,7 +46,6 @@ The full validation record is maintained in `VALIDATION_SUMMARY.md`.
 
 `GO - ready for public release`
 
-Local validation and package inspection passed. CI, tag workflow, GitHub
-Release verification, public clone testing, and final branch synchronization
-remain publication gates and are recorded in `VALIDATION_SUMMARY.md` and the
-post-release `PUBLICATION_REPORT.md`.
+Local validation, package inspection, CI, tag workflow, GitHub Release
+verification, and public clone testing passed. Final branch synchronization is
+recorded in `PUBLICATION_REPORT.md`.

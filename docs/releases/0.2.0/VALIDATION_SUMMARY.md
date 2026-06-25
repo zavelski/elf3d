@@ -71,10 +71,10 @@ Viewer smoke and package smoke were run with process window-handle checks,
 | Archive inspection | Passed | ZIP contained `assets/font/DroidSans.ttf`, all generated toolbar icons, runtime binaries, README, license files, and third-party notices. |
 | Checksums | Passed | `SHA256SUMS.txt` matched the viewer ZIP hash. |
 | Packaged viewer smoke | Passed | Extracted package viewer opened and exited with code 0 after `CloseMainWindow()`. |
-| GitHub branch CI | Pending | Required after pushing release source to `develop` and `main`. |
-| Tag-triggered release workflow | Pending | Required after pushing annotated `v0.2.0`. |
-| Published release assets | Pending | Required after GitHub Release creation. |
-| Public clone test | Pending | Required after the tag is public. |
+| GitHub branch CI | Passed | Develop CI run `28129043437` and main CI run `28129065207` passed Debug and Release jobs. |
+| Tag-triggered release workflow | Passed | Release workflow run `28159209602` built, tested, packaged, uploaded assets, and created the GitHub Release. |
+| Published release assets | Passed | Downloaded GitHub Release assets; `SHA256SUMS.txt` matched the downloaded viewer ZIP hash `ad2fceae8ff0af7d83521a92e3e1cd20407ac209900ba62b3d8e544fe7ad9021`. |
+| Public clone test | Passed | Fresh clone from `v0.2.0` configured, built, and passed Debug and Release CTest 16/16. |
 
 ## CTest Totals
 
@@ -103,6 +103,14 @@ SHA-256:
 
 ZIP size: 1,132,433 bytes.
 
+Published GitHub Release asset SHA-256:
+
+```text
+ad2fceae8ff0af7d83521a92e3e1cd20407ac209900ba62b3d8e544fe7ad9021  elf3d-viewer-0.2.0-windows-x64.zip
+```
+
+Published ZIP size: 1,132,689 bytes.
+
 ## Not Verified
 
 - External model corpus.
@@ -113,7 +121,7 @@ ZIP size: 1,132,433 bytes.
 `GO - ready for public release`
 
 Local build, tests, package creation, archive inspection, release viewer smoke,
-packaged viewer smoke, checksum verification, and prior visual comparison of
-the unchanged viewer UI implementation passed. Continue with GitHub CI, tag,
-GitHub Release asset verification, public clone testing, and final branch
-synchronization.
+packaged viewer smoke, checksum verification, prior visual comparison of the
+unchanged viewer UI implementation, GitHub CI, tag-triggered release workflow,
+GitHub Release asset verification, and public clone testing passed. Continue
+only with final branch synchronization and remote verification.

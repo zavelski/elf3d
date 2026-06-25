@@ -43,10 +43,10 @@ Related documents: `PROJECT_STATE_EN.md`, `VALIDATION_SUMMARY.md`,
 | Checksums | Passed | `SHA256SUMS.txt` matched ZIP SHA-256 `8cdd519ccee832fb8705a307eba32e46759e8920fef37ea2993a0b85b599c3e4`. |
 | SDK package | Not applicable | Deferred for 0.2.0; no SDK archive is produced. |
 | Documentation | Passed | Living docs and 0.2.0 release records updated. |
-| GitHub CI | Pending | `develop`, `main`, and tag-triggered release workflow must pass. |
-| Tag correctness | Pending | `v0.2.0` must point to the validated release source commit. |
-| GitHub Release | Pending | Public release must exist at the published tag with verified assets. |
-| Clone test | Pending | Fresh public clone from `v0.2.0` must build and pass Debug/Release CTest. |
+| GitHub CI | Passed | Develop CI `28129043437`, main CI `28129065207`, and tag release workflow `28159209602` passed. |
+| Tag correctness | Passed | Remote annotated `v0.2.0` tag object `b19797293f93eee728fd72337bde72973f85a98f` peels to `e547f123051ec847bc63a59f4cbc45eaea46cd95`. |
+| GitHub Release | Passed | Public release `Elf3D 0.2.0` exists at `https://github.com/zavelski/elf3d/releases/tag/v0.2.0` with verified assets. |
+| Clone test | Passed | Fresh public clone from `v0.2.0` built and passed Debug/Release CTest 16/16. |
 
 ## Remaining Local Blockers
 
