@@ -2,19 +2,19 @@
 
 Purpose: Index the verified Elf3D technical documentation set.
 
-Applicable version: 0.2.0
+Applicable version: 0.3.0
 
-Document status: Living index for the current release.
+Document status: Living index for the current development and migration line.
 
-Last verified implementation commit: pending 0.2.0 release source commit
+Last verified implementation commit: pending C++20 module migration commit
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`
 
-Known limitations: This index is not an immutable release snapshot. Current
-release records are under `releases/0.2.0/`; historical 0.1.0 records remain
-under `releases/0.1.0/`.
+Known limitations: This index is not an immutable release snapshot. The latest
+public release records are under `releases/0.2.0/`; historical 0.1.0 records
+remain under `releases/0.1.0/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 `releases/0.2.0/RELEASE_CHECKLIST.md`
@@ -22,7 +22,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 ## Core Documents
 
 - `PUBLIC_API_OVERVIEW.md`: public C++ API, ownership, errors, integration.
-- `MODULE_MAP.md`: CMake targets, module responsibilities, dependencies.
+- `MODULE_MAP.md`: CMake targets, OBJECT-library groups, named modules, dependencies.
 - `GLTF_SUPPORT.md`: verified glTF and GLB support matrix.
 - `RENDERING_PIPELINE.md`: graphics abstraction, OpenGL backend, renderer.
 - `VIEWPORT_AND_TOOLS.md`: viewport input, navigation, picking, tools.
@@ -35,7 +35,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `DOCUMENTATION_POLICY.md`: documentation ownership and review rules.
 - `DOCUMENTATION_UPDATE_CHECKLIST.md`: task checklist for documentation updates.
 
-## Current Release Snapshot
+## Latest Public Release Snapshot
 
 - `releases/0.2.0/PROJECT_STATE_EN.md`
 - `releases/0.2.0/VALIDATION_SUMMARY.md`
@@ -64,6 +64,6 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 ## Current Release Readiness
 
-0.2.0 release readiness is tracked in
-`releases/0.2.0/RELEASE_CHECKLIST.md`. Do not publish from local state unless
-the final checklist records `GO - ready for public release`.
+0.3.0 release readiness is not complete. The latest immutable public release
+snapshot is 0.2.0 under `releases/0.2.0/`. Do not publish from local state
+unless a current 0.3.0 checklist records `GO - ready for public release`.

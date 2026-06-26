@@ -1,6 +1,8 @@
-#include <elf3d/renderer/renderer.h>
+module;
 
-#include <elf3d/assets/handle_access.h>
+#include <elf3d/assets.h>
+#include <elf3d/viewport.h>
+#include <elf3d/math/detail/glm_helpers.h>
 
 #include <algorithm>
 #include <array>
@@ -11,6 +13,14 @@
 #include <optional>
 #include <span>
 #include <utility>
+
+module elf.renderer;
+
+import elf.assets;
+import elf.clipping;
+import elf.graphics;
+import elf.math;
+import elf.scene;
 
 namespace elf3d::renderer {
 namespace {
@@ -196,12 +206,6 @@ graphics::TextureFilterMode filter_mode(TextureFilter filter) noexcept {
     return graphics::TextureFilterMode::linear;
 }
 
-template <std::size_t Size> std::array<float, Size> matrix_values(const float *values) noexcept {
-    std::array<float, Size> result{};
-    std::copy_n(values, Size, result.begin());
-    return result;
-}
-
 [[nodiscard]] std::optional<GpuPickHit>
 make_gpu_pick_hit(const RenderList &list, const RenderItem &item, graphics::PickingPixel pixel,
                   Extent2D extent, Float2 position_pixels) noexcept {
@@ -209,7 +213,8 @@ make_gpu_pick_hit(const RenderList &list, const RenderItem &item, graphics::Pick
         pixel.depth < 0.0F || pixel.depth >= 1.0F) {
         return std::nullopt;
     }
-    const math::Matrix4 view_projection = list.projection_matrix * list.view_matrix;
+    const math::Matrix4 view_projection =
+        math::to_matrix(list.projection_matrix) * math::to_matrix(list.view_matrix);
     const float determinant = glm::determinant(view_projection);
     if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001F) {
         return std::nullopt;
@@ -283,17 +288,17 @@ build_render_list(const scene::Storage &scene_storage, EntityId camera, Extent2D
         return RenderList{};
     }
 
-    const Result<math::Matrix4> camera_world = scene_storage.world_matrix(camera);
+    const Result<Float4x4> camera_world = scene_storage.world_matrix(camera);
     if (!camera_world) {
         return camera_world.error();
     }
-    const Result<math::Matrix4> view = math::camera_view_matrix(camera_world.value());
+    const Result<Float4x4> view = math::camera_view_matrix(camera_world.value());
     if (!view) {
         return view.error();
     }
     const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
     const PerspectiveCameraDescription &camera_description = camera_record.value()->camera.value();
-    const Result<math::Matrix4> projection =
+    const Result<Float4x4> projection =
         math::perspective_matrix(camera_description.vertical_field_of_view_radians, aspect,
                                  camera_description.near_plane, camera_description.far_plane);
     if (!projection) {
@@ -304,22 +309,24 @@ build_render_list(const scene::Storage &scene_storage, EntityId camera, Extent2D
         RenderList list;
         list.view_matrix = view.value();
         list.projection_matrix = projection.value();
+        const math::Matrix4 native_camera_world = math::to_matrix(camera_world.value());
         list.camera_world_position =
-            Float3{camera_world.value()[3].x, camera_world.value()[3].y, camera_world.value()[3].z};
+            Float3{native_camera_world[3].x, native_camera_world[3].y, native_camera_world[3].z};
         for (const std::optional<scene::EntityRecord> &record : scene_storage.entities()) {
             if (!record.has_value() || !record->model.has_value() ||
                 !scene::entity_visible_in_filter(scene_storage, visibility, record->id)) {
                 continue;
             }
-            const Result<math::Matrix4> model = scene_storage.world_matrix(record->id);
+            const Result<Float4x4> model = scene_storage.world_matrix(record->id);
             if (!model) {
                 return model.error();
             }
-            const Result<math::Matrix3> normals = math::normal_matrix(model.value());
+            const Result<math::Matrix3x3> normals = math::normal_matrix(model.value());
             if (!normals) {
                 return normals.error();
             }
-            const float determinant = glm::determinant(math::Matrix3{model.value()});
+            const float determinant =
+                glm::determinant(math::Matrix3{math::to_matrix(model.value())});
             const bool orientation_reversed = determinant < 0.0F;
             for (std::uint32_t primitive_index = 0;
                  primitive_index < record->model->primitives.size(); ++primitive_index) {
@@ -505,10 +512,10 @@ Renderer::render(const scene::Storage &scene_storage, EntityId camera,
         }
 
         graphics::DrawIndexedDescription draw;
-        draw.model_matrix = matrix_values<16>(glm::value_ptr(item.model_matrix));
-        draw.view_matrix = matrix_values<16>(glm::value_ptr(list.view_matrix));
-        draw.projection_matrix = matrix_values<16>(glm::value_ptr(list.projection_matrix));
-        draw.normal_matrix = matrix_values<9>(glm::value_ptr(item.normal_matrix));
+        draw.model_matrix = item.model_matrix.elements;
+        draw.view_matrix = list.view_matrix.elements;
+        draw.projection_matrix = list.projection_matrix.elements;
+        draw.normal_matrix = item.normal_matrix;
         draw.base_color = material.base_color;
         draw.camera_world_position = list.camera_world_position;
         draw.light_direction = lighting.direction;
@@ -540,8 +547,8 @@ Renderer::render(const scene::Storage &scene_storage, EntityId camera,
 
     if (!options.overlay_lines.empty() || !options.overlay_markers.empty()) {
         const graphics::DrawOverlayDescription overlay{
-            matrix_values<16>(glm::value_ptr(list.view_matrix)),
-            matrix_values<16>(glm::value_ptr(list.projection_matrix)),
+            list.view_matrix.elements,
+            list.projection_matrix.elements,
             options.overlay_lines,
             options.overlay_markers,
         };
@@ -626,9 +633,9 @@ Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage &scene_storage, En
 
         item_indices.push_back(item_index);
         graphics::PickingDrawDescription draw;
-        draw.model_matrix = matrix_values<16>(glm::value_ptr(item.model_matrix));
-        draw.view_matrix = matrix_values<16>(glm::value_ptr(list.view_matrix));
-        draw.projection_matrix = matrix_values<16>(glm::value_ptr(list.projection_matrix));
+        draw.model_matrix = item.model_matrix.elements;
+        draw.view_matrix = list.view_matrix.elements;
+        draw.projection_matrix = list.projection_matrix.elements;
         draw.object_id = static_cast<std::uint32_t>(item_indices.size() - 1U);
         draw.primitive_index = item.primitive_index;
         draw.double_sided = material_result.value()->description.double_sided;

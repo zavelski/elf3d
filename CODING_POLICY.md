@@ -156,12 +156,15 @@ The following require concrete justification:
 The following are not part of the default vocabulary and require proven support
 across the toolchain matrix or an isolated fallback:
 
-- C++ language modules;
 - coroutines;
 - parallel standard algorithms;
 - complex range-view pipelines;
 - compiler intrinsics and native vector types;
 - facilities with incomplete or inconsistent library support.
+
+C++20 named modules are allowed for project-owned internal architecture when
+they follow the module policy in Section 17. Do not use preview or newer
+language modes to obtain module features.
 
 ## 3. Code Structure and Readability
 
@@ -811,7 +814,21 @@ complexity remains local.
   external-service isolation, or plugin needs.
 - Registries require dynamic discovery or extensibility and must define
   ownership, duplicate behavior, thread safety, and registration lifetime.
-- C++20 language modules are not part of the default project structure.
+- C++20 named modules define selected internal project boundaries. Use one
+  named module per meaningful component, not one module per tiny class.
+- Prefer dotted names such as `elf.core`, `elf.math`, `elf.assets`, and
+  `elf.render`; dotted names are naming conventions and do not imply
+  language-level nesting or transitive imports.
+- Keep exported module interfaces minimal and project-owned. Do not export
+  third-party types or expose third-party headers through project module
+  interfaces.
+- Do not use module partitions, private module fragments, header units, or
+  mandatory `import std` until the project makes a separate toolchain decision.
+- Keep ordinary standard-library `#include` use for now.
+- C++ module export is separate from DLL symbol export. The external binary API
+  must remain explicit through supported export/import declarations.
+- Generated BMI, IFC, PCM, GCM, and similar compiler module artifacts are build
+  outputs and must not be committed or distributed as SDK artifacts.
 - Pimpl does not create cross-toolchain ABI stability; use a stable C ABI or an
   explicit protocol when that is required.
 

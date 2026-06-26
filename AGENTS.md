@@ -59,7 +59,8 @@ The primary product is one public shared library:
 elf3d.dll
 ```
 
-The shared library is assembled from internal static-library modules.
+The shared library is assembled from internal CMake OBJECT-library modules.
+C++20 named modules define the current internal engine logical boundaries.
 
 The repository also contains:
 
@@ -149,10 +150,33 @@ clear architectural responsibility.
 
 Do not create empty placeholder modules for possible future features.
 
-Internal modules are normally static libraries linked into `elf3d`.
+Internal engine modules are normally CMake OBJECT libraries linked into
+`elf3d`. New engine components should prefer a meaningful C++20 named module
+interface plus implementation units instead of a new internal static library.
+
+Do not create a new internal static library unless packaging, reuse outside
+`elf3d`, tooling, external integration, or another concrete reason makes an
+OBJECT library unsuitable.
 
 Do not convert a module into a separate DLL unless independent deployment,
 runtime selection, licensing, or replacement provides a concrete benefit.
+
+C++ named-module export and DLL symbol export are separate mechanisms. Keep the
+external DLL ABI narrow and explicit through supported export/import macros such
+as `ELF3D_API`. Do not expose third-party types through exported project module
+interfaces, and do not treat BMI, IFC, PCM, or GCM files as distributable
+artifacts.
+
+For the current named-module migration:
+
+- use meaningful dotted names such as `elf.core`, `elf.math`, `elf.assets`,
+  and `elf.render`;
+- dotted names are naming conventions, not language-level nesting;
+- do not use module partitions, private module fragments, header units, or
+  mandatory `import std`;
+- keep ordinary standard-library `#include` use;
+- do not modularize third-party dependencies;
+- avoid import cycles and excessive one-class module granularity.
 
 Built-in modules must be registered explicitly by the composition root.
 
@@ -266,8 +290,8 @@ It may grow as engine functionality grows, but it must remain focused on:
 
 The viewer must use the public Elf3D API.
 
-It must not include private engine headers or link directly to internal static
-modules.
+It must not include private engine headers or link directly to internal engine
+OBJECT modules.
 
 GUI code belongs in the viewer or `elf3d_imgui`, not in the engine.
 

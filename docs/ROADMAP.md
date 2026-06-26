@@ -2,11 +2,11 @@
 
 Purpose: Track committed, candidate, and exploratory work after the 0.2.0 release.
 
-Applicable version: 0.2.0
+Applicable version: 0.3.0
 
 Document status: Living roadmap derived from audit findings and current code.
 
-Last verified implementation commit before release snapshot: pending 0.2.0 release source commit
+Last verified implementation commit before release snapshot: pending C++20 module migration commit
 
 Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_REMEDIATION_LOG.md`, `README.md`, `modules`,
@@ -16,7 +16,7 @@ Known limitations: This roadmap is not a promise of delivery. Candidate and
 exploratory items require separate design, implementation, and validation.
 Manual viewer validation for the 0.1.0 publication baseline was completed by
 the user on the packaged Windows Release viewer. 0.2.0 release validation is
-tracked under `docs/releases/0.2.0/`.
+tracked under `docs/releases/0.2.0/`. 0.3.0 release readiness is not complete.
 
 Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 `PERFORMANCE_BASELINE.md`, `TESTING.md`
@@ -66,6 +66,12 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Scene-wide acceleration | Improve picking scale. | Scene revision invalidation. | Faster large-scene picking. | Cache invalidation complexity. | Picking benchmarks and tests. |
 | Viewer file UX improvements | Better reference app workflow. | Current viewer. | Easier validation. | Keep viewer from becoming a full editor. | Manual viewer checklist. |
 | Performance baseline tooling | Ground optimization work. | Instrumentation procedure. | Repeatable metrics. | Bad metrics can mislead. | Benchmark docs and scripts. |
+
+## Active 0.3.0 Migration Work
+
+| Item | Motivation | Dependency | Expected benefit | Risk | Validation |
+| --- | --- | --- | --- | --- | --- |
+| C++20 named modules and OBJECT libraries | Move internal architecture away from static-library boundaries while preserving one public DLL. | Visual Studio 2022 v17.14.35, CMake 3.28+ `FILE_SET CXX_MODULES`. | Clearer logical module boundaries, one final DLL product, and less reliance on internal static libraries. | CMake/Visual Studio module support and CI runner tool versions must be verified. | Debug/Release configure/build/CTest plus module-map review. |
 
 ## Later Exploratory Work
 

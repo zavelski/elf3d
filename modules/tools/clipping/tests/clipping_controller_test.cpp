@@ -1,5 +1,12 @@
 #include <elf3d/assets/handle_access.h>
+#include <elf3d/scene/storage.h>
 #include <elf3d/tools/clipping/clipping_controller.h>
+
+#include <elf3d/assets.h>
+#include <elf3d/clipping.h>
+#include <elf3d/core/result.h>
+#include <elf3d/measurement.h>
+#include <elf3d/scene.h>
 
 #include <array>
 #include <cmath>

@@ -1,7 +1,10 @@
-#include <elf3d/math/conventions.h>
+module;
 
-#include <algorithm>
+#include <elf3d/math/detail/glm_helpers.h>
+
 #include <cmath>
+
+module elf.math;
 
 namespace elf3d::math {
 namespace {
@@ -15,55 +18,9 @@ float clamp_channel(float value, float fallback) noexcept {
 
 } // namespace
 
-Vector2 to_vector(Float2 value) noexcept {
-    return Vector2{value.x, value.y};
-}
-
-Float2 to_float2(const Vector2 &value) noexcept {
-    return Float2{value.x, value.y};
-}
-
-Vector3 to_vector(Float3 value) noexcept {
-    return Vector3{value.x, value.y, value.z};
-}
-
-Float3 to_float3(const Vector3 &value) noexcept {
-    return Float3{value.x, value.y, value.z};
-}
-
-Rotation to_rotation(Quaternion value) noexcept {
-    return Rotation{value.w, value.x, value.y, value.z};
-}
-
-Quaternion to_quaternion(const Rotation &value) noexcept {
-    return Quaternion{value.x, value.y, value.z, value.w};
-}
-
-Matrix4 to_matrix(const Float4x4 &value) noexcept {
-    return glm::make_mat4(value.elements.data());
-}
-
-Float4x4 to_float4x4(const Matrix4 &value) noexcept {
-    Float4x4 result;
-    std::copy_n(glm::value_ptr(value), result.elements.size(), result.elements.begin());
-    return result;
-}
-
-Vector4 to_vector(Color4 value) noexcept {
-    return Vector4{value.red, value.green, value.blue, value.alpha};
-}
-
-Color4 to_color4(const Vector4 &value) noexcept {
-    return Color4{value.r, value.g, value.b, value.a};
-}
-
 Color4 clamp_color(Color4 value) noexcept {
     return Color4{clamp_channel(value.red, 0.0F), clamp_channel(value.green, 0.0F),
                   clamp_channel(value.blue, 0.0F), clamp_channel(value.alpha, 1.0F)};
-}
-
-Matrix4 compose_world(const Matrix4 &parent_world, const Matrix4 &local) noexcept {
-    return parent_world * local;
 }
 
 bool is_finite(Float3 value) noexcept {
@@ -88,22 +45,21 @@ bool is_valid_transform(const Transform &transform) noexcept {
            std::abs(transform.scale.z) > minimum_length;
 }
 
-bool is_valid_affine_matrix(const Matrix4 &matrix) noexcept {
-    for (int column = 0; column < 4; ++column) {
-        for (int row = 0; row < 4; ++row) {
-            if (!std::isfinite(matrix[column][row])) {
-                return false;
-            }
+bool is_valid_affine_matrix(const Float4x4 &matrix) noexcept {
+    for (const float value : matrix.elements) {
+        if (!std::isfinite(value)) {
+            return false;
         }
     }
 
+    const Matrix4 native = to_matrix(matrix);
     constexpr float tolerance = 0.00001F;
-    if (std::abs(matrix[0][3]) > tolerance || std::abs(matrix[1][3]) > tolerance ||
-        std::abs(matrix[2][3]) > tolerance || std::abs(matrix[3][3] - 1.0F) > tolerance) {
+    if (std::abs(native[0][3]) > tolerance || std::abs(native[1][3]) > tolerance ||
+        std::abs(native[2][3]) > tolerance || std::abs(native[3][3] - 1.0F) > tolerance) {
         return false;
     }
 
-    const float determinant = glm::determinant(Matrix3{matrix});
+    const float determinant = glm::determinant(Matrix3{native});
     return std::isfinite(determinant) && std::abs(determinant) > 0.000001F;
 }
 
@@ -113,17 +69,22 @@ Transform normalized_transform(const Transform &transform) noexcept {
     return result;
 }
 
-Matrix4 transform_matrix(const Transform &transform) noexcept {
+Float4x4 compose_world(const Float4x4 &parent_world, const Float4x4 &local) noexcept {
+    return to_float4x4(to_matrix(parent_world) * to_matrix(local));
+}
+
+Float4x4 transform_matrix(const Transform &transform) noexcept {
     const Matrix4 translation = glm::translate(Matrix4{1.0F}, to_vector(transform.translation));
     const Matrix4 rotation = glm::mat4_cast(glm::normalize(to_rotation(transform.rotation)));
     const Matrix4 scale = glm::scale(Matrix4{1.0F}, to_vector(transform.scale));
-    return translation * rotation * scale;
+    return to_float4x4(translation * rotation * scale);
 }
 
-Result<Matrix4> camera_view_matrix(const Matrix4 &camera_world) noexcept {
-    const Vector3 position = Vector3{camera_world[3]};
-    Vector3 right = Vector3{camera_world[0]};
-    Vector3 up = Vector3{camera_world[1]};
+Result<Float4x4> camera_view_matrix(const Float4x4 &camera_world) noexcept {
+    const Matrix4 native_camera_world = to_matrix(camera_world);
+    const Vector3 position = Vector3{native_camera_world[3]};
+    Vector3 right = Vector3{native_camera_world[0]};
+    Vector3 up = Vector3{native_camera_world[1]};
 
     constexpr float minimum_length = 0.000001F;
     const auto finite_vector = [](const Vector3 &value) noexcept {
@@ -150,11 +111,11 @@ Result<Matrix4> camera_view_matrix(const Matrix4 &camera_world) noexcept {
     rigid_world[1] = Vector4{up, 0.0F};
     rigid_world[2] = Vector4{backward, 0.0F};
     rigid_world[3] = Vector4{position, 1.0F};
-    return glm::inverse(rigid_world);
+    return to_float4x4(glm::inverse(rigid_world));
 }
 
-Result<Matrix4> perspective_matrix(float vertical_field_of_view_radians, float aspect_ratio,
-                                   float near_plane, float far_plane) noexcept {
+Result<Float4x4> perspective_matrix(float vertical_field_of_view_radians, float aspect_ratio,
+                                    float near_plane, float far_plane) noexcept {
     constexpr float pi = 3.14159265358979323846F;
     if (!std::isfinite(vertical_field_of_view_radians) || !std::isfinite(aspect_ratio) ||
         !std::isfinite(near_plane) || !std::isfinite(far_plane) ||
@@ -163,18 +124,26 @@ Result<Matrix4> perspective_matrix(float vertical_field_of_view_radians, float a
         return Error{ErrorCode::invalid_camera_configuration,
                      "Perspective projection requires finite field of view, aspect, and planes"};
     }
-    return glm::perspectiveRH_NO(vertical_field_of_view_radians, aspect_ratio, near_plane,
-                                 far_plane);
+    return to_float4x4(glm::perspectiveRH_NO(vertical_field_of_view_radians, aspect_ratio,
+                                             near_plane, far_plane));
 }
 
-Result<Matrix3> normal_matrix(const Matrix4 &model) noexcept {
-    const Matrix3 linear{model};
+Result<Matrix3x3> normal_matrix(const Float4x4 &model) noexcept {
+    const Matrix3 linear{to_matrix(model)};
     const float determinant = glm::determinant(linear);
     if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001F) {
         return Error{ErrorCode::invalid_argument,
                      "A model transform must be invertible to transform normals"};
     }
-    return glm::transpose(glm::inverse(linear));
+    Matrix3x3 result{};
+    const Matrix3 native = glm::transpose(glm::inverse(linear));
+    std::copy_n(glm::value_ptr(native), result.size(), result.begin());
+    return result;
+}
+
+Float3 transform_point(const Float4x4 &matrix, Float3 point) noexcept {
+    const Vector4 transformed = to_matrix(matrix) * Vector4{point.x, point.y, point.z, 1.0F};
+    return Float3{transformed.x, transformed.y, transformed.z};
 }
 
 } // namespace elf3d::math

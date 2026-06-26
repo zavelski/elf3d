@@ -1,14 +1,14 @@
 # Performance Baseline
 
-Purpose: Record measured and unmeasured performance status for Elf3D 0.2.0 and
+Purpose: Record measured and unmeasured performance status for Elf3D 0.3.0 and
 provide reproducible measurement procedures.
 
-Applicable version: 0.2.0
+Applicable version: 0.3.0
 
 Document status: Baseline procedure only. No performance benchmark run has been
 performed.
 
-Last verified Git commit: pending 0.2.0 release source commit
+Last verified Git commit: pending C++20 module migration commit
 
 Implementation source paths: `apps/viewer`, `modules/gltf`, `modules/renderer`,
 `modules/picking`, `modules/scene`, `tests/fixtures/textured_pbr.gltf`
@@ -26,7 +26,7 @@ Related documents: `TESTING.md`, `RENDERING_PIPELINE.md`, `GLTF_SUPPORT.md`,
 | --- | --- | --- |
 | Hardware | Not measured | No benchmark machine profile recorded. |
 | Operating system | Not measured | Validation environment was not captured as a benchmark baseline. |
-| Compiler | Known for validation | MSVC 19.44.35222.0 used for build validation, not benchmarking. |
+| Compiler | Known for validation | MSVC 19.44.35228.0 used for build validation, not benchmarking. |
 | Build configuration | Known for validation | Debug and Release built; no timed benchmark run. |
 | Graphics driver | Not measured | No driver version captured. |
 | Test model | Available | `tests/fixtures/textured_pbr.gltf` is available for small visual validation. |
@@ -90,6 +90,6 @@ cmake --build --preset windows-release
 
 ## Current Baseline Decision
 
-No performance claims should be made for 0.2.0 beyond the existence of renderer,
+No performance claims should be made for 0.3.0 beyond the existence of renderer,
 picking, and cache statistics. The first real performance baseline should be a
 future task after release documentation and manual validation are complete.

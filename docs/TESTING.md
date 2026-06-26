@@ -1,14 +1,14 @@
 # Testing
 
-Purpose: Document how Elf3D 0.2.0 is configured, built, tested, and manually
+Purpose: Document how Elf3D 0.3.0 is configured, built, tested, and manually
 validated.
 
-Applicable version: 0.2.0
+Applicable version: 0.3.0
 
-Document status: Living testing guide, updated for public CI and release
-packaging preparation on 2026-06-24.
+Document status: Living testing guide, updated for the C++20 named-module and
+OBJECT-library migration branch.
 
-Last verified Git commit: pending 0.2.0 release source commit
+Last verified Git commit: pending migration commit
 
 Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
 `.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
@@ -26,8 +26,9 @@ Related documents: `MODULE_MAP.md`, `USER_GUIDE.md`,
 
 Validated environment:
 
-- Visual Studio 2022 `17.14.23`
-- MSVC `19.44.35222.0`
+- Visual Studio 2022 `17.14.35`
+- Visual Studio installation version `17.14.37411.7`
+- MSVC `19.44.35228.0`
 - Windows SDK `10.0.26100.0`
 - CMake/CTest `3.31.6-msvc6` from Visual Studio bundled tools
 - Generator: `Visual Studio 17 2022`
@@ -35,6 +36,14 @@ Validated environment:
 
 In the validated shell, `cmake` and `ctest` were not on `PATH`. Use a Visual
 Studio Developer PowerShell or call the bundled tools by absolute path.
+
+The project currently requires CMake 3.28 or newer because C++20 named modules
+are declared through `FILE_SET CXX_MODULES`. Visual Studio 2022 v17.14.35
+provides a suitable bundled CMake version.
+
+Visual Studio 2026 is not required for this migration. It may become useful
+later if its module tooling proves materially better, but that would be an
+optional future improvement rather than a build requirement.
 
 ## Configure, Build, Test
 
@@ -81,9 +90,14 @@ The Debug and Release presets use separate build directories:
 | `elf3d.renderer` | `elf3d_renderer_test` | renderer preparation and caches |
 | `elf3d.viewport_lifetime` | `elf3d_viewport_test` | viewport with fake graphics device |
 | `elf3d.public_api_lifetime` | `elf3d_public_api_test` | public API smoke, version, load, lifetime |
+| `elf3d.module_import_smoke` | `elf3d_module_import_smoke` | imports every internal C++20 named-module interface |
 
-Debug and Release both passed 16 of 16 tests after the Goal 4 lifetime fix.
-Goal 7 repeated Debug and Release configure/build/CTest successfully.
+Internal module tests link the needed OBJECT-library object files explicitly
+through the project helper `elf3d_link_object_libraries`. This keeps tests close
+to the module under test while the final `elf3d` DLL remains the public binary
+product.
+
+Debug and Release are expected to pass 17 of 17 tests.
 
 ## GitHub Actions
 
@@ -103,6 +117,10 @@ runs CTest, creates the Windows viewer package, uploads workflow artifacts, and
 creates a GitHub Release for tag-triggered runs when no release already exists.
 The `v0.2.0` tag-triggered release run is recorded under
 `docs/releases/0.2.0/`.
+
+Before promoting the module migration branch, confirm that the GitHub
+`windows-2022` runner exposes CMake 3.28 or newer and a Visual Studio 2022/MSVC
+toolchain that can build the checked-in `FILE_SET CXX_MODULES` configuration.
 
 ## Release Packaging
 
@@ -141,7 +159,7 @@ assets/icon/show_all.png
 assets/icon/reset_layout.png
 ```
 
-SDK packaging is deferred for 0.2.0 because install/export rules and an
+SDK packaging is deferred for 0.3.0 because install/export rules and an
 external consumer validation workflow are not yet implemented.
 
 ## Public Header Self-Containment
@@ -149,6 +167,10 @@ external consumer validation workflow are not yet implemented.
 Goal 7 compiled every public header under `include/elf3d` individually as a
 forced include using MSVC C++20, `/permissive-`, `/W4`, and `/WX`. This checks
 that each public header can be included first by a host translation unit.
+
+C++ named-module interfaces are internal implementation artifacts in this
+migration. Public headers remain the consumer-facing API and should continue to
+be self-contained.
 
 ## Fixtures
 

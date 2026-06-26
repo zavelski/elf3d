@@ -1,12 +1,19 @@
 add_library(
     elf3d_backend_opengl
-    STATIC
+    OBJECT
         include/elf3d/backend/opengl/device_factory.h
         src/device.cpp
 )
 add_library(elf3d::backend_opengl ALIAS elf3d_backend_opengl)
 
 target_compile_features(elf3d_backend_opengl PUBLIC cxx_std_20)
+target_sources(
+    elf3d_backend_opengl
+    PUBLIC
+        FILE_SET elf3d_backend_opengl_modules TYPE CXX_MODULES
+        FILES
+            src/elf.backend.opengl.cppm
+)
 target_include_directories(
     elf3d_backend_opengl
     PUBLIC

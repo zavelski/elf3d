@@ -11,9 +11,9 @@ Maturity: first public baseline. The project is useful as an embeddable
 Windows/OpenGL visualization slice and reference viewer, but it is not a
 complete game engine, editor, or stable cross-toolchain binary SDK.
 
-Validated baseline: Windows desktop x64, Visual Studio 2022, dynamic MSVC
-runtime, and OpenGL 4.1 core profile. Linux and macOS are architectural goals,
-but they are not validated platforms for 0.3.0.
+Validated baseline: Windows desktop x64, Visual Studio 2022 v17.14.35, MSVC
+19.44.35228.0, dynamic MSVC runtime, and OpenGL 4.1 core profile. Linux and
+macOS are architectural goals, but they are not validated platforms for 0.3.0.
 
 ## Features
 
@@ -40,9 +40,12 @@ The engine core does not depend on Dear ImGui, GLFW, or application GUI code.
 GLM, cgltf, GLAD, OpenGL types, and private module classes do not appear in the
 public Elf3D headers.
 
-Internal modules are normally static libraries linked into the public `elf3d`
-shared library. The reference viewer uses only the public Elf3D API plus the
-optional ImGui integration target.
+Internal engine build grouping uses CMake OBJECT libraries linked into the
+public `elf3d` shared library. Each internal engine OBJECT library exposes a
+C++20 named-module interface for its logical boundary; module export is not DLL
+symbol export, and the public DLL ABI remains controlled by explicit
+`ELF3D_API` declarations. The reference viewer uses only the public Elf3D API
+plus the optional ImGui integration target.
 
 ## glTF Scope
 
@@ -60,8 +63,10 @@ image-based lighting, scene editing, runtime plugins, and a stable C ABI.
 ## Requirements
 
 - Windows x64.
-- Visual Studio 2022 with the Desktop development with C++ workload.
-- CMake 3.25 or newer.
+- Visual Studio 2022 v17.14.35 or newer with the Desktop development with C++
+  workload.
+- CMake 3.28 or newer. Visual Studio 2022 v17.14.35 provides CMake
+  3.31.6-msvc6, which is the current validated local tool.
 - Git, used by CMake FetchContent.
 - Graphics driver supporting an OpenGL 4.1 core-profile context.
 
@@ -86,6 +91,9 @@ ctest --preset windows-release --output-on-failure
 
 The presets build tests and the viewer. Generated files are written under
 `out/`.
+
+Generated C++ module artifacts such as BMI, IFC, PCM, and GCM files are build
+outputs. They are not SDK artifacts and must not be committed.
 
 ## Run The Viewer
 

@@ -14,13 +14,20 @@ set_target_properties(
 
 add_library(
     elf3d_image
-    STATIC
+    OBJECT
         include/elf3d/image/decoder.h
         src/image_decoder.cpp
 )
 add_library(elf3d::image ALIAS elf3d_image)
 
 target_compile_features(elf3d_image PUBLIC cxx_std_20)
+target_sources(
+    elf3d_image
+    PUBLIC
+        FILE_SET elf3d_image_modules TYPE CXX_MODULES
+        FILES
+            src/elf.image.cppm
+)
 target_include_directories(
     elf3d_image
     PUBLIC

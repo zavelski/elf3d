@@ -1,4 +1,6 @@
-#include <elf3d/graphics/device.h>
+module;
+
+module elf.graphics;
 
 namespace elf3d::graphics {
 

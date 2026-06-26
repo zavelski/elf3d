@@ -1,5 +1,13 @@
 #include <elf3d/assets/handle_access.h>
+#include <elf3d/math/conventions.h>
 #include <elf3d/navigation/orbit_navigation.h>
+#include <elf3d/scene/storage.h>
+
+#include <elf3d/assets.h>
+#include <elf3d/core/result.h>
+#include <elf3d/navigation.h>
+#include <elf3d/scene.h>
+#include <elf3d/math/detail/glm_helpers.h>
 
 #include <array>
 #include <cmath>
@@ -62,13 +70,13 @@ struct SceneFixture {
 
 [[nodiscard]] elf3d::Float3 camera_position(const elf3d::scene::Storage &scene,
                                             elf3d::EntityId camera) {
-    const elf3d::math::Matrix4 world = scene.world_matrix(camera).value();
+    const elf3d::math::Matrix4 world = elf3d::math::to_matrix(scene.world_matrix(camera).value());
     return {world[3].x, world[3].y, world[3].z};
 }
 
 [[nodiscard]] elf3d::Float3 camera_forward(const elf3d::scene::Storage &scene,
                                            elf3d::EntityId camera) {
-    const elf3d::math::Matrix4 world = scene.world_matrix(camera).value();
+    const elf3d::math::Matrix4 world = elf3d::math::to_matrix(scene.world_matrix(camera).value());
     elf3d::math::Vector3 right{world[0]};
     elf3d::math::Vector3 up{world[1]};
     right = glm::normalize(right);
@@ -89,15 +97,16 @@ struct SceneFixture {
 [[nodiscard]] bool bounds_visible(const elf3d::scene::Storage &scene, elf3d::EntityId camera,
                                   elf3d::Extent2D extent) {
     const elf3d::Bounds3 bounds = scene.world_bounds();
-    const elf3d::math::Matrix4 camera_world = scene.world_matrix(camera).value();
-    const elf3d::math::Matrix4 view = elf3d::math::camera_view_matrix(camera_world).value();
+    const elf3d::Float4x4 camera_world = scene.world_matrix(camera).value();
+    const elf3d::math::Matrix4 view =
+        elf3d::math::to_matrix(elf3d::math::camera_view_matrix(camera_world).value());
     const elf3d::PerspectiveCameraDescription description =
         scene.perspective_camera(camera).value();
     const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-    const elf3d::math::Matrix4 projection =
+    const elf3d::math::Matrix4 projection = elf3d::math::to_matrix(
         elf3d::math::perspective_matrix(description.vertical_field_of_view_radians, aspect,
                                         description.near_plane, description.far_plane)
-            .value();
+            .value());
     const std::array<elf3d::Float3, 8> corners{{
         {bounds.minimum.x, bounds.minimum.y, bounds.minimum.z},
         {bounds.maximum.x, bounds.minimum.y, bounds.minimum.z},
@@ -344,7 +353,7 @@ int main() {
     elf3d::scene::Storage empty{scene_id(4)};
     const elf3d::EntityId empty_camera =
         empty.create_perspective_camera(elf3d::PerspectiveCameraDescription{}).value();
-    const elf3d::math::Matrix4 empty_camera_matrix = empty.local_matrix(empty_camera).value();
+    const elf3d::Float4x4 empty_camera_matrix = empty.local_matrix(empty_camera).value();
     const elf3d::Result<void> empty_fit = navigation.fit_to_scene(empty, empty_camera, {800, 600});
     if (empty_fit || empty_fit.error().code() != elf3d::ErrorCode::scene_has_no_bounds ||
         empty.local_matrix(empty_camera).value() != empty_camera_matrix) {

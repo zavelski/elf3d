@@ -1,6 +1,6 @@
 add_executable(elf3d_assets_test assets_test.cpp)
 target_compile_features(elf3d_assets_test PRIVATE cxx_std_20)
-target_link_libraries(elf3d_assets_test PRIVATE elf3d_assets)
+elf3d_link_object_libraries(elf3d_assets_test elf3d_core elf3d_math elf3d_assets)
 set_target_properties(elf3d_assets_test PROPERTIES FOLDER "Elf3D/Tests")
 elf3d_enable_warnings(elf3d_assets_test)
 add_test(NAME elf3d.assets COMMAND elf3d_assets_test)

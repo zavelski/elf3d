@@ -14,13 +14,20 @@ set_target_properties(
 
 add_library(
     elf3d_gltf
-    STATIC
+    OBJECT
         include/elf3d/gltf/importer.h
         src/importer.cpp
 )
 add_library(elf3d::gltf ALIAS elf3d_gltf)
 
 target_compile_features(elf3d_gltf PUBLIC cxx_std_20)
+target_sources(
+    elf3d_gltf
+    PUBLIC
+        FILE_SET elf3d_gltf_modules TYPE CXX_MODULES
+        FILES
+            src/elf.gltf.cppm
+)
 target_include_directories(
     elf3d_gltf
     PUBLIC

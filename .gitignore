@@ -9,6 +9,10 @@
 CMakeCache.txt
 CMakeFiles/
 *.obj
+*.bmi
+*.gcm
+*.ifc
+*.pcm
 *.pdb
 *.ilk
 *.exp

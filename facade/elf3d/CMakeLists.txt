@@ -12,14 +12,14 @@ target_include_directories(
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
 )
-target_link_libraries(elf3d PRIVATE elf3d_core)
-target_link_libraries(
+elf3d_link_object_libraries(
     elf3d
-    PRIVATE
+        elf3d_core
         elf3d_math
         elf3d_graphics
         elf3d_backend_opengl
         elf3d_assets
+        elf3d_image
         elf3d_scene
         elf3d_interaction
         elf3d_navigation

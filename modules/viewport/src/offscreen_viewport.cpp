@@ -1,12 +1,28 @@
-#include <elf3d/viewport/offscreen_viewport.h>
+module;
 
-#include <elf3d/math/conventions.h>
+#include <elf3d/clipping.h>
+#include <elf3d/math/detail/glm_helpers.h>
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <span>
 #include <utility>
+
+module elf.viewport;
+
+import elf.clipping;
+import elf.graphics;
+import elf.math;
+import elf.navigation;
+import elf.picking;
+import elf.renderer;
+import elf.scene;
+import elf.tool.clipping;
+import elf.tool.measurement;
+import elf.tool.selection;
+import elf.tool.visibility;
 
 namespace elf3d::viewport {
 namespace {
@@ -588,25 +604,27 @@ OffscreenViewport::project_world_to_viewport(const scene::Storage &scene, Entity
         return Error{ErrorCode::invalid_camera_configuration,
                      "World-to-viewport projection requires a valid perspective camera"};
     }
-    const Result<math::Matrix4> camera_world = scene.world_matrix(camera);
+    const Result<Float4x4> camera_world = scene.world_matrix(camera);
     if (!camera_world) {
         return camera_world.error();
     }
-    const Result<math::Matrix4> view = math::camera_view_matrix(camera_world.value());
+    const Result<Float4x4> view = math::camera_view_matrix(camera_world.value());
     if (!view) {
         return view.error();
     }
     const float aspect =
         static_cast<float>(target_extent.width) / static_cast<float>(target_extent.height);
-    const Result<math::Matrix4> projection = math::perspective_matrix(
+    const Result<Float4x4> projection = math::perspective_matrix(
         camera_description.value().vertical_field_of_view_radians, aspect,
         camera_description.value().near_plane, camera_description.value().far_plane);
     if (!projection) {
         return projection.error();
     }
 
+    const math::Matrix4 native_projection = math::to_matrix(projection.value());
+    const math::Matrix4 native_view = math::to_matrix(view.value());
     const math::Vector4 clip =
-        projection.value() * view.value() *
+        native_projection * native_view *
         math::Vector4{world_position.x, world_position.y, world_position.z, 1.0F};
     if (!std::isfinite(clip.x) || !std::isfinite(clip.y) || !std::isfinite(clip.z) ||
         !std::isfinite(clip.w) || std::abs(clip.w) <= 0.000001F) {

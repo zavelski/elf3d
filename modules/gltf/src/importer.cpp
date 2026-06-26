@@ -1,8 +1,9 @@
-#include <elf3d/gltf/importer.h>
+module;
 
-#include <elf3d/image/decoder.h>
-#include <elf3d/math/conventions.h>
-#include <elf3d/scene/import_builder.h>
+#include <elf3d/assets.h>
+#include <elf3d/core/error.h>
+#include <elf3d/core/result.h>
+#include <elf3d/scene.h>
 
 #include <cgltf.h>
 
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <memory>
@@ -20,6 +22,13 @@
 #include <span>
 #include <string_view>
 #include <utility>
+#include <vector>
+
+module elf.gltf;
+
+import elf.image;
+import elf.math;
+import elf.scene;
 
 namespace elf3d::gltf {
 namespace {
@@ -1332,7 +1341,8 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
 
             float local_values[16]{};
             cgltf_node_transform_local(&node, local_values);
-            const math::Matrix4 local_matrix = glm::make_mat4(local_values);
+            Float4x4 local_matrix;
+            std::copy_n(local_values, local_matrix.elements.size(), local_matrix.elements.begin());
             const Result<void> matrix_result =
                 builder.set_local_matrix(entity.value(), local_matrix);
             if (!matrix_result) {

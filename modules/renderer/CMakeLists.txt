@@ -1,12 +1,19 @@
 add_library(
     elf3d_renderer
-    STATIC
+    OBJECT
         include/elf3d/renderer/renderer.h
         src/renderer.cpp
 )
 add_library(elf3d::renderer ALIAS elf3d_renderer)
 
 target_compile_features(elf3d_renderer PUBLIC cxx_std_20)
+target_sources(
+    elf3d_renderer
+    PUBLIC
+        FILE_SET elf3d_renderer_modules TYPE CXX_MODULES
+        FILES
+            src/elf.renderer.cppm
+)
 target_include_directories(
     elf3d_renderer
     PUBLIC

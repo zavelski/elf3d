@@ -1,12 +1,19 @@
 add_library(
     elf3d_picking
-    STATIC
+    OBJECT
         include/elf3d/picking/service.h
         src/service.cpp
 )
 add_library(elf3d::picking ALIAS elf3d_picking)
 
 target_compile_features(elf3d_picking PUBLIC cxx_std_20)
+target_sources(
+    elf3d_picking
+    PUBLIC
+        FILE_SET elf3d_picking_modules TYPE CXX_MODULES
+        FILES
+            src/elf.picking.cppm
+)
 target_include_directories(
     elf3d_picking
     PUBLIC

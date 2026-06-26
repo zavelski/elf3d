@@ -1,12 +1,19 @@
 add_library(
     elf3d_tool_measurement
-    STATIC
+    OBJECT
         include/elf3d/tools/measurement/distance_measurement.h
         src/distance_measurement.cpp
 )
 add_library(elf3d::tool_measurement ALIAS elf3d_tool_measurement)
 
 target_compile_features(elf3d_tool_measurement PUBLIC cxx_std_20)
+target_sources(
+    elf3d_tool_measurement
+    PUBLIC
+        FILE_SET elf3d_tool_measurement_modules TYPE CXX_MODULES
+        FILES
+            src/elf.tool.measurement.cppm
+)
 target_include_directories(
     elf3d_tool_measurement
     PUBLIC

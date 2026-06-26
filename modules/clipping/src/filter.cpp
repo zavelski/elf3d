@@ -1,8 +1,14 @@
-#include <elf3d/clipping/filter.h>
+module;
+
+#include <elf3d/clipping.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+
+module elf.clipping;
+
+import elf.math;
 
 namespace elf3d::clipping {
 namespace {
@@ -310,23 +316,19 @@ bool is_valid_bounds(Bounds3 bounds) noexcept {
            bounds.minimum.z <= bounds.maximum.z;
 }
 
-Bounds3 transform_bounds(Bounds3 local_bounds, const math::Matrix4 &world) noexcept {
+Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4 &world) noexcept {
     if (!is_valid_bounds(local_bounds)) {
         return {};
     }
-    for (int column = 0; column < 4; ++column) {
-        for (int row = 0; row < 4; ++row) {
-            if (!std::isfinite(world[column][row])) {
-                return {};
-            }
+    for (const float value : world.elements) {
+        if (!std::isfinite(value)) {
+            return {};
         }
     }
 
     Bounds3 result;
     for (const Float3 corner : corners(local_bounds)) {
-        const math::Vector4 transformed =
-            world * math::Vector4{corner.x, corner.y, corner.z, 1.0F};
-        expand(result, Float3{transformed.x, transformed.y, transformed.z});
+        expand(result, math::transform_point(world, corner));
     }
     return result;
 }

@@ -1,7 +1,6 @@
 #include <elf3d/elf3d.h>
 
 #include <elf3d/backend/opengl/device_factory.h>
-#include <elf3d/core/version_data.h>
 #include <elf3d/gltf/importer.h>
 #include <elf3d/graphics/device.h>
 #include <elf3d/picking/service.h>
@@ -15,6 +14,8 @@
 #include <memory>
 #include <optional>
 #include <utility>
+
+import elf.core;
 
 namespace elf3d {
 

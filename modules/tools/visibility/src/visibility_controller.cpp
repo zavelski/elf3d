@@ -1,4 +1,10 @@
-#include <elf3d/tools/visibility/visibility_controller.h>
+module;
+
+#include <optional>
+
+module elf.tool.visibility;
+
+import elf.scene;
 
 namespace elf3d::tools::visibility {
 

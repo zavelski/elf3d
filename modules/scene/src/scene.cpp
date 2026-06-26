@@ -150,7 +150,7 @@ Result<Transform> Scene::local_transform(EntityId entity) const {
 }
 
 Result<void> Scene::set_local_matrix(EntityId entity, const Float4x4 &matrix) {
-    return impl_ != nullptr ? impl_->storage.set_local_matrix(entity, math::to_matrix(matrix))
+    return impl_ != nullptr ? impl_->storage.set_local_matrix(entity, matrix)
                             : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
@@ -158,11 +158,7 @@ Result<Float4x4> Scene::local_matrix(EntityId entity) const {
     if (impl_ == nullptr) {
         return Error{ErrorCode::invalid_entity, "The scene is empty"};
     }
-    const Result<math::Matrix4> result = impl_->storage.local_matrix(entity);
-    if (!result) {
-        return result.error();
-    }
-    return math::to_float4x4(result.value());
+    return impl_->storage.local_matrix(entity);
 }
 
 Result<void> Scene::set_entity_name(EntityId entity, std::string_view name) {

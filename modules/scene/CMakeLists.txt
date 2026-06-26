@@ -1,6 +1,6 @@
 add_library(
     elf3d_scene
-    STATIC
+    OBJECT
         include/elf3d/scene/access.h
         include/elf3d/scene/import_builder.h
         include/elf3d/scene/storage.h
@@ -11,6 +11,13 @@ add_library(
 add_library(elf3d::scene ALIAS elf3d_scene)
 
 target_compile_features(elf3d_scene PUBLIC cxx_std_20)
+target_sources(
+    elf3d_scene
+    PUBLIC
+        FILE_SET elf3d_scene_modules TYPE CXX_MODULES
+        FILES
+            src/elf.scene.cppm
+)
 target_compile_definitions(elf3d_scene PRIVATE ELF3D_BUILDING_LIBRARY)
 target_include_directories(
     elf3d_scene

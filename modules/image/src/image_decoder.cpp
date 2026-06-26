@@ -1,4 +1,6 @@
-#include <elf3d/image/decoder.h>
+module;
+
+#include <elf3d/core/error.h>
 
 #include <stb_image.h>
 
@@ -6,6 +8,9 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <string_view>
+
+module elf.image;
 
 namespace elf3d::image {
 namespace {

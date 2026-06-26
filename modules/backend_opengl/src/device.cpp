@@ -1,7 +1,9 @@
-#include <elf3d/backend/opengl/device_factory.h>
+module;
 
-#include <elf3d/graphics/device.h>
-#include <elf3d/graphics/texture_handle_access.h>
+#include <elf3d/clipping.h>
+#include <elf3d/graphics.h>
+#include <elf3d/math/value_types.h>
+#include <elf3d/measurement.h>
 
 #include <glad/gl.h>
 
@@ -20,6 +22,10 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+module elf.backend.opengl;
+
+import elf.graphics;
 
 namespace elf3d::backend::opengl {
 namespace {

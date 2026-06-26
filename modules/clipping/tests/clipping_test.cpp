@@ -1,5 +1,9 @@
 #include <elf3d/clipping/filter.h>
 
+#include <elf3d/clipping.h>
+#include <elf3d/core/error.h>
+#include <elf3d/math/detail/glm_helpers.h>
+
 #include <array>
 #include <cmath>
 #include <limits>
@@ -132,8 +136,9 @@ int main() {
         return 15;
     }
 
-    const elf3d::math::Matrix4 translated =
+    const elf3d::math::Matrix4 native_translated =
         glm::translate(elf3d::math::Matrix4{1.0F}, elf3d::math::Vector3{4.0F, 0.0F, 0.0F});
+    const elf3d::Float4x4 translated = elf3d::math::to_float4x4(native_translated);
     const elf3d::Bounds3 transformed = elf3d::clipping::transform_bounds(centered, translated);
     if (!transformed.is_valid || !nearly_equal(transformed.minimum.x, 3.0F) ||
         !nearly_equal(transformed.maximum.x, 5.0F)) {

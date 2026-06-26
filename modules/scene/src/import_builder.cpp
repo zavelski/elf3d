@@ -1,4 +1,9 @@
-#include <elf3d/scene/import_builder.h>
+module;
+
+#include <span>
+#include <string_view>
+
+module elf.scene;
 
 namespace elf3d::scene {
 
@@ -12,7 +17,7 @@ Result<void> ImportBuilder::set_entity_name(EntityId entity, std::string_view na
     return storage_->set_entity_name(entity, name);
 }
 
-Result<void> ImportBuilder::set_local_matrix(EntityId entity, const math::Matrix4 &matrix) {
+Result<void> ImportBuilder::set_local_matrix(EntityId entity, const Float4x4 &matrix) {
     return storage_->set_local_matrix(entity, matrix);
 }
 

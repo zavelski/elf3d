@@ -1,13 +1,21 @@
 add_library(
     elf3d_math
-    STATIC
+    OBJECT
         include/elf3d/math/conventions.h
+        include/elf3d/math/detail/glm_helpers.h
         include/elf3d/math/glm_config.h
         src/conventions.cpp
 )
 add_library(elf3d::math ALIAS elf3d_math)
 
 target_compile_features(elf3d_math PUBLIC cxx_std_20)
+target_sources(
+    elf3d_math
+    PUBLIC
+        FILE_SET elf3d_math_modules TYPE CXX_MODULES
+        FILES
+            src/elf.math.cppm
+)
 target_include_directories(
     elf3d_math
     PUBLIC

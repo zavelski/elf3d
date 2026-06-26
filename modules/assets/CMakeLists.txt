@@ -1,6 +1,6 @@
 add_library(
     elf3d_assets
-    STATIC
+    OBJECT
         include/elf3d/assets/handle_access.h
         include/elf3d/assets/storage.h
         src/storage.cpp
@@ -8,6 +8,13 @@ add_library(
 add_library(elf3d::assets ALIAS elf3d_assets)
 
 target_compile_features(elf3d_assets PUBLIC cxx_std_20)
+target_sources(
+    elf3d_assets
+    PUBLIC
+        FILE_SET elf3d_assets_modules TYPE CXX_MODULES
+        FILES
+            src/elf.assets.cppm
+)
 target_include_directories(
     elf3d_assets
     PUBLIC

@@ -1,12 +1,19 @@
 add_library(
     elf3d_viewport
-    STATIC
+    OBJECT
         include/elf3d/viewport/offscreen_viewport.h
         src/offscreen_viewport.cpp
 )
 add_library(elf3d::viewport ALIAS elf3d_viewport)
 
 target_compile_features(elf3d_viewport PUBLIC cxx_std_20)
+target_sources(
+    elf3d_viewport
+    PUBLIC
+        FILE_SET elf3d_viewport_modules TYPE CXX_MODULES
+        FILES
+            src/elf.viewport.cppm
+)
 target_include_directories(
     elf3d_viewport
     PUBLIC

@@ -1,4 +1,6 @@
-#include <elf3d/interaction/viewport_interaction.h>
+module;
+
+module elf.interaction;
 
 namespace elf3d::interaction {
 namespace {

@@ -4,10 +4,22 @@
 #include <elf3d/scene/storage.h>
 #include <elf3d/viewport/offscreen_viewport.h>
 
+#include <elf3d/assets.h>
+#include <elf3d/clipping.h>
+#include <elf3d/core/result.h>
+#include <elf3d/graphics.h>
+#include <elf3d/measurement.h>
+#include <elf3d/navigation.h>
+#include <elf3d/picking.h>
+#include <elf3d/scene.h>
+#include <elf3d/selection.h>
+#include <elf3d/viewport.h>
+
 #include <array>
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace {

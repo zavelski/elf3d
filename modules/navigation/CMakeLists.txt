@@ -1,12 +1,19 @@
 add_library(
     elf3d_navigation
-    STATIC
+    OBJECT
         include/elf3d/navigation/orbit_navigation.h
         src/orbit_navigation.cpp
 )
 add_library(elf3d::navigation ALIAS elf3d_navigation)
 
 target_compile_features(elf3d_navigation PUBLIC cxx_std_20)
+target_sources(
+    elf3d_navigation
+    PUBLIC
+        FILE_SET elf3d_navigation_modules TYPE CXX_MODULES
+        FILES
+            src/elf.navigation.cppm
+)
 target_include_directories(
     elf3d_navigation
     PUBLIC

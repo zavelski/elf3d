@@ -1,9 +1,16 @@
-#include <elf3d/navigation/orbit_navigation.h>
+module;
+
+#include <elf3d/math/detail/glm_helpers.h>
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <optional>
+
+module elf.navigation;
+
+import elf.math;
+import elf.scene;
 
 namespace elf3d::navigation {
 namespace {
@@ -114,18 +121,19 @@ void angles_from_direction(const math::Vector3 &direction, float &yaw, float &pi
 }
 
 [[nodiscard]] Result<CameraBasis> camera_basis(const scene::Storage &scene, EntityId camera) {
-    const Result<math::Matrix4> camera_world = scene.world_matrix(camera);
-    if (!camera_world) {
-        return camera_world.error();
+    const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
+    if (!camera_world_result) {
+        return camera_world_result.error();
     }
-    const Result<math::Matrix4> view = math::camera_view_matrix(camera_world.value());
+    const Result<Float4x4> view = math::camera_view_matrix(camera_world_result.value());
     if (!view) {
         return view.error();
     }
 
-    const math::Vector3 position{camera_world.value()[3]};
-    math::Vector3 right{camera_world.value()[0]};
-    math::Vector3 up{camera_world.value()[1]};
+    const math::Matrix4 camera_world = math::to_matrix(camera_world_result.value());
+    const math::Vector3 position{camera_world[3]};
+    math::Vector3 right{camera_world[0]};
+    math::Vector3 up{camera_world[1]};
     if (!finite_vector(position) || !finite_vector(right) || !finite_vector(up) ||
         glm::length(right) <= minimum_axis_length) {
         return Error{ErrorCode::invalid_camera_configuration,
@@ -169,21 +177,23 @@ void angles_from_direction(const math::Vector3 &direction, float &yaw, float &pi
     if (!record) {
         return record.error();
     }
-    const math::Matrix4 camera_world = math::transform_matrix(world_transform);
+    const math::Matrix4 camera_world = math::to_matrix(math::transform_matrix(world_transform));
     if (!record.value()->parent.has_value()) {
         return scene.set_local_transform(camera, world_transform);
     }
 
-    const Result<math::Matrix4> parent_world = scene.world_matrix(record.value()->parent.value());
-    if (!parent_world) {
-        return parent_world.error();
+    const Result<Float4x4> parent_world_result =
+        scene.world_matrix(record.value()->parent.value());
+    if (!parent_world_result) {
+        return parent_world_result.error();
     }
-    const float determinant = glm::determinant(math::Matrix3{parent_world.value()});
+    const math::Matrix4 parent_world = math::to_matrix(parent_world_result.value());
+    const float determinant = glm::determinant(math::Matrix3{parent_world});
     if (!std::isfinite(determinant) || std::abs(determinant) <= minimum_axis_length) {
         return Error{ErrorCode::invalid_transform_matrix,
                      "The camera parent transform is not invertible"};
     }
-    return scene.set_local_matrix(camera, glm::inverse(parent_world.value()) * camera_world);
+    return scene.set_local_matrix(camera, math::to_float4x4(glm::inverse(parent_world) * camera_world));
 }
 
 [[nodiscard]] Result<void> validate_camera(const scene::Storage &scene, EntityId camera) {
@@ -580,7 +590,7 @@ Result<void> OrbitNavigationController::fit_with_direction(scene::Storage &scene
         direction = math::to_float3(canonical_direction());
     }
 
-    const Result<math::Matrix4> old_matrix = scene.local_matrix(camera);
+    const Result<Float4x4> old_matrix = scene.local_matrix(camera);
     if (!old_matrix) {
         return old_matrix.error();
     }

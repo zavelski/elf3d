@@ -1,12 +1,19 @@
 add_library(
     elf3d_interaction
-    STATIC
+    OBJECT
         include/elf3d/interaction/viewport_interaction.h
         src/viewport_interaction.cpp
 )
 add_library(elf3d::interaction ALIAS elf3d_interaction)
 
 target_compile_features(elf3d_interaction PUBLIC cxx_std_20)
+target_sources(
+    elf3d_interaction
+    PUBLIC
+        FILE_SET elf3d_interaction_modules TYPE CXX_MODULES
+        FILES
+            src/elf.interaction.cppm
+)
 target_include_directories(
     elf3d_interaction
     PUBLIC

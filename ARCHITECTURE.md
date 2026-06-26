@@ -115,17 +115,18 @@ The shared library:
 - exposes the supported public engine API;
 - owns the composition root;
 - creates and coordinates engine services;
-- hides internal static-library boundaries;
+- hides internal OBJECT-library and named-module implementation boundaries;
 - hides graphics backend implementation details;
 - contains no `main()` function;
 - starts no event loop;
 - creates no application GUI.
 
-### 4.2 Internal static modules
+### 4.2 Internal engine modules
 
-Major engine subsystems are implemented as internal static libraries.
+Major engine subsystems are grouped as internal CMake OBJECT libraries with
+matching project-owned C++20 named-module interfaces.
 
-These libraries provide:
+These internal boundaries provide:
 
 - source and dependency boundaries;
 - independent build targets;
@@ -134,7 +135,7 @@ These libraries provide:
 - reduced compile-time coupling;
 - a possible migration path to runtime plugins where justified.
 
-They are linked into `elf3d`.
+They are linked into `elf3d` as object code.
 
 They are not distributed as separate public SDK libraries unless a future
 requirement explicitly changes that policy.
@@ -313,7 +314,7 @@ elf3d.dll
 elf3d_viewer.exe
 ```
 
-The shared library is assembled from a reasonable number of internal static
+The shared library is assembled from a reasonable number of internal OBJECT
 libraries.
 
 A future deployment may also contain optional runtime plugin DLLs.
@@ -323,10 +324,13 @@ The three concepts are distinct:
 ### 8.1 Logical module
 
 A coherent architectural subsystem, such as Scene, Navigation, or Picking.
+Project-owned C++20 named modules express the current internal engine OBJECT
+library boundaries.
 
 ### 8.2 Build module
 
-A separate CMake target, usually an internal static library.
+A separate CMake target, usually an internal OBJECT library for built-in engine
+code.
 
 ### 8.3 Runtime plugin
 
@@ -335,6 +339,11 @@ A separate shared library loaded dynamically and versioned independently.
 Not every logical module needs its own build target.
 
 Not every build module should become a DLL.
+
+Current built-in engine OBJECT libraries expose C++ named-module interfaces and
+module implementation units. Legacy internal include paths may remain as
+import-only shims for source compatibility during the migration; declarations
+belong in the named-module interfaces.
 
 A separate module is justified when it provides at least one substantial
 benefit:
@@ -678,14 +687,14 @@ A tool must not create application GUI.
 The host application may create Dear ImGui panels that configure and display the
 state of an engine tool.
 
-The initial distance-measurement tool is a built-in static module. It stores one
+The initial distance-measurement tool is a built-in engine module. It stores one
 in-progress or completed point-to-point measurement per Viewport, derives
 anchors from existing picking results, resolves current world positions through
 Scene and Asset queries, reports canonical distances in meters, and generates
 backend-neutral overlay data. It must not depend on Dear ImGui, GLFW, OpenGL, or
 private renderer implementation types.
 
-The initial section/clipping tool is also a built-in static module. It owns only
+The initial section/clipping tool is also a built-in engine module. It owns only
 Viewport clipping state and commands, initializes boxes from current visible
 Scene bounds without retaining Scene ownership, and generates backend-neutral
 helper overlay primitives. Renderer and Picking consume only the neutral
@@ -791,7 +800,7 @@ A future C-compatible API or plugin ABI uses the `elf3d_` function prefix and
 
 The public facade must hide:
 
-- internal static-library boundaries;
+- internal OBJECT-library and named-module boundaries;
 - internal registries;
 - concrete renderer classes;
 - backend-specific classes;
@@ -830,6 +839,15 @@ Avoid exposing the following across a long-lived public DLL boundary:
 
 A future stable C ABI may be introduced when support for unrelated compilers or
 other programming languages becomes a real requirement.
+
+C++20 module export does not export DLL symbols. Public DLL symbols must remain
+controlled by explicit export/import declarations such as `ELF3D_API`.
+Generated compiler module artifacts such as BMI, IFC, PCM, and GCM files are
+build outputs, not ABI or SDK artifacts.
+
+Exported project module interfaces must not expose third-party types or
+third-party headers. Third-party dependencies remain isolated behind normal
+headers, implementation files, and build targets.
 
 ## 13. Engine Object Model
 
@@ -1033,7 +1051,7 @@ The first likely tool modules are:
 1. selection;
 2. measurement.
 
-These should first be implemented as built-in static modules.
+These should first be implemented as built-in engine modules.
 
 A runtime DLL version should be attempted only after the tool contract has
 stabilized.
@@ -1084,7 +1102,7 @@ changing the public scene API.
 
 ## 20. Built-In Module Registration
 
-Built-in static modules are registered explicitly by the `elf3d` composition
+Built-in engine modules are registered explicitly by the `elf3d` composition
 root.
 
 Conceptually:
@@ -1109,7 +1127,7 @@ Explicit registration provides:
 - deterministic startup;
 - visible build composition;
 - predictable shutdown;
-- reliable static-library linking;
+- reliable object-library composition;
 - easier testing;
 - no dependency on linker-specific whole-archive behavior for registration.
 
@@ -1303,7 +1321,7 @@ The reference viewer must exercise the supported public engine API.
 It must not depend on:
 
 - private engine headers;
-- internal static module targets;
+- internal engine OBJECT module targets;
 - private renderer classes;
 - internal scene storage;
 - hidden resource caches;
@@ -1381,7 +1399,8 @@ The generated solution is not maintained manually.
 The viewer links against the public `elf3d` target and optional integration
 targets.
 
-Module tests may link directly against internal static libraries.
+Module tests may link directly against internal OBJECT-library groups and their
+object files.
 
 Final integration tests must also exercise the public shared-library boundary.
 
@@ -1579,7 +1598,7 @@ Add:
 
 Add:
 
-- measurement tool as a built-in static module;
+- measurement tool as a built-in engine module;
 - overlay rendering;
 - viewer controls.
 
@@ -1612,7 +1631,8 @@ The following rules must always remain true:
 5. The engine does not create application menus or panels.
 6. The viewer depends on the engine; the engine never depends on the viewer.
 7. The viewer uses the public shared-library API.
-8. Internal static module boundaries are hidden from host applications.
+8. Internal OBJECT-library and named-module boundaries are hidden from host
+   applications.
 9. Built-in modules are registered explicitly.
 10. Major module dependencies remain acyclic.
 11. Scene data does not depend on a concrete graphics backend.

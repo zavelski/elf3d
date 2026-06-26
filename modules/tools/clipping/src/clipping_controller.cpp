@@ -1,7 +1,19 @@
-#include <elf3d/tools/clipping/clipping_controller.h>
+module;
+
+#include <elf3d/clipping.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <optional>
+#include <span>
+
+module elf.tool.clipping;
+
+import elf.assets;
+import elf.clipping;
+import elf.scene;
 
 namespace elf3d::tools::clipping {
 namespace {
@@ -360,7 +372,7 @@ Bounds3 visible_bounds(const scene::Storage &scene, const scene::VisibilityFilte
             !scene::entity_visible_in_filter(scene, visibility, record->id)) {
             continue;
         }
-        const Result<math::Matrix4> world = scene.world_matrix(record->id);
+        const Result<Float4x4> world = scene.world_matrix(record->id);
         if (!world) {
             continue;
         }

@@ -1,6 +1,10 @@
 #include <elf3d/assets/handle_access.h>
 #include <elf3d/scene/storage.h>
 
+#include <elf3d/assets.h>
+#include <elf3d/core/result.h>
+#include <elf3d/scene.h>
+
 #include <array>
 #include <cmath>
 #include <optional>
@@ -27,8 +31,8 @@ int main() {
     root_transform.translation = {10.0F, 0.0F, 0.0F};
     elf3d::Transform child_transform;
     child_transform.translation = {0.0F, 2.0F, 0.0F};
-    elf3d::math::Matrix4 grandchild_matrix{1.0F};
-    grandchild_matrix[3].z = 3.0F;
+    elf3d::Float4x4 grandchild_matrix;
+    grandchild_matrix.elements[14] = 3.0F;
     if (!scene.set_local_transform(root.value(), root_transform) ||
         !scene.set_local_transform(child.value(), child_transform) ||
         !scene.set_local_matrix(grandchild.value(), grandchild_matrix) ||
@@ -44,9 +48,10 @@ int main() {
         scene.entity_name(grandchild.value()).value() != "Imported child") {
         return 3;
     }
-    const elf3d::Result<elf3d::math::Matrix4> world = scene.world_matrix(grandchild.value());
-    if (!world || !nearly_equal(world.value()[3].x, 10.0F) ||
-        !nearly_equal(world.value()[3].y, 2.0F) || !nearly_equal(world.value()[3].z, 3.0F)) {
+    const elf3d::Result<elf3d::Float4x4> world = scene.world_matrix(grandchild.value());
+    if (!world || !nearly_equal(world.value().elements[12], 10.0F) ||
+        !nearly_equal(world.value().elements[13], 2.0F) ||
+        !nearly_equal(world.value().elements[14], 3.0F)) {
         return 4;
     }
     if (scene.set_parent(root.value(), grandchild.value()).error().code() !=

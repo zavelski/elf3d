@@ -3,6 +3,10 @@
 #include <elf3d/scene/import_builder.h>
 #include <elf3d/scene/storage.h>
 
+#include <elf3d/assets.h>
+#include <elf3d/core/result.h>
+#include <elf3d/scene.h>
+
 #include <bit>
 #include <array>
 #include <chrono>
@@ -297,7 +301,7 @@ int main(int argument_count, char **arguments) {
         return 4;
     }
     const auto matrix = rich_storage.local_matrix(entities[1]->id);
-    if (!matrix || !nearly_equal(matrix.value()[3].y, 3.0F)) {
+    if (!matrix || !nearly_equal(matrix.value().elements[13], 3.0F)) {
         return 5;
     }
     const elf3d::Bounds3 rich_bounds = rich_storage.world_bounds();

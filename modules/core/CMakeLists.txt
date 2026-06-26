@@ -1,12 +1,19 @@
 add_library(
     elf3d_core
-    STATIC
+    OBJECT
         include/elf3d/core/version_data.h
         src/version_data.cpp
 )
 add_library(elf3d::core ALIAS elf3d_core)
 
 target_compile_features(elf3d_core PUBLIC cxx_std_20)
+target_sources(
+    elf3d_core
+    PUBLIC
+        FILE_SET elf3d_core_modules TYPE CXX_MODULES
+        FILES
+            src/elf.core.cppm
+)
 target_include_directories(
     elf3d_core
     PUBLIC

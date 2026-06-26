@@ -1,12 +1,13 @@
-#include <elf3d/assets/storage.h>
-
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/math/conventions.h>
+module;
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
+
+module elf.assets;
+
+import elf.math;
 
 namespace elf3d::assets {
 namespace {

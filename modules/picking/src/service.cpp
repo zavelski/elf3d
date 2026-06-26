@@ -1,15 +1,28 @@
-#include <elf3d/picking/service.h>
+module;
 
-#include <elf3d/assets/handle_access.h>
+#include <elf3d/assets.h>
+#include <elf3d/core/result.h>
+#include <elf3d/math/detail/glm_helpers.h>
+#include <elf3d/picking.h>
+#include <elf3d/scene.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+module elf.picking;
+
+import elf.assets;
+import elf.clipping;
+import elf.math;
+import elf.scene;
 
 namespace elf3d::picking {
 namespace {
@@ -224,7 +237,11 @@ class ScenePickingView final {
     }
 
     [[nodiscard]] Result<math::Matrix4> world_matrix(EntityId entity) const noexcept {
-        return scene_.world_matrix(entity);
+        const Result<Float4x4> world = scene_.world_matrix(entity);
+        if (!world) {
+            return world.error();
+        }
+        return math::to_matrix(world.value());
     }
 
     [[nodiscard]] Result<const assets::MeshAsset *> mesh(MeshHandle handle) const {
@@ -411,18 +428,19 @@ class PickingService::Impl final {
         if (!camera_world) {
             return camera_world.error();
         }
-        const Result<math::Matrix4> view = math::camera_view_matrix(camera_world.value());
+        const Result<Float4x4> view = math::camera_view_matrix(math::to_float4x4(camera_world.value()));
         if (!view) {
             return view.error();
         }
         const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-        const Result<math::Matrix4> projection = math::perspective_matrix(
+        const Result<Float4x4> projection = math::perspective_matrix(
             camera_description.value().vertical_field_of_view_radians, aspect,
             camera_description.value().near_plane, camera_description.value().far_plane);
         if (!projection) {
             return projection.error();
         }
-        const math::Matrix4 view_projection = projection.value() * view.value();
+        const math::Matrix4 view_projection =
+            math::to_matrix(projection.value()) * math::to_matrix(view.value());
         const float determinant = glm::determinant(view_projection);
         if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001F) {
             return Error{ErrorCode::invalid_camera_configuration,

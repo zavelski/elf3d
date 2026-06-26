@@ -1,10 +1,17 @@
-#include <elf3d/tools/measurement/distance_measurement.h>
+module;
 
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/math/conventions.h>
+#include <elf3d/math/detail/glm_helpers.h>
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
+
+module elf.tool.measurement;
+
+import elf.assets;
+import elf.clipping;
+import elf.math;
+import elf.scene;
 
 namespace elf3d::tools::measurement {
 namespace {
@@ -21,12 +28,10 @@ constexpr float minimum_normal_length = 0.000001F;
            std::isfinite(color.alpha);
 }
 
-[[nodiscard]] bool finite_matrix(const math::Matrix4 &matrix) noexcept {
-    for (int column = 0; column < 4; ++column) {
-        for (int row = 0; row < 4; ++row) {
-            if (!std::isfinite(matrix[column][row])) {
-                return false;
-            }
+[[nodiscard]] bool finite_matrix(const Float4x4 &matrix) noexcept {
+    for (float value : matrix.elements) {
+        if (!std::isfinite(value)) {
+            return false;
         }
     }
     return true;
@@ -461,7 +466,7 @@ Result<DistanceMeasurementController::ResolvedAnchor> DistanceMeasurementControl
                      "A measurement anchor triangle has degenerate geometry"};
     }
 
-    const Result<math::Matrix4> world = scene.world_matrix(anchor.entity);
+    const Result<Float4x4> world = scene.world_matrix(anchor.entity);
     if (!world) {
         return world.error();
     }
@@ -469,14 +474,16 @@ Result<DistanceMeasurementController::ResolvedAnchor> DistanceMeasurementControl
         return Error{ErrorCode::invalid_transform_matrix,
                      "A measurement anchor entity has a non-finite world transform"};
     }
-    const Result<math::Matrix3> normal_transform = math::normal_matrix(world.value());
+    const Result<math::Matrix3x3> normal_transform = math::normal_matrix(world.value());
     if (!normal_transform) {
         return normal_transform.error();
     }
 
-    const math::Vector4 world_position4 = world.value() * math::Vector4{local_position, 1.0F};
+    const math::Matrix4 native_world = math::to_matrix(world.value());
+    const math::Matrix3 native_normal_transform = glm::make_mat3(normal_transform.value().data());
+    const math::Vector4 world_position4 = native_world * math::Vector4{local_position, 1.0F};
     const Float3 world_position{world_position4.x, world_position4.y, world_position4.z};
-    math::Vector3 world_normal = normal_transform.value() * glm::normalize(local_normal);
+    math::Vector3 world_normal = native_normal_transform * glm::normalize(local_normal);
     const float world_normal_length = glm::length(world_normal);
     if (!math::is_finite(world_position) || !std::isfinite(world_normal_length) ||
         world_normal_length <= minimum_normal_length) {

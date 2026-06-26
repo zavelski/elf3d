@@ -20,6 +20,13 @@ Elf3D 0.3.0 focuses on reference-viewer polish and Windows startup behavior.
 - Built `elf3d_viewer` as a Windows GUI subsystem executable with a WinMain
   entry point, matching the Low.3D startup approach and avoiding the extra
   console window.
+- Converted internal engine build groups from static libraries to CMake OBJECT
+  libraries linked into the single public `elf3d` DLL.
+- Added project-owned C++20 named-module interfaces for each internal engine
+  OBJECT library, kept DLL symbol export explicit, and added an import smoke
+  test for the module set.
+- Updated build and service guidance for Visual Studio 2022 v17.14.35, CMake
+  `FILE_SET CXX_MODULES`, and generated module artifact handling.
 - Updated runtime version data and the public API version test to `0.3.0`.
 
 ## 0.2.0 - Viewer Interaction And Low.3D UI Refresh

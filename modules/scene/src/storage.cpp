@@ -1,12 +1,20 @@
-#include <elf3d/scene/storage.h>
-
-#include <elf3d/assets/handle_access.h>
+module;
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
+
+module elf.scene;
+
+import elf.assets;
+import elf.math;
 
 namespace elf3d::scene {
 
@@ -170,7 +178,7 @@ Result<Transform> Storage::local_transform(EntityId entity_id) const noexcept {
     return record.value()->local_transform.value();
 }
 
-Result<void> Storage::set_local_matrix(EntityId entity_id, const math::Matrix4 &matrix) {
+Result<void> Storage::set_local_matrix(EntityId entity_id, const Float4x4 &matrix) {
     Result<EntityRecord *> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -186,7 +194,7 @@ Result<void> Storage::set_local_matrix(EntityId entity_id, const math::Matrix4 &
     return {};
 }
 
-Result<math::Matrix4> Storage::local_matrix(EntityId entity_id) const noexcept {
+Result<Float4x4> Storage::local_matrix(EntityId entity_id) const noexcept {
     const Result<const EntityRecord *> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -194,7 +202,7 @@ Result<math::Matrix4> Storage::local_matrix(EntityId entity_id) const noexcept {
     return record.value()->local_matrix;
 }
 
-Result<math::Matrix4> Storage::world_matrix(EntityId entity_id) const noexcept {
+Result<Float4x4> Storage::world_matrix(EntityId entity_id) const noexcept {
     const Result<const EntityRecord *> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -204,7 +212,7 @@ Result<math::Matrix4> Storage::world_matrix(EntityId entity_id) const noexcept {
     }
 
     if (record.value()->parent.has_value()) {
-        const Result<math::Matrix4> parent_world = world_matrix(record.value()->parent.value());
+        const Result<Float4x4> parent_world = world_matrix(record.value()->parent.value());
         if (!parent_world) {
             return parent_world.error();
         }
@@ -540,11 +548,10 @@ Bounds3 Storage::world_bounds() const noexcept {
         if (!record.has_value() || !record->model.has_value()) {
             continue;
         }
-        const Result<math::Matrix4> world_result = world_matrix(record->id);
+        const Result<Float4x4> world_result = world_matrix(record->id);
         if (!world_result) {
             continue;
         }
-        const math::Matrix4 &world = world_result.value();
         for (const ModelPrimitiveBinding &primitive : record->model->primitives) {
             const Result<const assets::MeshAsset *> mesh_result = assets_.mesh(primitive.mesh);
             if (!mesh_result || !mesh_result.value()->bounds.is_valid) {
@@ -562,9 +569,7 @@ Bounds3 Storage::world_bounds() const noexcept {
                 {local.maximum.x, local.maximum.y, local.maximum.z},
             }};
             for (const Float3 corner : corners) {
-                const math::Vector4 transformed =
-                    world * math::Vector4{corner.x, corner.y, corner.z, 1.0F};
-                const Float3 point{transformed.x, transformed.y, transformed.z};
+                const Float3 point = math::transform_point(world_result.value(), corner);
                 if (!math::is_finite(point)) {
                     return Bounds3{};
                 }
@@ -593,11 +598,10 @@ Bounds3 Storage::visible_world_bounds(const VisibilityFilter &filter) const noex
             !entity_visible_in_filter(*this, filter, record->id)) {
             continue;
         }
-        const Result<math::Matrix4> world_result = world_matrix(record->id);
+        const Result<Float4x4> world_result = world_matrix(record->id);
         if (!world_result) {
             continue;
         }
-        const math::Matrix4 &world = world_result.value();
         for (const ModelPrimitiveBinding &primitive : record->model->primitives) {
             const Result<const assets::MeshAsset *> mesh_result = assets_.mesh(primitive.mesh);
             if (!mesh_result || !mesh_result.value()->bounds.is_valid) {
@@ -615,9 +619,7 @@ Bounds3 Storage::visible_world_bounds(const VisibilityFilter &filter) const noex
                 {local.maximum.x, local.maximum.y, local.maximum.z},
             }};
             for (const Float3 corner : corners) {
-                const math::Vector4 transformed =
-                    world * math::Vector4{corner.x, corner.y, corner.z, 1.0F};
-                const Float3 point{transformed.x, transformed.y, transformed.z};
+                const Float3 point = math::transform_point(world_result.value(), corner);
                 if (!math::is_finite(point)) {
                     return Bounds3{};
                 }

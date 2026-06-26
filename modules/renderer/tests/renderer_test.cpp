@@ -1,5 +1,13 @@
 #include <elf3d/assets/handle_access.h>
+#include <elf3d/graphics/device.h>
 #include <elf3d/renderer/renderer.h>
+#include <elf3d/scene/storage.h>
+
+#include <elf3d/assets.h>
+#include <elf3d/core/result.h>
+#include <elf3d/graphics.h>
+#include <elf3d/scene.h>
+#include <elf3d/viewport.h>
 
 #include <array>
 #include <cmath>

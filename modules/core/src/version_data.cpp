@@ -1,4 +1,4 @@
-#include <elf3d/core/version_data.h>
+module elf.core;
 
 namespace elf3d::core {
 namespace {

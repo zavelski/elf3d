@@ -1,7 +1,14 @@
-#include <elf3d/tools/selection/selection_controller.h>
+module;
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
+
+module elf.tool.selection;
+
+import elf.clipping;
+import elf.picking;
+import elf.scene;
 
 namespace elf3d::tools::selection {
 namespace {
