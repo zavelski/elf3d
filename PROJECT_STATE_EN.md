@@ -1,12 +1,12 @@
-# Elf3D 0.2.0 Project State
+# Elf3D 0.3.0 Project State
 
-Purpose: Living project-state baseline for the current 0.2.0 release.
+Purpose: Living project-state baseline for the current 0.3.0 development line.
 
-Applicable version: 0.2.0
+Applicable version: 0.3.0
 
 Document status: Living project-state document.
 
-Last verified implementation commit: pending 0.2.0 release source commit
+Last verified implementation commit: pending 0.3.0 development commit
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
@@ -27,15 +27,15 @@ Related documents: `docs/README.md`, `docs/releases/0.2.0/RELEASE_CHECKLIST.md`,
 - Optional integration: `elf3d_imgui`
 - Reference app: `elf3d_viewer`
 - Active release branch: `develop`
-- Previous public release tag: `v0.1.0`
-- Current release target: `v0.2.0`
+- Previous public release tag: `v0.2.0`
+- Current release target: `v0.3.0`
 
 ## Implemented Vertical Slice
 
-Elf3D 0.2.0 implements:
+Elf3D 0.3.0 implements:
 
 - public `Engine`, `Scene`, `Viewport`, and `SceneHierarchySnapshot` facades
-- version API returning `0.2.0`
+- version API returning `0.3.0`
 - scene entities, hierarchy, transforms, explicit local matrices, cameras,
   models, persistent visibility, bounds, hierarchy snapshots, and statistics
 - scene-owned CPU mesh, image, texture, sampler, and material assets
@@ -51,7 +51,8 @@ Elf3D 0.2.0 implements:
 - one distance measurement per viewport
 - one section plane and up to three axis-aligned clipping boxes per viewport
 - Dear ImGui/GLFW reference viewer with docking, Droid Sans UI font asset,
-  light Low.3D-inspired panels, generated PNG toolbar icons, and command toolbar
+  light Low.3D-inspired panels, generated PNG toolbar icons, command toolbar,
+  Blender-like Open File modal, and Windows GUI-subsystem startup
 
 ## Architecture Boundaries
 
@@ -69,10 +70,9 @@ Confirmed boundaries:
 
 ## Validation State
 
-0.2.0 validation is recorded in `docs/releases/0.2.0/` and includes fresh
-Debug and Release configure/build/CTest, viewer smoke, package creation,
-archive inspection, extracted-package smoke, CI, GitHub Release asset
-verification, and public clone testing.
+0.2.0 public-release validation is recorded in `docs/releases/0.2.0/`.
+0.3.0 validation must be refreshed from the current development commit before a
+release.
 
 Not yet validated:
 

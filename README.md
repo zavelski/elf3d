@@ -5,7 +5,7 @@
 Elf3D is a modular C++20 3D visualization engine for loading, rendering, and
 interactively inspecting glTF 2.0 scenes in desktop applications.
 
-Current version: 0.2.0.
+Current version: 0.3.0.
 
 Maturity: first public baseline. The project is useful as an embeddable
 Windows/OpenGL visualization slice and reference viewer, but it is not a
@@ -13,7 +13,7 @@ complete game engine, editor, or stable cross-toolchain binary SDK.
 
 Validated baseline: Windows desktop x64, Visual Studio 2022, dynamic MSVC
 runtime, and OpenGL 4.1 core profile. Linux and macOS are architectural goals,
-but they are not validated platforms for 0.2.0.
+but they are not validated platforms for 0.3.0.
 
 ## Features
 
@@ -46,7 +46,7 @@ optional ImGui integration target.
 
 ## glTF Scope
 
-Elf3D 0.2.0 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
+Elf3D 0.3.0 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
 images, node hierarchy, TRS and matrix transforms, reusable meshes, triangle
 primitives, indexed and non-indexed geometry, positions, normals, `TEXCOORD_0`,
 base-color textures, metallic/roughness factors, metallic-roughness textures,
@@ -96,7 +96,9 @@ After a Debug build:
 ```
 
 Open a model from `File > Open...`, pass a `.gltf` or `.glb` path as the first
-command-line argument, or drop a model file onto the viewer window.
+command-line argument, or drop a model file onto the viewer window. On Windows,
+the viewer is built as a GUI executable and does not open a separate console
+window before the graphical window.
 
 The build copies viewer assets beside the executable under `assets/`. Keep
 `assets/font/DroidSans.ttf` and `assets/icon/*.png` with `elf3d_viewer.exe`;
@@ -179,7 +181,7 @@ docs/                   Technical documentation and release records
 
 ## Release
 
-The 0.2.0 release is published from tag `v0.2.0` as
+The latest public release is 0.2.0, published from tag `v0.2.0` as
 [Elf3D 0.2.0](https://github.com/zavelski/elf3d/releases/tag/v0.2.0).
 The previous 0.1.0 release remains available from tag `v0.1.0`.
 

@@ -1,14 +1,14 @@
 # Viewport and Tools
 
 Purpose: Document viewport state, input, navigation, picking, selection,
-visibility, measurement, and clipping behavior in Elf3D 0.2.0.
+visibility, measurement, and clipping behavior in Elf3D 0.3.0.
 
-Applicable version: 0.2.0
+Applicable version: 0.3.0
 
 Document status: Verified from public headers, tool modules, viewer code, tests,
 and validation on 2026-06-24.
 
-Last verified Git commit: pending 0.2.0 release source commit
+Last verified Git commit: pending 0.3.0 development commit
 
 Implementation source paths: `include/elf3d/viewport.h`,
 `include/elf3d/navigation.h`, `include/elf3d/picking.h`,
@@ -55,7 +55,7 @@ Navigation and tools share the input snapshot. The current behavior is:
 
 - pending left click remains a click until movement exceeds the threshold
 - threshold-crossing frame starts orbit without a jump
-- left drag orbits
+- left drag orbits in the mouse-movement direction
 - X + left drag pans
 - Z + left drag dollies
 - middle drag pans
@@ -80,10 +80,11 @@ Orbit navigation supports:
 - dynamic examine-pivot updates from visible surface clicks
 - fit to visible content
 - reset to a canonical three-quarter view
+- default orbit drags make the visible model follow mouse movement
 - configurable sensitivity and vertical orbit inversion
 - diagnostics through `NavigationSnapshot`
 
-Navigation is mouse-based in 0.2.0. Touch, gamepad, first-person movement, and
+Navigation is mouse-based in 0.3.0. Touch, gamepad, first-person movement, and
 keyboard fly-camera modes are not implemented.
 
 ## Picking
@@ -178,16 +179,31 @@ ImGui or GLFW.
 
 The viewer initializes Dear ImGui with docking enabled, Droid Sans at
 `20.0f * dpi_scale` when `assets/font/DroidSans.ttf` is present, Cyrillic glyph
-ranges, and a light Low.3D-inspired panel style. The permanent toolbar below
-the main menu uses project-generated PNG icons from `assets/icon/`; LWApp PNG
-icons are not copied. The seeded docking layout keeps the 3D view centered,
-uses a narrow right column for scene/selection panels, and places diagnostics
-and tool panels in a lower-right split instead of a wide bottom band. The
-default 3D view clear color is white to match the light reference workspace.
+ranges, and a light Low.3D-inspired panel style. Menus, the toolbar, the status
+bar, modals, and 3D overlays use the normal viewer font; docked panel titles use
+an intermediate `17.5f * dpi_scale` font; panel content uses a
+`14.0f * dpi_scale` font. The permanent toolbar below the main menu uses
+project-generated PNG icons from `assets/icon/`; LWApp PNG icons are not copied.
+Toolbar buttons apply explicit icon tint and button backgrounds for normal,
+hover, active, and disabled states. The seeded docking layout keeps the 3D view
+centered, docks `Model Information` beside `3D View`, uses a right column for
+scene/selection panels, and places rendering controls and tool panels in a
+lower-right split instead of a wide bottom band.
+
+The `3D View` window is a clean zero-padding viewport area. The render texture
+fills the available dock content area, and viewport errors are drawn as small
+overlays instead of layout text. Source/format/path information remains in
+`Model Information`, which uses a white panel background. The Open command uses
+an ImGui file browser with Blender-like top navigation, sidebar bookmarks,
+system locations, recent folders, search, file metadata, Windows drive shortcuts
+when available, and `.gltf`/`.glb` file filtering. Clear color, lighting, procedural
+cube color, rotation, speed, and reset transform controls are in the side
+`Rendering` panel. The default 3D view clear color is white to match the light
+reference workspace.
 
 ## Validation
 
 Debug and Release tests cover interaction, navigation, picking, selection,
 visibility, measurement, clipping, renderer, and viewport lifetime. Release
-validation for 0.2.0 records the exact local and CI results under
+validation for 0.2.0 records the exact public-release local and CI results under
 `docs/releases/0.2.0/`.

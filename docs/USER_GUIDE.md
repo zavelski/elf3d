@@ -1,13 +1,12 @@
 # User Guide
 
-Purpose: Explain how to use the actual Elf3D 0.2.0 reference viewer.
+Purpose: Explain how to use the actual Elf3D 0.3.0 reference viewer.
 
-Applicable version: 0.2.0
+Applicable version: 0.3.0
 
-Document status: Verified from viewer code and README; release validation is
-recorded under `docs/releases/0.2.0/`.
+Document status: Living guide verified from viewer code and README.
 
-Last verified Git commit: pending 0.2.0 release source commit
+Last verified Git commit: pending 0.3.0 development commit
 
 Implementation source paths: `apps/viewer/src/main.cpp`, `integrations/imgui`,
 `include/elf3d`, `tests/fixtures/textured_pbr.gltf`
@@ -48,7 +47,8 @@ Supported file types:
 Model loading options:
 
 - pass a path as the first command-line argument
-- use `File > Open...`
+- use `File > Open...` or the toolbar Open button to browse folders, sidebar
+  locations, recent folders, and filtered `.gltf` or `.glb` files
 - drop a file onto the GLFW window
 
 Loading is synchronous and can temporarily block the viewer UI. Failed loading
@@ -58,8 +58,17 @@ keeps the current scene.
 
 The viewer uses a light Low.3D-inspired Dear ImGui style with pale panels, grey
 title/tab bars, a white default 3D-view clear background, compact status strip,
-and generated PNG toolbar icons. The Debug, Release, and packaged viewer
-layouts expect an `assets` directory beside `elf3d_viewer.exe`:
+and generated PNG toolbar icons. Toolbar buttons use explicit normal, hover,
+active, and disabled visual states so icons remain readable on the pale toolbar.
+Menus, toolbar, status bar, modals, and 3D overlays use the normal viewer font;
+docked panel titles use a slightly reduced intermediate font; panel content
+uses a smaller font.
+The default layout opens at 1600 x 900, docks `Model Information` beside
+`3D View`, and keeps a right column for scene, selection, rendering,
+measurement, clipping, and diagnostic panels. `Model Information` uses a white
+panel background.
+The Debug, Release, and packaged viewer layouts expect an `assets` directory
+beside `elf3d_viewer.exe`:
 
 - `assets/font/DroidSans.ttf`
 - `assets/icon/*.png`
@@ -68,14 +77,19 @@ If `DroidSans.ttf` is missing, the ImGui integration falls back to its default
 font. Missing toolbar PNGs leave blank fallback buttons, so release packages
 must include the full `assets` directory.
 
+On Windows, the viewer is linked as a GUI subsystem executable, so launching it
+opens only the graphical viewer window.
+
 ## 3D View
 
 The viewer starts with a procedural cube when no model is loaded. Imported
 models render into an off-screen Elf3D viewport texture displayed by Dear ImGui.
+The `3D View` window is reserved for the render texture and overlays; rendering
+and demo controls live in the side UI.
 
 Controls:
 
-- left drag beyond click threshold: orbit
+- left drag beyond click threshold: orbit in the mouse-movement direction
 - X + left drag: pan
 - Z + left drag: dolly
 - middle drag: pan
@@ -153,8 +167,23 @@ measurement overlay visibility, fit, and reset.
 ## Model Information
 
 The Model Information panel reports scene counts, bounds, decoded image memory,
-texture and renderer statistics, overlay counts, clipping statistics, and basic
-rendering settings.
+texture and renderer statistics, overlay counts, and clipping statistics. It
+also keeps the source path and format visible for the current procedural or
+imported scene.
+
+## Rendering
+
+The Rendering panel contains viewport and scene-display controls:
+
+- clear color
+- procedural cube rotation
+- procedural cube speed
+- reset cube transform
+- procedural cube base color
+- light direction
+- light intensity
+- ambient intensity
+- reset lighting
 
 ## Error Messages
 

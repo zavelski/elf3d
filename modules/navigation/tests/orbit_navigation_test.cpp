@@ -213,6 +213,7 @@ int main() {
     }
     const elf3d::NavigationSnapshot yawed = navigation.snapshot();
     if (nearly_equal(yawed.yaw_radians, first_drag.yaw_radians) ||
+        !(yawed.yaw_radians < first_drag.yaw_radians) ||
         !nearly_equal(yawed.distance, first_drag.distance) ||
         !camera_looks_at(fixture.scene, fixture.camera, yawed.pivot)) {
         return 7;
@@ -223,7 +224,8 @@ int main() {
         return 8;
     }
     const elf3d::NavigationSnapshot pitched = navigation.snapshot();
-    if (pitched.pitch_radians < navigation.settings().minimum_pitch_radians ||
+    if (!(pitched.pitch_radians > yawed.pitch_radians) ||
+        pitched.pitch_radians < navigation.settings().minimum_pitch_radians ||
         pitched.pitch_radians > navigation.settings().maximum_pitch_radians) {
         return 9;
     }

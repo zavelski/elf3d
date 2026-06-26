@@ -70,7 +70,7 @@ void apply_elf3d_style(GLFWwindow *window, const ContextOptions &options) noexce
     colors[ImGuiCol_ScrollbarGrab] = ImVec4{0.00F, 0.00F, 0.00F, 0.27F};
     colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4{0.00F, 0.00F, 0.00F, 0.40F};
     colors[ImGuiCol_ScrollbarGrabActive] = ImVec4{0.00F, 0.00F, 0.00F, 0.51F};
-    colors[ImGuiCol_CheckMark] = ImVec4{1.00F, 1.00F, 0.95F, 1.00F};
+    colors[ImGuiCol_CheckMark] = ImVec4{0.03F, 0.32F, 0.36F, 1.00F};
     colors[ImGuiCol_SliderGrab] = ImVec4{1.00F, 1.00F, 1.00F, 0.30F};
     colors[ImGuiCol_SliderGrabActive] = ImVec4{0.75F, 1.00F, 1.00F, 1.00F};
     colors[ImGuiCol_Button] = ImVec4{0.74F, 0.81F, 0.81F, 1.00F};

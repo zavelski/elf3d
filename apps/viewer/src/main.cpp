@@ -17,21 +17,29 @@
 
 #if defined(_WIN32)
 #include <objbase.h>
+#include <windows.h>
 #include <wincodec.h>
 #endif
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <ctime>
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -46,6 +54,10 @@
 namespace {
 
 constexpr char glsl_version[] = "#version 410 core";
+constexpr float viewer_ui_font_size_pixels = 20.0F;
+constexpr float panel_content_font_size_pixels = viewer_ui_font_size_pixels * 0.70F;
+constexpr float panel_title_font_size_pixels = viewer_ui_font_size_pixels * 0.875F;
+constexpr float side_dock_width_fraction = 0.27968F;
 
 class GlfwRuntime final {
   public:
@@ -83,10 +95,47 @@ struct LoadFailure {
     elf3d::Error error;
 };
 
+struct OpenBrowserEntry {
+    std::filesystem::path path;
+    std::string label;
+    std::string modified_time;
+    std::uintmax_t size_bytes = 0;
+    bool directory = false;
+    bool has_size = false;
+};
+
+class ScopedFont final {
+  public:
+    explicit ScopedFont(ImFont *font) noexcept : font_(font) {
+        if (font_ != nullptr) {
+            ImGui::PushFont(font_);
+        }
+    }
+
+    ~ScopedFont() {
+        if (font_ != nullptr) {
+            ImGui::PopFont();
+        }
+    }
+
+    ScopedFont(const ScopedFont &) = delete;
+    ScopedFont &operator=(const ScopedFont &) = delete;
+
+  private:
+    ImFont *font_ = nullptr;
+};
+
+[[nodiscard]] bool begin_panel_window(const char *name, bool *open, ImFont *title_font,
+                                      ImGuiWindowFlags flags = ImGuiWindowFlags_None) {
+    const ScopedFont title_scope{title_font};
+    return ImGui::Begin(name, open, flags);
+}
+
 struct ViewerState {
     bool show_3d_view = true;
     bool show_scene_hierarchy = true;
     bool show_model_information = true;
+    bool show_rendering_panel = true;
     bool show_selection_panel = true;
     bool show_measurement_panel = true;
     bool show_clipping_panel = true;
@@ -94,6 +143,7 @@ struct ViewerState {
     bool show_imgui_demo = false;
     bool show_status_bar = true;
     bool show_about = false;
+    bool about_window_was_visible = false;
     bool reset_dock_layout = false;
     bool dock_layout_initialized = false;
     bool apply_dock_layout = false;
@@ -102,7 +152,19 @@ struct ViewerState {
     ImGuiID dock_right_bottom_id = 0;
     bool request_open_modal = false;
     bool request_error_modal = false;
-    std::array<char, 2048> open_path{};
+    std::array<char, 2048> open_folder_path{};
+    std::array<char, 2048> open_file_path{};
+    std::array<char, 256> open_search{};
+    std::filesystem::path open_browser_directory;
+    std::filesystem::path open_browser_selected_path;
+    std::vector<OpenBrowserEntry> open_browser_entries;
+    std::vector<std::filesystem::path> open_browser_bookmarks;
+    std::vector<std::filesystem::path> open_browser_recents;
+    std::vector<std::filesystem::path> open_browser_history;
+    std::size_t open_browser_history_index = 0;
+    std::string open_browser_error;
+    bool open_browser_initialized = false;
+    bool open_browser_needs_refresh = false;
     std::optional<std::string> dropped_path;
     bool drop_copy_failed = false;
     elf3d::Extent2D view_dimensions;
@@ -120,6 +182,8 @@ struct ViewerState {
     std::optional<elf3d::EntityId> last_revealed_hierarchy_selection;
     float main_menu_height = 0.0F;
     float toolbar_height = 0.0F;
+    ImFont *panel_title_font = nullptr;
+    ImFont *panel_content_font = nullptr;
 };
 
 struct ViewerScene {
@@ -182,6 +246,348 @@ struct ViewerCommands {
     return result;
 }
 
+[[nodiscard]] float window_content_scale(GLFWwindow *window) noexcept {
+    if (window == nullptr) {
+        return 1.0F;
+    }
+
+    float x_scale = 1.0F;
+    float y_scale = 1.0F;
+    glfwGetWindowContentScale(window, &x_scale, &y_scale);
+    return std::max(1.0F, std::min(std::max(x_scale, y_scale), 3.0F));
+}
+
+[[nodiscard]] ImFont *load_viewer_font(GLFWwindow *window, const char *font_path_utf8,
+                                       float font_size_pixels) {
+    ImGuiIO &io = ImGui::GetIO();
+    const float requested_font_size = font_size_pixels * window_content_scale(window);
+
+    if (font_path_utf8 != nullptr && font_path_utf8[0] != '\0') {
+        ImFont *font = io.Fonts->AddFontFromFileTTF(font_path_utf8, requested_font_size, nullptr,
+                                                    io.Fonts->GetGlyphRangesCyrillic());
+        if (font != nullptr) {
+            return font;
+        }
+    }
+
+    ImFontConfig font_config;
+    font_config.SizePixels = requested_font_size;
+    return io.Fonts->AddFontDefault(&font_config);
+}
+
+void copy_text_to_buffer(std::string_view value, std::span<char> buffer) {
+    if (buffer.empty()) {
+        return;
+    }
+    std::fill(buffer.begin(), buffer.end(), '\0');
+    const std::size_t copy_count = std::min(value.size(), buffer.size() - 1U);
+    std::copy_n(value.data(), copy_count, buffer.data());
+}
+
+[[nodiscard]] std::string lowercase_ascii(std::string value) {
+    for (char &character : value) {
+        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    }
+    return value;
+}
+
+[[nodiscard]] bool supported_model_path(const std::filesystem::path &path) {
+    const std::string extension = lowercase_ascii(path.extension().string());
+    return extension == ".gltf" || extension == ".glb";
+}
+
+[[nodiscard]] std::string file_name_label(const std::filesystem::path &path) {
+    std::string label = path_to_utf8(path.filename());
+    if (label.empty()) {
+        label = path_to_utf8(path);
+    }
+    return label;
+}
+
+[[nodiscard]] std::filesystem::path fallback_open_directory() {
+    std::error_code error;
+    const std::filesystem::path current = std::filesystem::current_path(error);
+    return error ? std::filesystem::path{"."} : current;
+}
+
+[[nodiscard]] std::filesystem::path absolute_path_no_throw(const std::filesystem::path &path) {
+    std::error_code error;
+    const std::filesystem::path absolute = std::filesystem::absolute(path, error);
+    return error ? path.lexically_normal() : absolute.lexically_normal();
+}
+
+[[nodiscard]] std::string normalized_path_key(const std::filesystem::path &path) {
+    std::string key = path_to_utf8(absolute_path_no_throw(path));
+#if defined(_WIN32)
+    key = lowercase_ascii(std::move(key));
+#endif
+    return key;
+}
+
+[[nodiscard]] bool same_path_key(const std::filesystem::path &left,
+                                 const std::filesystem::path &right) {
+    return normalized_path_key(left) == normalized_path_key(right);
+}
+
+void push_unique_directory(std::vector<std::filesystem::path> &directories,
+                           const std::filesystem::path &directory, std::size_t maximum_count) {
+    std::error_code error;
+    const std::filesystem::path resolved = absolute_path_no_throw(directory);
+    if (!std::filesystem::is_directory(resolved, error) || error) {
+        return;
+    }
+
+    directories.erase(std::remove_if(directories.begin(), directories.end(),
+                                     [&resolved](const std::filesystem::path &existing) {
+                                         return same_path_key(existing, resolved);
+                                     }),
+                      directories.end());
+    directories.insert(directories.begin(), resolved);
+    if (directories.size() > maximum_count) {
+        directories.resize(maximum_count);
+    }
+}
+
+[[nodiscard]] std::optional<std::string> environment_value(const char *name) {
+#if defined(_WIN32)
+    char *value = nullptr;
+    std::size_t value_size = 0;
+    if (_dupenv_s(&value, &value_size, name) != 0 || value == nullptr || value[0] == '\0') {
+        if (value != nullptr) {
+            std::free(value);
+        }
+        return std::nullopt;
+    }
+    std::string result{value};
+    std::free(value);
+    return result;
+#else
+    const char *value = std::getenv(name);
+    if (value == nullptr || value[0] == '\0') {
+        return std::nullopt;
+    }
+    return std::string{value};
+#endif
+}
+
+[[nodiscard]] std::optional<std::filesystem::path> environment_directory(const char *name) {
+    const std::optional<std::string> value = environment_value(name);
+    if (!value.has_value()) {
+        return std::nullopt;
+    }
+
+    std::error_code error;
+    std::filesystem::path path = absolute_path_no_throw(path_from_utf8(value.value()));
+    if (!std::filesystem::is_directory(path, error) || error) {
+        return std::nullopt;
+    }
+    return path;
+}
+
+void initialize_open_browser_bookmarks(ViewerState &state) {
+    if (!state.open_browser_bookmarks.empty()) {
+        return;
+    }
+
+    const std::optional<std::filesystem::path> user_profile = environment_directory("USERPROFILE");
+    const std::optional<std::filesystem::path> one_drive = environment_directory("OneDrive");
+    std::vector<std::filesystem::path> defaults;
+    if (user_profile.has_value()) {
+        defaults.push_back(user_profile.value());
+        defaults.push_back(user_profile.value() / "Desktop");
+        defaults.push_back(user_profile.value() / "Documents");
+        defaults.push_back(user_profile.value() / "Downloads");
+        defaults.push_back(user_profile.value() / "Pictures");
+        defaults.push_back(user_profile.value() / "Videos");
+        defaults.push_back(user_profile.value() / "Music");
+    }
+    if (one_drive.has_value()) {
+        defaults.push_back(one_drive.value());
+    }
+    defaults.push_back(fallback_open_directory());
+
+    for (const std::filesystem::path &path : defaults) {
+        push_unique_directory(state.open_browser_bookmarks, path, 12);
+    }
+}
+
+void set_open_browser_selected_file(ViewerState &state, const std::filesystem::path &path) {
+    state.open_browser_selected_path = path;
+    copy_text_to_buffer(path_to_utf8(path), state.open_file_path);
+}
+
+void clear_open_browser_selected_file(ViewerState &state) {
+    state.open_browser_selected_path.clear();
+    copy_text_to_buffer("", state.open_file_path);
+}
+
+[[nodiscard]] std::string format_file_size(std::uintmax_t bytes) {
+    constexpr std::array<const char *, 5> units{"B", "KB", "MB", "GB", "TB"};
+    double value = static_cast<double>(bytes);
+    std::size_t unit_index = 0;
+    while (value >= 1024.0 && unit_index + 1U < units.size()) {
+        value /= 1024.0;
+        ++unit_index;
+    }
+
+    std::ostringstream stream;
+    if (unit_index == 0U) {
+        stream << bytes << ' ' << units[unit_index];
+    } else {
+        stream << std::fixed << std::setprecision(value < 10.0 ? 1 : 0) << value << ' '
+               << units[unit_index];
+    }
+    return stream.str();
+}
+
+[[nodiscard]] std::string format_file_time(const std::filesystem::path &path) {
+    std::error_code error;
+    const std::filesystem::file_time_type file_time = std::filesystem::last_write_time(path, error);
+    if (error) {
+        return "-";
+    }
+
+    const auto system_time = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        file_time - std::filesystem::file_time_type::clock::now() +
+        std::chrono::system_clock::now());
+    const std::time_t time = std::chrono::system_clock::to_time_t(system_time);
+
+    std::tm local_time{};
+#if defined(_WIN32)
+    if (localtime_s(&local_time, &time) != 0) {
+        return "-";
+    }
+#else
+    if (localtime_r(&time, &local_time) == nullptr) {
+        return "-";
+    }
+#endif
+
+    std::ostringstream stream;
+    stream << std::put_time(&local_time, "%d %b %Y %H:%M");
+    return stream.str();
+}
+
+void set_open_browser_directory(ViewerState &state, const std::filesystem::path &directory,
+                                bool record_history = true) {
+    std::filesystem::path resolved = absolute_path_no_throw(directory);
+    std::error_code error;
+    if (!std::filesystem::is_directory(resolved, error) || error) {
+        state.open_browser_error = "Folder is not available: " + path_to_utf8(directory);
+        return;
+    }
+
+    state.open_browser_directory = resolved;
+    clear_open_browser_selected_file(state);
+    state.open_browser_error.clear();
+    state.open_browser_needs_refresh = true;
+    copy_text_to_buffer(path_to_utf8(resolved), state.open_folder_path);
+    push_unique_directory(state.open_browser_recents, resolved, 10);
+
+    if (record_history) {
+        if (state.open_browser_history.empty() ||
+            !same_path_key(state.open_browser_history[state.open_browser_history_index],
+                           resolved)) {
+            if (state.open_browser_history_index + 1U < state.open_browser_history.size()) {
+                state.open_browser_history.erase(
+                    state.open_browser_history.begin() +
+                        static_cast<std::ptrdiff_t>(state.open_browser_history_index + 1U),
+                    state.open_browser_history.end());
+            }
+            state.open_browser_history.push_back(resolved);
+            state.open_browser_history_index = state.open_browser_history.size() - 1U;
+        }
+    }
+}
+
+void navigate_open_browser_history(ViewerState &state, int offset) {
+    if (state.open_browser_history.empty()) {
+        return;
+    }
+
+    const int current = static_cast<int>(state.open_browser_history_index);
+    const int maximum = static_cast<int>(state.open_browser_history.size() - 1U);
+    const int next = std::clamp(current + offset, 0, maximum);
+    if (next == current) {
+        return;
+    }
+
+    state.open_browser_history_index = static_cast<std::size_t>(next);
+    set_open_browser_directory(state, state.open_browser_history[state.open_browser_history_index],
+                               false);
+}
+
+void refresh_open_browser_entries(ViewerState &state) {
+    if (!state.open_browser_needs_refresh) {
+        return;
+    }
+
+    state.open_browser_needs_refresh = false;
+    state.open_browser_entries.clear();
+
+    std::error_code iteration_error;
+    constexpr std::filesystem::directory_options options =
+        std::filesystem::directory_options::skip_permission_denied;
+    std::filesystem::directory_iterator iterator{state.open_browser_directory, options,
+                                                 iteration_error};
+    const std::filesystem::directory_iterator end;
+    if (iteration_error) {
+        state.open_browser_error = "Could not read folder: " + iteration_error.message();
+        return;
+    }
+
+    while (iterator != end) {
+        const std::filesystem::directory_entry entry = *iterator;
+        std::error_code entry_error;
+        const bool is_directory = entry.is_directory(entry_error);
+        if (!entry_error && (is_directory || supported_model_path(entry.path()))) {
+            OpenBrowserEntry browser_entry;
+            browser_entry.path = entry.path();
+            browser_entry.label = file_name_label(entry.path());
+            browser_entry.modified_time = format_file_time(entry.path());
+            browser_entry.directory = is_directory;
+            if (!is_directory) {
+                std::error_code size_error;
+                browser_entry.size_bytes = entry.file_size(size_error);
+                browser_entry.has_size = !size_error;
+            }
+            state.open_browser_entries.push_back(std::move(browser_entry));
+        }
+        iterator.increment(iteration_error);
+        if (iteration_error) {
+            state.open_browser_error =
+                "Could not finish reading folder: " + iteration_error.message();
+            break;
+        }
+    }
+
+    std::sort(state.open_browser_entries.begin(), state.open_browser_entries.end(),
+              [](const OpenBrowserEntry &left, const OpenBrowserEntry &right) {
+                  if (left.directory != right.directory) {
+                      return left.directory;
+                  }
+                  return lowercase_ascii(left.label) < lowercase_ascii(right.label);
+              });
+}
+
+void initialize_open_browser(ViewerState &state, const ViewerScene &scene) {
+    initialize_open_browser_bookmarks(state);
+    state.open_browser_history.clear();
+    state.open_browser_history_index = 0;
+    copy_text_to_buffer("", state.open_search);
+
+    std::filesystem::path directory = fallback_open_directory();
+    if (scene.is_imported() && scene.source_path.has_parent_path()) {
+        directory = scene.source_path.parent_path();
+    }
+
+    state.open_browser_initialized = true;
+    set_open_browser_directory(state, directory);
+    if (scene.is_imported()) {
+        set_open_browser_selected_file(state, scene.source_path);
+    }
+}
+
 [[nodiscard]] std::filesystem::path executable_directory(int argument_count, char **arguments) {
     if (argument_count > 0 && arguments != nullptr && arguments[0] != nullptr) {
         std::error_code error;
@@ -205,8 +611,8 @@ struct ViewerCommands {
         return executable_assets;
     }
 
-    const std::filesystem::path source_assets = std::filesystem::current_path(error) /
-                                                "apps" / "viewer" / "assets";
+    const std::filesystem::path source_assets =
+        std::filesystem::current_path(error) / "apps" / "viewer" / "assets";
     if (!error && std::filesystem::exists(source_assets, error)) {
         return source_assets;
     }
@@ -281,8 +687,8 @@ class ComInitialization final {
 };
 #endif
 
-[[nodiscard]] std::optional<DecodedImage> decode_png_rgba(
-    const std::filesystem::path &path) noexcept {
+[[nodiscard]] std::optional<DecodedImage>
+decode_png_rgba(const std::filesystem::path &path) noexcept {
 #if defined(_WIN32)
     const ComInitialization com;
     if (!com.can_use_com()) {
@@ -297,8 +703,7 @@ class ComInitialization final {
 
     ComPtr<IWICBitmapDecoder> decoder;
     if (FAILED(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
-                                                  WICDecodeMetadataCacheOnLoad,
-                                                  decoder.put()))) {
+                                                  WICDecodeMetadataCacheOnLoad, decoder.put()))) {
         return std::nullopt;
     }
 
@@ -413,8 +818,8 @@ class ToolbarTexture final {
     }
 
     [[nodiscard]] ImTextureRef texture_ref() const noexcept {
-        return ImTextureRef{to_imgui_texture_id<ImTextureID>(
-            static_cast<std::uintptr_t>(texture_))};
+        return ImTextureRef{
+            to_imgui_texture_id<ImTextureID>(static_cast<std::uintptr_t>(texture_))};
     }
 
   private:
@@ -640,6 +1045,7 @@ void build_main_menu(GLFWwindow *window, ViewerState &state, const ViewerScene &
         ImGui::MenuItem("3D View", nullptr, &state.show_3d_view);
         ImGui::MenuItem("Scene Hierarchy", nullptr, &state.show_scene_hierarchy);
         ImGui::MenuItem("Model Information", nullptr, &state.show_model_information);
+        ImGui::MenuItem("Rendering", nullptr, &state.show_rendering_panel);
         ImGui::MenuItem("Selection", nullptr, &state.show_selection_panel);
         ImGui::MenuItem("Measurement", nullptr, &state.show_measurement_panel);
         ImGui::MenuItem("Clipping", nullptr, &state.show_clipping_panel);
@@ -669,8 +1075,7 @@ void build_main_menu(GLFWwindow *window, ViewerState &state, const ViewerScene &
         commands.flip_section_side = ImGui::MenuItem("Flip Section Side");
         ImGui::EndDisabled();
         ImGui::BeginDisabled(clipping.box_count >= elf3d::maximum_clipping_boxes);
-        commands.add_clipping_box_from_bounds =
-            ImGui::MenuItem("Add Box from Visible Bounds");
+        commands.add_clipping_box_from_bounds = ImGui::MenuItem("Add Box from Visible Bounds");
         ImGui::EndDisabled();
         commands.clear_clipping = ImGui::MenuItem("Clear Clipping");
         commands.toggle_clipping_helpers =
@@ -752,84 +1157,121 @@ void build_main_menu(GLFWwindow *window, ViewerState &state, const ViewerScene &
 }
 
 void tooltip(const char *text) {
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip)) {
         ImGui::SetTooltip("%s", text);
     }
 }
 
-bool toolbar_button(const ToolbarIcons &icons, ToolbarIcon icon, const char *id,
-                    const char *tooltip_text, float icon_size, bool active = false) {
-    const ToolbarTexture &texture = icons.at(icon);
-    const ImVec2 image_size{icon_size, icon_size};
-    const ImVec2 fallback_size{icon_size + 4.0F, icon_size + 4.0F};
-    const ImVec4 transparent{0.0F, 0.0F, 0.0F, 0.0F};
-    const ImVec4 hover{0.79F, 0.89F, 0.89F, 0.85F};
-    const ImVec4 selected{0.75F, 1.00F, 1.00F, 0.90F};
+constexpr float toolbar_button_frame_padding = 3.0F;
+constexpr float toolbar_button_vertical_margin = 7.0F;
+constexpr float toolbar_button_visual_center_offset = -0.5F;
 
-    ImGui::PushID(id);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{2.0F, 2.0F});
-    ImGui::PushStyleColor(ImGuiCol_Button, active ? selected : transparent);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, selected);
-    const bool pressed =
-        texture.is_valid()
-            ? ImGui::ImageButton("image", texture.texture_ref(), image_size, ImVec2{0.0F, 0.0F},
-                                 ImVec2{1.0F, 1.0F}, transparent)
-            : ImGui::Button("##missing-icon", fallback_size);
-    tooltip(tooltip_text);
-    ImGui::PopStyleColor(3);
-    ImGui::PopStyleVar();
-    ImGui::PopID();
-    return pressed;
+struct ToolbarButtonPalette {
+    ImVec4 button;
+    ImVec4 hovered;
+    ImVec4 active;
+};
+
+[[nodiscard]] ToolbarButtonPalette toolbar_button_palette(bool enabled, bool selected) noexcept {
+    if (!enabled) {
+        return ToolbarButtonPalette{
+            ImVec4{0.70F, 0.76F, 0.76F, 0.30F},
+            ImVec4{0.70F, 0.76F, 0.76F, 0.30F},
+            ImVec4{0.70F, 0.76F, 0.76F, 0.30F},
+        };
+    }
+
+    if (selected) {
+        return ToolbarButtonPalette{
+            ImVec4{0.75F, 1.00F, 1.00F, 0.95F},
+            ImVec4{0.84F, 0.96F, 0.96F, 1.00F},
+            ImVec4{0.66F, 0.90F, 0.94F, 1.00F},
+        };
+    }
+
+    return ToolbarButtonPalette{
+        ImVec4{0.76F, 0.84F, 0.84F, 0.48F},
+        ImVec4{0.84F, 0.94F, 0.94F, 0.90F},
+        ImVec4{0.70F, 0.90F, 0.93F, 1.00F},
+    };
 }
 
-void toolbar_separator() {
-    ImGui::SameLine();
-    ImGui::Dummy(ImVec2{2.0F, 1.0F});
-    ImGui::SameLine();
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine();
-    ImGui::Dummy(ImVec2{2.0F, 1.0F});
-    ImGui::SameLine();
+bool toolbar_button(const ToolbarIcons &icons, ToolbarIcon icon, const char *id,
+                    const char *tooltip_text, float icon_size, bool active = false,
+                    bool enabled = true) {
+    const ToolbarTexture &texture = icons.at(icon);
+    const ImVec2 image_size{icon_size, icon_size};
+    const ImVec2 fallback_size{icon_size + 6.0F, icon_size + 6.0F};
+    const ImVec4 transparent{0.0F, 0.0F, 0.0F, 0.0F};
+    const ToolbarButtonPalette palette = toolbar_button_palette(enabled, active);
+
+    ImGui::PushID(id);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2{toolbar_button_frame_padding, toolbar_button_frame_padding});
+    ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
+    ImGui::PushStyleColor(ImGuiCol_Button, palette.button);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.hovered);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.active);
+    if (!enabled) {
+        ImGui::BeginDisabled();
+    }
+    const bool pressed =
+        texture.is_valid() ? ImGui::ImageButton("image", texture.texture_ref(), image_size,
+                                                ImVec2{0.0F, 0.0F}, ImVec2{1.0F, 1.0F}, transparent)
+                           : ImGui::Button("?", fallback_size);
+    if (!enabled) {
+        ImGui::EndDisabled();
+    }
+    tooltip(tooltip_text);
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(2);
+    ImGui::PopID();
+    return enabled && pressed;
+}
+
+void toolbar_group_gap() {
+    ImGui::SameLine(0.0F, ImGui::GetStyle().ItemSpacing.x + 10.0F);
 }
 
 void build_toolbar(ViewerState &state, const ToolbarIcons &icons, const ViewerScene &scene,
                    elf3d::Viewport &engine_viewport, ViewerCommands &commands) {
     const ImGuiViewport *viewport = ImGui::GetMainViewport();
-    state.toolbar_height = std::max(ImGui::GetFrameHeight() * 1.5F, state.main_menu_height * 1.6F);
-    const float icon_size = state.toolbar_height * 30.0F / 55.0F;
+    const float base_toolbar_height =
+        std::max(ImGui::GetFrameHeight() * 1.5F, state.main_menu_height * 1.6F);
+    const float icon_size = base_toolbar_height * 45.0F / 55.0F;
+    const float button_size = icon_size + 2.0F * toolbar_button_frame_padding;
+    state.toolbar_height =
+        std::max(base_toolbar_height, button_size + 2.0F * toolbar_button_vertical_margin);
     ImGui::SetNextWindowPos(ImVec2{viewport->Pos.x, viewport->Pos.y + state.main_menu_height});
     ImGui::SetNextWindowSize(ImVec2{viewport->Size.x, state.toolbar_height});
     ImGui::SetNextWindowViewport(viewport->ID);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking |
                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                        ImGuiWindowFlags_NoScrollbar;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{6.0F, 3.0F});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{6.0F, 0.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{3.0F, 0.0F});
     if (ImGui::Begin("##Elf3DToolbar", nullptr, flags)) {
+        ImGui::SetCursorPosY((state.toolbar_height - button_size) * 0.5F +
+                             toolbar_button_visual_center_offset);
         if (toolbar_button(icons, ToolbarIcon::open, "open", "Open glTF or GLB", icon_size)) {
             state.request_open_modal = true;
         }
         ImGui::SameLine();
-        ImGui::BeginDisabled(!scene.is_imported());
-        if (toolbar_button(icons, ToolbarIcon::reload, "reload", "Reload current model",
-                           icon_size)) {
+        if (toolbar_button(icons, ToolbarIcon::reload, "reload", "Reload current model", icon_size,
+                           false, scene.is_imported())) {
             commands.reload = true;
         }
-        ImGui::EndDisabled();
-        toolbar_separator();
-        ImGui::BeginDisabled(!has_nonzero_extent(state.view_dimensions));
+        toolbar_group_gap();
         if (toolbar_button(icons, ToolbarIcon::fit_view, "fit-view", "Fit visible content",
-                           icon_size)) {
+                           icon_size, false, has_nonzero_extent(state.view_dimensions))) {
             commands.fit_to_scene = true;
         }
         ImGui::SameLine();
         if (toolbar_button(icons, ToolbarIcon::reset_camera, "reset-camera", "Reset camera",
-                           icon_size)) {
+                           icon_size, false, has_nonzero_extent(state.view_dimensions))) {
             commands.reset_view = true;
         }
-        ImGui::EndDisabled();
-        toolbar_separator();
+        toolbar_group_gap();
         const elf3d::ViewportTool active_tool = engine_viewport.active_tool();
         if (toolbar_button(icons, ToolbarIcon::select, "select", "Selection tool", icon_size,
                            active_tool == elf3d::ViewportTool::selection)) {
@@ -837,11 +1279,10 @@ void build_toolbar(ViewerState &state, const ToolbarIcons &icons, const ViewerSc
         }
         ImGui::SameLine();
         if (toolbar_button(icons, ToolbarIcon::measure, "measure", "Distance measurement tool",
-                           icon_size,
-                           active_tool == elf3d::ViewportTool::distance_measurement)) {
+                           icon_size, active_tool == elf3d::ViewportTool::distance_measurement)) {
             commands.measure_tool = true;
         }
-        toolbar_separator();
+        toolbar_group_gap();
         if (toolbar_button(icons, ToolbarIcon::clipping_panel, "clipping-panel", "Clipping panel",
                            icon_size)) {
             commands.show_clipping_panel = true;
@@ -858,33 +1299,32 @@ void build_toolbar(ViewerState &state, const ToolbarIcons &icons, const ViewerSc
             commands.add_clipping_box_from_bounds = true;
         }
         ImGui::SameLine();
-        if (toolbar_button(icons, ToolbarIcon::clear_clipping, "clear-clipping",
-                           "Clear clipping", icon_size)) {
+        if (toolbar_button(icons, ToolbarIcon::clear_clipping, "clear-clipping", "Clear clipping",
+                           icon_size)) {
             commands.clear_clipping = true;
         }
-        toolbar_separator();
-        ImGui::BeginDisabled(!engine_viewport.has_selection());
+        toolbar_group_gap();
+        const bool has_selection = engine_viewport.has_selection();
         if (toolbar_button(icons, ToolbarIcon::hide_selected, "hide-selected",
-                           "Hide selected entity", icon_size)) {
+                           "Hide selected entity", icon_size, false, has_selection)) {
             commands.hide_selected = true;
         }
         ImGui::SameLine();
         if (toolbar_button(icons, ToolbarIcon::show_selected, "show-selected",
-                           "Show selected entity", icon_size)) {
+                           "Show selected entity", icon_size, false, has_selection)) {
             commands.show_selected = true;
         }
         ImGui::SameLine();
         if (toolbar_button(icons, ToolbarIcon::isolate_selected, "isolate-selected",
-                           "Isolate selected entity", icon_size)) {
+                           "Isolate selected entity", icon_size, false, has_selection)) {
             commands.isolate_selected = true;
         }
-        ImGui::EndDisabled();
         ImGui::SameLine();
         if (toolbar_button(icons, ToolbarIcon::show_all, "show-all", "Show all entities",
                            icon_size)) {
             commands.show_all = true;
         }
-        toolbar_separator();
+        toolbar_group_gap();
         if (toolbar_button(icons, ToolbarIcon::reset_layout, "reset-layout", "Reset dock layout",
                            icon_size)) {
             state.reset_dock_layout = true;
@@ -907,14 +1347,16 @@ struct DockLayoutNodes {
     ImGui::DockBuilderSetNodeSize(dockspace_id, dockspace_size);
 
     ImGuiID center = dockspace_id;
-    ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.19F, nullptr, &center);
+    ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, side_dock_width_fraction,
+                                                nullptr, &center);
     ImGuiID right_bottom =
-        ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.197F, nullptr, &right);
+        ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.28F, nullptr, &right);
 
     ImGui::DockBuilderDockWindow("3D View", center);
+    ImGui::DockBuilderDockWindow("Model Information", center);
     ImGui::DockBuilderDockWindow("Scene Hierarchy", right);
     ImGui::DockBuilderDockWindow("Selection", right);
-    ImGui::DockBuilderDockWindow("Model Information", right_bottom);
+    ImGui::DockBuilderDockWindow("Rendering", right_bottom);
     ImGui::DockBuilderDockWindow("Measurement", right_bottom);
     ImGui::DockBuilderDockWindow("Clipping", right_bottom);
     ImGui::DockBuilderDockWindow("Navigation Settings", right_bottom);
@@ -925,6 +1367,61 @@ struct DockLayoutNodes {
 void set_default_dock(ImGuiID dock_id, bool force) {
     if (dock_id != 0) {
         ImGui::SetNextWindowDockID(dock_id, force ? ImGuiCond_Always : ImGuiCond_FirstUseEver);
+    }
+}
+
+void draw_compact_tab_close_buttons(ImGuiDockNode *node) {
+    if (node == nullptr) {
+        return;
+    }
+    draw_compact_tab_close_buttons(node->ChildNodes[0]);
+    draw_compact_tab_close_buttons(node->ChildNodes[1]);
+
+    ImGuiTabBar *tab_bar = node->TabBar;
+    if (tab_bar == nullptr || node->HostWindow == nullptr) {
+        return;
+    }
+
+    ImDrawList *draw_list = node->HostWindow->DrawList;
+    const float button_size = ImGui::GetFontSize();
+    const ImVec2 frame_padding = tab_bar->FramePadding;
+    for (int index = 0; index < tab_bar->Tabs.Size; ++index) {
+        const ImGuiTabItem &tab = tab_bar->Tabs[index];
+        if (tab.Window == nullptr || !tab.Window->HasCloseButton || tab.Width <= 0.0F) {
+            continue;
+        }
+
+        const ImRect tab_rect{
+            ImVec2{tab_bar->BarRect.Min.x + tab.Offset, tab_bar->BarRect.Min.y},
+            ImVec2{tab_bar->BarRect.Min.x + tab.Offset + tab.Width, tab_bar->BarRect.Max.y}};
+        const bool tab_hovered = ImGui::IsMouseHoveringRect(tab_rect.Min, tab_rect.Max);
+        const bool tab_selected = tab.ID == tab_bar->SelectedTabId;
+        if (!tab_selected && !tab_hovered) {
+            continue;
+        }
+
+        const ImVec2 button_pos{
+            std::max(tab_rect.Min.x, tab_rect.Max.x - frame_padding.x - button_size),
+            tab_rect.Min.y + frame_padding.y};
+        const ImRect button_rect{
+            button_pos, ImVec2{button_pos.x + button_size, button_pos.y + button_size}};
+        const bool button_hovered =
+            ImGui::IsMouseHoveringRect(button_rect.Min, button_rect.Max, false);
+        const ImU32 background =
+            button_hovered
+                ? ImGui::GetColorU32(ImGuiCol_ButtonHovered)
+                : ImGui::GetColorU32(tab_selected ? ImGuiCol_TabActive : ImGuiCol_Tab);
+        draw_list->AddRectFilled(button_rect.Min, button_rect.Max, background);
+
+        const ImVec2 raw_center = button_rect.GetCenter();
+        const ImVec2 center{raw_center.x - 0.5F, raw_center.y - 0.5F};
+        const float extent = button_size * 0.18F;
+        const float thickness = std::max(1.0F, button_size * 0.055F);
+        const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+        draw_list->AddLine(ImVec2{center.x + extent, center.y + extent},
+                           ImVec2{center.x - extent, center.y - extent}, color, thickness);
+        draw_list->AddLine(ImVec2{center.x + extent, center.y - extent},
+                           ImVec2{center.x - extent, center.y + extent}, color, thickness);
     }
 }
 
@@ -957,7 +1454,11 @@ ImGuiID build_main_dockspace(ViewerState &state) {
             state.apply_dock_layout = true;
         }
     }
-    ImGui::DockSpace(dockspace_id, ImVec2{0.0F, 0.0F}, ImGuiDockNodeFlags_None);
+    {
+        const ScopedFont panel_title_font{state.panel_title_font};
+        ImGui::DockSpace(dockspace_id, ImVec2{0.0F, 0.0F}, ImGuiDockNodeFlags_None);
+        draw_compact_tab_close_buttons(ImGui::DockBuilderGetNode(dockspace_id));
+    }
     ImGui::End();
     ImGui::PopStyleVar();
     return dockspace_id;
@@ -1053,8 +1554,7 @@ elf3d::Extent2D content_extent_in_pixels(ImVec2 logical_size) noexcept {
 
 [[nodiscard]] bool valid_box_for_commit(const elf3d::ClippingBox &box) noexcept {
     return finite_float3(box.minimum) && finite_float3(box.maximum) &&
-           box.maximum.x - box.minimum.x > 0.00001F &&
-           box.maximum.y - box.minimum.y > 0.00001F &&
+           box.maximum.x - box.minimum.x > 0.00001F && box.maximum.y - box.minimum.y > 0.00001F &&
            box.maximum.z - box.minimum.z > 0.00001F;
 }
 
@@ -1181,6 +1681,60 @@ void set_viewport_error(ViewerState &state, const elf3d::Error &error) {
     state.framebuffer_valid = false;
 }
 
+void reset_demo_cube_transform(ViewerState &state, ViewerScene &scene) {
+    state.rotation_angle = 0.0F;
+    if (!scene.cube.has_value()) {
+        return;
+    }
+
+    const elf3d::Result<void> reset_result =
+        scene.scene->set_local_transform(scene.cube.value(), elf3d::Transform{});
+    if (!reset_result) {
+        set_viewport_error(state, reset_result.error());
+    }
+}
+
+void update_demo_cube_animation(ViewerState &state, ViewerScene &scene) {
+    if (scene.is_imported() || !state.rotate_cube || !scene.cube.has_value()) {
+        return;
+    }
+
+    state.rotation_angle = std::fmod(
+        state.rotation_angle + state.rotation_speed * ImGui::GetIO().DeltaTime, 6.2831853072F);
+    elf3d::Transform cube_transform;
+    cube_transform.rotation = axis_angle({0.0F, 1.0F, 0.0F}, state.rotation_angle);
+    const elf3d::Result<void> transform_result =
+        scene.scene->set_local_transform(scene.cube.value(), cube_transform);
+    if (!transform_result) {
+        set_viewport_error(state, transform_result.error());
+    }
+}
+
+void apply_demo_cube_color(ViewerState &state, ViewerScene &scene) {
+    if (scene.is_imported() || !scene.cube_material.has_value()) {
+        return;
+    }
+
+    const elf3d::Result<void> material_result = scene.scene->set_material(
+        scene.cube_material.value(),
+        elf3d::MaterialDescription{elf3d::Color4{state.cube_color[0], state.cube_color[1],
+                                                 state.cube_color[2], state.cube_color[3]}});
+    if (!material_result) {
+        set_viewport_error(state, material_result.error());
+    }
+}
+
+bool color_control(const char *label, std::array<float, 4> &rgba) {
+    ImGui::PushID(label);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(std::max(72.0F, ImGui::GetContentRegionAvail().x));
+    const bool changed = ImGui::ColorEdit4("##value", rgba.data(), ImGuiColorEditFlags_NoInputs);
+    ImGui::PopID();
+    return changed;
+}
+
 void draw_measurement_label(ViewerState &state, elf3d::Viewport &engine_viewport,
                             const ViewerScene &scene, ImVec2 image_min, ImVec2 area_size) {
     const elf3d::DistanceMeasurementSnapshot measurement =
@@ -1229,6 +1783,25 @@ void draw_measurement_label(ViewerState &state, elf3d::Viewport &engine_viewport
                        label.c_str());
 }
 
+void draw_viewport_error_overlay(const std::string &error, ImVec2 image_min, ImVec2 area_size) {
+    if (error.empty() || area_size.x < 48.0F || area_size.y < 32.0F) {
+        return;
+    }
+
+    const std::string message = std::string{"Viewport error: "} + error;
+    const float wrap_width = std::max(96.0F, std::min(area_size.x - 24.0F, 520.0F));
+    const ImVec2 text_size = ImGui::CalcTextSize(message.c_str(), nullptr, false, wrap_width);
+    const ImVec2 overlay_min{image_min.x + 8.0F, image_min.y + 8.0F};
+    const ImVec2 overlay_max{overlay_min.x + text_size.x + 14.0F,
+                             overlay_min.y + text_size.y + 10.0F};
+    ImDrawList *draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddRectFilled(overlay_min, overlay_max, IM_COL32(24, 30, 34, 218), 3.0F);
+    draw_list->AddRect(overlay_min, overlay_max, IM_COL32(255, 255, 255, 110), 3.0F);
+    draw_list->AddText(ImGui::GetFont(), ImGui::GetFontSize(),
+                       ImVec2{overlay_min.x + 7.0F, overlay_min.y + 5.0F},
+                       IM_COL32(255, 255, 255, 255), message.c_str(), nullptr, wrap_width);
+}
+
 void build_3d_view(ImGuiID dockspace_id, ViewerState &state, elf3d::Engine &engine,
                    elf3d::Viewport &engine_viewport, ViewerScene &active_scene) {
     if (!state.show_3d_view) {
@@ -1245,61 +1818,14 @@ void build_3d_view(ImGuiID dockspace_id, ViewerState &state, elf3d::Engine &engi
 
     set_default_dock(state.dock_center_id != 0 ? state.dock_center_id : dockspace_id,
                      state.apply_dock_layout);
+    constexpr ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.94F, 0.94F, 0.94F, 1.0F});
-    const bool is_visible = ImGui::Begin("3D View", &state.show_3d_view);
-    ImGui::PopStyleColor();
+    const bool is_visible =
+        begin_panel_window("3D View", &state.show_3d_view, state.panel_title_font, flags);
 
     if (is_visible) {
-        state.viewport_error.clear();
-        if (!active_scene.is_imported()) {
-            ImGui::Checkbox("Rotate cube", &state.rotate_cube);
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(130.0F);
-            ImGui::SliderFloat("Speed", &state.rotation_speed, 0.0F, 3.0F, "%.2f rad/s");
-            ImGui::SameLine();
-            if (ImGui::Button("Reset cube transform") && active_scene.cube.has_value()) {
-                state.rotation_angle = 0.0F;
-                const elf3d::Result<void> reset_result = active_scene.scene->set_local_transform(
-                    active_scene.cube.value(), elf3d::Transform{});
-                if (!reset_result) {
-                    set_viewport_error(state, reset_result.error());
-                }
-            }
-            if (state.rotate_cube && active_scene.cube.has_value()) {
-                state.rotation_angle = std::fmod(
-                    state.rotation_angle + state.rotation_speed * ImGui::GetIO().DeltaTime,
-                    6.2831853072F);
-                elf3d::Transform cube_transform;
-                cube_transform.rotation = axis_angle({0.0F, 1.0F, 0.0F}, state.rotation_angle);
-                const elf3d::Result<void> transform_result =
-                    active_scene.scene->set_local_transform(active_scene.cube.value(),
-                                                            cube_transform);
-                if (!transform_result) {
-                    set_viewport_error(state, transform_result.error());
-                }
-            }
-        } else {
-            ImGui::TextUnformatted(path_to_utf8(active_scene.source_path).c_str());
-        }
-
-        ImGui::SetNextItemWidth(220.0F);
-        ImGui::ColorEdit4("Clear color", state.clear_color.data(), ImGuiColorEditFlags_NoInputs);
-        if (!active_scene.is_imported() && active_scene.cube_material.has_value()) {
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(220.0F);
-            if (ImGui::ColorEdit4("Cube base color", state.cube_color.data(),
-                                  ImGuiColorEditFlags_NoInputs)) {
-                const elf3d::Result<void> material_result = active_scene.scene->set_material(
-                    active_scene.cube_material.value(),
-                    elf3d::MaterialDescription{
-                        elf3d::Color4{state.cube_color[0], state.cube_color[1], state.cube_color[2],
-                                      state.cube_color[3]}});
-                if (!material_result) {
-                    set_viewport_error(state, material_result.error());
-                }
-            }
-        }
-
         const ImVec2 area_size = ImGui::GetContentRegionAvail();
         state.view_dimensions = content_extent_in_pixels(area_size);
         const bool has_view_area =
@@ -1388,7 +1914,7 @@ void build_3d_view(ImGuiID dockspace_id, ViewerState &state, elf3d::Engine &engi
             }
         }
         if (!state.viewport_error.empty()) {
-            ImGui::TextWrapped("Viewport error: %s", state.viewport_error.c_str());
+            draw_viewport_error_overlay(state.viewport_error, image_min, area_size);
         }
     } else {
         state.view_dimensions = {};
@@ -1401,15 +1927,20 @@ void build_3d_view(ImGuiID dockspace_id, ViewerState &state, elf3d::Engine &engi
         }
     }
     ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
 }
 
 void build_model_information(ImGuiID dockspace_id, ViewerState &state, const ViewerScene &scene) {
     if (!state.show_model_information) {
         return;
     }
-    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
+    set_default_dock(state.dock_center_id != 0 ? state.dock_center_id : dockspace_id,
                      state.apply_dock_layout);
-    if (ImGui::Begin("Model Information", &state.show_model_information)) {
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{1.0F, 1.0F, 1.0F, 1.0F});
+    if (begin_panel_window("Model Information", &state.show_model_information,
+                           state.panel_title_font)) {
+        const ScopedFont panel_font{state.panel_content_font};
         const std::string source =
             scene.is_imported() ? path_to_utf8(scene.source_path) : "Procedural cube demo";
         const std::string extension = scene.source_path.extension().string();
@@ -1479,8 +2010,40 @@ void build_model_information(ImGuiID dockspace_id, ViewerState &state, const Vie
         ImGui::TextUnformatted("Image formats: PNG, JPEG");
         ImGui::TextWrapped("PBR: one directional light, no IBL, shadows, normal maps, emissive, "
                            "occlusion, alpha mask, or alpha blend. Materials are opaque.");
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+}
 
-        if (ImGui::CollapsingHeader("Rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
+void build_rendering_panel(ImGuiID dockspace_id, ViewerState &state, ViewerScene &scene) {
+    if (!state.show_rendering_panel) {
+        return;
+    }
+    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
+                     state.apply_dock_layout);
+    if (begin_panel_window("Rendering", &state.show_rendering_panel, state.panel_title_font)) {
+        const ScopedFont panel_font{state.panel_content_font};
+        ImGui::TextUnformatted("Viewport");
+        color_control("Clear color", state.clear_color);
+
+        if (!scene.is_imported() && scene.cube.has_value()) {
+            ImGui::Separator();
+            ImGui::TextUnformatted("Demo Cube");
+            ImGui::Checkbox("Rotate cube", &state.rotate_cube);
+            const float speed_label_width =
+                ImGui::CalcTextSize("Speed").x + ImGui::GetStyle().ItemInnerSpacing.x;
+            ImGui::SetNextItemWidth(
+                std::max(80.0F, ImGui::GetContentRegionAvail().x - speed_label_width));
+            ImGui::SliderFloat("Speed##CubeSpeed", &state.rotation_speed, 0.0F, 3.0F, "%.2f rad/s");
+            if (ImGui::Button("Reset transform")) {
+                reset_demo_cube_transform(state, scene);
+            }
+            if (color_control("Cube base color", state.cube_color)) {
+                apply_demo_cube_color(state, scene);
+            }
+        }
+
+        if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
             std::array<float, 3> direction{state.lighting.direction.x, state.lighting.direction.y,
                                            state.lighting.direction.z};
             if (ImGui::DragFloat3("Light direction", direction.data(), 0.01F, -1.0F, 1.0F)) {
@@ -1523,7 +2086,9 @@ void build_navigation_settings_window(ImGuiID dockspace_id, ViewerState &state,
     }
     set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
                      state.apply_dock_layout);
-    if (ImGui::Begin("Navigation Settings", &state.show_navigation_settings)) {
+    if (begin_panel_window("Navigation Settings", &state.show_navigation_settings,
+                           state.panel_title_font)) {
+        const ScopedFont panel_font{state.panel_content_font};
         bool enabled = engine_viewport.navigation_enabled();
         if (ImGui::Checkbox("Enable Navigation", &enabled)) {
             engine_viewport.set_navigation_enabled(enabled);
@@ -1586,7 +2151,8 @@ void build_selection_panel(ImGuiID dockspace_id, ViewerState &state, const Viewe
     }
     set_default_dock(state.dock_right_id != 0 ? state.dock_right_id : dockspace_id,
                      state.apply_dock_layout);
-    if (ImGui::Begin("Selection", &state.show_selection_panel)) {
+    if (begin_panel_window("Selection", &state.show_selection_panel, state.panel_title_font)) {
+        const ScopedFont panel_font{state.panel_content_font};
         bool enabled = engine_viewport.selection_enabled();
         if (ImGui::Checkbox("Enable Selection", &enabled)) {
             engine_viewport.set_selection_enabled(enabled);
@@ -1707,7 +2273,8 @@ void build_measurement_panel(ImGuiID dockspace_id, ViewerState &state, const Vie
     }
     set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
                      state.apply_dock_layout);
-    if (ImGui::Begin("Measurement", &state.show_measurement_panel)) {
+    if (begin_panel_window("Measurement", &state.show_measurement_panel, state.panel_title_font)) {
+        const ScopedFont panel_font{state.panel_content_font};
         const elf3d::ViewportTool active_tool = engine_viewport.active_tool();
         ImGui::Text("Active tool: %s", tool_name(active_tool));
         if (ImGui::RadioButton("Select", active_tool == elf3d::ViewportTool::selection)) {
@@ -1840,7 +2407,8 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerState &state, const Viewer
     }
     set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
                      state.apply_dock_layout);
-    if (ImGui::Begin("Clipping", &state.show_clipping_panel)) {
+    if (begin_panel_window("Clipping", &state.show_clipping_panel, state.panel_title_font)) {
+        const ScopedFont panel_font{state.panel_content_font};
         elf3d::ClippingSnapshot snapshot = engine_viewport.clipping_snapshot();
         const elf3d::Result<elf3d::Bounds3> visible_bounds =
             engine_viewport.visible_bounds(*scene.scene);
@@ -1852,8 +2420,7 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerState &state, const Viewer
             bool changed = false;
             changed |= ImGui::Checkbox("Enabled##SectionPlane", &plane.enabled);
             std::array<float, 3> point{plane.point.x, plane.point.y, plane.point.z};
-            if (ImGui::DragFloat3("Point", point.data(), 0.05F, -100000.0F, 100000.0F,
-                                  "%.4g")) {
+            if (ImGui::DragFloat3("Point", point.data(), 0.05F, -100000.0F, 100000.0F, "%.4g")) {
                 plane.point = {point[0], point[1], point[2]};
                 changed = true;
             }
@@ -1981,9 +2548,10 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerState &state, const Viewer
             std::array<float, 4> plane_color{
                 helpers.section_plane_color.red, helpers.section_plane_color.green,
                 helpers.section_plane_color.blue, helpers.section_plane_color.alpha};
-            if (ImGui::ColorEdit4("Plane color", plane_color.data(), ImGuiColorEditFlags_NoInputs)) {
-                helpers.section_plane_color =
-                    {plane_color[0], plane_color[1], plane_color[2], plane_color[3]};
+            if (ImGui::ColorEdit4("Plane color", plane_color.data(),
+                                  ImGuiColorEditFlags_NoInputs)) {
+                helpers.section_plane_color = {plane_color[0], plane_color[1], plane_color[2],
+                                               plane_color[3]};
                 helper_changed = true;
             }
             std::array<float, 4> box_color{helpers.box_color.red, helpers.box_color.green,
@@ -2080,6 +2648,7 @@ void apply_hierarchy_error(ViewerState &state, const elf3d::Result<void> &result
 void build_hierarchy_row_context(ViewerState &state, ViewerScene &scene,
                                  elf3d::Viewport &engine_viewport,
                                  const elf3d::SceneHierarchyItem &item) {
+    const ScopedFont default_font{ImGui::GetDefaultFont()};
     if (!ImGui::BeginPopupContextItem()) {
         return;
     }
@@ -2117,166 +2686,176 @@ void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerState &state, Viewe
     }
     set_default_dock(state.dock_right_id != 0 ? state.dock_right_id : dockspace_id,
                      state.apply_dock_layout);
-    const bool scene_panel_open = ImGui::Begin("Scene Hierarchy", &state.show_scene_hierarchy);
+    const bool scene_panel_open =
+        begin_panel_window("Scene Hierarchy", &state.show_scene_hierarchy, state.panel_title_font);
     if (!scene_panel_open) {
         ImGui::End();
         return;
     }
     if (!refresh_hierarchy_snapshot(state, scene)) {
-        ImGui::TextWrapped("Hierarchy unavailable: %s", state.viewport_error.c_str());
+        {
+            const ScopedFont panel_font{state.panel_content_font};
+            ImGui::TextWrapped("Hierarchy unavailable: %s", state.viewport_error.c_str());
+        }
         ImGui::End();
         return;
     }
 
-    const elf3d::SceneHierarchyStatistics hierarchy = scene.scene->hierarchy_statistics();
-    ImGui::Text("Entities: %llu  Roots: %llu  Hidden: %llu / %llu",
-                static_cast<unsigned long long>(hierarchy.entities),
-                static_cast<unsigned long long>(hierarchy.root_entities),
-                static_cast<unsigned long long>(hierarchy.effectively_hidden_entities),
-                static_cast<unsigned long long>(hierarchy.entities));
+    {
+        const ScopedFont panel_font{state.panel_content_font};
 
-    const std::optional<elf3d::EntityId> isolated = engine_viewport.isolated_entity();
-    if (isolated.has_value()) {
-        const std::string label = entity_label(scene, isolated.value());
-        ImGui::Text("Isolation: %s", label.c_str());
+        const elf3d::SceneHierarchyStatistics hierarchy = scene.scene->hierarchy_statistics();
+        ImGui::Text("Entities: %llu  Roots: %llu  Hidden: %llu / %llu",
+                    static_cast<unsigned long long>(hierarchy.entities),
+                    static_cast<unsigned long long>(hierarchy.root_entities),
+                    static_cast<unsigned long long>(hierarchy.effectively_hidden_entities),
+                    static_cast<unsigned long long>(hierarchy.entities));
+
+        const std::optional<elf3d::EntityId> isolated = engine_viewport.isolated_entity();
+        if (isolated.has_value()) {
+            const std::string label = entity_label(scene, isolated.value());
+            ImGui::Text("Isolation: %s", label.c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Exit Isolation")) {
+                engine_viewport.clear_isolation();
+            }
+        } else {
+            ImGui::TextUnformatted("Isolation: none");
+        }
+
+        const bool has_selection = engine_viewport.has_selection();
+        ImGui::BeginDisabled(!has_selection);
+        if (ImGui::SmallButton("Hide Selected")) {
+            apply_hierarchy_error(state, engine_viewport.hide_selected(*scene.scene));
+            invalidate_hierarchy_snapshot(scene);
+        }
         ImGui::SameLine();
-        if (ImGui::SmallButton("Exit Isolation")) {
-            engine_viewport.clear_isolation();
+        if (ImGui::SmallButton("Show Selected")) {
+            apply_hierarchy_error(state, engine_viewport.show_selected(*scene.scene));
+            invalidate_hierarchy_snapshot(scene);
         }
-    } else {
-        ImGui::TextUnformatted("Isolation: none");
-    }
-
-    const bool has_selection = engine_viewport.has_selection();
-    ImGui::BeginDisabled(!has_selection);
-    if (ImGui::SmallButton("Hide Selected")) {
-        apply_hierarchy_error(state, engine_viewport.hide_selected(*scene.scene));
-        invalidate_hierarchy_snapshot(scene);
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Show Selected")) {
-        apply_hierarchy_error(state, engine_viewport.show_selected(*scene.scene));
-        invalidate_hierarchy_snapshot(scene);
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Isolate Selected")) {
-        apply_hierarchy_error(state, engine_viewport.isolate_selected(*scene.scene));
-    }
-    ImGui::EndDisabled();
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Show All")) {
-        const elf3d::Result<void> result = scene.scene->show_all_entities();
-        if (!result) {
-            set_viewport_error(state, result.error());
-        }
-        invalidate_hierarchy_snapshot(scene);
-    }
-
-    std::vector<elf3d::SceneHierarchyItem> items;
-    std::vector<std::string> names;
-    items.reserve(scene.hierarchy_snapshot.size());
-    names.reserve(scene.hierarchy_snapshot.size());
-    for (std::size_t index = 0; index < scene.hierarchy_snapshot.size(); ++index) {
-        const elf3d::Result<elf3d::SceneHierarchyItem> item = scene.hierarchy_snapshot.item(index);
-        const elf3d::Result<std::string_view> name = scene.hierarchy_snapshot.name(index);
-        if (!item || !name) {
-            continue;
-        }
-        items.push_back(item.value());
-        names.emplace_back(name.value());
-    }
-
-    std::optional<std::size_t> selected_index;
-    const std::vector<bool> ancestors =
-        selected_hierarchy_ancestors(items, engine_viewport.selected_entity(), selected_index);
-    if (!engine_viewport.selected_entity().has_value()) {
-        state.last_revealed_hierarchy_selection.reset();
-    }
-    const bool should_reveal =
-        engine_viewport.selected_entity().has_value() &&
-        state.last_revealed_hierarchy_selection != engine_viewport.selected_entity();
-
-    ImGui::Separator();
-    int open_depth = 0;
-    for (std::size_t index = 0; index < items.size();) {
-        const elf3d::SceneHierarchyItem &item = items[index];
-        while (open_depth > static_cast<int>(item.depth)) {
-            ImGui::TreePop();
-            --open_depth;
-        }
-
-        std::string label = names[index].empty() ? entity_label(scene, item.entity) : names[index];
-        if (item.has_camera) {
-            label += " [camera]";
-        } else if (item.renderable) {
-            label += " [model]";
-        }
-
-        ImGuiTreeNodeFlags flags =
-            ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-        if (item.child_count == 0) {
-            flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-        }
-        if (engine_viewport.selected_entity() == item.entity) {
-            flags |= ImGuiTreeNodeFlags_Selected;
-        }
-        if (ancestors[index]) {
-            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
-        }
-
-        const std::string id = std::to_string(item.entity.debug_value());
-        ImGui::PushID(id.c_str());
-        const bool open = ImGui::TreeNodeEx("##entity", flags, "%s", label.c_str());
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen()) {
-            apply_hierarchy_error(state,
-                                  engine_viewport.set_selected_entity(*scene.scene, item.entity));
-        }
-        if (should_reveal && selected_index.has_value() && selected_index.value() == index) {
-            ImGui::SetScrollHereY(0.5F);
-            state.last_revealed_hierarchy_selection = item.entity;
-        }
-        build_hierarchy_row_context(state, scene, engine_viewport, item);
-
         ImGui::SameLine();
-        if (ImGui::SmallButton(item.local_visible ? "Hide##visible" : "Show##visible")) {
-            const elf3d::Result<void> result =
-                scene.scene->set_entity_visible(item.entity, !item.local_visible);
+        if (ImGui::SmallButton("Isolate Selected")) {
+            apply_hierarchy_error(state, engine_viewport.isolate_selected(*scene.scene));
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Show All")) {
+            const elf3d::Result<void> result = scene.scene->show_all_entities();
             if (!result) {
                 set_viewport_error(state, result.error());
             }
             invalidate_hierarchy_snapshot(scene);
         }
-        if (!item.local_visible) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("local hidden");
-        } else if (!item.effective_visible) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("inherited hidden");
-        }
-        if (isolated.has_value() && isolated.value() == item.entity) {
-            ImGui::SameLine();
-            ImGui::TextUnformatted("isolated");
-        }
-        ImGui::PopID();
 
-        if (item.child_count != 0 && open) {
-            ++open_depth;
-            ++index;
-            continue;
-        }
-        if (item.child_count != 0 && !open) {
-            const std::uint32_t closed_depth = item.depth;
-            ++index;
-            while (index < items.size() && items[index].depth > closed_depth) {
-                ++index;
+        std::vector<elf3d::SceneHierarchyItem> items;
+        std::vector<std::string> names;
+        items.reserve(scene.hierarchy_snapshot.size());
+        names.reserve(scene.hierarchy_snapshot.size());
+        for (std::size_t index = 0; index < scene.hierarchy_snapshot.size(); ++index) {
+            const elf3d::Result<elf3d::SceneHierarchyItem> item =
+                scene.hierarchy_snapshot.item(index);
+            const elf3d::Result<std::string_view> name = scene.hierarchy_snapshot.name(index);
+            if (!item || !name) {
+                continue;
             }
-            continue;
+            items.push_back(item.value());
+            names.emplace_back(name.value());
         }
-        ++index;
-    }
-    while (open_depth > 0) {
-        ImGui::TreePop();
-        --open_depth;
+
+        std::optional<std::size_t> selected_index;
+        const std::vector<bool> ancestors =
+            selected_hierarchy_ancestors(items, engine_viewport.selected_entity(), selected_index);
+        if (!engine_viewport.selected_entity().has_value()) {
+            state.last_revealed_hierarchy_selection.reset();
+        }
+        const bool should_reveal =
+            engine_viewport.selected_entity().has_value() &&
+            state.last_revealed_hierarchy_selection != engine_viewport.selected_entity();
+
+        ImGui::Separator();
+        int open_depth = 0;
+        for (std::size_t index = 0; index < items.size();) {
+            const elf3d::SceneHierarchyItem &item = items[index];
+            while (open_depth > static_cast<int>(item.depth)) {
+                ImGui::TreePop();
+                --open_depth;
+            }
+
+            std::string label =
+                names[index].empty() ? entity_label(scene, item.entity) : names[index];
+            if (item.has_camera) {
+                label += " [camera]";
+            } else if (item.renderable) {
+                label += " [model]";
+            }
+
+            ImGuiTreeNodeFlags flags =
+                ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (item.child_count == 0) {
+                flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+            }
+            if (engine_viewport.selected_entity() == item.entity) {
+                flags |= ImGuiTreeNodeFlags_Selected;
+            }
+            if (ancestors[index]) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+            }
+
+            const std::string id = std::to_string(item.entity.debug_value());
+            ImGui::PushID(id.c_str());
+            const bool open = ImGui::TreeNodeEx("##entity", flags, "%s", label.c_str());
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen()) {
+                apply_hierarchy_error(
+                    state, engine_viewport.set_selected_entity(*scene.scene, item.entity));
+            }
+            if (should_reveal && selected_index.has_value() && selected_index.value() == index) {
+                ImGui::SetScrollHereY(0.5F);
+                state.last_revealed_hierarchy_selection = item.entity;
+            }
+            build_hierarchy_row_context(state, scene, engine_viewport, item);
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton(item.local_visible ? "Hide##visible" : "Show##visible")) {
+                const elf3d::Result<void> result =
+                    scene.scene->set_entity_visible(item.entity, !item.local_visible);
+                if (!result) {
+                    set_viewport_error(state, result.error());
+                }
+                invalidate_hierarchy_snapshot(scene);
+            }
+            if (!item.local_visible) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("local hidden");
+            } else if (!item.effective_visible) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("inherited hidden");
+            }
+            if (isolated.has_value() && isolated.value() == item.entity) {
+                ImGui::SameLine();
+                ImGui::TextUnformatted("isolated");
+            }
+            ImGui::PopID();
+
+            if (item.child_count != 0 && open) {
+                ++open_depth;
+                ++index;
+                continue;
+            }
+            if (item.child_count != 0 && !open) {
+                const std::uint32_t closed_depth = item.depth;
+                ++index;
+                while (index < items.size() && items[index].depth > closed_depth) {
+                    ++index;
+                }
+                continue;
+            }
+            ++index;
+        }
+        while (open_depth > 0) {
+            ImGui::TreePop();
+            --open_depth;
+        }
     }
     ImGui::End();
 }
@@ -2324,26 +2903,375 @@ void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerState &state, Viewe
     }
 }
 
-[[nodiscard]] std::optional<std::string> build_open_modal(ViewerState &state) {
+[[nodiscard]] bool open_browser_icon_button(const char *label, const char *tooltip_text,
+                                            bool enabled = true) {
+    if (!enabled) {
+        ImGui::BeginDisabled();
+    }
+    const float size = ImGui::GetFrameHeight();
+    const bool pressed = ImGui::Button(label, ImVec2{size, size});
+    tooltip(tooltip_text);
+    if (!enabled) {
+        ImGui::EndDisabled();
+    }
+    return enabled && pressed;
+}
+
+[[nodiscard]] std::optional<std::filesystem::path>
+open_browser_file_candidate(const ViewerState &state) {
+    const std::string text{state.open_file_path.data()};
+    if (text.empty()) {
+        return std::nullopt;
+    }
+
+    std::filesystem::path candidate = path_from_utf8(text);
+    if (candidate.is_relative()) {
+        candidate = state.open_browser_directory / candidate;
+    }
+    candidate = absolute_path_no_throw(candidate);
+
+    std::error_code error;
+    if (!supported_model_path(candidate) || !std::filesystem::is_regular_file(candidate, error) ||
+        error) {
+        return std::nullopt;
+    }
+    return candidate;
+}
+
+[[nodiscard]] bool open_browser_entry_matches_search(const OpenBrowserEntry &entry,
+                                                     std::string_view search_text) {
+    if (search_text.empty()) {
+        return true;
+    }
+    return lowercase_ascii(entry.label).find(search_text) != std::string::npos;
+}
+
+void build_open_browser_sidebar_item(ViewerState &state, std::string_view icon,
+                                     std::string_view label,
+                                     const std::filesystem::path &directory) {
+    std::error_code error;
+    if (!std::filesystem::is_directory(directory, error) || error) {
+        return;
+    }
+
+    std::string display;
+    display.reserve(icon.size() + label.size() + 2U);
+    display.append(icon);
+    display.push_back(' ');
+    display.append(label);
+
+    const bool selected = same_path_key(directory, state.open_browser_directory);
+    if (ImGui::Selectable(display.c_str(), selected)) {
+        set_open_browser_directory(state, directory);
+    }
+    tooltip(path_to_utf8(directory).c_str());
+}
+
+void build_open_browser_sidebar_section(const char *title) {
+    ImGui::Spacing();
+    ImGui::TextDisabled("%s", title);
+    ImGui::Separator();
+}
+
+void build_open_browser_bookmarks(ViewerState &state) {
+    build_open_browser_sidebar_section("Bookmarks");
+    if (ImGui::Button("+ Add Bookmark", ImVec2{-1.0F, 0.0F})) {
+        push_unique_directory(state.open_browser_bookmarks, state.open_browser_directory, 12);
+    }
+    for (const std::filesystem::path &bookmark : state.open_browser_bookmarks) {
+        build_open_browser_sidebar_item(state, "[*]", file_name_label(bookmark), bookmark);
+    }
+}
+
+void build_open_browser_system_locations(ViewerState &state) {
+    build_open_browser_sidebar_section("System");
+    const std::optional<std::filesystem::path> user_profile = environment_directory("USERPROFILE");
+    if (user_profile.has_value()) {
+        build_open_browser_sidebar_item(state, "[H]", "Home", user_profile.value());
+        build_open_browser_sidebar_item(state, "[D]", "Desktop", user_profile.value() / "Desktop");
+        build_open_browser_sidebar_item(state, "[D]", "Documents",
+                                        user_profile.value() / "Documents");
+        build_open_browser_sidebar_item(state, "[D]", "Downloads",
+                                        user_profile.value() / "Downloads");
+        build_open_browser_sidebar_item(state, "[M]", "Music", user_profile.value() / "Music");
+        build_open_browser_sidebar_item(state, "[P]", "Pictures",
+                                        user_profile.value() / "Pictures");
+        build_open_browser_sidebar_item(state, "[V]", "Videos", user_profile.value() / "Videos");
+    }
+    const std::optional<std::filesystem::path> one_drive = environment_directory("OneDrive");
+    if (one_drive.has_value()) {
+        build_open_browser_sidebar_item(state, "[O]", "OneDrive", one_drive.value());
+    }
+}
+
+void build_open_browser_volumes(ViewerState &state) {
+    build_open_browser_sidebar_section("Volumes");
+#if defined(_WIN32)
+    bool has_drive = false;
+    for (char letter = 'A'; letter <= 'Z'; ++letter) {
+        std::string root;
+        root.push_back(letter);
+        root += ":\\";
+
+        std::error_code error;
+        const std::filesystem::path root_path = path_from_utf8(root);
+        if (!std::filesystem::is_directory(root_path, error) || error) {
+            continue;
+        }
+
+        has_drive = true;
+        build_open_browser_sidebar_item(state, "[V]", root, root_path);
+    }
+    if (!has_drive) {
+        ImGui::TextDisabled("none");
+    }
+#else
+    static_cast<void>(state);
+#endif
+}
+
+void build_open_browser_recents(ViewerState &state) {
+    build_open_browser_sidebar_section("Recent");
+    if (state.open_browser_recents.empty()) {
+        ImGui::TextDisabled("none");
+        return;
+    }
+    for (const std::filesystem::path &recent : state.open_browser_recents) {
+        build_open_browser_sidebar_item(state, "[R]", file_name_label(recent), recent);
+    }
+}
+
+void build_open_browser_sidebar(ViewerState &state) {
+    build_open_browser_bookmarks(state);
+    build_open_browser_system_locations(state);
+    build_open_browser_volumes(state);
+    build_open_browser_recents(state);
+}
+
+void build_open_browser_top_bar(ViewerState &state) {
+    if (open_browser_icon_button("<", "Back", state.open_browser_history_index > 0U)) {
+        navigate_open_browser_history(state, -1);
+    }
+    ImGui::SameLine();
+    if (open_browser_icon_button(
+            ">", "Forward",
+            !state.open_browser_history.empty() &&
+                state.open_browser_history_index + 1U < state.open_browser_history.size())) {
+        navigate_open_browser_history(state, 1);
+    }
+    ImGui::SameLine();
+    if (open_browser_icon_button("^", "Parent folder")) {
+        const std::filesystem::path parent = state.open_browser_directory.parent_path();
+        if (!parent.empty() && parent != state.open_browser_directory) {
+            set_open_browser_directory(state, parent);
+        }
+    }
+    ImGui::SameLine();
+    if (open_browser_icon_button("R", "Refresh")) {
+        state.open_browser_needs_refresh = true;
+    }
+    ImGui::SameLine();
+    if (open_browser_icon_button("+", "Add bookmark")) {
+        push_unique_directory(state.open_browser_bookmarks, state.open_browser_directory, 12);
+    }
+
+    ImGui::SameLine();
+    const float search_width = 190.0F;
+    ImGui::SetNextItemWidth(-(search_width + ImGui::GetStyle().ItemSpacing.x));
+    if (ImGui::InputText("##OpenFolderPath", state.open_folder_path.data(),
+                         state.open_folder_path.size(),
+                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+        set_open_browser_directory(state,
+                                   path_from_utf8(std::string{state.open_folder_path.data()}));
+    }
+    tooltip("Current folder");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(search_width);
+    ImGui::InputText("##OpenSearch", state.open_search.data(), state.open_search.size());
+    tooltip("Search visible folders and glTF files");
+}
+
+void build_open_browser_file_table(ViewerState &state,
+                                   std::optional<std::filesystem::path> &file_request) {
+    const std::string search_text = lowercase_ascii(std::string{state.open_search.data()});
+    constexpr ImGuiTableFlags table_flags =
+        ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersInnerH |
+        ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp |
+        ImGuiTableFlags_ScrollY;
+    if (!ImGui::BeginTable("##OpenBrowserTable", 3, table_flags)) {
+        return;
+    }
+
+    ImGui::TableSetupScrollFreeze(0, 1);
+    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.58F);
+    ImGui::TableSetupColumn("Date Modified", ImGuiTableColumnFlags_WidthStretch, 0.28F);
+    ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthStretch, 0.14F);
+    ImGui::TableHeadersRow();
+
+    bool has_visible_entry = false;
+    std::optional<std::filesystem::path> navigation_request;
+    for (const OpenBrowserEntry &entry : state.open_browser_entries) {
+        if (!open_browser_entry_matches_search(entry, search_text)) {
+            continue;
+        }
+        has_visible_entry = true;
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        const std::string display_label =
+            (entry.directory ? "[DIR]  " : "[GLB]  ") + entry.label;
+        const bool selected =
+            !entry.directory && !state.open_browser_selected_path.empty() &&
+            same_path_key(entry.path, state.open_browser_selected_path);
+        if (ImGui::Selectable(display_label.c_str(), selected,
+                              ImGuiSelectableFlags_SpanAllColumns |
+                                  ImGuiSelectableFlags_AllowDoubleClick)) {
+            if (entry.directory) {
+                clear_open_browser_selected_file(state);
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    navigation_request = entry.path;
+                }
+            } else {
+                set_open_browser_selected_file(state, entry.path);
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    file_request = entry.path;
+                }
+            }
+        }
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(entry.modified_time.c_str());
+        ImGui::TableNextColumn();
+        const std::string size_text = entry.has_size ? format_file_size(entry.size_bytes) : "";
+        ImGui::TextUnformatted(size_text.c_str());
+    }
+
+    if (!has_visible_entry) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextDisabled("No matching folders or .gltf/.glb files.");
+    }
+
+    ImGui::EndTable();
+    if (navigation_request.has_value()) {
+        set_open_browser_directory(state, navigation_request.value());
+    }
+}
+
+[[nodiscard]] std::optional<std::string> build_open_modal(ViewerState &state,
+                                                          const ViewerScene &scene) {
     if (state.request_open_modal) {
+        initialize_open_browser(state, scene);
         ImGui::OpenPopup("Open glTF Model");
         state.request_open_modal = false;
     }
     std::optional<std::string> requested_path;
-    if (ImGui::BeginPopupModal("Open glTF Model", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Enter a UTF-8 path to a .gltf or .glb file.");
-        ImGui::SetNextItemWidth(620.0F);
-        ImGui::InputText("##ModelPath", state.open_path.data(), state.open_path.size());
-        if (ImGui::Button("Load") && state.open_path[0] != '\0') {
-            requested_path = std::string{state.open_path.data()};
+
+    int style_color_count = 0;
+    int style_var_count = 0;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{10.0F, 10.0F});
+    ++style_var_count;
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0F);
+    ++style_var_count;
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0F);
+    ++style_var_count;
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 6.0F);
+    ++style_var_count;
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.13F, 0.15F, 0.16F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4{0.13F, 0.15F, 0.16F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4{0.17F, 0.19F, 0.20F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.88F, 0.90F, 0.89F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4{0.58F, 0.62F, 0.62F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4{0.31F, 0.35F, 0.36F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4{0.13F, 0.15F, 0.16F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4{0.16F, 0.19F, 0.20F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_TitleBgCollapsed, ImVec4{0.13F, 0.15F, 0.16F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4{0.08F, 0.09F, 0.10F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4{0.15F, 0.18F, 0.19F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.24F, 0.28F, 0.30F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.30F, 0.42F, 0.54F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.26F, 0.50F, 0.72F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.22F, 0.29F, 0.34F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.28F, 0.40F, 0.50F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.31F, 0.48F, 0.66F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, ImVec4{0.19F, 0.22F, 0.23F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_TableRowBg, ImVec4{0.14F, 0.16F, 0.17F, 1.00F});
+    ++style_color_count;
+    ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, ImVec4{0.16F, 0.18F, 0.19F, 1.00F});
+    ++style_color_count;
+
+    ImGui::SetNextWindowSize(ImVec2{1020.0F, 650.0F}, ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Open glTF Model", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
+        refresh_open_browser_entries(state);
+
+        build_open_browser_top_bar(state);
+        if (!state.open_browser_error.empty()) {
+            ImGui::TextColored(ImVec4{1.00F, 0.38F, 0.28F, 1.0F}, "%s",
+                               state.open_browser_error.c_str());
+        }
+        ImGui::Separator();
+
+        std::optional<std::filesystem::path> file_request;
+        const float footer_height = ImGui::GetFrameHeightWithSpacing() + 6.0F;
+        const float sidebar_width = 275.0F;
+        if (ImGui::BeginChild("##OpenBrowserSidebar", ImVec2{sidebar_width, -footer_height}, true)) {
+            build_open_browser_sidebar(state);
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        if (ImGui::BeginChild("##OpenBrowserFiles", ImVec2{0.0F, -footer_height}, true)) {
+            build_open_browser_file_table(state, file_request);
+            if (file_request.has_value()) {
+                set_open_browser_selected_file(state, file_request.value());
+            }
+        }
+        ImGui::EndChild();
+
+        if (file_request.has_value()) {
+            requested_path = path_to_utf8(file_request.value());
             ImGui::CloseCurrentPopup();
         }
+
+        const std::optional<std::filesystem::path> candidate = open_browser_file_candidate(state);
+        const bool can_open = candidate.has_value();
+        const float button_width = 118.0F;
+        const float button_area_width = button_width * 2.0F + ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SetNextItemWidth(-button_area_width - ImGui::GetStyle().ItemSpacing.x);
+        const bool open_from_enter =
+            ImGui::InputText("##OpenFilePath", state.open_file_path.data(),
+                             state.open_file_path.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+        tooltip("Selected model file");
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) {
+        ImGui::BeginDisabled(!can_open);
+        if (ImGui::Button("Open", ImVec2{button_width, 0.0F}) || (open_from_enter && can_open)) {
+            requested_path = path_to_utf8(candidate.value());
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2{button_width, 0.0F})) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
+    ImGui::PopStyleColor(style_color_count);
+    ImGui::PopStyleVar(style_var_count);
     return requested_path;
 }
 
@@ -2402,9 +3330,8 @@ void build_status_bar(const ViewerState &state, const elf3d::Engine &engine,
             engine_viewport.distance_measurement_snapshot(*scene.scene);
         const elf3d::Result<elf3d::Bounds3> visible_bounds =
             engine_viewport.visible_bounds(*scene.scene);
-        const std::string clipping =
-            clipping_status(engine_viewport.clipping_snapshot(),
-                            visible_bounds && visible_bounds.value().is_valid);
+        const std::string clipping = clipping_status(
+            engine_viewport.clipping_snapshot(), visible_bounds && visible_bounds.value().is_valid);
         std::string tool_status = std::string{"Tool: "} + tool_name(engine_viewport.active_tool());
         if (engine_viewport.active_tool() == elf3d::ViewportTool::distance_measurement) {
             tool_status += " | ";
@@ -2419,15 +3346,16 @@ void build_status_bar(const ViewerState &state, const elf3d::Engine &engine,
             tool_status += format_distance(measurement.distance_meters,
                                            engine_viewport.measurement_settings().display_unit);
         }
-        ImGui::Text(
-            "Elf3D %s  |  %s  |  Viewport %u x %u  |  FBO %s  |  Draws %llu  |  "
-            "Triangles %llu  |  Selected: %s  |  Isolation: %s  |  %s  |  %s  |  %.2f ms  |  %.1f FPS",
-            elf3d::version_string(), graphics_backend_name(engine.graphics_backend()),
-            state.view_dimensions.width, state.view_dimensions.height,
-            state.framebuffer_valid ? "valid" : "inactive",
-            static_cast<unsigned long long>(state.statistics.draw_calls),
-            static_cast<unsigned long long>(state.statistics.triangles), selection_status.c_str(),
-            isolation_status.c_str(), clipping.c_str(), tool_status.c_str(), frame_time_ms, fps);
+        ImGui::Text("Elf3D %s  |  %s  |  Viewport %u x %u  |  FBO %s  |  Draws %llu  |  "
+                    "Triangles %llu  |  Selected: %s  |  Isolation: %s  |  %s  |  %s  |  %.2f ms  "
+                    "|  %.1f FPS",
+                    elf3d::version_string(), graphics_backend_name(engine.graphics_backend()),
+                    state.view_dimensions.width, state.view_dimensions.height,
+                    state.framebuffer_valid ? "valid" : "inactive",
+                    static_cast<unsigned long long>(state.statistics.draw_calls),
+                    static_cast<unsigned long long>(state.statistics.triangles),
+                    selection_status.c_str(), isolation_status.c_str(), clipping.c_str(),
+                    tool_status.c_str(), frame_time_ms, fps);
     }
     ImGui::End();
     ImGui::PopStyleColor(2);
@@ -2436,6 +3364,7 @@ void build_status_bar(const ViewerState &state, const elf3d::Engine &engine,
 
 void build_about_window(ViewerState &state) {
     if (!state.show_about) {
+        state.about_window_was_visible = false;
         return;
     }
     if (ImGui::Begin("About Elf3D", &state.show_about, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -2449,8 +3378,16 @@ void build_about_window(ViewerState &state) {
         ImGui::Spacing();
         ImGui::TextWrapped(
             "elf3d_viewer is the reference and demonstration application for the Elf3D engine.");
+        if (!state.about_window_was_visible) {
+            const ImVec2 display_size = ImGui::GetIO().DisplaySize;
+            const ImVec2 window_size = ImGui::GetWindowSize();
+            ImGui::SetWindowPos(ImVec2{(display_size.x - window_size.x) * 0.5F,
+                                       (display_size.y - window_size.y) * 0.5F},
+                                ImGuiCond_Always);
+        }
     }
     ImGui::End();
+    state.about_window_was_visible = state.show_about;
 }
 
 void report_load_failure(ViewerState &state, const std::string &path, const elf3d::Error &error) {
@@ -2509,7 +3446,7 @@ int run_viewer(int argument_count, char **arguments) {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
 
-    Window window{glfwCreateWindow(1440, 900, "Elf3D Viewer", nullptr, nullptr)};
+    Window window{glfwCreateWindow(1600, 900, "Elf3D Viewer", nullptr, nullptr)};
     if (!window) {
         std::cerr << "Failed to create the Elf3D GLFW window with an OpenGL 4.1 core context\n";
         return 1;
@@ -2554,7 +3491,7 @@ int run_viewer(int argument_count, char **arguments) {
     const std::string font_path_utf8 = path_to_utf8(asset_root / "font" / "DroidSans.ttf");
     elf3d::imgui::ContextOptions imgui_options;
     imgui_options.font_path_utf8 = font_path_utf8.c_str();
-    imgui_options.font_size_pixels = 20.0F;
+    imgui_options.font_size_pixels = viewer_ui_font_size_pixels;
     std::unique_ptr<elf3d::imgui::Context> imgui =
         elf3d::imgui::Context::create(window.get(), glsl_version, imgui_options, imgui_error);
     if (!imgui) {
@@ -2564,6 +3501,10 @@ int run_viewer(int argument_count, char **arguments) {
 
     ToolbarIcons toolbar_icons = load_toolbar_icons(asset_root);
     ViewerState state;
+    state.panel_title_font =
+        load_viewer_font(window.get(), font_path_utf8.c_str(), panel_title_font_size_pixels);
+    state.panel_content_font =
+        load_viewer_font(window.get(), font_path_utf8.c_str(), panel_content_font_size_pixels);
     glfwSetWindowUserPointer(window.get(), &state);
     glfwSetDropCallback(window.get(), glfw_drop_callback);
     if (argument_count >= 2 && arguments[1] != nullptr) {
@@ -2577,6 +3518,7 @@ int run_viewer(int argument_count, char **arguments) {
             engine_viewport->cancel_interaction();
         }
         imgui->begin_frame();
+        state.viewport_error.clear();
 
         ViewerCommands commands;
         build_main_menu(window.get(), state, active_scene, *engine_viewport, commands);
@@ -2645,10 +3587,9 @@ int run_viewer(int argument_count, char **arguments) {
         }
         if (commands.flip_section_side) {
             elf3d::SectionPlane plane = engine_viewport->clipping_snapshot().section_plane;
-            plane.retained_half_space =
-                plane.retained_half_space == elf3d::PlaneHalfSpace::positive
-                    ? elf3d::PlaneHalfSpace::negative
-                    : elf3d::PlaneHalfSpace::positive;
+            plane.retained_half_space = plane.retained_half_space == elf3d::PlaneHalfSpace::positive
+                                            ? elf3d::PlaneHalfSpace::negative
+                                            : elf3d::PlaneHalfSpace::positive;
             const elf3d::Result<void> result = engine_viewport->set_section_plane(plane);
             if (!result) {
                 set_viewport_error(state, result.error());
@@ -2764,11 +3705,13 @@ int run_viewer(int argument_count, char **arguments) {
                                 elf3d::Error{elf3d::ErrorCode::unexpected_exception,
                                              "The viewer could not copy the dropped UTF-8 path"});
         }
-        const std::optional<std::string> modal_path = build_open_modal(state);
+        const std::optional<std::string> modal_path = build_open_modal(state, active_scene);
         if (modal_path.has_value()) {
             attempt_model_load(*engine, *engine_viewport, state, active_scene, modal_path.value());
         }
 
+        build_rendering_panel(dockspace_id, state, active_scene);
+        update_demo_cube_animation(state, active_scene);
         build_3d_view(dockspace_id, state, *engine, *engine_viewport, active_scene);
         build_scene_hierarchy_panel(dockspace_id, state, active_scene, *engine_viewport);
         build_model_information(dockspace_id, state, active_scene);
@@ -2798,7 +3741,7 @@ int run_viewer(int argument_count, char **arguments) {
 
 } // namespace
 
-int main(int argument_count, char **arguments) {
+int run_viewer_entry(int argument_count, char **arguments) {
     try {
         return run_viewer(argument_count, arguments);
     } catch (const std::exception &exception) {
@@ -2809,3 +3752,13 @@ int main(int argument_count, char **arguments) {
     }
     return 1;
 }
+
+#if defined(_WIN32)
+int APIENTRY WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+    return run_viewer_entry(__argc, __argv);
+}
+#else
+int main(int argument_count, char **arguments) {
+    return run_viewer_entry(argument_count, arguments);
+}
+#endif

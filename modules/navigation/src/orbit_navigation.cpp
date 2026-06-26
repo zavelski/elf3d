@@ -287,7 +287,7 @@ OrbitNavigationController::update(scene::Storage &scene, EntityId camera, Extent
     const Float2 delta = sanitized_delta(interaction.pointer_delta_pixels);
     if (interaction.drag_active && interaction.mode == NavigationInteractionMode::orbit &&
         (delta.x != 0.0F || delta.y != 0.0F)) {
-        yaw_radians_ += delta.x * settings_.orbit_sensitivity;
+        yaw_radians_ -= delta.x * settings_.orbit_sensitivity;
         const float vertical_sign = settings_.invert_vertical_orbit ? 1.0F : -1.0F;
         pitch_radians_ += delta.y * vertical_sign * settings_.orbit_sensitivity;
         pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,

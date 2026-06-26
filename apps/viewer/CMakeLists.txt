@@ -1,5 +1,6 @@
 add_executable(
     elf3d_viewer
+    WIN32
     src/main.cpp
 )
 

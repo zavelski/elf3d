@@ -40,6 +40,7 @@ struct OrbitNavigationSettings {
     float minimum_pitch_radians = -1.55334306F;
     float maximum_pitch_radians = 1.55334306F;
 
+    // When false, orbit drags make the visible model follow vertical mouse movement.
     bool invert_vertical_orbit = false;
 };
 

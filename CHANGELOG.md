@@ -3,6 +3,25 @@
 All notable project changes are recorded here when they are relevant to a
 release baseline.
 
+## 0.3.0 - Viewer Polish And Windows Startup
+
+Elf3D 0.3.0 focuses on reference-viewer polish and Windows startup behavior.
+
+### Implemented
+
+- Refined the docked panel title font, compacted the per-tab close glyphs while
+  leaving the dock-node close-all button unchanged, and centered the About
+  window when it appears.
+- Reversed orbit drag direction so the visible model follows mouse movement by
+  default, while preserving the vertical inversion setting.
+- Reworked the Open glTF Model dialog into a Blender-like file browser with
+  top navigation, search, sidebar locations, file metadata, and a bottom
+  selected-path row with Open/Cancel actions.
+- Built `elf3d_viewer` as a Windows GUI subsystem executable with a WinMain
+  entry point, matching the Low.3D startup approach and avoiding the extra
+  console window.
+- Updated runtime version data and the public API version test to `0.3.0`.
+
 ## 0.2.0 - Viewer Interaction And Low.3D UI Refresh
 
 Elf3D 0.2.0 extends the viewer/testbed slice with GPU-assisted interaction and
