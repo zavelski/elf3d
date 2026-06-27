@@ -1,7 +1,6 @@
 add_library(
     elf3d_interaction
     OBJECT
-        include/elf3d/interaction/viewport_interaction.h
         src/viewport_interaction.cpp
 )
 add_library(elf3d::interaction ALIAS elf3d_interaction)

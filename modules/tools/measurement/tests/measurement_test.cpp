@@ -1,7 +1,3 @@
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/scene/storage.h>
-#include <elf3d/tools/measurement/distance_measurement.h>
-
 #include <elf3d/assets.h>
 #include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
@@ -14,6 +10,10 @@
 #include <limits>
 #include <optional>
 #include <utility>
+
+import elf.assets;
+import elf.scene;
+import elf.tool.measurement;
 
 namespace {
 

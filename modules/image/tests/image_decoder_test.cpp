@@ -1,5 +1,3 @@
-#include <elf3d/image/decoder.h>
-
 #include <elf3d/core/result.h>
 
 #include <array>
@@ -8,6 +6,8 @@
 #include <span>
 #include <string_view>
 #include <vector>
+
+import elf.image;
 
 namespace {
 

@@ -1,7 +1,6 @@
 add_library(
     elf3d_tool_selection
     OBJECT
-        include/elf3d/tools/selection/selection_controller.h
         src/selection_controller.cpp
 )
 add_library(elf3d::tool_selection ALIAS elf3d_tool_selection)

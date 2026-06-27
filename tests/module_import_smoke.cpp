@@ -19,7 +19,7 @@ import elf.viewport;
 
 int main() {
     const auto version = elf3d::core::version_data();
-    if (version.major != 0U || version.minor != 3U || version.patch != 0U) {
+    if (version.major != 0U || version.minor != 4U || version.patch != 0U) {
         return 1;
     }
 

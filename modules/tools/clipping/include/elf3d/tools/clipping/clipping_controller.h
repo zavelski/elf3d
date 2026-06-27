@@ -1,6 +1,0 @@
-#ifndef ELF3D_TOOLS_CLIPPING_CLIPPING_CONTROLLER_H
-#define ELF3D_TOOLS_CLIPPING_CLIPPING_CONTROLLER_H
-
-import elf.tool.clipping;
-
-#endif

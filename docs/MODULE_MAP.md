@@ -1,31 +1,31 @@
 # Module Map
 
-Purpose: Record the actual Elf3D 0.3.0 CMake targets, responsibilities,
+Purpose: Record the actual Elf3D 0.4.0 CMake targets, responsibilities,
 dependency direction, and current C++20 named-module migration state.
 
-Applicable version: 0.3.0
+Applicable version: 0.4.0
 
-Document status: Living build/module map for the
-`feature/cpp20-named-modules-object-dll-migration` branch.
+Document status: Living build/module map for the 0.4.0 release source.
 
-Last verified Git commit: pending migration commit
+Last verified Git commit: pending 0.4.0 release source commit
 
 Implementation source paths: `CMakeLists.txt`, `cmake/dependencies.cmake`,
 `cmake/compiler_options.cmake`, `modules/*/CMakeLists.txt`,
-`modules/tools/*/CMakeLists.txt`, `facade/elf3d/CMakeLists.txt`,
+`modules/*/src/*.cppm`, `modules/tools/*/CMakeLists.txt`,
+`modules/tools/*/src/*.cppm`, `facade/elf3d/CMakeLists.txt`,
 `integrations/imgui/CMakeLists.txt`, `apps/viewer/CMakeLists.txt`,
 `tests/CMakeLists.txt`
 
 Known limitations: There is no install/export SDK target. Windows viewer ZIP
-packaging is script-based. Legacy internal include paths remain as import-only
-shims for source compatibility during the named-module migration.
+packaging is script-based. Named modules and their generated BMI/IFC artifacts
+remain internal build details rather than a distributable SDK surface.
 
 Related documents: `PUBLIC_API_OVERVIEW.md`, `RENDERING_PIPELINE.md`,
 `TESTING.md`, root `ARCHITECTURE.md`, root `CODING_POLICY.md`
 
 ## Top-Level Build
 
-The root project is `Elf3D` version `0.3.0`. It requires CMake 3.28 or newer,
+The root project is `Elf3D` version `0.4.0`. It requires CMake 3.28 or newer,
 C++20, compiler extensions disabled, and MSVC dynamic runtime selection:
 
 - Debug: `/MDd`
@@ -88,6 +88,42 @@ Module policy:
   `import std` are not used;
 - ordinary standard-library `#include` use remains the default;
 - generated BMI, IFC, PCM, GCM, and similar artifacts are build outputs.
+
+## Removed Internal Import Shims
+
+The named-module migration previously retained import-only headers under
+`modules/*/include`. They were internal target sources, were not part of the
+public `include/elf3d` tree, and were not installed or exported. All repository
+call sites now use the corresponding direct module import, and the following
+shims have been removed:
+
+| Removed internal header | Replacement |
+| --- | --- |
+| `modules/core/include/elf3d/core/version_data.h` | `import elf.core;` |
+| `modules/math/include/elf3d/math/conventions.h` | `import elf.math;` |
+| `modules/assets/include/elf3d/assets/handle_access.h` | `import elf.assets;` |
+| `modules/assets/include/elf3d/assets/storage.h` | `import elf.assets;` |
+| `modules/backend_opengl/include/elf3d/backend/opengl/device_factory.h` | `import elf.backend.opengl;` |
+| `modules/clipping/include/elf3d/clipping/filter.h` | `import elf.clipping;` |
+| `modules/gltf/include/elf3d/gltf/importer.h` | `import elf.gltf;` |
+| `modules/graphics/include/elf3d/graphics/device.h` | `import elf.graphics;` |
+| `modules/graphics/include/elf3d/graphics/texture_handle_access.h` | `import elf.graphics;` |
+| `modules/image/include/elf3d/image/decoder.h` | `import elf.image;` |
+| `modules/interaction/include/elf3d/interaction/viewport_interaction.h` | `import elf.interaction;` |
+| `modules/navigation/include/elf3d/navigation/orbit_navigation.h` | `import elf.navigation;` |
+| `modules/picking/include/elf3d/picking/service.h` | `import elf.picking;` |
+| `modules/renderer/include/elf3d/renderer/renderer.h` | `import elf.renderer;` |
+| `modules/scene/include/elf3d/scene/access.h` | `import elf.scene;` |
+| `modules/scene/include/elf3d/scene/import_builder.h` | `import elf.scene;` |
+| `modules/scene/include/elf3d/scene/storage.h` | `import elf.scene;` |
+| `modules/tools/clipping/include/elf3d/tools/clipping/clipping_controller.h` | `import elf.tool.clipping;` |
+| `modules/tools/measurement/include/elf3d/tools/measurement/distance_measurement.h` | `import elf.tool.measurement;` |
+| `modules/tools/selection/include/elf3d/tools/selection/selection_controller.h` | `import elf.tool.selection;` |
+| `modules/tools/visibility/include/elf3d/tools/visibility/visibility_controller.h` | `import elf.tool.visibility;` |
+| `modules/viewport/include/elf3d/viewport/offscreen_viewport.h` | `import elf.viewport;` |
+
+This removal does not affect the public DLL API or the ordinary public headers
+under `include/elf3d`. No public compatibility shim required deprecation.
 
 ## Target Map
 
@@ -178,8 +214,8 @@ elf3d_viewer
 - Named-module declarations are owned by real module interface units for every
   built-in engine OBJECT library.
 - Module implementation units are present for every built-in engine OBJECT
-  library. Internal include paths remain only as import shims while existing
-  source files migrate to direct imports.
+  library. Internal source files and tests use direct imports; the former
+  import-only compatibility headers have been removed.
 - GLM-backed aliases and conversions are implementation details under the math
   detail include path; exported named-module surfaces use project-owned public
   value types instead of GLM types.

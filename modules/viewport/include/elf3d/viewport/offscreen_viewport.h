@@ -1,6 +1,0 @@
-#ifndef ELF3D_VIEWPORT_OFFSCREEN_VIEWPORT_H
-#define ELF3D_VIEWPORT_OFFSCREEN_VIEWPORT_H
-
-import elf.viewport;
-
-#endif

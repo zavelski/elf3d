@@ -1,6 +1,0 @@
-#ifndef ELF3D_GRAPHICS_TEXTURE_HANDLE_ACCESS_H
-#define ELF3D_GRAPHICS_TEXTURE_HANDLE_ACCESS_H
-
-import elf.graphics;
-
-#endif

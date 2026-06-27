@@ -3,11 +3,11 @@
 Purpose: Document the project-scoped Codex skills used to publish ordinary
 Elf3D changes and version releases.
 
-Applicable version: 0.2.0
+Applicable version: 0.4.0
 
 Document status: Living workflow guide.
 
-Last verified Git commit: pending 0.2.0 release source commit
+Last verified Git commit: pending 0.4.0 release source commit
 
 Implementation source paths: `.agents/skills/elf3d-publish-change`,
 `.agents/skills/elf3d-release`, `AGENTS.md`, `.github/workflows`,

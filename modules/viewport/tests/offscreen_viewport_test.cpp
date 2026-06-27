@@ -1,9 +1,3 @@
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/graphics/texture_handle_access.h>
-#include <elf3d/renderer/renderer.h>
-#include <elf3d/scene/storage.h>
-#include <elf3d/viewport/offscreen_viewport.h>
-
 #include <elf3d/assets.h>
 #include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
@@ -21,6 +15,12 @@
 #include <memory>
 #include <optional>
 #include <utility>
+
+import elf.assets;
+import elf.graphics;
+import elf.renderer;
+import elf.scene;
+import elf.viewport;
 
 namespace {
 

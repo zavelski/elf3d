@@ -1,8 +1,3 @@
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/gltf/importer.h>
-#include <elf3d/scene/import_builder.h>
-#include <elf3d/scene/storage.h>
-
 #include <elf3d/assets.h>
 #include <elf3d/core/result.h>
 #include <elf3d/scene.h>
@@ -19,6 +14,10 @@
 #include <span>
 #include <string>
 #include <vector>
+
+import elf.assets;
+import elf.gltf;
+import elf.scene;
 
 namespace {
 

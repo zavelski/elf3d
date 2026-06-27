@@ -1,14 +1,14 @@
 # Viewport and Tools
 
 Purpose: Document viewport state, input, navigation, picking, selection,
-visibility, measurement, and clipping behavior in Elf3D 0.3.0.
+visibility, measurement, and clipping behavior in Elf3D 0.4.0.
 
-Applicable version: 0.3.0
+Applicable version: 0.4.0
 
 Document status: Verified from public headers, tool modules, viewer code, tests,
-and validation on 2026-06-24.
+and validation on 2026-06-27.
 
-Last verified Git commit: pending 0.3.0 development commit
+Last verified Git commit: pending 0.4.0 release source commit
 
 Implementation source paths: `include/elf3d/viewport.h`,
 `include/elf3d/navigation.h`, `include/elf3d/picking.h`,
@@ -84,7 +84,7 @@ Orbit navigation supports:
 - configurable sensitivity and vertical orbit inversion
 - diagnostics through `NavigationSnapshot`
 
-Navigation is mouse-based in 0.3.0. Touch, gamepad, first-person movement, and
+Navigation is mouse-based in 0.4.0. Touch, gamepad, first-person movement, and
 keyboard fly-camera modes are not implemented.
 
 ## Picking
@@ -205,5 +205,6 @@ reference workspace.
 
 Debug and Release tests cover interaction, navigation, picking, selection,
 visibility, measurement, clipping, renderer, and viewport lifetime. Release
-validation for 0.2.0 records the exact public-release local and CI results under
-`docs/releases/0.2.0/`.
+candidate validation for 0.4.0 records local results under
+`docs/releases/0.4.0/`; remote CI and publication evidence remain unavailable
+until publication.

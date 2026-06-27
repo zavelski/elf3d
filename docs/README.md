@@ -2,22 +2,22 @@
 
 Purpose: Index the verified Elf3D technical documentation set.
 
-Applicable version: 0.3.0
+Applicable version: 0.4.0
 
-Document status: Living index for the current development and migration line.
+Document status: Living index for the 0.4.0 release source.
 
-Last verified implementation commit: pending C++20 module migration commit
+Last verified implementation commit: pending 0.4.0 release source commit
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`
 
 Known limitations: This index is not an immutable release snapshot. The latest
-public release records are under `releases/0.2.0/`; historical 0.1.0 records
-remain under `releases/0.1.0/`.
+public release records remain under `releases/0.2.0/` until 0.4.0 is published;
+the local release candidate is under `releases/0.4.0/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
-`releases/0.2.0/RELEASE_CHECKLIST.md`
+`releases/0.4.0/RELEASE_CHECKLIST.md`
 
 ## Core Documents
 
@@ -34,6 +34,16 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `CODEX_SKILLS.md`: repository-local automation skill routing.
 - `DOCUMENTATION_POLICY.md`: documentation ownership and review rules.
 - `DOCUMENTATION_UPDATE_CHECKLIST.md`: task checklist for documentation updates.
+
+## 0.4.0 Local Release Candidate
+
+- `releases/0.4.0/PROJECT_STATE_EN.md`
+- `releases/0.4.0/VALIDATION_SUMMARY.md`
+- `releases/0.4.0/KNOWN_LIMITATIONS.md`
+- `releases/0.4.0/RELEASE_CHECKLIST.md`
+- `releases/0.4.0/RELEASE_ARTIFACTS.md`
+- `releases/0.4.0/PUBLIC_CONTENT_AUDIT.md`
+- `releases/0.4.0/GITHUB_RELEASE_NOTES.md`
 
 ## Latest Public Release Snapshot
 
@@ -64,6 +74,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 ## Current Release Readiness
 
-0.3.0 release readiness is not complete. The latest immutable public release
-snapshot is 0.2.0 under `releases/0.2.0/`. Do not publish from local state
-unless a current 0.3.0 checklist records `GO - ready for public release`.
+The 0.4.0 source, local package, and automated validation are tracked under
+`releases/0.4.0/`. Publication remains blocked until the checklist records
+`GO - ready for public release` after manual viewer and remote verification.
+The latest immutable public release snapshot remains 0.2.0.

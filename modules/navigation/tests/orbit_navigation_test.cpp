@@ -1,8 +1,3 @@
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/math/conventions.h>
-#include <elf3d/navigation/orbit_navigation.h>
-#include <elf3d/scene/storage.h>
-
 #include <elf3d/assets.h>
 #include <elf3d/core/result.h>
 #include <elf3d/navigation.h>
@@ -13,6 +8,11 @@
 #include <cmath>
 #include <cstdint>
 #include <utility>
+
+import elf.assets;
+import elf.math;
+import elf.navigation;
+import elf.scene;
 
 namespace {
 

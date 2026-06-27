@@ -1,7 +1,6 @@
 add_library(
     elf3d_clipping
     OBJECT
-        include/elf3d/clipping/filter.h
         src/filter.cpp
 )
 add_library(elf3d::clipping ALIAS elf3d_clipping)

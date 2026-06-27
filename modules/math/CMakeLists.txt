@@ -1,7 +1,6 @@
 add_library(
     elf3d_math
     OBJECT
-        include/elf3d/math/conventions.h
         include/elf3d/math/detail/glm_helpers.h
         include/elf3d/math/glm_config.h
         src/conventions.cpp

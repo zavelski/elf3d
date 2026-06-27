@@ -1,6 +1,0 @@
-#ifndef ELF3D_INTERACTION_VIEWPORT_INTERACTION_H
-#define ELF3D_INTERACTION_VIEWPORT_INTERACTION_H
-
-import elf.interaction;
-
-#endif

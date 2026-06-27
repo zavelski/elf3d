@@ -1,7 +1,6 @@
 add_library(
     elf3d_renderer
     OBJECT
-        include/elf3d/renderer/renderer.h
         src/renderer.cpp
 )
 add_library(elf3d::renderer ALIAS elf3d_renderer)

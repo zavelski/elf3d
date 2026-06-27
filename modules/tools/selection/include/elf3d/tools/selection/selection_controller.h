@@ -1,6 +1,0 @@
-#ifndef ELF3D_TOOLS_SELECTION_SELECTION_CONTROLLER_H
-#define ELF3D_TOOLS_SELECTION_SELECTION_CONTROLLER_H
-
-import elf.tool.selection;
-
-#endif

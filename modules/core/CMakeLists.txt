@@ -1,7 +1,6 @@
 add_library(
     elf3d_core
     OBJECT
-        include/elf3d/core/version_data.h
         src/version_data.cpp
 )
 add_library(elf3d::core ALIAS elf3d_core)

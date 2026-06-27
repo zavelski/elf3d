@@ -341,9 +341,8 @@ Not every logical module needs its own build target.
 Not every build module should become a DLL.
 
 Current built-in engine OBJECT libraries expose C++ named-module interfaces and
-module implementation units. Legacy internal include paths may remain as
-import-only shims for source compatibility during the migration; declarations
-belong in the named-module interfaces.
+module implementation units. Internal users import these modules directly;
+legacy import-only shim headers are not retained as a second internal surface.
 
 A separate module is justified when it provides at least one substantial
 benefit:

@@ -1,7 +1,6 @@
 add_library(
     elf3d_viewport
     OBJECT
-        include/elf3d/viewport/offscreen_viewport.h
         src/offscreen_viewport.cpp
 )
 add_library(elf3d::viewport ALIAS elf3d_viewport)

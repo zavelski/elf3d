@@ -1,7 +1,6 @@
 add_library(
     elf3d_tool_measurement
     OBJECT
-        include/elf3d/tools/measurement/distance_measurement.h
         src/distance_measurement.cpp
 )
 add_library(elf3d::tool_measurement ALIAS elf3d_tool_measurement)

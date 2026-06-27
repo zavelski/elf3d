@@ -1,6 +1,0 @@
-#ifndef ELF3D_NAVIGATION_ORBIT_NAVIGATION_H
-#define ELF3D_NAVIGATION_ORBIT_NAVIGATION_H
-
-import elf.navigation;
-
-#endif

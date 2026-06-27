@@ -15,7 +15,6 @@ set_target_properties(
 add_library(
     elf3d_gltf
     OBJECT
-        include/elf3d/gltf/importer.h
         src/importer.cpp
 )
 add_library(elf3d::gltf ALIAS elf3d_gltf)

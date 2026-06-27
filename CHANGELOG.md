@@ -3,6 +3,37 @@
 All notable project changes are recorded here when they are relevant to a
 release baseline.
 
+## 0.4.0 - Complete Named-Module Migration
+
+Elf3D 0.4.0 completes the internal C++20 named-module migration while
+preserving the public C++ DLL API and the single `elf3d` shared-library
+product.
+
+### Implemented
+
+- Added real named-module interface and implementation units for all 18
+  internal engine OBJECT-library boundaries.
+- Kept exported module interfaces project-owned and GLM-neutral; GLM and other
+  third-party types remain implementation details.
+- Replaced internal compatibility-header includes with direct `import elf.*;`
+  declarations in the facade, engine code, and module tests.
+- Removed all 22 obsolete import-only shim headers and their CMake source-list
+  entries after confirming that none belonged to the public or install SDK
+  surface.
+- Added a module import smoke test covering every internal named module.
+- Updated local release packaging and the tag-triggered GitHub workflow for
+  `0.4.0` Windows viewer artifacts.
+
+### Compatibility
+
+- Public headers under `include/elf3d` and the public DLL API are unchanged by
+  the shim removal.
+- Compared with the 0.2.0 public baseline, `OrbitNavigationSettings` includes
+  `invert_vertical_orbit`; C++ consumers must rebuild against the 0.4.0 headers
+  and compatible runtime.
+- Named-module artifacts remain internal build products and are not
+  distributed as an SDK.
+
 ## 0.3.0 - Viewer Polish And Windows Startup
 
 Elf3D 0.3.0 focuses on reference-viewer polish and Windows startup behavior.

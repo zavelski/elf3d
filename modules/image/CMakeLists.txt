@@ -15,7 +15,6 @@ set_target_properties(
 add_library(
     elf3d_image
     OBJECT
-        include/elf3d/image/decoder.h
         src/image_decoder.cpp
 )
 add_library(elf3d::image ALIAS elf3d_image)

@@ -1,7 +1,6 @@
 add_library(
     elf3d_picking
     OBJECT
-        include/elf3d/picking/service.h
         src/service.cpp
 )
 add_library(elf3d::picking ALIAS elf3d_picking)

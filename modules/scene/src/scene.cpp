@@ -1,9 +1,5 @@
 #include <elf3d/scene.h>
 
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/scene/access.h>
-#include <elf3d/scene/storage.h>
-
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -11,6 +7,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+import elf.assets;
+import elf.scene;
 
 namespace elf3d {
 

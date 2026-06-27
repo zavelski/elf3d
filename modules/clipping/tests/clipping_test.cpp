@@ -1,5 +1,3 @@
-#include <elf3d/clipping/filter.h>
-
 #include <elf3d/clipping.h>
 #include <elf3d/core/error.h>
 #include <elf3d/math/detail/glm_helpers.h>
@@ -7,6 +5,8 @@
 #include <array>
 #include <cmath>
 #include <limits>
+
+import elf.clipping;
 
 namespace {
 

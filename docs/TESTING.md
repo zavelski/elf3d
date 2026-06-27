@@ -1,26 +1,25 @@
 # Testing
 
-Purpose: Document how Elf3D 0.3.0 is configured, built, tested, and manually
+Purpose: Document how Elf3D 0.4.0 is configured, built, tested, and manually
 validated.
 
-Applicable version: 0.3.0
+Applicable version: 0.4.0
 
-Document status: Living testing guide, updated for the C++20 named-module and
-OBJECT-library migration branch.
+Document status: Living testing guide for the 0.4.0 release source.
 
-Last verified Git commit: pending migration commit
+Last verified Git commit: pending 0.4.0 release source commit
 
 Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
 `.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
 `modules/*/tests`, `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`
 
-Known limitations: Corrected GitHub Actions branch CI and tag-triggered release
-workflow were verified on the public repository. Manual viewer interaction and
-visual rendering must be validated separately.
+Known limitations: Local builds, tests, package checks, and process smoke do
+not replace complete manual viewer interaction or post-push GitHub CI, tag,
+release-asset, and public-clone verification.
 
 Related documents: `MODULE_MAP.md`, `USER_GUIDE.md`,
 `PERFORMANCE_BASELINE.md`, `audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
-`releases/0.2.0/RELEASE_ARTIFACTS.md`
+`releases/0.4.0/RELEASE_ARTIFACTS.md`
 
 ## Environment
 
@@ -112,13 +111,14 @@ Each job configures, builds, and runs CTest. The corrected branch workflow was
 verified on public `develop` and `main` pushes before tag publication.
 
 The release workflow is `.github/workflows/release.yml`. It runs on `v*` tags
-and manual dispatch, verifies the 0.2.0 version, configures and builds Release,
+and manual dispatch, verifies the 0.4.0 version, configures and builds Release,
 runs CTest, creates the Windows viewer package, uploads workflow artifacts, and
 creates a GitHub Release for tag-triggered runs when no release already exists.
-The `v0.2.0` tag-triggered release run is recorded under
-`docs/releases/0.2.0/`.
+The local 0.4.0 release-source validation is recorded under
+`docs/releases/0.4.0/`; remote workflow results can be recorded only after
+publication.
 
-Before promoting the module migration branch, confirm that the GitHub
+Before publishing 0.4.0, confirm that the GitHub
 `windows-2022` runner exposes CMake 3.28 or newer and a Visual Studio 2022/MSVC
 toolchain that can build the checked-in `FILE_SET CXX_MODULES` configuration.
 
@@ -127,13 +127,13 @@ toolchain that can build the checked-in `FILE_SET CXX_MODULES` configuration.
 Local package command after a successful Release build:
 
 ```powershell
-.\scripts\package_release.ps1 -Version 0.2.0
+.\scripts\package_release.ps1 -Version 0.4.0
 ```
 
 Expected outputs:
 
 ```text
-out/release/elf3d-viewer-0.2.0-windows-x64.zip
+out/release/elf3d-viewer-0.4.0-windows-x64.zip
 out/release/SHA256SUMS.txt
 ```
 
@@ -159,7 +159,7 @@ assets/icon/show_all.png
 assets/icon/reset_layout.png
 ```
 
-SDK packaging is deferred for 0.3.0 because install/export rules and an
+SDK packaging is deferred for 0.4.0 because install/export rules and an
 external consumer validation workflow are not yet implemented.
 
 ## Public Header Self-Containment

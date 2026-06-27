@@ -1,7 +1,6 @@
 add_library(
     elf3d_navigation
     OBJECT
-        include/elf3d/navigation/orbit_navigation.h
         src/orbit_navigation.cpp
 )
 add_library(elf3d::navigation ALIAS elf3d_navigation)

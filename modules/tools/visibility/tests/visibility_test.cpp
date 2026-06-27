@@ -1,13 +1,13 @@
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/scene/storage.h>
-#include <elf3d/tools/visibility/visibility_controller.h>
-
 #include <elf3d/assets.h>
 #include <elf3d/core/result.h>
 #include <elf3d/scene.h>
 
 #include <cstdint>
 #include <optional>
+
+import elf.assets;
+import elf.scene;
+import elf.tool.visibility;
 
 namespace {
 

@@ -1,7 +1,6 @@
 add_library(
     elf3d_tool_clipping
     OBJECT
-        include/elf3d/tools/clipping/clipping_controller.h
         src/clipping_controller.cpp
 )
 add_library(elf3d::tool_clipping ALIAS elf3d_tool_clipping)

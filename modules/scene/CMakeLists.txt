@@ -1,9 +1,6 @@
 add_library(
     elf3d_scene
     OBJECT
-        include/elf3d/scene/access.h
-        include/elf3d/scene/import_builder.h
-        include/elf3d/scene/storage.h
         src/import_builder.cpp
         src/scene.cpp
         src/storage.cpp

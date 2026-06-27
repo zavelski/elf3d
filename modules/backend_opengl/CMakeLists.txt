@@ -1,7 +1,6 @@
 add_library(
     elf3d_backend_opengl
     OBJECT
-        include/elf3d/backend/opengl/device_factory.h
         src/device.cpp
 )
 add_library(elf3d::backend_opengl ALIAS elf3d_backend_opengl)

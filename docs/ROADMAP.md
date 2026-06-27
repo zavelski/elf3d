@@ -1,12 +1,12 @@
 # Roadmap
 
-Purpose: Track committed, candidate, and exploratory work after the 0.2.0 release.
+Purpose: Track completed 0.4.0 work and candidate or exploratory follow-up work.
 
-Applicable version: 0.3.0
+Applicable version: 0.4.0
 
 Document status: Living roadmap derived from audit findings and current code.
 
-Last verified implementation commit before release snapshot: pending C++20 module migration commit
+Last verified implementation commit before release snapshot: pending 0.4.0 release source commit
 
 Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_REMEDIATION_LOG.md`, `README.md`, `modules`,
@@ -16,7 +16,9 @@ Known limitations: This roadmap is not a promise of delivery. Candidate and
 exploratory items require separate design, implementation, and validation.
 Manual viewer validation for the 0.1.0 publication baseline was completed by
 the user on the packaged Windows Release viewer. 0.2.0 release validation is
-tracked under `docs/releases/0.2.0/`. 0.3.0 release readiness is not complete.
+tracked under `docs/releases/0.2.0/`. Local 0.4.0 release validation is tracked
+under `docs/releases/0.4.0/`; publication remains pending manual and remote
+release gates.
 
 Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 `PERFORMANCE_BASELINE.md`, `TESTING.md`
@@ -44,8 +46,8 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
-| Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Completed by the user for the 0.1.0 publication baseline. |
-| Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature `v0.1.0`. | None if required validation remains respected. | `GO — ready for public publication`. |
+| Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Required for 0.4.0 before publication. |
+| Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature version tags. | None if required validation remains respected. | Record `GO - ready for public release` only after every gate passes. |
 | Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Completed for `v0.1.0`: branch CI, tag-triggered GitHub Release, asset download/checksum verification, and public clone test passed. |
 
 ## 0.1.x Candidate Corrections
@@ -57,7 +59,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Debug diagnostics for skipped GL deletes | Make shutdown mistakes visible. | Backend policy decision. | Easier host integration debugging. | Low-level logging policy must stay clean. | Backend tests where possible plus manual shutdown. |
 | Public header self-containment test | Verify include quality. | Build script/test addition. | Catches missing includes. | More test target maintenance. | CTest target. |
 
-## Proposed 0.3.x Scope Candidates
+## Proposed 0.5.x Scope Candidates
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
@@ -67,11 +69,12 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Viewer file UX improvements | Better reference app workflow. | Current viewer. | Easier validation. | Keep viewer from becoming a full editor. | Manual viewer checklist. |
 | Performance baseline tooling | Ground optimization work. | Instrumentation procedure. | Repeatable metrics. | Bad metrics can mislead. | Benchmark docs and scripts. |
 
-## Active 0.3.0 Migration Work
+## Completed For 0.4.0
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
 | C++20 named modules and OBJECT libraries | Move internal architecture away from static-library boundaries while preserving one public DLL. | Visual Studio 2022 v17.14.35, CMake 3.28+ `FILE_SET CXX_MODULES`. | Clearer logical module boundaries, one final DLL product, and less reliance on internal static libraries. | CMake/Visual Studio module support and CI runner tool versions must be verified. | Debug/Release configure/build/CTest plus module-map review. |
+| Direct module imports | Remove the transitional internal include surface after module interfaces own declarations. | Completed named-module interfaces and CMake dependency scanning. | One internal declaration surface with explicit imports. | Public headers must remain untouched. | Shim audit, module import smoke, Debug/Release builds and CTest. |
 
 ## Later Exploratory Work
 

@@ -1,7 +1,3 @@
-#include <elf3d/assets/handle_access.h>
-#include <elf3d/picking/service.h>
-#include <elf3d/scene/storage.h>
-
 #include <elf3d/assets.h>
 #include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
@@ -12,6 +8,10 @@
 #include <cmath>
 #include <optional>
 #include <utility>
+
+import elf.assets;
+import elf.picking;
+import elf.scene;
 
 namespace {
 

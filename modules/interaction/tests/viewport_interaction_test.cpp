@@ -1,4 +1,4 @@
-#include <elf3d/interaction/viewport_interaction.h>
+import elf.interaction;
 
 int main() {
     constexpr float threshold = 4.0F;

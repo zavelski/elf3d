@@ -1,8 +1,6 @@
 add_library(
     elf3d_graphics
     OBJECT
-        include/elf3d/graphics/device.h
-        include/elf3d/graphics/texture_handle_access.h
         src/device.cpp
 )
 add_library(elf3d::graphics ALIAS elf3d_graphics)

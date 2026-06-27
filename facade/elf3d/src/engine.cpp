@@ -1,21 +1,19 @@
 #include <elf3d/elf3d.h>
 
-#include <elf3d/backend/opengl/device_factory.h>
-#include <elf3d/gltf/importer.h>
-#include <elf3d/graphics/device.h>
-#include <elf3d/picking/service.h>
-#include <elf3d/renderer/renderer.h>
-#include <elf3d/scene/access.h>
-#include <elf3d/scene/import_builder.h>
-#include <elf3d/viewport/offscreen_viewport.h>
-
 #include <cstdint>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <utility>
 
+import elf.backend.opengl;
 import elf.core;
+import elf.gltf;
+import elf.graphics;
+import elf.picking;
+import elf.renderer;
+import elf.scene;
+import elf.viewport;
 
 namespace elf3d {
 

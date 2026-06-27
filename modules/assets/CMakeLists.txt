@@ -1,8 +1,6 @@
 add_library(
     elf3d_assets
     OBJECT
-        include/elf3d/assets/handle_access.h
-        include/elf3d/assets/storage.h
         src/storage.cpp
 )
 add_library(elf3d::assets ALIAS elf3d_assets)

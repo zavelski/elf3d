@@ -1,14 +1,14 @@
 # glTF Support
 
 Purpose: Record the verified static glTF and GLB support status for Elf3D
-0.2.0.
+0.4.0.
 
-Applicable version: 0.2.0
+Applicable version: 0.4.0
 
 Document status: Verified from importer code, tests, README, and
-Debug/Release CTest on 2026-06-24.
+Debug/Release CTest on 2026-06-27.
 
-Last verified Git commit: pending 0.2.0 release source commit
+Last verified Git commit: pending 0.4.0 release source commit
 
 Implementation source paths: `modules/gltf/src/importer.cpp`,
 `modules/gltf/tests/gltf_importer_test.cpp`, `tests/fixtures/textured_pbr.gltf`,
@@ -23,7 +23,7 @@ Related documents: `PUBLIC_API_OVERVIEW.md`, `RENDERING_PIPELINE.md`,
 
 ## Summary
 
-Elf3D 0.2.0 imports bounded static triangle geometry from `.gltf` and `.glb`
+Elf3D 0.4.0 imports bounded static triangle geometry from `.gltf` and `.glb`
 files synchronously. Successful import creates a new `Scene`. Failed import
 returns a structured error and does not modify the caller's existing scene.
 

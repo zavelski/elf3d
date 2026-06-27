@@ -1,18 +1,18 @@
 # Public API Overview
 
-Purpose: Describe the verified Elf3D 0.2.0 public C++ API and host integration
+Purpose: Describe the verified Elf3D 0.4.0 public C++ API and host integration
 contract.
 
-Applicable version: 0.2.0
+Applicable version: 0.4.0
 
-Document status: Verified against public headers and validation on 2026-06-24.
+Document status: Verified against public headers and validation on 2026-06-27.
 
-Last verified Git commit: pending 0.2.0 release source commit
+Last verified Git commit: pending 0.4.0 release source commit
 
 Implementation source paths: `include/elf3d`, `facade/elf3d/src/engine.cpp`,
 `tests/public_api_test.cpp`
 
-Known limitations: This is a C++ API, not a stable C ABI. The 0.2.0 DLL surface
+Known limitations: This is a C++ API, not a stable C ABI. The 0.4.0 DLL surface
 uses standard library types and is intended for compatible compiler, standard
 library, and MSVC runtime configurations.
 
@@ -125,6 +125,9 @@ not own the logical scene.
 - neutral overlay lines and markers for tools
 - render, picking, and measurement statistics
 
+`OrbitNavigationSettings::invert_vertical_orbit` controls vertical orbit drag
+direction and defaults to `false`, so the visible model follows pointer motion.
+
 `Engine::native_texture_view()` returns a non-owning native texture view for a
 viewport color texture. The host must never delete that texture.
 
@@ -139,13 +142,17 @@ Normal absence uses `std::optional`, for example no pick hit or no selected
 entity.
 
 Import warnings currently go to `std::clog` from `Engine::load_scene()`. They
-are not returned through a public load report in 0.2.0.
+are not returned through a public load report in 0.4.0.
 
 ## Thread and ABI Notes
 
-Scene mutation and rendering are single-threaded in 0.2.0. Viewport creation,
+Scene mutation and rendering are single-threaded in 0.4.0. Viewport creation,
 resize, render, native texture access, and destruction are graphics-thread
 operations and require a compatible current OpenGL context.
+
+The 0.4.0 public headers add `OrbitNavigationSettings::invert_vertical_orbit`
+relative to 0.2.0. Because Elf3D exposes a C++ ABI rather than a stable C ABI,
+hosts must rebuild against the matching 0.4.0 headers and compatible toolchain.
 
 The public ABI uses standard library types including `std::unique_ptr`,
 `std::filesystem::path`, `std::optional`, `std::span`, `std::string_view`, and
