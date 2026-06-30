@@ -3,11 +3,11 @@
 Purpose: Define how Elf3D documentation is owned, verified, and kept in sync
 with implementation changes.
 
-Applicable version: 0.4.0
+Applicable version: 0.6.0
 
 Document status: Living policy.
 
-Last verified Git commit: pending 0.4.0 release source commit
+Last verified Git commit: local tag `v0.6.0` after release commit
 
 Implementation source paths: `AGENTS.md`, `docs`, `README.md`,
 `PROJECT_STATE_EN.md`

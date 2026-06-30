@@ -2,23 +2,22 @@
 
 Purpose: Index the verified Elf3D technical documentation set.
 
-Applicable version: 0.5.0
+Applicable version: 0.6.0
 
-Document status: Living index for the 0.5.0 development source.
+Document status: Living index for the local 0.6.0 source.
 
-Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
-0.5.0 validation applies to the current worktree.
+Release source identifier: local tag `v0.6.0` after release commit.
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`
 
 Known limitations: This index is not an immutable release snapshot. The latest
-public release records remain under `releases/0.2.0/` until 0.4.0 is published;
-the local release candidate is under `releases/0.4.0/`.
+public release records remain under `releases/0.2.0/`; the current local
+release records are under `releases/0.6.0/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
-`releases/0.4.0/RELEASE_CHECKLIST.md`
+`releases/0.6.0/RELEASE_CHECKLIST.md`
 
 ## Core Documents
 
@@ -36,7 +35,17 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `DOCUMENTATION_POLICY.md`: documentation ownership and review rules.
 - `DOCUMENTATION_UPDATE_CHECKLIST.md`: task checklist for documentation updates.
 
-## 0.4.0 Local Release Candidate
+## 0.6.0 Local Release Records
+
+- `releases/0.6.0/PROJECT_STATE_EN.md`
+- `releases/0.6.0/VALIDATION_SUMMARY.md`
+- `releases/0.6.0/KNOWN_LIMITATIONS.md`
+- `releases/0.6.0/RELEASE_CHECKLIST.md`
+- `releases/0.6.0/RELEASE_ARTIFACTS.md`
+- `releases/0.6.0/PUBLIC_CONTENT_AUDIT.md`
+- `releases/0.6.0/GITHUB_RELEASE_NOTES.md`
+
+## Previous 0.4.0 Local Release Candidate
 
 - `releases/0.4.0/PROJECT_STATE_EN.md`
 - `releases/0.4.0/VALIDATION_SUMMARY.md`
@@ -75,7 +84,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 ## Current Release Readiness
 
-The 0.4.0 source, local package, and automated validation are tracked under
-`releases/0.4.0/`. Publication remains blocked until the checklist records
-`GO - ready for public release` after manual viewer and remote verification.
-The latest immutable public release snapshot remains 0.2.0.
+The 0.6.0 source, local package, and automated validation are tracked under
+`releases/0.6.0/`. GitHub publication, CI, release asset upload, and public
+clone verification are intentionally deferred to manual follow-up. The latest
+immutable public release snapshot remains 0.2.0.

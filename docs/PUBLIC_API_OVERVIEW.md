@@ -1,19 +1,18 @@
 # Public API Overview
 
-Purpose: Describe the verified Elf3D 0.5.0 public C++ API and host integration
+Purpose: Describe the verified Elf3D 0.6.0 public C++ API and host integration
 contract.
 
-Applicable version: 0.5.0
+Applicable version: 0.6.0
 
-Document status: Verified against public headers and validation on 2026-06-27.
+Document status: Verified against public headers and 0.6.0 local validation.
 
-Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
-0.5.0 validation applies to the current worktree.
+Release source identifier: local tag `v0.6.0` after release commit.
 
 Implementation source paths: `include/elf3d`, `facade/elf3d/src/engine.cpp`,
 `tests/public_api_test.cpp`
 
-Known limitations: This is a C++ API, not a stable C ABI. The 0.5.0 DLL surface
+Known limitations: This is a C++ API, not a stable C ABI. The 0.6.0 DLL surface
 uses standard library types and is intended for compatible compiler, standard
 library, and MSVC runtime configurations.
 
@@ -152,16 +151,16 @@ continues to write warning diagnostics to `std::clog` for existing hosts.
 
 ## Thread and ABI Notes
 
-Scene mutation and rendering are single-threaded in 0.5.0. Viewport creation,
+Scene mutation and rendering are single-threaded in 0.6.0. Viewport creation,
 resize, render, native texture access, and destruction are graphics-thread
 operations and require a compatible current OpenGL context.
 
-The 0.5.0 public headers add the load-report types/API and extend the public
+The 0.6.0 public headers add the load-report types/API and extend the public
 vertex/material value descriptions with UV1, vertex color, texture mappings,
 alpha, emissive, occlusion, normal-map preservation, unlit, IOR, and specular
 factors. Existing loading and scene-creation entry points remain source
 compatible. Because Elf3D exposes a C++ ABI rather than a stable C ABI, hosts
-must rebuild against matching 0.5.0 headers and a compatible toolchain.
+must rebuild against matching 0.6.0 headers and a compatible toolchain.
 
 The public ABI uses standard library types including `std::unique_ptr`,
 `std::filesystem::path`, `std::optional`, `std::span`, `std::string_view`, and

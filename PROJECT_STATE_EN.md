@@ -1,14 +1,14 @@
-# Elf3D 0.5.0 Project State
+# Elf3D 0.6.0 Project State
 
 Purpose: Living project-state baseline for the glTF compatibility development
 milestone after the audited 0.4.0 source.
 
-Applicable version: 0.5.0
+Applicable version: 0.6.0
 
-Document status: Living development-state document. Versioned 0.4.0 release
-records under `docs/releases/0.4.0/` remain immutable.
+Document status: Living release-state document for the local 0.6.0 source.
+Versioned 0.4.0 release records under `docs/releases/0.4.0/` remain immutable.
 
-Baseline implementation commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`
+Release source identifier: local tag `v0.6.0` after release commit.
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
@@ -29,7 +29,7 @@ Related documents: `docs/GLTF_SUPPORT.md`, `docs/RENDERING_PIPELINE.md`,
 
 ## Implemented Vertical Slice
 
-Elf3D 0.5.0 includes the 0.4.0 visualization/tool baseline plus:
+Elf3D 0.6.0 includes the 0.4.0 visualization/tool baseline plus:
 
 - fixed bounded UV0/UV1 vertex storage;
 - independent material texture `texCoord` selection;
@@ -64,7 +64,7 @@ The change preserves the existing dependency direction:
 The public API addition is source-compatible at the entry-point level:
 `Engine::load_scene` remains available, while `Engine::load_scene_with_report`
 returns a `LoadedScene` and `SceneLoadReport`. Public vertex/material value
-layouts changed, so matched-toolchain DLL consumers must rebuild for 0.5.0.
+layouts changed, so matched-toolchain DLL consumers must rebuild for 0.6.0.
 
 ## Compatibility Behavior
 

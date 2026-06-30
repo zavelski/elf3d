@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.4.0",
+    [string]$Version = "0.6.0",
     [ValidateSet("Release")]
     [string]$Configuration = "Release",
     [string]$BuildDir = "out/build/windows-release",

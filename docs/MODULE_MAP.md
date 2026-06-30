@@ -1,14 +1,13 @@
 # Module Map
 
-Purpose: Record the actual Elf3D 0.5.0 CMake targets, responsibilities,
+Purpose: Record the actual Elf3D 0.6.0 CMake targets, responsibilities,
 dependency direction, and C++20 named-module state.
 
-Applicable version: 0.5.0
+Applicable version: 0.6.0
 
-Document status: Living build/module map for the 0.5.0 development source.
+Document status: Living build/module map for the local 0.6.0 source.
 
-Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
-0.5.0 validation applies to the current worktree.
+Release source identifier: local tag `v0.6.0` after release commit.
 
 Implementation source paths: `CMakeLists.txt`, `cmake/dependencies.cmake`,
 `cmake/compiler_options.cmake`, `modules/*/CMakeLists.txt`,
@@ -26,7 +25,7 @@ Related documents: `PUBLIC_API_OVERVIEW.md`, `RENDERING_PIPELINE.md`,
 
 ## Top-Level Build
 
-The root project is `Elf3D` version `0.5.0`. It requires CMake 3.28 or newer,
+The root project is `Elf3D` version `0.6.0`. It requires CMake 3.28 or newer,
 C++20, compiler extensions disabled, and MSVC dynamic runtime selection:
 
 - Debug: `/MDd`

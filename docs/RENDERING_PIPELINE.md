@@ -1,9 +1,9 @@
 # Rendering Pipeline
 
-Purpose: Document the verified Elf3D 0.5.0 renderer, OpenGL backend, material
+Purpose: Document the verified Elf3D 0.6.0 renderer, OpenGL backend, material
 path, caches, and limitations.
 
-Applicable version: 0.5.0
+Applicable version: 0.6.0
 
 Document status: Living pipeline description verified from renderer/backend
 source and tests.

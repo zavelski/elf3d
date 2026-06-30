@@ -3,6 +3,41 @@
 All notable project changes are recorded here when they are relevant to a
 release baseline.
 
+## 0.6.0 - Self-contained Dependencies And glTF Compatibility Baseline
+
+Elf3D 0.6.0 makes the repository self-contained for the currently used
+third-party source dependencies and records the current glTF compatibility
+baseline after the 0.4.0 module migration.
+
+### Implemented
+
+- Vendored the used source subsets for Dear ImGui, GLFW, GLM, GLAD, cgltf, and
+  stb under `third_party/` as ordinary tracked files.
+- Removed the normal configure/build dependency on `FetchContent`, network
+  downloads, external clones, and `_deps/*-src` source trees.
+- Kept third-party license notices with each vendored dependency and preserved
+  release-package copies under `third_party_licenses/`.
+- Updated dependency CMake wiring so the public `elf3d` DLL is still assembled
+  from internal OBJECT-library modules while dependency source is resolved only
+  from the local repository.
+- Recorded the current static glTF/GLB support scope, including UV0/UV1 storage,
+  material texture-coordinate selection, texture transforms, alpha values,
+  sampler handling, generated normals, scene-load reporting, and a corpus probe
+  test target.
+- Moved local build/output expectations under repository-owned ignored build
+  locations and kept generated Visual Studio projects outside tracked source.
+- Updated runtime version data, public/module smoke version tests, release
+  packaging, workflow metadata, and living documentation to `0.6.0`.
+
+### Compatibility
+
+- Public API remains C++ and toolchain-matched; consumers must rebuild against
+  the 0.6.0 headers and compatible MSVC runtime.
+- The public API still does not expose Dear ImGui, GLFW, native OpenGL/GLAD,
+  GLM, cgltf, or private module types.
+- GitHub publication, release asset upload, and public clone verification are
+  intentionally left for a later manual step.
+
 ## 0.4.0 - Complete Named-Module Migration
 
 Elf3D 0.4.0 completes the internal C++20 named-module migration while

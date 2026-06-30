@@ -1,13 +1,12 @@
 # Roadmap
 
-Purpose: Track completed 0.5.0 work and candidate or exploratory follow-up work.
+Purpose: Track completed 0.6.0 work and candidate or exploratory follow-up work.
 
-Applicable version: 0.5.0
+Applicable version: 0.6.0
 
 Document status: Living roadmap derived from audit findings and current code.
 
-Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
-0.5.0 validation applies to the current worktree.
+Release source identifier: local tag `v0.6.0` after release commit.
 
 Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_REMEDIATION_LOG.md`, `README.md`, `modules`,
@@ -17,9 +16,8 @@ Known limitations: This roadmap is not a promise of delivery. Candidate and
 exploratory items require separate design, implementation, and validation.
 Manual viewer validation for the 0.1.0 publication baseline was completed by
 the user on the packaged Windows Release viewer. 0.2.0 release validation is
-tracked under `docs/releases/0.2.0/`. Local 0.4.0 release validation is tracked
-under `docs/releases/0.4.0/`; publication remains pending manual and remote
-release gates.
+tracked under `docs/releases/0.2.0/`. Local 0.6.0 release validation is tracked
+under `docs/releases/0.6.0/`; GitHub publication remains a manual follow-up.
 
 Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 `PERFORMANCE_BASELINE.md`, `TESTING.md`
@@ -47,7 +45,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
-| Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Required for 0.4.0 before publication. |
+| Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Required before public publication. |
 | Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature version tags. | None if required validation remains respected. | Record `GO - ready for public release` only after every gate passes. |
 | Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Completed for `v0.1.0`: branch CI, tag-triggered GitHub Release, asset download/checksum verification, and public clone test passed. |
 
@@ -60,7 +58,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Debug diagnostics for skipped GL deletes | Make shutdown mistakes visible. | Backend policy decision. | Easier host integration debugging. | Low-level logging policy must stay clean. | Backend tests where possible plus manual shutdown. |
 | Public header self-containment test | Verify include quality. | Build script/test addition. | Catches missing includes. | More test target maintenance. | CTest target. |
 
-## Completed For 0.5.0
+## Completed For 0.6.0
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |

@@ -1,21 +1,21 @@
 # Lifetime and Threading
 
-Purpose: Document Elf3D 0.4.0 ownership, destruction order, cache invalidation,
+Purpose: Document Elf3D 0.6.0 ownership, destruction order, cache invalidation,
 handle validity, and thread-affinity rules.
 
-Applicable version: 0.4.0
+Applicable version: 0.6.0
 
 Document status: Verified from public headers, facade code, backend code, tests,
 and remediation on 2026-06-27.
 
-Last verified Git commit: pending 0.4.0 release source commit
+Last verified Git commit: local tag `v0.6.0` after release commit
 
 Implementation source paths: `include/elf3d/elf3d.h`, `include/elf3d/scene.h`,
 `include/elf3d/viewport.h`, `facade/elf3d/src/engine.cpp`,
 `modules/scene/src/scene.cpp`, `modules/backend_opengl/src/device.cpp`,
 `tests/public_api_test.cpp`
 
-Known limitations: The 0.4.0 runtime model is single-threaded for scene
+Known limitations: The 0.6.0 runtime model is single-threaded for scene
 mutation and rendering. No background loading, render thread, or task system is
 implemented.
 
@@ -59,7 +59,7 @@ The public contract remains: the creating `Engine` must outlive `Scene` and
 
 `Scene` owns logical data and CPU assets. Handles include scene identity and are
 valid only for their owning scene lifetime. Destroyed entity slots are not
-reused in 0.4.0.
+reused in 0.6.0.
 
 Scene destruction releases renderer and picking caches while the engine release
 state is alive. Goal 4 replaced the previous raw engine-pointer callback with a
@@ -102,7 +102,7 @@ clipping state that belongs to the previous scene.
 
 ## Threading
 
-0.4.0 assumes single-threaded scene mutation, navigation, picking, viewport
+0.6.0 assumes single-threaded scene mutation, navigation, picking, viewport
 rendering, and resource management. There is no public synchronization contract
 for concurrent scene access. Graphics operations are tied to the thread that
 owns the current OpenGL context.
