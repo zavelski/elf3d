@@ -1,14 +1,14 @@
-# Elf3D 0.6.0 Project State
+# Elf3D 0.7.1 Project State
 
 Purpose: Living project-state baseline for the glTF compatibility development
 milestone after the audited 0.4.0 source.
 
-Applicable version: 0.6.0
+Applicable version: 0.7.1
 
-Document status: Living release-state document for the local 0.6.0 source.
+Document status: Living release-state document for the local 0.7.1 source.
 Versioned 0.4.0 release records under `docs/releases/0.4.0/` remain immutable.
 
-Release source identifier: local tag `v0.6.0` after release commit.
+Last verified Git commit: local tag `v0.7.1` after release commit
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
@@ -29,14 +29,18 @@ Related documents: `docs/GLTF_SUPPORT.md`, `docs/RENDERING_PIPELINE.md`,
 
 ## Implemented Vertical Slice
 
-Elf3D 0.6.0 includes the 0.4.0 visualization/tool baseline plus:
+Elf3D 0.7.1 carries forward the 0.6.0 production glTF compatibility baseline
+and adds targeted viewport UX stabilization, renderer correctness fixes, and
+release preparation.
+
+The glTF/static-visualization baseline includes:
 
 - fixed bounded UV0/UV1 vertex storage;
 - independent material texture `texCoord` selection;
 - full supported-slot `KHR_texture_transform` offset, scale, rotation, and UV
   override;
 - vertex `COLOR_0`;
-- base-color alpha, alpha mask/cutoff, and simple sorted alpha blending;
+- base-color alpha, alpha mask/cutoff, and simple sorted linear alpha blending;
 - emissive factor/texture and emissive strength;
 - occlusion texture/strength;
 - unlit materials;
@@ -47,6 +51,25 @@ Elf3D 0.6.0 includes the 0.4.0 visualization/tool baseline plus:
 - structured public load diagnostics through `load_scene_with_report`;
 - viewer display of successful-load diagnostics;
 - a repeatable public-API private-corpus probe.
+
+New 0.7.1 stabilization work includes:
+
+- About dialog first-open centering using Dear ImGui next-window positioning;
+- hover-based mouse-wheel dolly when the cursor is inside the 3D view, without
+  requiring a click to restore 3D-view focus;
+- wheel zoom stability after a quick click updates a dynamic examine pivot;
+- focused navigation regression tests for the hover-wheel and click-pivot wheel
+  paths;
+- linear off-screen color composition with a display resolve pass that applies
+  sRGB transfer encoding after blending;
+- a real hidden-context OpenGL smoke test for GLSL compilation and transparent
+  pixel output;
+- glTF strip/fan resource-limit validation against the expanded imported
+  triangle-list index count;
+- host-owned scene-load diagnostics with no `std::clog` output from
+  `Engine::load_scene`;
+- refreshed 0.7.1 version metadata, packaging metadata, workflow metadata,
+  living documentation, and local release records.
 
 ## Architecture Boundaries
 
@@ -61,10 +84,11 @@ The change preserves the existing dependency direction:
 - no third-party type was added to a public header;
 - no dependency revision changed.
 
-The public API addition is source-compatible at the entry-point level:
-`Engine::load_scene` remains available, while `Engine::load_scene_with_report`
-returns a `LoadedScene` and `SceneLoadReport`. Public vertex/material value
-layouts changed, so matched-toolchain DLL consumers must rebuild for 0.6.0.
+The carried-forward public glTF diagnostics API is source-compatible at the
+entry-point level: `Engine::load_scene` remains available, while
+`Engine::load_scene_with_report` returns a `LoadedScene` and `SceneLoadReport`.
+Public vertex/material value layouts include the glTF compatibility baseline,
+so matched-toolchain DLL consumers must rebuild for 0.7.1.
 
 ## Compatibility Behavior
 
@@ -83,12 +107,19 @@ and report diagnostics. Unsupported required extensions fail clearly.
 
 ## Validation State
 
-Fresh Windows Debug and Release configurations build all targets under the
-warning-as-error policy, and both configurations pass all 17 default CTest
-tests. The conditional local-corpus CTest also passes against the project
-fixture. Manual Release-viewer validation covered the procedural scene, the
-project-owned textured fixture, and the generated UV1/texture-transform
-fixture; rendering, scene statistics, and load diagnostics were visible.
+Fresh Windows Debug and Release configure/build/test validation passed for the
+0.7.1 local release source. The Release glTF probe passed against
+`tests/fixtures/textured_pbr.gltf`, the 0.7.1 package was generated and
+inspected, and the extracted packaged viewer process stayed alive for a
+short process-smoke run.
+
+The automated test set now includes `elf3d.opengl_render_smoke`, which passed
+locally with a hidden real OpenGL context and verified GLSL compilation plus a
+linear transparent-blend center pixel.
+
+No visible/manual viewer interaction pass was rerun after the 0.7.1 renderer
+and importer fixes, so the local release does not claim visual inspection of the
+packaged viewer beyond the hidden-context OpenGL smoke and process launch.
 
 No user-provided real-file corpus was attached or found in the workspace. The
 project-owned `tests/fixtures/textured_pbr.gltf` probe passes without hard

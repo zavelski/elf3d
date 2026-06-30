@@ -3,6 +3,51 @@
 All notable project changes are recorded here when they are relevant to a
 release baseline.
 
+## 0.7.1 - Renderer Correctness And Release Baseline
+
+Elf3D 0.7.1 prepares a local release baseline on top of the existing static
+glTF/GLB compatibility work and stabilizes important reference-viewer viewport
+interaction behavior.
+
+### Implemented
+
+- Kept the 0.6.0 glTF compatibility baseline in the 0.7.1 release state:
+  UV0/UV1 storage, per-slot `texCoord`, `KHR_texture_transform`, structured
+  load diagnostics, material fallbacks, strip/fan conversion, and the local
+  corpus probe remain validated scope.
+- Fixed the About dialog first-open placement by centering it with Dear ImGui's
+  next-window positioning before the first rendered frame.
+- Fixed mouse-wheel dolly so hover over the 3D view is sufficient even when the
+  docked 3D view no longer has keyboard/window focus.
+- Prevented a quick click from leaving an off-axis examine pivot that later
+  causes wheel zoom to rotate or jump the camera.
+- Moved material shader output back to linear color and added an OpenGL display
+  resolve pass so alpha blending occurs before sRGB transfer encoding.
+- Added an automated hidden-context OpenGL smoke test that compiles the real
+  GLSL path, renders overlapping transparent geometry, and checks the resulting
+  sRGB pixel.
+- Tightened glTF resource limits so triangle strip/fan expansion is counted
+  against the final imported triangle-list index limit before buffers are
+  loaded.
+- Kept `Engine::load_scene()` free of host-visible logging; structured import
+  diagnostics remain available through `Engine::load_scene_with_report()`.
+- Corrected public loader snippets to return `elf3d::GraphicsProcedure`.
+- Normalized current technical document verification fields to
+  `Last verified Git commit`.
+- Added focused navigation regression tests for hover-wheel-without-focus and
+  wheel zoom after a click-derived pivot.
+- Updated runtime version data, public API version tests, release packaging,
+  workflow metadata, living documentation, and local release records to
+  `0.7.1`.
+
+### Compatibility
+
+- No third-party dependency revisions changed.
+- Public API entry points remain source-compatible. The public C++ ABI remains
+  matched-toolchain and consumers should rebuild against the 0.7.1 headers.
+- GitHub publication, release asset upload, external corpus validation, and
+  public clone verification are intentionally left for later manual follow-up.
+
 ## 0.6.0 - Self-contained Dependencies And glTF Compatibility Baseline
 
 Elf3D 0.6.0 makes the repository self-contained for the currently used

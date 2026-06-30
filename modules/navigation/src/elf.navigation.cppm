@@ -52,6 +52,8 @@ class OrbitNavigationController final {
 
   private:
     [[nodiscard]] Result<void> ensure_synchronized(const scene::Storage &scene, EntityId camera);
+    [[nodiscard]] Result<void> align_deferred_pivot_for_wheel(const scene::Storage &scene,
+                                                              EntityId camera);
     [[nodiscard]] Result<void> synchronize_from_camera(const scene::Storage &scene, EntityId camera,
                                                        bool preserve_existing_pivot);
     [[nodiscard]] Result<void> apply_camera(scene::Storage &scene, EntityId camera);
@@ -70,6 +72,7 @@ class OrbitNavigationController final {
     float distance_ = 1.0F;
     float yaw_radians_ = 3.14159265F;
     float pitch_radians_ = 0.0F;
+    bool pivot_pending_camera_alignment_ = false;
 };
 
 } // namespace elf3d::navigation

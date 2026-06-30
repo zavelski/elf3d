@@ -1,7 +1,6 @@
 #include <elf3d/elf3d.h>
 
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -170,16 +169,6 @@ Result<std::unique_ptr<Scene>> Engine::load_scene(const std::filesystem::path &p
         return loaded_result.error();
     }
     LoadedScene loaded = std::move(loaded_result).value();
-    for (const SceneLoadDiagnostic &diagnostic : loaded.report.diagnostics) {
-        if (diagnostic.severity != SceneLoadDiagnosticSeverity::warning) {
-            continue;
-        }
-        std::clog << "Elf3D scene import warning: " << diagnostic.message;
-        if (!diagnostic.source_context.empty()) {
-            std::clog << " [" << diagnostic.source_context << ']';
-        }
-        std::clog << '\n';
-    }
     return std::move(loaded.scene);
 }
 

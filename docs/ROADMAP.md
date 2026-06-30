@@ -1,12 +1,12 @@
 # Roadmap
 
-Purpose: Track completed 0.6.0 work and candidate or exploratory follow-up work.
+Purpose: Track completed 0.7.1 work and candidate or exploratory follow-up work.
 
-Applicable version: 0.6.0
+Applicable version: 0.7.1
 
 Document status: Living roadmap derived from audit findings and current code.
 
-Release source identifier: local tag `v0.6.0` after release commit.
+Last verified Git commit: local tag `v0.7.1` after release commit
 
 Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_REMEDIATION_LOG.md`, `README.md`, `modules`,
@@ -16,8 +16,8 @@ Known limitations: This roadmap is not a promise of delivery. Candidate and
 exploratory items require separate design, implementation, and validation.
 Manual viewer validation for the 0.1.0 publication baseline was completed by
 the user on the packaged Windows Release viewer. 0.2.0 release validation is
-tracked under `docs/releases/0.2.0/`. Local 0.6.0 release validation is tracked
-under `docs/releases/0.6.0/`; GitHub publication remains a manual follow-up.
+tracked under `docs/releases/0.2.0/`. Local 0.7.1 release validation is tracked
+under `docs/releases/0.7.1/`; GitHub publication remains a manual follow-up.
 
 Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 `PERFORMANCE_BASELINE.md`, `TESTING.md`
@@ -53,10 +53,22 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
-| Public import warning reporting | `std::clog` warnings are not host-controllable. | Public API design. | GUI hosts can display import warnings. | API addition must preserve source compatibility where practical. | Facade tests and viewer warning display. |
 | Documentation path checks | Keep docs synchronized. | Documentation policy. | Reduces stale source references. | Avoid adding heavy tooling. | Lightweight script or CTest. |
 | Debug diagnostics for skipped GL deletes | Make shutdown mistakes visible. | Backend policy decision. | Easier host integration debugging. | Low-level logging policy must stay clean. | Backend tests where possible plus manual shutdown. |
 | Public header self-containment test | Verify include quality. | Build script/test addition. | Catches missing includes. | More test target maintenance. | CTest target. |
+
+## Completed For 0.7.1
+
+| Item | Motivation | Dependency | Expected benefit | Risk | Validation |
+| --- | --- | --- | --- | --- | --- |
+| About dialog first-open centering | Remove first-use viewer polish regression. | Dear ImGui next-window positioning. | About dialog opens centered on the first and later invocations across window sizes. | Manual GUI verification is still required. | Viewer build; manual checklist item. |
+| Hover-wheel 3D view dolly | Make wheel zoom respond when the cursor is inside the 3D view without requiring a click to restore focus. | Viewer ImGui hover routing and orbit navigation input handling. | More predictable docked viewport navigation. | Must not steal wheel from active UI/popup paths. | Navigation regression test and viewer build. |
+| Stable wheel after quick click | Prevent a click-derived off-axis pivot from causing later wheel zoom to rotate or jump the camera. | Orbit navigation pivot alignment. | Wheel zoom remains smooth after quick click, mouse movement, and focus changes. | Dynamic pivot behavior must remain available for intentional examine/orbit use. | Navigation regression test. |
+| Linear transparency composition | Blend transparent materials before display transfer encoding. | OpenGL backend display resolve. | Avoids output-space alpha blending in the viewport target. | Display resolve adds one pass and broader golden-image coverage is still pending. | `elf3d.opengl_render_smoke` pixel test. |
+| Real OpenGL smoke test | Exercise shader compilation and framebuffer readback in automation. | Hidden GLFW OpenGL context. | Catches GLSL/state/pixel regressions that fake-device tests cannot. | Test skips on machines without OpenGL 4.1 context. | CTest with skip return code 77. |
+| Expanded glTF index limit | Bound imported triangle-list memory after strip/fan conversion. | Importer resource-limit validation. | Prevents strip/fan expansion from bypassing index memory limits. | None for supported primitive modes. | glTF importer oversized strip fixture. |
+| Host-owned load diagnostics | Keep scene-load warnings out of global streams. | Existing `load_scene_with_report()` API. | Hosts choose how diagnostics are displayed. | Callers of compatibility `load_scene()` do not receive warnings. | Public API and viewer documentation. |
+| Local 0.7.1 release preparation | Establish a coherent source/package baseline. | Version metadata, release workflow, package script, docs. | 0.7.1 source can be reviewed and published later without guessing release state. | Remote CI/publication remains a separate manual gate. | Debug/Release validation and release records. |
 
 ## Completed For 0.6.0
 

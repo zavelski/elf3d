@@ -39,9 +39,61 @@ constexpr char context_failure_message[] =
 constexpr char thread_failure_message[] =
     "The graphics operation must run on the engine owning graphics thread";
 
+class ColorTextureResolver {
+  public:
+    virtual ~ColorTextureResolver() = default;
+    [[nodiscard]] virtual Result<void> resolve_color_texture() = 0;
+};
+
+[[nodiscard]] Result<GLuint> compile_shader(GLenum type, std::string_view source);
+[[nodiscard]] Result<GLuint> link_program(GLuint vertex_shader, GLuint fragment_shader);
+
+constexpr char display_resolve_vertex_shader_source[] = R"glsl(#version 410 core
+out vec2 v_texcoord;
+
+void main()
+{
+    const vec2 positions[3] = vec2[3](
+        vec2(-1.0, -1.0),
+        vec2(3.0, -1.0),
+        vec2(-1.0, 3.0)
+    );
+    const vec2 texcoords[3] = vec2[3](
+        vec2(0.0, 0.0),
+        vec2(2.0, 0.0),
+        vec2(0.0, 2.0)
+    );
+    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+    v_texcoord = texcoords[gl_VertexID];
+}
+)glsl";
+
+constexpr char display_resolve_fragment_shader_source[] = R"glsl(#version 410 core
+in vec2 v_texcoord;
+
+uniform sampler2D u_linear_color_texture;
+
+layout(location = 0) out vec4 fragment_color;
+
+vec3 linear_to_srgb(vec3 linear_color)
+{
+    linear_color = max(linear_color, vec3(0.0));
+    return mix(12.92 * linear_color,
+               1.055 * pow(linear_color, vec3(1.0 / 2.4)) - 0.055,
+               step(vec3(0.0031308), linear_color));
+}
+
+void main()
+{
+    vec4 linear_color = texture(u_linear_color_texture, v_texcoord);
+    fragment_color = vec4(linear_to_srgb(linear_color.rgb), linear_color.a);
+}
+)glsl";
+
 struct TextureRecord {
     GLuint texture = 0;
     Extent2D extent;
+    ColorTextureResolver *resolver = nullptr;
 };
 
 class OpenGLDeviceState final {
@@ -74,13 +126,14 @@ class OpenGLDeviceState final {
                extent.height <= static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max());
     }
 
-    [[nodiscard]] Result<TextureHandle> register_texture(GLuint texture, Extent2D extent) {
+    [[nodiscard]] Result<TextureHandle>
+    register_texture(GLuint texture, Extent2D extent, ColorTextureResolver *resolver = nullptr) {
         try {
             std::uint64_t candidate = next_texture_handle_++;
             if (candidate == 0) {
                 candidate = next_texture_handle_++;
             }
-            texture_records_.emplace(candidate, TextureRecord{texture, extent});
+            texture_records_.emplace(candidate, TextureRecord{texture, extent, resolver});
             return detail::TextureHandleAccess::create(candidate);
         } catch (...) {
             return Error{ErrorCode::unexpected_exception,
@@ -93,7 +146,7 @@ class OpenGLDeviceState final {
     }
 
     [[nodiscard]] Result<NativeTextureView>
-    native_texture_view(TextureHandle handle) const noexcept {
+    native_texture_view(TextureHandle handle) const {
         const Result<void> validation = validate_operation();
         if (!validation) {
             return validation.error();
@@ -106,6 +159,12 @@ class OpenGLDeviceState final {
         if (record == texture_records_.end()) {
             return Error{ErrorCode::texture_unavailable,
                          "The texture handle is stale or does not belong to this device"};
+        }
+        if (record->second.resolver != nullptr) {
+            const Result<void> resolve_result = record->second.resolver->resolve_color_texture();
+            if (!resolve_result) {
+                return resolve_result.error();
+            }
         }
 
         return NativeTextureView{NativeGraphicsApi::opengl,
@@ -295,12 +354,20 @@ class RenderStateGuard final {
     GLdouble depth_range_[2]{0.0, 1.0};
 };
 
-void delete_objects(GLuint framebuffer, GLuint color_texture, GLuint depth_renderbuffer) noexcept {
+void delete_render_target_objects(GLuint framebuffer, GLuint linear_color_texture,
+                                  GLuint display_framebuffer, GLuint display_texture,
+                                  GLuint depth_renderbuffer) noexcept {
     if (depth_renderbuffer != 0) {
         glDeleteRenderbuffers(1, &depth_renderbuffer);
     }
-    if (color_texture != 0) {
-        glDeleteTextures(1, &color_texture);
+    if (display_texture != 0) {
+        glDeleteTextures(1, &display_texture);
+    }
+    if (linear_color_texture != 0) {
+        glDeleteTextures(1, &linear_color_texture);
+    }
+    if (display_framebuffer != 0) {
+        glDeleteFramebuffers(1, &display_framebuffer);
     }
     if (framebuffer != 0) {
         glDeleteFramebuffers(1, &framebuffer);
@@ -320,13 +387,14 @@ void delete_picking_objects(GLuint framebuffer, GLuint id_texture,
     }
 }
 
-class OpenGLRenderTarget final : public graphics::RenderTarget {
+class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorTextureResolver {
   public:
     explicit OpenGLRenderTarget(std::shared_ptr<OpenGLDeviceState> state) noexcept
         : state_(std::move(state)) {}
 
     ~OpenGLRenderTarget() override {
         release();
+        release_resolve_resources();
     }
 
     [[nodiscard]] Extent2D extent() const noexcept override {
@@ -352,29 +420,45 @@ class OpenGLRenderTarget final : public graphics::RenderTarget {
         }
 
         GLuint new_framebuffer = 0;
-        GLuint new_color_texture = 0;
+        GLuint new_linear_color_texture = 0;
+        GLuint new_display_framebuffer = 0;
+        GLuint new_display_texture = 0;
         GLuint new_depth_renderbuffer = 0;
 
         {
             AllocationStateGuard state_guard;
 
             glGenFramebuffers(1, &new_framebuffer);
-            glGenTextures(1, &new_color_texture);
+            glGenFramebuffers(1, &new_display_framebuffer);
+            GLuint color_textures[2]{};
+            glGenTextures(2, color_textures);
+            new_linear_color_texture = color_textures[0];
+            new_display_texture = color_textures[1];
             glGenRenderbuffers(1, &new_depth_renderbuffer);
-            if (new_framebuffer == 0 || new_color_texture == 0 || new_depth_renderbuffer == 0) {
-                delete_objects(new_framebuffer, new_color_texture, new_depth_renderbuffer);
+            if (new_framebuffer == 0 || new_linear_color_texture == 0 ||
+                new_display_framebuffer == 0 || new_display_texture == 0 ||
+                new_depth_renderbuffer == 0) {
+                delete_render_target_objects(new_framebuffer, new_linear_color_texture,
+                                             new_display_framebuffer, new_display_texture,
+                                             new_depth_renderbuffer);
                 return Error{ErrorCode::framebuffer_creation_failed,
                              "OpenGL failed to allocate viewport framebuffer objects"};
             }
 
-            glBindTexture(GL_TEXTURE_2D, new_color_texture);
+            glBindTexture(GL_TEXTURE_2D, new_linear_color_texture);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-            // Renderer shaders manually encode display RGB once; the off-screen target is not
-            // sRGB and GL_FRAMEBUFFER_SRGB remains disabled for this pass.
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, static_cast<GLsizei>(extent.width),
+                         static_cast<GLsizei>(extent.height), 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
+
+            glBindTexture(GL_TEXTURE_2D, new_display_texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<GLsizei>(extent.width),
                          static_cast<GLsizei>(extent.height), 0, GL_RGBA, GL_UNSIGNED_BYTE,
                          nullptr);
@@ -386,32 +470,54 @@ class OpenGLRenderTarget final : public graphics::RenderTarget {
 
             glBindFramebuffer(GL_FRAMEBUFFER, new_framebuffer);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                   new_color_texture, 0);
+                                   new_linear_color_texture, 0);
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
                                       new_depth_renderbuffer);
             constexpr GLenum draw_buffer = GL_COLOR_ATTACHMENT0;
             glDrawBuffers(1, &draw_buffer);
 
-            const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-            if (status != GL_FRAMEBUFFER_COMPLETE) {
-                delete_objects(new_framebuffer, new_color_texture, new_depth_renderbuffer);
+            const GLenum render_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            if (render_status != GL_FRAMEBUFFER_COMPLETE) {
+                delete_render_target_objects(new_framebuffer, new_linear_color_texture,
+                                             new_display_framebuffer, new_display_texture,
+                                             new_depth_renderbuffer);
                 return Error{ErrorCode::framebuffer_incomplete,
                              "The OpenGL viewport framebuffer is incomplete"};
             }
+
+            glBindFramebuffer(GL_FRAMEBUFFER, new_display_framebuffer);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                   new_display_texture, 0);
+            glDrawBuffers(1, &draw_buffer);
+
+            const GLenum display_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            if (display_status != GL_FRAMEBUFFER_COMPLETE) {
+                delete_render_target_objects(new_framebuffer, new_linear_color_texture,
+                                             new_display_framebuffer, new_display_texture,
+                                             new_depth_renderbuffer);
+                return Error{ErrorCode::framebuffer_incomplete,
+                             "The OpenGL viewport display framebuffer is incomplete"};
+            }
         }
 
-        Result<TextureHandle> handle_result = state_->register_texture(new_color_texture, extent);
+        Result<TextureHandle> handle_result =
+            state_->register_texture(new_display_texture, extent, this);
         if (!handle_result) {
-            delete_objects(new_framebuffer, new_color_texture, new_depth_renderbuffer);
+            delete_render_target_objects(new_framebuffer, new_linear_color_texture,
+                                         new_display_framebuffer, new_display_texture,
+                                         new_depth_renderbuffer);
             return handle_result.error();
         }
 
         release();
         framebuffer_ = new_framebuffer;
-        color_texture_ = new_color_texture;
+        linear_color_texture_ = new_linear_color_texture;
+        display_framebuffer_ = new_display_framebuffer;
+        display_texture_ = new_display_texture;
         depth_renderbuffer_ = new_depth_renderbuffer;
         color_texture_handle_ = std::move(handle_result).value();
         extent_ = extent;
+        display_stale_ = true;
         return {};
     }
 
@@ -434,6 +540,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget {
         glClearColor(color.red, color.green, color.blue, color.alpha);
         glClearDepth(1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        display_stale_ = true;
         return {};
     }
 
@@ -442,7 +549,8 @@ class OpenGLRenderTarget final : public graphics::RenderTarget {
     }
 
     [[nodiscard]] bool is_valid() const noexcept override {
-        return framebuffer_ != 0 && color_texture_ != 0 && depth_renderbuffer_ != 0 &&
+        return framebuffer_ != 0 && linear_color_texture_ != 0 && display_framebuffer_ != 0 &&
+               display_texture_ != 0 && depth_renderbuffer_ != 0 &&
                color_texture_handle_.is_valid() && extent_.width != 0 && extent_.height != 0;
     }
 
@@ -450,27 +558,150 @@ class OpenGLRenderTarget final : public graphics::RenderTarget {
         return framebuffer_;
     }
 
+    void mark_display_stale() noexcept {
+        display_stale_ = true;
+    }
+
+    [[nodiscard]] Result<void> resolve_color_texture() override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+        if (!is_valid() || !display_stale_) {
+            return {};
+        }
+
+        const Result<void> resources = ensure_display_resolve_resources();
+        if (!resources) {
+            return resources.error();
+        }
+
+        RenderStateGuard state_guard;
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, display_framebuffer_);
+        glViewport(0, 0, static_cast<GLsizei>(extent_.width), static_cast<GLsizei>(extent_.height));
+        glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_FRAMEBUFFER_SRGB);
+        glDisable(GL_BLEND);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_DEPTH_CLAMP);
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glDisable(GL_PRIMITIVE_RESTART);
+        glDisable(GL_RASTERIZER_DISCARD);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glDepthMask(GL_FALSE);
+        glUseProgram(resolve_program_);
+        glBindVertexArray(resolve_vertex_array_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, linear_color_texture_);
+        glUniform1i(resolve_texture_uniform_, 0);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        if (glGetError() != GL_NO_ERROR) {
+            return Error{ErrorCode::draw_submission_failed,
+                         "OpenGL reported an error while resolving the viewport display texture"};
+        }
+
+        display_stale_ = false;
+        return {};
+    }
+
   private:
+    [[nodiscard]] Result<void> ensure_display_resolve_resources() {
+        if (resolve_program_ != 0 && resolve_vertex_array_ != 0 &&
+            resolve_texture_uniform_ >= 0) {
+            return {};
+        }
+
+        AllocationStateGuard allocation_guard;
+        Result<GLuint> vertex_result =
+            compile_shader(GL_VERTEX_SHADER, display_resolve_vertex_shader_source);
+        if (!vertex_result) {
+            return vertex_result.error();
+        }
+        const GLuint vertex_shader = vertex_result.value();
+        Result<GLuint> fragment_result =
+            compile_shader(GL_FRAGMENT_SHADER, display_resolve_fragment_shader_source);
+        if (!fragment_result) {
+            glDeleteShader(vertex_shader);
+            return fragment_result.error();
+        }
+        const GLuint fragment_shader = fragment_result.value();
+        Result<GLuint> program_result = link_program(vertex_shader, fragment_shader);
+        glDeleteShader(vertex_shader);
+        glDeleteShader(fragment_shader);
+        if (!program_result) {
+            return program_result.error();
+        }
+
+        GLuint vertex_array = 0;
+        glGenVertexArrays(1, &vertex_array);
+        if (vertex_array == 0) {
+            glDeleteProgram(program_result.value());
+            return Error{ErrorCode::gpu_buffer_creation_failed,
+                         "OpenGL failed to allocate viewport display resolve resources"};
+        }
+
+        const GLuint program = program_result.value();
+        const GLint texture_uniform = glGetUniformLocation(program, "u_linear_color_texture");
+        if (texture_uniform < 0) {
+            glDeleteProgram(program);
+            glDeleteVertexArrays(1, &vertex_array);
+            return Error{ErrorCode::shader_linking_failed,
+                         "The viewport display resolve shader is missing a required uniform"};
+        }
+
+        resolve_program_ = program;
+        resolve_vertex_array_ = vertex_array;
+        resolve_texture_uniform_ = texture_uniform;
+        return {};
+    }
+
+    void release_resolve_resources() noexcept {
+        if (!state_->can_destroy_objects()) {
+            return;
+        }
+        if (resolve_vertex_array_ != 0) {
+            glDeleteVertexArrays(1, &resolve_vertex_array_);
+        }
+        if (resolve_program_ != 0) {
+            glDeleteProgram(resolve_program_);
+        }
+        resolve_vertex_array_ = 0;
+        resolve_program_ = 0;
+        resolve_texture_uniform_ = -1;
+    }
+
     void release() noexcept {
         if (color_texture_handle_.is_valid()) {
             state_->unregister_texture(color_texture_handle_);
         }
         if (state_->can_destroy_objects()) {
-            delete_objects(framebuffer_, color_texture_, depth_renderbuffer_);
+            delete_render_target_objects(framebuffer_, linear_color_texture_, display_framebuffer_,
+                                         display_texture_, depth_renderbuffer_);
         }
 
         framebuffer_ = 0;
-        color_texture_ = 0;
+        linear_color_texture_ = 0;
+        display_framebuffer_ = 0;
+        display_texture_ = 0;
         depth_renderbuffer_ = 0;
         color_texture_handle_ = {};
+        display_stale_ = false;
     }
 
     std::shared_ptr<OpenGLDeviceState> state_;
     Extent2D extent_;
     GLuint framebuffer_ = 0;
-    GLuint color_texture_ = 0;
+    GLuint linear_color_texture_ = 0;
+    GLuint display_framebuffer_ = 0;
+    GLuint display_texture_ = 0;
     GLuint depth_renderbuffer_ = 0;
+    GLuint resolve_program_ = 0;
+    GLuint resolve_vertex_array_ = 0;
+    GLint resolve_texture_uniform_ = -1;
     TextureHandle color_texture_handle_;
+    bool display_stale_ = false;
 };
 
 class OpenGLPickingTarget final : public graphics::PickingTarget {
@@ -1596,6 +1827,7 @@ class OpenGLDevice final : public graphics::Device {
             return Error{ErrorCode::draw_submission_failed,
                          "OpenGL reported an error while submitting an indexed draw"};
         }
+        opengl_target->mark_display_stale();
         return {};
     }
 
@@ -1690,6 +1922,7 @@ class OpenGLDevice final : public graphics::Device {
             return Error{ErrorCode::draw_submission_failed,
                          "OpenGL reported an error while submitting overlay geometry"};
         }
+        opengl_target->mark_display_stale();
         return {};
     }
 

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.6.0",
+    [string]$Version = "0.7.1",
     [ValidateSet("Release")]
     [string]$Configuration = "Release",
     [string]$BuildDir = "out/build/windows-release",
@@ -43,6 +43,12 @@ if (-not (Test-Path -LiteralPath $buildRoot)) {
 }
 
 $binDir = Join-Path $buildRoot "bin/$Configuration"
+if (-not (Test-Path -LiteralPath $binDir -PathType Container)) {
+    $directBinDir = Join-Path $buildRoot $Configuration
+    if (Test-Path -LiteralPath $directBinDir -PathType Container) {
+        $binDir = $directBinDir
+    }
+}
 $viewerExe = Join-Path $binDir "elf3d_viewer.exe"
 $engineDll = Join-Path $binDir "elf3d.dll"
 $assetsDir = Join-Path $binDir "assets"
@@ -168,9 +174,9 @@ Elf3D original source code is licensed under the MIT License. See LICENSE.
 Third-party components remain governed by their own notices. See THIRD_PARTY.md
 and third_party_licenses/.
 
-Known limitations include opaque-only rendering, no animation, no skins,
-no morph targets, no compression extensions, no KTX2, no stable C ABI, and no
-validated Linux or macOS build.
+Known limitations include no tangent-space normal mapping, no animation,
+no skins, no morph targets, no compression extensions, no KTX2, no stable C
+ABI, and no validated Linux or macOS build.
 "@
 $readme | Set-Content -LiteralPath (Join-Path $stageRoot "README.txt") -Encoding UTF8
 

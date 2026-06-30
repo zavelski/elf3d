@@ -272,7 +272,8 @@ OrbitNavigationController::update(scene::Storage &scene, EntityId camera, Extent
     if (interaction.click_released) {
         update_result.click_position_pixels = interaction.click_position_pixels;
     }
-    if (!input.is_focused) {
+    const bool has_hover_wheel = input.is_hovered && input.wheel_delta != 0.0F;
+    if (!input.is_focused && !has_hover_wheel) {
         return update_result;
     }
 
@@ -284,7 +285,13 @@ OrbitNavigationController::update(scene::Storage &scene, EntityId camera, Extent
     bool changed = false;
     const BoundsInfo bounds = bounds_info(scene.visible_world_bounds(visibility));
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
-    if (input.is_hovered && input.wheel_delta != 0.0F) {
+    if (has_hover_wheel) {
+        if (pivot_pending_camera_alignment_) {
+            const Result<void> alignment = align_deferred_pivot_for_wheel(scene, camera);
+            if (!alignment) {
+                return alignment.error();
+            }
+        }
         const float multiplier = std::exp(-input.wheel_delta * settings_.zoom_sensitivity);
         if (!std::isfinite(multiplier) || multiplier <= 0.0F) {
             return Error{ErrorCode::invalid_viewport_input,
@@ -389,6 +396,7 @@ Result<void> OrbitNavigationController::set_pivot(scene::Storage &scene, EntityI
     camera_ = camera;
     scene_revision_ = scene.revision();
     has_valid_state_ = true;
+    pivot_pending_camera_alignment_ = true;
     return {};
 }
 
@@ -506,6 +514,42 @@ Result<void> OrbitNavigationController::ensure_synchronized(const scene::Storage
     return {};
 }
 
+Result<void> OrbitNavigationController::align_deferred_pivot_for_wheel(
+    const scene::Storage &scene, EntityId camera) {
+    const Result<CameraBasis> basis = camera_basis(scene, camera);
+    if (!basis) {
+        return basis.error();
+    }
+
+    math::Vector3 forward = basis.value().forward;
+    if (!finite_vector(forward) || glm::length(forward) <= minimum_axis_length) {
+        forward = math::Vector3{0.0F, 0.0F, -1.0F};
+    } else {
+        forward = glm::normalize(forward);
+    }
+
+    const BoundsInfo bounds = bounds_info(scene.world_bounds());
+    const DistanceLimits limits = effective_distance_limits(settings_, bounds);
+    float distance = distance_;
+    if (!std::isfinite(distance) || distance <= minimum_axis_length) {
+        distance = bounds.has_bounds ? std::max(bounds.radius * 2.0F, settings_.minimum_distance)
+                                     : std::max(1.0F, settings_.minimum_distance);
+    }
+    distance = std::clamp(distance, limits.minimum, limits.maximum);
+
+    angles_from_direction(forward, yaw_radians_, pitch_radians_);
+    pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
+                                settings_.maximum_pitch_radians);
+    pivot_ = math::to_float3(basis.value().position + forward * distance);
+    distance_ = distance;
+    scene_ = scene.id();
+    camera_ = camera;
+    scene_revision_ = scene.revision();
+    has_valid_state_ = true;
+    pivot_pending_camera_alignment_ = false;
+    return {};
+}
+
 Result<void> OrbitNavigationController::synchronize_from_camera(const scene::Storage &scene,
                                                                 EntityId camera,
                                                                 bool preserve_existing_pivot) {
@@ -548,6 +592,7 @@ Result<void> OrbitNavigationController::synchronize_from_camera(const scene::Sto
     camera_ = camera;
     scene_revision_ = scene.revision();
     has_valid_state_ = true;
+    pivot_pending_camera_alignment_ = false;
     return {};
 }
 
@@ -566,6 +611,7 @@ Result<void> OrbitNavigationController::apply_camera(scene::Storage &scene, Enti
     camera_ = camera;
     scene_revision_ = scene.revision();
     has_valid_state_ = true;
+    pivot_pending_camera_alignment_ = false;
     return {};
 }
 
@@ -626,6 +672,7 @@ Result<void> OrbitNavigationController::fit_with_direction(scene::Storage &scene
     camera_ = camera;
     scene_revision_ = scene.revision();
     has_valid_state_ = true;
+    pivot_pending_camera_alignment_ = false;
     const Result<void> clip_result = update_clip_planes(scene, camera, distance_, bounds.radius);
     if (!clip_result) {
         const Result<void> restore_matrix = scene.set_local_matrix(camera, old_matrix.value());

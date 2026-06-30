@@ -234,12 +234,15 @@ void append_float(std::vector<std::byte> &bytes, float value) {
 
 [[nodiscard]] std::vector<std::byte> decode_test_base64(std::string_view source) {
     const auto value = [](char character) -> std::uint32_t {
-        if (character >= 'A' && character <= 'Z')
+        if (character >= 'A' && character <= 'Z') {
             return character - 'A';
-        if (character >= 'a' && character <= 'z')
+        }
+        if (character >= 'a' && character <= 'z') {
             return character - 'a' + 26;
-        if (character >= '0' && character <= '9')
+        }
+        if (character >= '0' && character <= '9') {
             return character - '0' + 52;
+        }
         return character == '+' ? 62U : character == '/' ? 63U : 0U;
     };
     std::vector<std::byte> result;
@@ -249,10 +252,12 @@ void append_float(std::vector<std::byte> &bytes, float value) {
             ((source[index + 2] == '=' ? 0U : value(source[index + 2])) << 6U) |
             (source[index + 3] == '=' ? 0U : value(source[index + 3]));
         result.push_back(static_cast<std::byte>((combined >> 16U) & 0xffU));
-        if (source[index + 2] != '=')
+        if (source[index + 2] != '=') {
             result.push_back(static_cast<std::byte>((combined >> 8U) & 0xffU));
-        if (source[index + 3] != '=')
+        }
+        if (source[index + 3] != '=') {
             result.push_back(static_cast<std::byte>(combined & 0xffU));
+        }
     }
     return result;
 }
@@ -904,6 +909,29 @@ int main(int argument_count, char **arguments) {
                                 elf3d::SceneLoadDiagnosticCode::material_fallback;
                      })) {
         return 64;
+    }
+
+    constexpr std::uint64_t oversized_strip_index_count = 50000003ULL;
+    constexpr std::uint64_t oversized_strip_buffer_bytes =
+        36ULL + oversized_strip_index_count * 2ULL;
+    const std::filesystem::path oversized_strip_path =
+        temporary.path() / "oversized_strip.gltf";
+    const std::string oversized_strip_json =
+        std::string{
+            R"json({"asset":{"version":"2.0"},"buffers":[{"uri":"oversized_strip.bin","byteLength":)json"} +
+        std::to_string(oversized_strip_buffer_bytes) +
+        R"json(}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":)json" +
+        std::to_string(oversized_strip_index_count * 2ULL) +
+        R"json(}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5123,"count":)json" +
+        std::to_string(oversized_strip_index_count) +
+        R"json(,"type":"SCALAR"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1,"mode":5}]}],"nodes":[{"mesh":0}]})json";
+    elf3d::scene::Storage oversized_strip_storage{scene_id(45)};
+    elf3d::scene::ImportBuilder oversized_strip_builder{oversized_strip_storage};
+    if (!write_text(oversized_strip_path, oversized_strip_json) ||
+        elf3d::gltf::import_scene(oversized_strip_path, {}, oversized_strip_builder)
+                .error()
+                .code() != elf3d::ErrorCode::resource_limit_exceeded) {
+        return 67;
     }
 
     const std::vector<std::byte> quantized_bytes = quantized_positions();

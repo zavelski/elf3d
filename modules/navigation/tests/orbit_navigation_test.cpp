@@ -309,6 +309,56 @@ int main() {
         !nearly_equal(navigation.snapshot().distance, distance_after_zoom_out)) {
         return 15;
     }
+    input = hovered_input();
+    input.is_focused = false;
+    input.wheel_delta = 1.0F;
+    const float distance_before_hover_wheel = navigation.snapshot().distance;
+    if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold) ||
+        !(navigation.snapshot().distance < distance_before_hover_wheel)) {
+        return 33;
+    }
+
+    if (!navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
+        return 34;
+    }
+    const elf3d::Float3 forward_before_click_pivot =
+        camera_forward(fixture.scene, fixture.camera);
+    const elf3d::Float3 position_before_click_pivot =
+        camera_position(fixture.scene, fixture.camera);
+    const float click_pivot_distance = navigation.snapshot().distance;
+    const elf3d::Float3 off_axis_click_pivot{
+        position_before_click_pivot.x + forward_before_click_pivot.x * click_pivot_distance +
+            2.0F,
+        position_before_click_pivot.y + forward_before_click_pivot.y * click_pivot_distance,
+        position_before_click_pivot.z + forward_before_click_pivot.z * click_pivot_distance,
+    };
+    if (!navigation.set_pivot(fixture.scene, fixture.camera, off_axis_click_pivot)) {
+        return 35;
+    }
+    input = hovered_input();
+    input.pointer_delta_pixels = {20.0F, 8.0F};
+    input.wheel_delta = 1.0F;
+    if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold)) {
+        return 36;
+    }
+    const elf3d::Float3 forward_after_click_pivot_wheel =
+        camera_forward(fixture.scene, fixture.camera);
+    const elf3d::Float3 position_after_click_pivot_wheel =
+        camera_position(fixture.scene, fixture.camera);
+    const elf3d::Float3 wheel_movement =
+        subtract(position_after_click_pivot_wheel, position_before_click_pivot);
+    const float wheel_movement_length = length(wheel_movement);
+    const float wheel_alignment =
+        wheel_movement_length > 0.0F
+            ? (wheel_movement.x * forward_before_click_pivot.x +
+               wheel_movement.y * forward_before_click_pivot.y +
+               wheel_movement.z * forward_before_click_pivot.z) /
+                  wheel_movement_length
+            : 0.0F;
+    if (!nearly_equal(forward_after_click_pivot_wheel, forward_before_click_pivot) ||
+        !(wheel_alignment > 0.999F)) {
+        return 37;
+    }
 
     elf3d::OrbitNavigationSettings invalid_settings = navigation.settings();
     invalid_settings.maximum_distance = invalid_settings.minimum_distance;

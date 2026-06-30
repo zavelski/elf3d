@@ -1,18 +1,18 @@
 # Public API Overview
 
-Purpose: Describe the verified Elf3D 0.6.0 public C++ API and host integration
+Purpose: Describe the verified Elf3D 0.7.1 public C++ API and host integration
 contract.
 
-Applicable version: 0.6.0
+Applicable version: 0.7.1
 
-Document status: Verified against public headers and 0.6.0 local validation.
+Document status: Verified against public headers and 0.7.1 local validation.
 
-Release source identifier: local tag `v0.6.0` after release commit.
+Last verified Git commit: local tag `v0.7.1` after release commit
 
 Implementation source paths: `include/elf3d`, `facade/elf3d/src/engine.cpp`,
 `tests/public_api_test.cpp`
 
-Known limitations: This is a C++ API, not a stable C ABI. The 0.6.0 DLL surface
+Known limitations: This is a C++ API, not a stable C ABI. The 0.7.1 DLL surface
 uses standard library types and is intended for compatible compiler, standard
 library, and MSVC runtime configurations.
 
@@ -74,7 +74,7 @@ OpenGL 4.1 core-compatible context and provide an OpenGL procedure loader:
 ```cpp
 elf3d::EngineConfiguration configuration;
 configuration.graphics_backend = elf3d::GraphicsBackend::opengl;
-configuration.opengl.load_procedure = [](const char *name) -> void * {
+configuration.opengl.load_procedure = [](const char *name) -> elf3d::GraphicsProcedure {
     return load_host_opengl_symbol(name);
 };
 
@@ -147,20 +147,21 @@ entity.
 `SceneLoadDiagnostic` includes severity, category, stable diagnostic code,
 message, and optional source context. `Engine::load_scene_with_report()` does
 not write warnings to a global stream. The compatibility `load_scene()` method
-continues to write warning diagnostics to `std::clog` for existing hosts.
+returns only the loaded scene or hard failure; hosts that need warnings should
+use `load_scene_with_report()`.
 
 ## Thread and ABI Notes
 
-Scene mutation and rendering are single-threaded in 0.6.0. Viewport creation,
+Scene mutation and rendering are single-threaded in 0.7.1. Viewport creation,
 resize, render, native texture access, and destruction are graphics-thread
 operations and require a compatible current OpenGL context.
 
-The 0.6.0 public headers add the load-report types/API and extend the public
-vertex/material value descriptions with UV1, vertex color, texture mappings,
-alpha, emissive, occlusion, normal-map preservation, unlit, IOR, and specular
-factors. Existing loading and scene-creation entry points remain source
-compatible. Because Elf3D exposes a C++ ABI rather than a stable C ABI, hosts
-must rebuild against matching 0.6.0 headers and a compatible toolchain.
+The public headers include the load-report types/API and public vertex/material
+value descriptions for UV1, vertex color, texture mappings, alpha, emissive,
+occlusion, normal-map preservation, unlit, IOR, and specular factors. Existing
+loading and scene-creation entry points remain source compatible. Because Elf3D
+exposes a C++ ABI rather than a stable C ABI, hosts must rebuild against
+matching 0.7.1 headers and a compatible toolchain.
 
 The public ABI uses standard library types including `std::unique_ptr`,
 `std::filesystem::path`, `std::optional`, `std::span`, `std::string_view`, and

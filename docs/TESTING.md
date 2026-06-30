@@ -1,25 +1,26 @@
 # Testing
 
-Purpose: Document how Elf3D 0.6.0 is configured, built, tested, and manually
+Purpose: Document how Elf3D 0.7.1 is configured, built, tested, and manually
 validated.
 
-Applicable version: 0.6.0
+Applicable version: 0.7.1
 
 Document status: Living testing and compatibility-validation guide.
 
-Release source identifier: local tag `v0.6.0` after release commit.
+Last verified Git commit: local tag `v0.7.1` after release commit
 
 Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
 `.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
 `modules/*/tests`, `docs/audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`
 
-Known limitations: Local builds, tests, package checks, and process smoke do
-not replace complete manual viewer interaction or post-push GitHub CI, tag,
-release-asset, and public-clone verification.
+Known limitations: Local builds, tests, package checks, process smoke, and
+targeted manual viewer checks do not replace exhaustive manual viewer
+interaction or post-push GitHub CI, tag, release-asset, and public-clone
+verification.
 
 Related documents: `MODULE_MAP.md`, `USER_GUIDE.md`,
 `PERFORMANCE_BASELINE.md`, `audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
-`releases/0.6.0/RELEASE_ARTIFACTS.md`
+`releases/0.7.1/RELEASE_ARTIFACTS.md`
 
 ## Environment
 
@@ -89,6 +90,7 @@ The Debug and Release presets use separate build directories:
 | `elf3d.renderer` | `elf3d_renderer_test` | renderer preparation and caches |
 | `elf3d.viewport_lifetime` | `elf3d_viewport_test` | viewport with fake graphics device |
 | `elf3d.public_api_lifetime` | `elf3d_public_api_test` | public API smoke, version, load, lifetime |
+| `elf3d.opengl_render_smoke` | `elf3d_opengl_render_smoke_test` | hidden real OpenGL context, GLSL compilation, linear alpha-blend pixel check |
 | `elf3d.module_import_smoke` | `elf3d_module_import_smoke` | imports every internal C++20 named-module interface |
 
 `elf3d_gltf_probe` is a public-API corpus tool built when `BUILD_TESTING=ON`.
@@ -100,7 +102,9 @@ through the project helper `elf3d_link_object_libraries`. This keeps tests close
 to the module under test while the final `elf3d` DLL remains the public binary
 product.
 
-Debug and Release are expected to pass 17 of 17 tests.
+Debug and Release are expected to pass 18 of 18 tests when a hidden OpenGL 4.1
+context is available. `elf3d.opengl_render_smoke` is marked skipped with return
+code 77 if the local machine cannot create the required context.
 
 ## GitHub Actions
 
@@ -115,14 +119,14 @@ Each job configures, builds, and runs CTest. The corrected branch workflow was
 verified on public `develop` and `main` pushes before tag publication.
 
 The release workflow is `.github/workflows/release.yml`. It runs on `v*` tags
-and manual dispatch, verifies the 0.6.0 version, configures and builds Release,
+and manual dispatch, verifies the 0.7.1 version, configures and builds Release,
 runs CTest, creates the Windows viewer package, uploads workflow artifacts, and
 creates a GitHub Release for tag-triggered runs when no release already exists.
-The local 0.6.0 release-source validation is recorded under
-`docs/releases/0.6.0/`; remote workflow results can be recorded only after
+The local 0.7.1 release-source validation is recorded under
+`docs/releases/0.7.1/`; remote workflow results can be recorded only after
 publication.
 
-Before publishing 0.6.0, confirm that the GitHub
+Before publishing 0.7.1, confirm that the GitHub
 `windows-2022` runner exposes CMake 3.28 or newer and a Visual Studio 2022/MSVC
 toolchain that can build the checked-in `FILE_SET CXX_MODULES` configuration.
 
@@ -131,13 +135,13 @@ toolchain that can build the checked-in `FILE_SET CXX_MODULES` configuration.
 Local package command after a successful Release build:
 
 ```powershell
-.\scripts\package_release.ps1 -Version 0.6.0
+.\scripts\package_release.ps1 -Version 0.7.1
 ```
 
 Expected outputs:
 
 ```text
-out/release/elf3d-viewer-0.6.0-windows-x64.zip
+out/release/elf3d-viewer-0.7.1-windows-x64.zip
 out/release/SHA256SUMS.txt
 ```
 
@@ -163,7 +167,7 @@ assets/icon/show_all.png
 assets/icon/reset_layout.png
 ```
 
-SDK packaging is deferred for 0.6.0 because install/export rules and an
+SDK packaging is deferred for 0.7.1 because install/export rules and an
 external consumer validation workflow are not yet implemented.
 
 ## Public Header Self-Containment
@@ -219,18 +223,16 @@ cmake --build --preset windows-debug
 ctest --preset windows-debug -R elf3d.gltf_local_corpus --output-on-failure
 ```
 
-For the 0.6.0 milestone run, no user-provided corpus directory or attached
-model files were present. The same probe was run against
-`tests/fixtures/textured_pbr.gltf`; that file passed with no hard errors and no
-diagnostics. This project fixture result is not a substitute for the pending
-user corpus.
+For the 0.7.1 milestone run, record the local corpus path and per-file results
+in `docs/releases/0.7.1/VALIDATION_SUMMARY.md`. If no user-provided corpus is
+present, run the probe against `tests/fixtures/textured_pbr.gltf` and state
+clearly that the project fixture is not a substitute for the pending user
+corpus.
 
-The Release viewer was also launched manually for this milestone. The
-procedural cube rendered, `textured_pbr.gltf` rendered with two draws and four
-triangles, and the generated `dual_uv.gltf` regression fixture rendered with
-its UV1/texture-transform material path. The Model Information panel displayed
-the expected generated-normal and normal-map fallback diagnostics. No
-user-provided failing model was available for a separate manual run.
+Manual Release-viewer validation for 0.7.1 should record the procedural scene,
+`textured_pbr.gltf`, any UV1/texture-transform real-file case available, import
+diagnostic display, About dialog first-open centering, hover-wheel zoom without
+clicking to refocus, and quick-click/mouse-move/wheel no-jump behavior.
 
 ## Viewer Smoke Procedure
 
@@ -256,6 +258,10 @@ Before release, manually validate:
 - `tests/fixtures/textured_pbr.gltf` loads and renders
 - failed load preserves current scene
 - orbit, X/right/middle pan, wheel/Z-drag dolly, dynamic examine pivot, fit, reset
+- About dialog first-open and later-open centering
+- mouse-wheel zoom after moving the cursor back into the 3D view without
+  clicking to refocus
+- no sudden camera/model jump after quick click, cursor movement, and wheel zoom
 - GPU-first picking, Ctrl-click selection, and Shift-click hide
 - hierarchy selection and visibility
 - isolation and exit isolation

@@ -1,12 +1,12 @@
 # User Guide
 
-Purpose: Explain how to use the actual Elf3D 0.6.0 reference viewer.
+Purpose: Explain how to use the actual Elf3D 0.7.1 reference viewer.
 
-Applicable version: 0.6.0
+Applicable version: 0.7.1
 
 Document status: Living guide verified from viewer code and README.
 
-Release source identifier: local tag `v0.6.0` after release commit.
+Last verified Git commit: local tag `v0.7.1` after release commit
 
 Implementation source paths: `apps/viewer/src/main.cpp`, `integrations/imgui`,
 `include/elf3d`, `tests/fixtures/textured_pbr.gltf`
@@ -98,8 +98,10 @@ Controls:
 - Z + left drag: dolly
 - middle drag: pan
 - right drag: pan
-- mouse wheel over the 3D view: dolly
-- plain surface click: set examine pivot
+- mouse wheel over the 3D view: dolly; moving the cursor back into the 3D view
+  is enough, and a click is not required just to restore wheel zoom
+- plain surface click: set examine pivot without making a later wheel zoom jump
+  toward a stale off-axis click point
 - Ctrl + surface click: select
 - Shift + surface click: hide hit entity
 - `F`: fit visible content
@@ -199,8 +201,11 @@ is complete.
 
 Model load failures are shown in a modal with source path, error category, and
 message. The viewer also writes some failures to `std::cerr`. Successful-load
-diagnostics are shown in `Model Information`; they no longer depend on
-`std::clog` in the viewer path.
+diagnostics are shown in `Model Information` through the structured
+`SceneLoadReport` returned by `Engine::load_scene_with_report()`.
+
+The About dialog opens centered in the application viewport on first and later
+opens.
 
 ## Shutdown
 

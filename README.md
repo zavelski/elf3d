@@ -5,7 +5,7 @@
 Elf3D is a modular C++20 3D visualization engine for loading, rendering, and
 interactively inspecting glTF 2.0 scenes in desktop applications.
 
-Current development version: 0.6.0.
+Current development version: 0.7.1.
 
 Maturity: first public baseline. The project is useful as an embeddable
 Windows/OpenGL visualization slice and reference viewer, but it is not a
@@ -13,7 +13,7 @@ complete game engine, editor, or stable cross-toolchain binary SDK.
 
 Validated baseline: Windows desktop x64, Visual Studio 2022 v17.14.35, MSVC
 19.44.35228.0, dynamic MSVC runtime, and OpenGL 4.1 core profile. Linux and
-macOS are architectural goals, but they are not validated platforms for 0.6.0.
+macOS are architectural goals, but they are not validated platforms for 0.7.1.
 
 ## Features
 
@@ -24,7 +24,7 @@ macOS are architectural goals, but they are not validated platforms for 0.6.0.
   diagnostics, triangle strips/fans, and perspective cameras.
 - Scene hierarchy, transforms, cameras, mesh/material/image assets, and bounds.
 - OpenGL 4.1 off-screen viewport rendering with metallic-roughness, emissive,
-  occlusion, unlit, alpha-mask, and simple alpha-blend paths.
+  occlusion, unlit, alpha-mask, and simple linear alpha-blend paths.
 - Orbit, pan, wheel/drag dolly, dynamic examine pivot, fit, and reset navigation.
 - GPU-first picking with CPU refinement/fallback, one selected entity per viewport, visibility, and isolation.
 - One point-to-point distance measurement per viewport.
@@ -50,11 +50,11 @@ plus the optional ImGui integration target.
 
 ## glTF Scope
 
-Elf3D 0.6.0 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
+Elf3D 0.7.1 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
 images, node hierarchy, TRS/matrices, reusable meshes, triangle lists/strips/
 fans, positions, normals, generated normals, `TEXCOORD_0`, `TEXCOORD_1`,
 `COLOR_0`, per-slot `texCoord`, `KHR_texture_transform`, base-color alpha,
-`OPAQUE`/`MASK`/simple `BLEND`, emissive and occlusion textures, unlit,
+`OPAQUE`/`MASK`/simple linear `BLEND`, emissive and occlusion textures, unlit,
 emissive strength, IOR/specular factors, mesh quantization, and perspective
 cameras. `Engine::load_scene_with_report` exposes structured compatibility
 diagnostics to hosts.
@@ -145,7 +145,7 @@ void run_host_viewport()
 {
     elf3d::EngineConfiguration configuration;
     configuration.graphics_backend = elf3d::GraphicsBackend::opengl;
-    configuration.opengl.load_procedure = [](const char *name) -> void * {
+    configuration.opengl.load_procedure = [](const char *name) -> elf3d::GraphicsProcedure {
         return load_host_opengl_symbol(name);
     };
 
@@ -199,14 +199,15 @@ docs/                   Technical documentation and release records
 - [Performance baseline](docs/PERFORMANCE_BASELINE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [User guide](docs/USER_GUIDE.md)
-- [0.6.0 local release records](docs/releases/0.6.0/)
+- [0.7.1 local release records](docs/releases/0.7.1/)
+- [Previous 0.6.0 local release records](docs/releases/0.6.0/)
 - [Previous 0.4.0 release candidate records](docs/releases/0.4.0/)
 - [Latest public release records](docs/releases/0.2.0/)
 - [Previous 0.1.0 release records](docs/releases/0.1.0/)
 
 ## Release
 
-The `0.6.0` release source is prepared locally. GitHub publication, CI,
+The `0.7.1` release source is prepared locally. GitHub publication, CI,
 GitHub Release creation, asset upload, and public clone verification are left
 for manual follow-up. The latest public release remains 0.2.0, published from
 tag `v0.2.0` as [Elf3D 0.2.0](https://github.com/zavelski/elf3d/releases/tag/v0.2.0).

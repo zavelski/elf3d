@@ -11,6 +11,32 @@ elf3d_enable_warnings(elf3d_public_api_test)
 
 add_test(NAME elf3d.public_api_lifetime COMMAND elf3d_public_api_test)
 
+if(TARGET glfw)
+    add_executable(
+        elf3d_opengl_render_smoke_test
+        opengl_render_smoke_test.cpp
+    )
+
+    target_compile_features(elf3d_opengl_render_smoke_test PRIVATE cxx_std_20)
+    target_link_libraries(
+        elf3d_opengl_render_smoke_test
+        PRIVATE
+            elf3d::elf3d
+            elf3d::third_party_glad
+            glfw
+    )
+    set_target_properties(
+        elf3d_opengl_render_smoke_test
+        PROPERTIES
+            FOLDER "Elf3D/Tests"
+    )
+
+    elf3d_enable_warnings(elf3d_opengl_render_smoke_test)
+
+    add_test(NAME elf3d.opengl_render_smoke COMMAND elf3d_opengl_render_smoke_test)
+    set_tests_properties(elf3d.opengl_render_smoke PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 add_executable(
     elf3d_gltf_probe
     gltf_corpus_probe.cpp

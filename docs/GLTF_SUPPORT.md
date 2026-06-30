@@ -1,9 +1,9 @@
 # glTF Support
 
 Purpose: Record the verified static glTF and GLB support status for Elf3D
-0.6.0.
+0.7.1.
 
-Applicable version: 0.6.0
+Applicable version: 0.7.1
 
 Document status: Living compatibility matrix verified from importer, renderer,
 public API, viewer, and tests.
@@ -22,7 +22,7 @@ Related documents: `PUBLIC_API_OVERVIEW.md`, `RENDERING_PIPELINE.md`,
 
 ## Summary
 
-Elf3D 0.6.0 imports bounded static geometry from `.gltf` and `.glb`
+Elf3D 0.7.1 imports bounded static geometry from `.gltf` and `.glb`
 synchronously. UV sets 0 and 1, per-texture UV selection, and
 `KHR_texture_transform` are preserved through the asset model and renderer.
 Successful imports may return structured diagnostics through
@@ -125,7 +125,8 @@ full-fidelity support.
 - Primitives: 262,144
 - Accessors: 262,144
 - Vertices: 50 million
-- Indices: 150 million
+- Imported triangle-list indices: 150 million after non-indexed primitives and
+  `TRIANGLE_STRIP` / `TRIANGLE_FAN` expansion are accounted for.
 
 ## Validation Coverage
 
@@ -134,9 +135,10 @@ missing referenced UV sets, all `KHR_texture_transform` fields, vertex color,
 alpha factors/modes/cutoff, emissive/normal/occlusion slots, unlit, emissive
 strength, IOR, specular factors, supported and unsupported required extensions,
 optional extension diagnostics, perspective cameras, and indexed/non-indexed
-strip/fan conversion. Renderer tests validate that mappings and material values
-reach the graphics boundary and that the shader contains the corresponding
-paths.
+strip/fan conversion, including an oversized strip that must fail before buffer
+loading because its expanded triangle-list index count exceeds the importer
+limit. Renderer tests validate that mappings and material values reach the
+graphics boundary and that the shader contains the corresponding paths.
 
 The repeatable private-corpus workflow is documented in `TESTING.md`. No
 user-provided real-file corpus was present in the workspace for this milestone

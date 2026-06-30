@@ -229,11 +229,7 @@ void main()
     linear_color = mix(linear_color, u_highlight_color.rgb,
                        clamp(u_highlight_strength, 0.0, 1.0));
 
-    // The viewport target is RGBA8 (not sRGB), so encode exactly once here.
-    vec3 srgb_color = mix(12.92 * linear_color,
-                          1.055 * pow(linear_color, vec3(1.0 / 2.4)) - 0.055,
-                          step(vec3(0.0031308), linear_color));
-    fragment_color = vec4(srgb_color, base_color.a);
+    fragment_color = vec4(linear_color, base_color.a);
 }
 )glsl";
 

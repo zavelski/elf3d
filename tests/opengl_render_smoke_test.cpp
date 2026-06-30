@@ -1,0 +1,210 @@
+#include <elf3d/elf3d.h>
+
+#include <glad/gl.h>
+
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <memory>
+#include <vector>
+
+namespace {
+
+constexpr int skipped = 77;
+
+class GlfwRuntime final {
+  public:
+    GlfwRuntime() = default;
+    ~GlfwRuntime() {
+        if (initialized_) {
+            glfwTerminate();
+        }
+    }
+
+    GlfwRuntime(const GlfwRuntime &) = delete;
+    GlfwRuntime &operator=(const GlfwRuntime &) = delete;
+
+    [[nodiscard]] bool initialize() noexcept {
+        initialized_ = glfwInit() == GLFW_TRUE;
+        return initialized_;
+    }
+
+  private:
+    bool initialized_ = false;
+};
+
+class Window final {
+  public:
+    explicit Window(GLFWwindow *window) noexcept : window_(window) {}
+    ~Window() {
+        if (window_ != nullptr) {
+            glfwDestroyWindow(window_);
+        }
+    }
+
+    Window(const Window &) = delete;
+    Window &operator=(const Window &) = delete;
+
+    [[nodiscard]] GLFWwindow *get() const noexcept {
+        return window_;
+    }
+
+  private:
+    GLFWwindow *window_ = nullptr;
+};
+
+elf3d::GraphicsProcedure load_opengl_procedure(const char *name) {
+    return glfwGetProcAddress(name);
+}
+
+[[nodiscard]] bool in_range(std::uint8_t value, std::uint8_t minimum,
+                            std::uint8_t maximum) noexcept {
+    return value >= minimum && value <= maximum;
+}
+
+[[nodiscard]] int fail(int code, const char *message) {
+    std::cerr << message << '\n';
+    return code;
+}
+
+} // namespace
+
+int main() {
+    GlfwRuntime glfw;
+    if (!glfw.initialize()) {
+        std::cout << "Skipping OpenGL render smoke test: GLFW initialization failed\n";
+        return skipped;
+    }
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+#if defined(__APPLE__)
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#endif
+
+    Window window{glfwCreateWindow(64, 64, "Elf3D OpenGL smoke", nullptr, nullptr)};
+    if (window.get() == nullptr) {
+        std::cout << "Skipping OpenGL render smoke test: hidden context creation failed\n";
+        return skipped;
+    }
+    glfwMakeContextCurrent(window.get());
+    if (glfwGetCurrentContext() != window.get()) {
+        return fail(1, "GLFW did not make the smoke-test context current");
+    }
+
+    const int loaded_version = gladLoadGL(load_opengl_procedure);
+    if (loaded_version == 0 || GLAD_GL_VERSION_4_1 == 0) {
+        std::cout << "Skipping OpenGL render smoke test: OpenGL 4.1 is unavailable\n";
+        return skipped;
+    }
+
+    {
+        elf3d::EngineConfiguration configuration;
+        configuration.opengl.load_procedure = load_opengl_procedure;
+        elf3d::Result<std::unique_ptr<elf3d::Engine>> engine_result =
+            elf3d::Engine::create(configuration);
+        if (!engine_result) {
+            if (engine_result.error().code() == elf3d::ErrorCode::unsupported_graphics_version ||
+                engine_result.error().code() == elf3d::ErrorCode::graphics_context_unavailable ||
+                engine_result.error().code() == elf3d::ErrorCode::graphics_initialization_failed) {
+                std::cout << "Skipping OpenGL render smoke test: "
+                          << engine_result.error().message() << '\n';
+                return skipped;
+            }
+            std::cerr << engine_result.error().message() << '\n';
+            return 2;
+        }
+        std::unique_ptr<elf3d::Engine> engine = std::move(engine_result).value();
+
+        elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine->create_scene();
+        elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
+            engine->create_viewport({64, 64});
+        if (!scene_result || !viewport_result) {
+            return fail(3, "OpenGL smoke test failed to create public scene or viewport");
+        }
+        std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
+        std::unique_ptr<elf3d::Viewport> viewport = std::move(viewport_result).value();
+
+        const std::array<elf3d::VertexPositionNormal, 3> vertices{{
+            {{-2.0F, -2.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
+            {{2.0F, -2.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
+            {{0.0F, 2.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
+        }};
+        const std::array<std::uint32_t, 3> indices{{0, 1, 2}};
+        const auto mesh = scene->create_mesh({vertices, indices});
+
+        elf3d::MaterialDescription red_material;
+        red_material.base_color = {1.0F, 0.0F, 0.0F, 0.5F};
+        red_material.alpha_mode = elf3d::AlphaMode::blend;
+        red_material.unlit = true;
+        const auto red = scene->create_material(red_material);
+
+        elf3d::MaterialDescription green_material;
+        green_material.base_color = {0.0F, 1.0F, 0.0F, 0.5F};
+        green_material.alpha_mode = elf3d::AlphaMode::blend;
+        green_material.unlit = true;
+        const auto green = scene->create_material(green_material);
+
+        if (!mesh || !red || !green) {
+            return fail(4, "OpenGL smoke test failed to create scene assets");
+        }
+
+        const auto far_model = scene->create_model(mesh.value(), red.value());
+        const auto near_model = scene->create_model(mesh.value(), green.value());
+        const auto camera = scene->create_perspective_camera({});
+        if (!far_model || !near_model || !camera) {
+            return fail(4, "OpenGL smoke test failed to create scene entities");
+        }
+
+        elf3d::Transform far_transform;
+        far_transform.translation = {0.0F, 0.0F, -3.0F};
+        elf3d::Transform near_transform;
+        near_transform.translation = {0.0F, 0.0F, -2.0F};
+        if (!scene->set_local_transform(far_model.value(), far_transform) ||
+            !scene->set_local_transform(near_model.value(), near_transform)) {
+            return fail(5, "OpenGL smoke test failed to position transparent models");
+        }
+
+        viewport->set_clear_color({0.0F, 0.0F, 0.0F, 1.0F});
+        const elf3d::Result<void> render_result = viewport->render(*scene, camera.value());
+        if (!render_result || viewport->statistics().draw_calls != 2) {
+            return fail(6, "OpenGL smoke test failed to render the transparent scene");
+        }
+
+        const elf3d::Result<elf3d::NativeTextureView> texture_result =
+            engine->native_texture_view(viewport->color_texture());
+        if (!texture_result) {
+            std::cerr << texture_result.error().message() << '\n';
+            return 7;
+        }
+
+        std::vector<std::uint8_t> pixels(64U * 64U * 4U);
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_result.value().value));
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        if (glGetError() != GL_NO_ERROR) {
+            return fail(8, "OpenGL smoke test failed to read the rendered texture");
+        }
+
+        const std::size_t center = ((32U * 64U) + 32U) * 4U;
+        const std::uint8_t red_channel = pixels[center];
+        const std::uint8_t green_channel = pixels[center + 1U];
+        const std::uint8_t blue_channel = pixels[center + 2U];
+        if (!in_range(red_channel, 130U, 145U) || !in_range(green_channel, 180U, 196U) ||
+            blue_channel > 8U) {
+            std::cerr << "Unexpected linear-blend sRGB pixel: R="
+                      << static_cast<unsigned>(red_channel)
+                      << " G=" << static_cast<unsigned>(green_channel)
+                      << " B=" << static_cast<unsigned>(blue_channel) << '\n';
+            return 9;
+        }
+    }
+
+    return 0;
+}

@@ -143,7 +143,6 @@ struct ViewerState {
     bool show_imgui_demo = false;
     bool show_status_bar = true;
     bool show_about = false;
-    bool about_window_was_visible = false;
     bool reset_dock_layout = false;
     bool dock_layout_initialized = false;
     bool apply_dock_layout = false;
@@ -3388,10 +3387,17 @@ void build_status_bar(const ViewerState &state, const elf3d::Engine &engine,
 
 void build_about_window(ViewerState &state) {
     if (!state.show_about) {
-        state.about_window_was_visible = false;
         return;
     }
-    if (ImGui::Begin("About Elf3D", &state.show_about, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    const ImVec2 center{viewport->WorkPos.x + viewport->WorkSize.x * 0.5F,
+                        viewport->WorkPos.y + viewport->WorkSize.y * 0.5F};
+    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2{0.5F, 0.5F});
+    ImGui::SetNextWindowViewport(viewport->ID);
+    constexpr ImGuiWindowFlags flags =
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::Begin("About Elf3D", &state.show_about, flags)) {
         ImGui::TextUnformatted("Elf3D");
         ImGui::Separator();
         ImGui::Text("Elf3D version: %s", elf3d::version_string());
@@ -3402,16 +3408,8 @@ void build_about_window(ViewerState &state) {
         ImGui::Spacing();
         ImGui::TextWrapped(
             "elf3d_viewer is the reference and demonstration application for the Elf3D engine.");
-        if (!state.about_window_was_visible) {
-            const ImVec2 display_size = ImGui::GetIO().DisplaySize;
-            const ImVec2 window_size = ImGui::GetWindowSize();
-            ImGui::SetWindowPos(ImVec2{(display_size.x - window_size.x) * 0.5F,
-                                       (display_size.y - window_size.y) * 0.5F},
-                                ImGuiCond_Always);
-        }
     }
     ImGui::End();
-    state.about_window_was_visible = state.show_about;
 }
 
 void report_load_failure(ViewerState &state, const std::string &path, const elf3d::Error &error) {

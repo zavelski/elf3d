@@ -349,6 +349,23 @@ void release_external_file(const cgltf_memory_options *memory, const cgltf_file_
     return true;
 }
 
+[[nodiscard]] std::optional<std::uint64_t>
+expanded_triangle_index_count(const cgltf_primitive &primitive,
+                              std::uint64_t source_index_count) noexcept {
+    if (primitive.type == cgltf_primitive_type_triangle_strip ||
+        primitive.type == cgltf_primitive_type_triangle_fan) {
+        if (source_index_count < 3) {
+            return source_index_count;
+        }
+        if (source_index_count - 2 >
+            std::numeric_limits<std::uint64_t>::max() / 3ULL) {
+            return std::nullopt;
+        }
+        return (source_index_count - 2) * 3ULL;
+    }
+    return source_index_count;
+}
+
 [[nodiscard]] Result<void> validate_resource_limits(const cgltf_data &data) {
     if (data.nodes_count > maximum_node_count || data.meshes_count > maximum_mesh_count ||
         data.accessors_count > maximum_accessor_count) {
@@ -387,13 +404,19 @@ void release_external_file(const cgltf_memory_options *memory, const cgltf_file_
                 return Error{ErrorCode::resource_limit_exceeded,
                              "The glTF vertex count exceeds the importer limit"};
             }
-            const std::uint64_t index_count =
+            const std::uint64_t source_index_count =
                 primitive.indices != nullptr ? static_cast<std::uint64_t>(primitive.indices->count)
                 : positions != nullptr       ? static_cast<std::uint64_t>(positions->count)
                                              : 0;
-            if (!checked_add(total_indices, index_count, maximum_total_indices)) {
+            const std::optional<std::uint64_t> index_count =
+                expanded_triangle_index_count(primitive, source_index_count);
+            if (!index_count.has_value()) {
                 return Error{ErrorCode::resource_limit_exceeded,
-                             "The glTF index count exceeds the importer limit"};
+                             "The glTF expanded triangle index count exceeds the importer limit"};
+            }
+            if (!checked_add(total_indices, index_count.value(), maximum_total_indices)) {
+                return Error{ErrorCode::resource_limit_exceeded,
+                             "The glTF expanded triangle index count exceeds the importer limit"};
             }
         }
     }

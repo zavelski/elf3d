@@ -1,14 +1,14 @@
 # Viewport and Tools
 
 Purpose: Document viewport state, input, navigation, picking, selection,
-visibility, measurement, and clipping behavior in Elf3D 0.6.0.
+visibility, measurement, and clipping behavior in Elf3D 0.7.1.
 
-Applicable version: 0.6.0
+Applicable version: 0.7.1
 
 Document status: Verified from public headers, tool modules, viewer code, tests,
-and 0.6.0 local validation.
+and 0.7.1 local validation.
 
-Release source identifier: local tag `v0.6.0` after release commit.
+Last verified Git commit: local tag `v0.7.1` after release commit
 
 Implementation source paths: `include/elf3d/viewport.h`,
 `include/elf3d/navigation.h`, `include/elf3d/picking.h`,
@@ -60,8 +60,12 @@ Navigation and tools share the input snapshot. The current behavior is:
 - Z + left drag dollies
 - middle drag pans
 - right drag pans
-- wheel over the 3D image dollies
-- plain surface click updates the examine pivot without moving the camera
+- wheel over the 3D image dollies, even if the docked 3D view does not already
+  have keyboard/window focus
+- plain surface click updates the examine pivot without moving the camera; a
+  later wheel zoom realigns deferred off-axis pivot state to the current camera
+  direction before changing distance, so quick clicks do not cause delayed
+  camera jumps
 - Ctrl + surface click selects
 - Shift + surface click hides the hit entity
 - measurement tool uses visible surface clicks for anchors
@@ -84,7 +88,7 @@ Orbit navigation supports:
 - configurable sensitivity and vertical orbit inversion
 - diagnostics through `NavigationSnapshot`
 
-Navigation is mouse-based in 0.6.0. Touch, gamepad, first-person movement, and
+Navigation is mouse-based in 0.7.1. Touch, gamepad, first-person movement, and
 keyboard fly-camera modes are not implemented.
 
 ## Picking
@@ -201,6 +205,10 @@ cube color, rotation, speed, and reset transform controls are in the side
 `Rendering` panel. The default 3D view clear color is white to match the light
 reference workspace.
 
+The About dialog is positioned with Dear ImGui next-window positioning before
+the dialog is first rendered, so first-open and later-open centering use the
+main application viewport size instead of a previous-frame window size.
+
 Successful model loads retain the public `SceneLoadReport`. The Model
 Information panel lists every import diagnostic and its source context, so
 optional-extension and visual-fallback warnings do not depend on a console.
@@ -210,6 +218,8 @@ triangle-based and does not sample material alpha.
 ## Validation
 
 Debug and Release tests cover interaction, navigation, picking, selection,
-visibility, measurement, clipping, renderer, and viewport lifetime. The 0.6.0
-compatibility paths are covered by importer, renderer, public API, and viewer
-builds. Versioned 0.4.0 release records remain immutable historical snapshots.
+visibility, measurement, clipping, renderer, and viewport lifetime. Navigation
+tests include regression coverage for hover-wheel zoom without focus and wheel
+zoom after a click-derived pivot. The 0.7.1 compatibility paths are covered by
+importer, renderer, public API, and viewer builds. Versioned release records
+before 0.7.1 remain immutable historical snapshots.
