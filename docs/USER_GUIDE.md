@@ -1,12 +1,12 @@
 # User Guide
 
-Purpose: Explain how to use the actual Elf3D 0.7.1 reference viewer.
+Purpose: Explain how to use the actual Elf3D 0.7.2 reference viewer.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
 Document status: Living guide verified from viewer code and README.
 
-Last verified Git commit: local tag `v0.7.1` after release commit
+Last verified Git commit: local tag `v0.7.2` after release commit
 
 Implementation source paths: `apps/viewer/src/main.cpp`, `integrations/imgui`,
 `include/elf3d`, `tests/fixtures/textured_pbr.gltf`

@@ -1,12 +1,12 @@
 # Roadmap
 
-Purpose: Track completed 0.7.1 work and candidate or exploratory follow-up work.
+Purpose: Track completed 0.7.2 work and candidate or exploratory follow-up work.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
 Document status: Living roadmap derived from audit findings and current code.
 
-Last verified Git commit: local tag `v0.7.1` after release commit
+Last verified Git commit: local tag `v0.7.2` after release commit
 
 Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_REMEDIATION_LOG.md`, `README.md`, `modules`,
@@ -16,8 +16,9 @@ Known limitations: This roadmap is not a promise of delivery. Candidate and
 exploratory items require separate design, implementation, and validation.
 Manual viewer validation for the 0.1.0 publication baseline was completed by
 the user on the packaged Windows Release viewer. 0.2.0 release validation is
-tracked under `docs/releases/0.2.0/`. Local 0.7.1 release validation is tracked
-under `docs/releases/0.7.1/`; GitHub publication remains a manual follow-up.
+tracked under `docs/releases/0.2.0/`. Published 0.7.1 verification is recorded
+under `docs/releases/0.7.1/PUBLICATION_REPORT.md`; local 0.7.2 release
+validation is tracked under `docs/releases/0.7.2/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 `PERFORMANCE_BASELINE.md`, `TESTING.md`
@@ -47,7 +48,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | --- | --- | --- | --- | --- | --- |
 | Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Required before public publication. |
 | Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature version tags. | None if required validation remains respected. | Record `GO - ready for public release` only after every gate passes. |
-| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Completed for `v0.1.0`: branch CI, tag-triggered GitHub Release, asset download/checksum verification, and public clone test passed. |
+| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Completed for `v0.1.0` and `v0.7.1`: branch CI, tag-triggered GitHub Release, asset download/checksum verification, and public clone test passed. |
 
 ## 0.1.x Candidate Corrections
 
@@ -56,6 +57,16 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Documentation path checks | Keep docs synchronized. | Documentation policy. | Reduces stale source references. | Avoid adding heavy tooling. | Lightweight script or CTest. |
 | Debug diagnostics for skipped GL deletes | Make shutdown mistakes visible. | Backend policy decision. | Easier host integration debugging. | Low-level logging policy must stay clean. | Backend tests where possible plus manual shutdown. |
 | Public header self-containment test | Verify include quality. | Build script/test addition. | Catches missing includes. | More test target maintenance. | CTest target. |
+
+## Completed For 0.7.2
+
+| Item | Motivation | Dependency | Expected benefit | Risk | Validation |
+| --- | --- | --- | --- | --- | --- |
+| Blended alpha-channel equation | Keep viewport texture alpha physically consistent with source-over composition. | OpenGL blend state. | Opaque clears remain opaque after transparent draws; host compositing gets correct alpha. | Broader reference-image coverage remains pending. | `elf3d.opengl_render_smoke` alpha-pixel check. |
+| Display-resolve resource cleanup | Avoid retaining resolve resources after a target is explicitly resized to zero. | OpenGL render-target lifetime. | Reduces GPU resource lifetime tail for zero-size viewports. | Requires current context, as before. | Debug/Release build and OpenGL smoke. |
+| Release workflow version derivation | Remove duplicated version literals from release automation. | CMake project version and tag naming. | Reduces tag/package/release-note drift. | Workflow still depends on GitHub runner/toolchain availability. | Local script smoke and tag workflow validation. |
+| Deterministic package ZIP metadata | Stabilize archive output for identical staged files. | Package script. | Entry order/timestamps no longer explain local/CI hash drift. | MSVC binary reproducibility is not claimed. | Two local package runs produced identical ZIP hashes. |
+| 0.7.2 release preparation | Establish a coherent source/package baseline. | Version metadata, release workflow, package script, docs. | 0.7.2 can be published without manual version edits in the workflow. | Manual viewer validation remains limited. | Debug/Release validation and release records. |
 
 ## Completed For 0.7.1
 
@@ -68,7 +79,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Real OpenGL smoke test | Exercise shader compilation and framebuffer readback in automation. | Hidden GLFW OpenGL context. | Catches GLSL/state/pixel regressions that fake-device tests cannot. | Test skips on machines without OpenGL 4.1 context. | CTest with skip return code 77. |
 | Expanded glTF index limit | Bound imported triangle-list memory after strip/fan conversion. | Importer resource-limit validation. | Prevents strip/fan expansion from bypassing index memory limits. | None for supported primitive modes. | glTF importer oversized strip fixture. |
 | Host-owned load diagnostics | Keep scene-load warnings out of global streams. | Existing `load_scene_with_report()` API. | Hosts choose how diagnostics are displayed. | Callers of compatibility `load_scene()` do not receive warnings. | Public API and viewer documentation. |
-| Local 0.7.1 release preparation | Establish a coherent source/package baseline. | Version metadata, release workflow, package script, docs. | 0.7.1 source can be reviewed and published later without guessing release state. | Remote CI/publication remains a separate manual gate. | Debug/Release validation and release records. |
+| Published 0.7.1 release | Verify the release path after local preparation. | GitHub workflows and release assets. | Confirms branch CI, tag workflow, assets, and public clone. | Manual viewer validation remained limited. | `docs/releases/0.7.1/PUBLICATION_REPORT.md`. |
 
 ## Completed For 0.6.0
 

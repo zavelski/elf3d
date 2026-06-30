@@ -1,18 +1,18 @@
 # Public API Overview
 
-Purpose: Describe the verified Elf3D 0.7.1 public C++ API and host integration
+Purpose: Describe the verified Elf3D 0.7.2 public C++ API and host integration
 contract.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
-Document status: Verified against public headers and 0.7.1 local validation.
+Document status: Verified against public headers and 0.7.2 local validation.
 
-Last verified Git commit: local tag `v0.7.1` after release commit
+Last verified Git commit: local tag `v0.7.2` after release commit
 
 Implementation source paths: `include/elf3d`, `facade/elf3d/src/engine.cpp`,
 `tests/public_api_test.cpp`
 
-Known limitations: This is a C++ API, not a stable C ABI. The 0.7.1 DLL surface
+Known limitations: This is a C++ API, not a stable C ABI. The 0.7.2 DLL surface
 uses standard library types and is intended for compatible compiler, standard
 library, and MSVC runtime configurations.
 
@@ -152,7 +152,7 @@ use `load_scene_with_report()`.
 
 ## Thread and ABI Notes
 
-Scene mutation and rendering are single-threaded in 0.7.1. Viewport creation,
+Scene mutation and rendering are single-threaded in 0.7.2. Viewport creation,
 resize, render, native texture access, and destruction are graphics-thread
 operations and require a compatible current OpenGL context.
 
@@ -161,7 +161,7 @@ value descriptions for UV1, vertex color, texture mappings, alpha, emissive,
 occlusion, normal-map preservation, unlit, IOR, and specular factors. Existing
 loading and scene-creation entry points remain source compatible. Because Elf3D
 exposes a C++ ABI rather than a stable C ABI, hosts must rebuild against
-matching 0.7.1 headers and a compatible toolchain.
+matching 0.7.2 headers and a compatible toolchain.
 
 The public ABI uses standard library types including `std::unique_ptr`,
 `std::filesystem::path`, `std::optional`, `std::span`, `std::string_view`, and

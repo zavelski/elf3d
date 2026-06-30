@@ -183,26 +183,31 @@ int main() {
             std::cerr << texture_result.error().message() << '\n';
             return 7;
         }
+        if (texture_result.value().extent != elf3d::Extent2D{64U, 64U}) {
+            return fail(8, "OpenGL smoke test returned an unexpected texture extent");
+        }
 
         std::vector<std::uint8_t> pixels(64U * 64U * 4U);
         glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_result.value().value));
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
         glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
         if (glGetError() != GL_NO_ERROR) {
-            return fail(8, "OpenGL smoke test failed to read the rendered texture");
+            return fail(9, "OpenGL smoke test failed to read the rendered texture");
         }
 
         const std::size_t center = ((32U * 64U) + 32U) * 4U;
         const std::uint8_t red_channel = pixels[center];
         const std::uint8_t green_channel = pixels[center + 1U];
         const std::uint8_t blue_channel = pixels[center + 2U];
+        const std::uint8_t alpha_channel = pixels[center + 3U];
         if (!in_range(red_channel, 130U, 145U) || !in_range(green_channel, 180U, 196U) ||
-            blue_channel > 8U) {
+            blue_channel > 8U || alpha_channel < 250U) {
             std::cerr << "Unexpected linear-blend sRGB pixel: R="
                       << static_cast<unsigned>(red_channel)
                       << " G=" << static_cast<unsigned>(green_channel)
-                      << " B=" << static_cast<unsigned>(blue_channel) << '\n';
-            return 9;
+                      << " B=" << static_cast<unsigned>(blue_channel)
+                      << " A=" << static_cast<unsigned>(alpha_channel) << '\n';
+            return 10;
         }
     }
 

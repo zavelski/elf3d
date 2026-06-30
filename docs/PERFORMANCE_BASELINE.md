@@ -1,14 +1,14 @@
 # Performance Baseline
 
-Purpose: Record measured and unmeasured performance status for Elf3D 0.7.1 and
+Purpose: Record measured and unmeasured performance status for Elf3D 0.7.2 and
 provide reproducible measurement procedures.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
 Document status: Baseline procedure only. No performance benchmark run has been
 performed.
 
-Last verified Git commit: local tag `v0.7.1` after release commit
+Last verified Git commit: local tag `v0.7.2` after release commit
 
 Implementation source paths: `apps/viewer`, `modules/gltf`, `modules/renderer`,
 `modules/picking`, `modules/scene`, `tests/fixtures/textured_pbr.gltf`
@@ -90,6 +90,6 @@ cmake --build --preset windows-release
 
 ## Current Baseline Decision
 
-No performance claims should be made for 0.7.1 beyond the existence of renderer,
+No performance claims should be made for 0.7.2 beyond the existence of renderer,
 picking, and cache statistics. The first real performance baseline should be a
 future task after release documentation and manual validation are complete.

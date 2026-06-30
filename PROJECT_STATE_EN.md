@@ -1,14 +1,14 @@
-# Elf3D 0.7.1 Project State
+# Elf3D 0.7.2 Project State
 
 Purpose: Living project-state baseline for the glTF compatibility development
 milestone after the audited 0.4.0 source.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
-Document status: Living release-state document for the local 0.7.1 source.
+Document status: Living release-state document for the local 0.7.2 source.
 Versioned 0.4.0 release records under `docs/releases/0.4.0/` remain immutable.
 
-Last verified Git commit: local tag `v0.7.1` after release commit
+Last verified Git commit: local tag `v0.7.2` after release commit
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
@@ -29,9 +29,10 @@ Related documents: `docs/GLTF_SUPPORT.md`, `docs/RENDERING_PIPELINE.md`,
 
 ## Implemented Vertical Slice
 
-Elf3D 0.7.1 carries forward the 0.6.0 production glTF compatibility baseline
-and adds targeted viewport UX stabilization, renderer correctness fixes, and
-release preparation.
+Elf3D 0.7.2 carries forward the published 0.7.1 static glTF/GLB compatibility,
+viewport UX, renderer color-space, and release baseline. It adds focused
+alpha-channel correctness, OpenGL resource cleanup, release workflow, and
+package reproducibility fixes from the post-0.7.1 audit.
 
 The glTF/static-visualization baseline includes:
 
@@ -52,7 +53,7 @@ The glTF/static-visualization baseline includes:
 - viewer display of successful-load diagnostics;
 - a repeatable public-API private-corpus probe.
 
-New 0.7.1 stabilization work includes:
+Carried-forward 0.7.1 stabilization work includes:
 
 - About dialog first-open centering using Dear ImGui next-window positioning;
 - hover-based mouse-wheel dolly when the cursor is inside the 3D view, without
@@ -68,8 +69,21 @@ New 0.7.1 stabilization work includes:
   triangle-list index count;
 - host-owned scene-load diagnostics with no `std::clog` output from
   `Engine::load_scene`;
-- refreshed 0.7.1 version metadata, packaging metadata, workflow metadata,
+- refreshed 0.7.2 version metadata, packaging metadata, workflow metadata,
   living documentation, and local release records.
+
+New 0.7.2 audit fixes include:
+
+- separate OpenGL alpha blending factors for material and overlay draws so the
+  viewport texture alpha remains correct over an opaque clear;
+- hidden-context OpenGL smoke coverage for resolved texture extent and alpha;
+- immediate display-resolve shader/VAO release when a viewport render target is
+  resized to zero;
+- default package-version derivation from `CMakeLists.txt`;
+- sorted deterministic ZIP packaging with fixed entry timestamps for fixed
+  staged file sets;
+- release workflow version derivation from CMake with tag validation and
+  version reuse for assets, title, and release notes.
 
 ## Architecture Boundaries
 
@@ -88,7 +102,7 @@ The carried-forward public glTF diagnostics API is source-compatible at the
 entry-point level: `Engine::load_scene` remains available, while
 `Engine::load_scene_with_report` returns a `LoadedScene` and `SceneLoadReport`.
 Public vertex/material value layouts include the glTF compatibility baseline,
-so matched-toolchain DLL consumers must rebuild for 0.7.1.
+so matched-toolchain DLL consumers must rebuild for 0.7.2.
 
 ## Compatibility Behavior
 
@@ -108,8 +122,8 @@ and report diagnostics. Unsupported required extensions fail clearly.
 ## Validation State
 
 Fresh Windows Debug and Release configure/build/test validation passed for the
-0.7.1 local release source. The Release glTF probe passed against
-`tests/fixtures/textured_pbr.gltf`, the 0.7.1 package was generated and
+0.7.2 local release source. The Release glTF probe passed against
+`tests/fixtures/textured_pbr.gltf`, the 0.7.2 package was generated and
 inspected, and the extracted packaged viewer process stayed alive for a
 short process-smoke run.
 
@@ -117,16 +131,9 @@ The automated test set now includes `elf3d.opengl_render_smoke`, which passed
 locally with a hidden real OpenGL context and verified GLSL compilation plus a
 linear transparent-blend center pixel.
 
-No visible/manual viewer interaction pass was rerun after the 0.7.1 renderer
+No visible/manual viewer interaction pass was rerun after the 0.7.2 renderer
 and importer fixes, so the local release does not claim visual inspection of the
 packaged viewer beyond the hidden-context OpenGL smoke and process launch.
-
-Post-release publication verification passed: remote `main`, remote `develop`,
-and the peeled `v0.7.1` tag all resolve to
-`5fa174b2c688654fd861438c65d4a3d6b5adb09a`; GitHub CI and the tag-triggered
-release workflow completed successfully; the published ZIP checksum matched the
-published `SHA256SUMS.txt`; a fresh public clone of `v0.7.1` resolved to the
-release source commit.
 
 No user-provided real-file corpus was attached or found in the workspace. The
 project-owned `tests/fixtures/textured_pbr.gltf` probe passes without hard

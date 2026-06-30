@@ -1,9 +1,9 @@
 # glTF Support
 
 Purpose: Record the verified static glTF and GLB support status for Elf3D
-0.7.1.
+0.7.2.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
 Document status: Living compatibility matrix verified from importer, renderer,
 public API, viewer, and tests.
@@ -22,7 +22,7 @@ Related documents: `PUBLIC_API_OVERVIEW.md`, `RENDERING_PIPELINE.md`,
 
 ## Summary
 
-Elf3D 0.7.1 imports bounded static geometry from `.gltf` and `.glb`
+Elf3D 0.7.2 imports bounded static geometry from `.gltf` and `.glb`
 synchronously. UV sets 0 and 1, per-texture UV selection, and
 `KHR_texture_transform` are preserved through the asset model and renderer.
 Successful imports may return structured diagnostics through

@@ -3,6 +3,37 @@
 All notable project changes are recorded here when they are relevant to a
 release baseline.
 
+## 0.7.2 - Alpha Channel And Release Process Hardening
+
+Elf3D 0.7.2 follows the published 0.7.1 baseline with a focused correctness and
+release-process pass from the post-release audit.
+
+### Implemented
+
+- Corrected OpenGL source-over alpha blending for material and overlay draws by
+  using a separate alpha blend equation. The resolved viewport alpha now remains
+  opaque over an opaque clear instead of being attenuated by source alpha twice.
+- Extended the hidden-context OpenGL smoke test to verify the resolved viewport
+  texture extent and alpha channel in addition to the linear-blend RGB pixel.
+- Released display-resolve shader/VAO resources immediately when a render
+  target is resized to zero.
+- Made `scripts/package_release.ps1` derive the default package version from
+  `CMakeLists.txt`.
+- Replaced `Compress-Archive` packaging with a sorted `ZipArchive` writer using
+  fixed entry timestamps. This makes the ZIP deterministic for a fixed staged
+  file set; MSVC binary reproducibility is still not claimed.
+- Updated the GitHub release workflow to derive the version from CMake, validate
+  it against the tag, and reuse that version for package paths, artifact names,
+  release title, and release notes.
+- Refreshed living documentation and 0.7.2 release records to reflect the
+  published 0.7.1 baseline and the 0.7.2 audit fixes.
+
+### Compatibility
+
+- No third-party dependency revisions changed.
+- Public API entry points remain source-compatible. The public C++ ABI remains
+  matched-toolchain and consumers should rebuild against the 0.7.2 headers.
+
 ## 0.7.1 - Renderer Correctness And Release Baseline
 
 Elf3D 0.7.1 prepares a local release baseline on top of the existing static
@@ -45,8 +76,9 @@ interaction behavior.
 - No third-party dependency revisions changed.
 - Public API entry points remain source-compatible. The public C++ ABI remains
   matched-toolchain and consumers should rebuild against the 0.7.1 headers.
-- GitHub publication, release asset upload, external corpus validation, and
-  public clone verification are intentionally left for later manual follow-up.
+- GitHub publication, release asset upload, asset checksum verification, and
+  public clone verification were completed after the source release commit and
+  recorded in `docs/releases/0.7.1/PUBLICATION_REPORT.md`.
 
 ## 0.6.0 - Self-contained Dependencies And glTF Compatibility Baseline
 

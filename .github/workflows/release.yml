@@ -23,15 +23,21 @@ jobs:
       - name: Verify release version
         shell: pwsh
         run: |
-          $version = "0.7.1"
+          $cmake = Get-Content -LiteralPath CMakeLists.txt -Raw
+          if ($cmake -notmatch "(?s)project\s*\(\s*Elf3D.*?VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)") {
+            throw "Could not determine the Elf3D project version from CMakeLists.txt."
+          }
+          $version = $Matches[1]
           $tag = "${{ github.ref_name }}"
           if ("${{ github.ref_type }}" -eq "tag" -and $tag -ne "v$version") {
             throw "This workflow currently packages Elf3D $version, but was triggered by $tag."
           }
-          $cmake = Get-Content -LiteralPath CMakeLists.txt -Raw
-          if ($cmake -notmatch "VERSION\s+$version") {
-            throw "CMake project version does not match $version."
+          $notes = "docs/releases/$version/GITHUB_RELEASE_NOTES.md"
+          if (-not (Test-Path -LiteralPath $notes -PathType Leaf)) {
+            throw "Release notes are missing: $notes"
           }
+          "ELF3D_RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ELF3D_RELEASE_NOTES=$notes" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Configure Release
         run: cmake --preset windows-release
@@ -44,14 +50,14 @@ jobs:
 
       - name: Package Release
         shell: pwsh
-        run: ./scripts/package_release.ps1 -Version 0.7.1
+        run: ./scripts/package_release.ps1 -Version $env:ELF3D_RELEASE_VERSION
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: elf3d-0.7.1-windows-release-assets
+          name: elf3d-${{ env.ELF3D_RELEASE_VERSION }}-windows-release-assets
           path: |
-            out/release/elf3d-viewer-0.7.1-windows-x64.zip
+            out/release/elf3d-viewer-${{ env.ELF3D_RELEASE_VERSION }}-windows-x64.zip
             out/release/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -62,12 +68,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
+          $version = $env:ELF3D_RELEASE_VERSION
           if (gh release view $tag *> $null) {
             throw "GitHub Release $tag already exists; refusing to overwrite it."
           }
           gh release create $tag `
-            out/release/elf3d-viewer-0.7.1-windows-x64.zip `
+            "out/release/elf3d-viewer-$version-windows-x64.zip" `
             out/release/SHA256SUMS.txt `
-            --title "Elf3D 0.7.1" `
-            --notes-file docs/releases/0.7.1/GITHUB_RELEASE_NOTES.md `
+            --title "Elf3D $version" `
+            --notes-file $env:ELF3D_RELEASE_NOTES `
             --latest

@@ -49,10 +49,10 @@ int main() {
     static_assert(!std::is_convertible_v<elf3d::ImageHandle, elf3d::TextureAssetHandle>);
 
     const elf3d::Version current = elf3d::version();
-    if (current.major != 0 || current.minor != 7 || current.patch != 1) {
+    if (current.major != 0 || current.minor != 7 || current.patch != 2) {
         return 1;
     }
-    if (std::strcmp(elf3d::version_string(), "0.7.1") != 0) {
+    if (std::strcmp(elf3d::version_string(), "0.7.2") != 0) {
         return 2;
     }
 

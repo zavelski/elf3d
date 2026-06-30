@@ -2,21 +2,22 @@
 
 Purpose: Index the verified Elf3D technical documentation set.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
-Document status: Living index for the local 0.7.1 source.
+Document status: Living index for the local 0.7.2 source.
 
-Last verified Git commit: local tag `v0.7.1` after release commit
+Last verified Git commit: local tag `v0.7.2` after release commit
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`
 
-Known limitations: This index is not an immutable release snapshot. The latest
-public release records are under `releases/0.7.1/`.
+Known limitations: This index is not an immutable release snapshot. The current
+local release records are under `releases/0.7.2/`; the latest public release
+records are under `releases/0.7.1/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
-`releases/0.7.1/RELEASE_CHECKLIST.md`
+`releases/0.7.2/RELEASE_CHECKLIST.md`
 
 ## Core Documents
 
@@ -34,7 +35,17 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `DOCUMENTATION_POLICY.md`: documentation ownership and review rules.
 - `DOCUMENTATION_UPDATE_CHECKLIST.md`: task checklist for documentation updates.
 
-## 0.7.1 Release Records
+## 0.7.2 Release Records
+
+- `releases/0.7.2/PROJECT_STATE_EN.md`
+- `releases/0.7.2/VALIDATION_SUMMARY.md`
+- `releases/0.7.2/KNOWN_LIMITATIONS.md`
+- `releases/0.7.2/RELEASE_CHECKLIST.md`
+- `releases/0.7.2/RELEASE_ARTIFACTS.md`
+- `releases/0.7.2/PUBLIC_CONTENT_AUDIT.md`
+- `releases/0.7.2/GITHUB_RELEASE_NOTES.md`
+
+## Previous 0.7.1 Release Records
 
 - `releases/0.7.1/PROJECT_STATE_EN.md`
 - `releases/0.7.1/VALIDATION_SUMMARY.md`
@@ -94,6 +105,6 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 ## Current Release Readiness
 
-The 0.7.1 source, local package, automated validation, GitHub publication, CI,
-release asset download, checksum verification, and public clone verification
-are tracked under `releases/0.7.1/`.
+The 0.7.2 source, local package, and automated validation are tracked under
+`releases/0.7.2/`. GitHub publication, CI, release asset download, checksum
+verification, and public clone verification are release follow-up gates.

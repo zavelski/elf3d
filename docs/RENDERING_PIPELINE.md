@@ -1,14 +1,14 @@
 # Rendering Pipeline
 
-Purpose: Document the verified Elf3D 0.7.1 renderer, OpenGL backend, material
+Purpose: Document the verified Elf3D 0.7.2 renderer, OpenGL backend, material
 path, caches, and limitations.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
 Document status: Living pipeline description verified from renderer/backend
 source and tests.
 
-Last verified Git commit: local tag `v0.7.1` after release commit
+Last verified Git commit: local tag `v0.7.2` after release commit
 
 Implementation source paths: `modules/graphics`, `modules/backend_opengl`,
 `modules/renderer`, `modules/viewport`, `facade/elf3d/src/engine.cpp`
@@ -87,6 +87,9 @@ display resolve pass.
 - `MASK`: fragments below `alphaCutoff` are discarded; retained fragments are
   opaque.
 - `BLEND`: simple linear source-over blending is enabled and depth writes are disabled.
+  RGB uses source alpha and one-minus-source-alpha factors; alpha uses `ONE`
+  and one-minus-source-alpha so the viewport texture alpha follows
+  source-over composition instead of squaring source alpha.
   Blended model primitives are submitted after opaque/masked primitives and
   sorted back-to-front by squared distance from camera to model origin.
 
@@ -126,5 +129,6 @@ selection, texture-transform values, alpha modes, unlit state, texture color
 roles/cache reuse, shader-path presence, draw ordering, clipping, overlays, and
 GPU-pick orchestration. `elf3d.opengl_render_smoke` creates a hidden real
 OpenGL context when available, compiles the real GLSL path, renders overlapping
-transparent geometry through the public API, and checks the resolved sRGB
-center pixel. Broader reference-image coverage remains future work.
+transparent geometry through the public API, and checks the resolved texture
+extent plus sRGB/alpha center pixel. Broader reference-image coverage remains
+future work.

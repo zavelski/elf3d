@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.7.1",
+    [string]$Version = "",
     [ValidateSet("Release")]
     [string]$Configuration = "Release",
     [string]$BuildDir = "out/build/windows-release",
@@ -11,6 +11,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+
+function Get-ProjectVersion {
+    $cmake = Get-Content -LiteralPath (Join-Path $repoRoot "CMakeLists.txt") -Raw
+    if ($cmake -notmatch "(?s)project\s*\(\s*Elf3D.*?VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)") {
+        throw "Could not determine the Elf3D project version from CMakeLists.txt."
+    }
+    return $Matches[1]
+}
 
 function Get-FullPathFromRepo {
     param([string]$Path)
@@ -33,6 +41,66 @@ function Assert-UnderRoot {
     if (-not $childFull.StartsWith($rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Path '$childFull' is outside '$rootFull'."
     }
+}
+
+function New-DeterministicZip {
+    param(
+        [string]$SourceDirectory,
+        [string]$DestinationPath
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    if (Test-Path -LiteralPath $DestinationPath) {
+        Remove-Item -LiteralPath $DestinationPath -Force
+    }
+
+    $sourceRoot = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\', '/')
+    $sourcePrefix = $sourceRoot + [System.IO.Path]::DirectorySeparatorChar
+    $fixedTimestamp = [System.DateTimeOffset]::new(2020, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero)
+    $files = Get-ChildItem -LiteralPath $sourceRoot -Recurse -File |
+        Sort-Object { $_.FullName.Substring($sourcePrefix.Length).Replace('\', '/') }
+
+    $fileStream = [System.IO.File]::Open(
+        $DestinationPath,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None)
+    try {
+        $archive = [System.IO.Compression.ZipArchive]::new(
+            $fileStream,
+            [System.IO.Compression.ZipArchiveMode]::Create,
+            $true)
+        try {
+            foreach ($file in $files) {
+                $relativePath = $file.FullName.Substring($sourcePrefix.Length).Replace('\', '/')
+                $entry = $archive.CreateEntry(
+                    $relativePath,
+                    [System.IO.Compression.CompressionLevel]::Optimal)
+                $entry.LastWriteTime = $fixedTimestamp
+                $entryStream = $entry.Open()
+                try {
+                    $sourceStream = [System.IO.File]::OpenRead($file.FullName)
+                    try {
+                        $sourceStream.CopyTo($entryStream)
+                    } finally {
+                        $sourceStream.Dispose()
+                    }
+                } finally {
+                    $entryStream.Dispose()
+                }
+            }
+        } finally {
+            $archive.Dispose()
+        }
+    } finally {
+        $fileStream.Dispose()
+    }
+}
+
+if ([System.String]::IsNullOrWhiteSpace($Version)) {
+    $Version = Get-ProjectVersion
 }
 
 $buildRoot = Get-FullPathFromRepo $BuildDir
@@ -180,11 +248,7 @@ ABI, and no validated Linux or macOS build.
 "@
 $readme | Set-Content -LiteralPath (Join-Path $stageRoot "README.txt") -Encoding UTF8
 
-if (Test-Path -LiteralPath $zipPath) {
-    Remove-Item -LiteralPath $zipPath -Force
-}
-
-Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $zipPath -Force
+New-DeterministicZip -SourceDirectory $stageRoot -DestinationPath $zipPath
 
 $hash = Get-FileHash -LiteralPath $zipPath -Algorithm SHA256
 $hashLine = "$($hash.Hash.ToLowerInvariant())  $([System.IO.Path]::GetFileName($zipPath))"

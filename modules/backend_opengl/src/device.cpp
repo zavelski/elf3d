@@ -411,6 +411,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         }
         if (extent.width == 0 || extent.height == 0) {
             release();
+            release_resolve_resources();
             extent_ = extent;
             return {};
         }
@@ -1688,8 +1689,9 @@ class OpenGLDevice final : public graphics::Device {
         glDisable(GL_FRAMEBUFFER_SRGB);
         if (description.alpha_mode == AlphaMode::blend) {
             glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glBlendEquation(GL_FUNC_ADD);
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE,
+                                GL_ONE_MINUS_SRC_ALPHA);
+            glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
             glDepthMask(GL_FALSE);
         } else {
             glDisable(GL_BLEND);
@@ -1871,7 +1873,9 @@ class OpenGLDevice final : public graphics::Device {
         glDisable(GL_PRIMITIVE_RESTART);
         glDisable(GL_RASTERIZER_DISCARD);
         glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE,
+                            GL_ONE_MINUS_SRC_ALPHA);
+        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         glDepthMask(GL_FALSE);
         glDepthFunc(GL_LEQUAL);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);

@@ -1,13 +1,13 @@
 # Testing
 
-Purpose: Document how Elf3D 0.7.1 is configured, built, tested, and manually
+Purpose: Document how Elf3D 0.7.2 is configured, built, tested, and manually
 validated.
 
-Applicable version: 0.7.1
+Applicable version: 0.7.2
 
 Document status: Living testing and compatibility-validation guide.
 
-Last verified Git commit: local tag `v0.7.1` after release commit
+Last verified Git commit: local tag `v0.7.2` after release commit
 
 Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
 `.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
@@ -20,7 +20,7 @@ verification.
 
 Related documents: `MODULE_MAP.md`, `USER_GUIDE.md`,
 `PERFORMANCE_BASELINE.md`, `audits/ELF3D_0.1.0_VALIDATION_MATRIX.md`,
-`releases/0.7.1/RELEASE_ARTIFACTS.md`
+`releases/0.7.2/RELEASE_ARTIFACTS.md`
 
 ## Environment
 
@@ -119,14 +119,15 @@ Each job configures, builds, and runs CTest. The corrected branch workflow was
 verified on public `develop` and `main` pushes before tag publication.
 
 The release workflow is `.github/workflows/release.yml`. It runs on `v*` tags
-and manual dispatch, verifies the 0.7.1 version, configures and builds Release,
-runs CTest, creates the Windows viewer package, uploads workflow artifacts, and
-creates a GitHub Release for tag-triggered runs when no release already exists.
-The local 0.7.1 release-source validation is recorded under
-`docs/releases/0.7.1/`; remote workflow results can be recorded only after
+and manual dispatch, derives the release version from `CMakeLists.txt`, verifies
+tag/version consistency, configures and builds Release, runs CTest, creates the
+Windows viewer package, uploads workflow artifacts, and creates a GitHub Release
+for tag-triggered runs when no release already exists.
+The local 0.7.2 release-source validation is recorded under
+`docs/releases/0.7.2/`; remote workflow results can be recorded only after
 publication.
 
-Before publishing 0.7.1, confirm that the GitHub
+Before publishing 0.7.2, confirm that the GitHub
 `windows-2022` runner exposes CMake 3.28 or newer and a Visual Studio 2022/MSVC
 toolchain that can build the checked-in `FILE_SET CXX_MODULES` configuration.
 
@@ -135,18 +136,21 @@ toolchain that can build the checked-in `FILE_SET CXX_MODULES` configuration.
 Local package command after a successful Release build:
 
 ```powershell
-.\scripts\package_release.ps1 -Version 0.7.1
+.\scripts\package_release.ps1
 ```
 
 Expected outputs:
 
 ```text
-out/release/elf3d-viewer-0.7.1-windows-x64.zip
+out/release/elf3d-viewer-0.7.2-windows-x64.zip
 out/release/SHA256SUMS.txt
 ```
 
-The package script requires the post-build viewer `assets` directory and copies
-it into the ZIP. Archive inspection for current releases must confirm:
+The package script derives the default version from `CMakeLists.txt`, requires
+the post-build viewer `assets` directory, and copies it into the ZIP. It writes
+ZIP entries in sorted order with fixed timestamps for deterministic archives
+when the staged files are identical. Archive inspection for current releases
+must confirm:
 
 ```text
 assets/font/DroidSans.ttf
@@ -167,7 +171,7 @@ assets/icon/show_all.png
 assets/icon/reset_layout.png
 ```
 
-SDK packaging is deferred for 0.7.1 because install/export rules and an
+SDK packaging is deferred for 0.7.2 because install/export rules and an
 external consumer validation workflow are not yet implemented.
 
 ## Public Header Self-Containment
@@ -223,13 +227,13 @@ cmake --build --preset windows-debug
 ctest --preset windows-debug -R elf3d.gltf_local_corpus --output-on-failure
 ```
 
-For the 0.7.1 milestone run, record the local corpus path and per-file results
-in `docs/releases/0.7.1/VALIDATION_SUMMARY.md`. If no user-provided corpus is
+For the 0.7.2 milestone run, record the local corpus path and per-file results
+in `docs/releases/0.7.2/VALIDATION_SUMMARY.md`. If no user-provided corpus is
 present, run the probe against `tests/fixtures/textured_pbr.gltf` and state
 clearly that the project fixture is not a substitute for the pending user
 corpus.
 
-Manual Release-viewer validation for 0.7.1 should record the procedural scene,
+Manual Release-viewer validation for 0.7.2 should record the procedural scene,
 `textured_pbr.gltf`, any UV1/texture-transform real-file case available, import
 diagnostic display, About dialog first-open centering, hover-wheel zoom without
 clicking to refocus, and quick-click/mouse-move/wheel no-jump behavior.

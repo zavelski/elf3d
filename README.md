@@ -5,7 +5,7 @@
 Elf3D is a modular C++20 3D visualization engine for loading, rendering, and
 interactively inspecting glTF 2.0 scenes in desktop applications.
 
-Current development version: 0.7.1.
+Current development version: 0.7.2.
 
 Maturity: first public baseline. The project is useful as an embeddable
 Windows/OpenGL visualization slice and reference viewer, but it is not a
@@ -13,7 +13,7 @@ complete game engine, editor, or stable cross-toolchain binary SDK.
 
 Validated baseline: Windows desktop x64, Visual Studio 2022 v17.14.35, MSVC
 19.44.35228.0, dynamic MSVC runtime, and OpenGL 4.1 core profile. Linux and
-macOS are architectural goals, but they are not validated platforms for 0.7.1.
+macOS are architectural goals, but they are not validated platforms for 0.7.2.
 
 ## Features
 
@@ -50,7 +50,7 @@ plus the optional ImGui integration target.
 
 ## glTF Scope
 
-Elf3D 0.7.1 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
+Elf3D 0.7.2 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
 images, node hierarchy, TRS/matrices, reusable meshes, triangle lists/strips/
 fans, positions, normals, generated normals, `TEXCOORD_0`, `TEXCOORD_1`,
 `COLOR_0`, per-slot `texCoord`, `KHR_texture_transform`, base-color alpha,
@@ -199,7 +199,8 @@ docs/                   Technical documentation and release records
 - [Performance baseline](docs/PERFORMANCE_BASELINE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [User guide](docs/USER_GUIDE.md)
-- [0.7.1 release records](docs/releases/0.7.1/)
+- [0.7.2 release records](docs/releases/0.7.2/)
+- [Previous 0.7.1 release records](docs/releases/0.7.1/)
 - [Previous 0.6.0 local release records](docs/releases/0.6.0/)
 - [Previous 0.4.0 release candidate records](docs/releases/0.4.0/)
 - [Previous 0.2.0 public release records](docs/releases/0.2.0/)
@@ -207,9 +208,11 @@ docs/                   Technical documentation and release records
 
 ## Release
 
-The latest public release is 0.7.1, published from tag `v0.7.1` as
-[Elf3D 0.7.1](https://github.com/zavelski/elf3d/releases/tag/v0.7.1).
-The previous public release remains 0.2.0, published from tag `v0.2.0` as
+The `0.7.2` release source is prepared locally. GitHub publication, CI,
+GitHub Release creation, asset upload, and public clone verification are left
+for release follow-up. The latest public release is 0.7.1, published from tag
+`v0.7.1` as [Elf3D 0.7.1](https://github.com/zavelski/elf3d/releases/tag/v0.7.1).
+The previous 0.2.0 public release remains available from tag `v0.2.0` as
 [Elf3D 0.2.0](https://github.com/zavelski/elf3d/releases/tag/v0.2.0).
 The previous 0.1.0 release remains available from tag `v0.1.0`.
 
