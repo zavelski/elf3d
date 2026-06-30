@@ -9,6 +9,8 @@
 
 namespace elf3d {
 
+inline constexpr std::uint32_t maximum_texture_coordinate_sets = 2;
+
 namespace detail {
 class SceneHandleAccess;
 }
@@ -172,8 +174,31 @@ struct VertexPositionNormalTexCoord {
     Float3 position;
     Float3 normal;
     Float2 texcoord0;
+    Float2 texcoord1;
+    Color4 color{1.0F, 1.0F, 1.0F, 1.0F};
 
     bool operator==(const VertexPositionNormalTexCoord &) const = default;
+};
+
+enum class AlphaMode {
+    opaque,
+    mask,
+    blend,
+};
+
+struct TextureTransform {
+    Float2 offset;
+    Float2 scale{1.0F, 1.0F};
+    float rotation_radians = 0.0F;
+
+    bool operator==(const TextureTransform &) const = default;
+};
+
+struct TextureMapping {
+    std::uint32_t texcoord_set = 0;
+    TextureTransform transform;
+
+    bool operator==(const TextureMapping &) const = default;
 };
 
 struct MeshDataView {
@@ -242,6 +267,24 @@ struct MaterialDescription {
     float roughness_factor = 1.0F;
     TextureAssetHandle base_color_texture;
     TextureAssetHandle metallic_roughness_texture;
+
+    bool unlit = false;
+    AlphaMode alpha_mode = AlphaMode::opaque;
+    float alpha_cutoff = 0.5F;
+    Float3 emissive_factor;
+    float normal_scale = 1.0F;
+    float occlusion_strength = 1.0F;
+    float ior = 1.5F;
+    float specular_factor = 1.0F;
+    Float3 specular_color_factor{1.0F, 1.0F, 1.0F};
+    TextureMapping base_color_texture_mapping;
+    TextureMapping metallic_roughness_texture_mapping;
+    TextureAssetHandle normal_texture;
+    TextureMapping normal_texture_mapping;
+    TextureAssetHandle occlusion_texture;
+    TextureMapping occlusion_texture_mapping;
+    TextureAssetHandle emissive_texture;
+    TextureMapping emissive_texture_mapping;
 
     bool operator==(const MaterialDescription &) const = default;
 };

@@ -47,6 +47,9 @@ struct SceneStatistics {
     std::uint64_t decoded_image_bytes = 0;
     std::uint64_t materials_with_base_color_textures = 0;
     std::uint64_t materials_with_metallic_roughness_textures = 0;
+    std::uint64_t materials_with_normal_textures = 0;
+    std::uint64_t materials_with_occlusion_textures = 0;
+    std::uint64_t materials_with_emissive_textures = 0;
 
     bool operator==(const SceneStatistics &) const = default;
 };
@@ -198,8 +201,8 @@ class ELF3D_API Scene final {
     class Impl;
     class ReleaseContext final {
       public:
-        using ReleaseCallback =
-            void (*)(const std::shared_ptr<void> &context, SceneId scene) noexcept;
+        using ReleaseCallback = void (*)(const std::shared_ptr<void> &context,
+                                         SceneId scene) noexcept;
 
         ReleaseContext(std::weak_ptr<void> context, ReleaseCallback callback) noexcept;
         void release(SceneId scene) const noexcept;
@@ -210,10 +213,9 @@ class ELF3D_API Scene final {
     };
 
     explicit Scene(std::unique_ptr<Impl> impl) noexcept;
-    [[nodiscard]] static Result<std::unique_ptr<Scene>> create(std::uintptr_t engine_token,
-                                                               std::uint64_t scene_value,
-                                                               std::shared_ptr<ReleaseContext>
-                                                                   release_context) noexcept;
+    [[nodiscard]] static Result<std::unique_ptr<Scene>>
+    create(std::uintptr_t engine_token, std::uint64_t scene_value,
+           std::shared_ptr<ReleaseContext> release_context) noexcept;
 
     std::unique_ptr<Impl> impl_;
 };

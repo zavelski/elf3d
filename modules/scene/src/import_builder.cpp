@@ -37,8 +37,7 @@ Result<ImageHandle> ImportBuilder::create_image(const ImageDescription &descript
     return storage_->create_image(description);
 }
 
-Result<TextureAssetHandle>
-ImportBuilder::create_texture(const TextureDescription &description) {
+Result<TextureAssetHandle> ImportBuilder::create_texture(const TextureDescription &description) {
     return storage_->create_texture(description);
 }
 
@@ -50,6 +49,12 @@ Result<void>
 ImportBuilder::set_model_primitives(EntityId entity,
                                     std::span<const ModelPrimitiveBinding> primitives) {
     return storage_->set_model_primitives(entity, primitives);
+}
+
+Result<void>
+ImportBuilder::set_perspective_camera(EntityId entity,
+                                      const PerspectiveCameraDescription &description) {
+    return storage_->attach_perspective_camera(entity, description);
 }
 
 } // namespace elf3d::scene

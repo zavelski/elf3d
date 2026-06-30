@@ -83,6 +83,42 @@ foreach ($asset in $requiredAssets) {
     }
 }
 
+$thirdPartyNotices = @(
+    @{
+        Source = Join-Path $repoRoot "third_party/cgltf/LICENSE"
+        Name = "cgltf-LICENSE.txt"
+    },
+    @{
+        Source = Join-Path $repoRoot "third_party/glad/LICENSE.txt"
+        Name = "glad-LICENSE.txt"
+    },
+    @{
+        Source = Join-Path $repoRoot "third_party/glfw/LICENSE.md"
+        Name = "glfw-LICENSE.md"
+    },
+    @{
+        Source = Join-Path $repoRoot "third_party/glm/copying.txt"
+        Name = "glm-copying.txt"
+    },
+    @{
+        Source = Join-Path $repoRoot "third_party/imgui/LICENSE.txt"
+        Name = "imgui-LICENSE.txt"
+    },
+    @{
+        Source = Join-Path $repoRoot "third_party/stb/LICENSE"
+        Name = "stb-LICENSE.txt"
+    },
+    @{
+        Source = Join-Path $repoRoot "apps/viewer/assets/font/DroidSans-LICENSE-APACHE-2.0.txt"
+        Name = "droidsans-APACHE-2.0.txt"
+    }
+)
+foreach ($notice in $thirdPartyNotices) {
+    if (-not (Test-Path -LiteralPath $notice.Source -PathType Leaf)) {
+        throw "Required third-party notice not found: $($notice.Source)"
+    }
+}
+
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 
 $packageName = "elf3d-viewer-$Version-windows-x64"
@@ -104,8 +140,13 @@ Copy-Item -LiteralPath $engineDll -Destination $stageRoot
 Copy-Item -LiteralPath $assetsDir -Destination (Join-Path $stageRoot "assets") -Recurse
 Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $repoRoot "THIRD_PARTY.md") -Destination $stageRoot
-Copy-Item -LiteralPath (Join-Path $repoRoot "third_party/licenses") `
-    -Destination (Join-Path $stageRoot "third_party_licenses") -Recurse
+
+$thirdPartyNoticesDir = Join-Path $stageRoot "third_party_licenses"
+New-Item -ItemType Directory -Force -Path $thirdPartyNoticesDir | Out-Null
+foreach ($notice in $thirdPartyNotices) {
+    Copy-Item -LiteralPath $notice.Source `
+        -Destination (Join-Path $thirdPartyNoticesDir $notice.Name)
+}
 
 $readme = @"
 Elf3D Viewer $Version for Windows x64

@@ -16,7 +16,6 @@ target_sources(
 target_include_directories(
     elf3d_assets
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/include
 )
 target_link_libraries(elf3d_assets PUBLIC elf3d_math elf3d_core)

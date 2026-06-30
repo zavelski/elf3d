@@ -8,6 +8,7 @@
 #include <cmath>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 import elf.assets;
@@ -131,7 +132,10 @@ class FakeDevice final : public elf3d::graphics::Device {
             std::make_unique<FakeTexture>(&texture_destruction_count)};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::GraphicsPipeline>>
-    create_graphics_pipeline(const elf3d::graphics::GraphicsPipelineDescription &) override {
+    create_graphics_pipeline(
+        const elf3d::graphics::GraphicsPipelineDescription &description) override {
+        vertex_shader_source = description.vertex_shader_source;
+        fragment_shader_source = description.fragment_shader_source;
         return std::unique_ptr<elf3d::graphics::GraphicsPipeline>{std::make_unique<FakePipeline>()};
     }
     [[nodiscard]] elf3d::Result<void>
@@ -175,6 +179,8 @@ class FakeDevice final : public elf3d::graphics::Device {
     std::vector<elf3d::graphics::Texture2DDescription> texture_descriptions;
     std::vector<elf3d::graphics::DrawIndexedDescription> draws;
     std::vector<elf3d::graphics::PickingDrawDescription> picking_draws;
+    std::string vertex_shader_source;
+    std::string fragment_shader_source;
 };
 
 [[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.0001F) noexcept {
@@ -210,12 +216,29 @@ int main() {
     elf3d::MaterialDescription textured_description;
     textured_description.base_color = {0.5F, 0.5F, 0.5F, 1.0F};
     textured_description.base_color_texture = texture.value();
+    textured_description.base_color_texture_mapping.texcoord_set = 1;
+    textured_description.base_color_texture_mapping.transform.offset = {0.25F, 0.5F};
+    textured_description.base_color_texture_mapping.transform.scale = {2.0F, 3.0F};
+    textured_description.base_color_texture_mapping.transform.rotation_radians = 0.5F;
     textured_description.metallic_roughness_texture = texture.value();
+    textured_description.occlusion_texture = texture.value();
+    textured_description.occlusion_texture_mapping.texcoord_set = 1;
+    textured_description.occlusion_strength = 0.6F;
+    textured_description.emissive_texture = texture.value();
+    textured_description.emissive_texture_mapping.texcoord_set = 1;
+    textured_description.emissive_factor = {0.2F, 0.3F, 0.4F};
+    textured_description.ior = 1.33F;
+    textured_description.specular_factor = 0.75F;
+    textured_description.specular_color_factor = {0.8F, 0.9F, 1.0F};
+    textured_description.unlit = true;
+    textured_description.alpha_mode = elf3d::AlphaMode::mask;
+    textured_description.alpha_cutoff = 0.35F;
     const auto material = scene.create_material(textured_description);
     elf3d::MaterialDescription double_sided_description;
     double_sided_description.base_color = {0.8F, 0.2F, 0.2F, 1.0F};
     double_sided_description.double_sided = true;
     double_sided_description.base_color_texture = clamped_texture.value();
+    double_sided_description.alpha_mode = elf3d::AlphaMode::blend;
     const auto double_sided = scene.create_material(double_sided_description);
     if (!mesh || !image || !texture || !clamped_texture || !material || !double_sided) {
         return 1;
@@ -247,11 +270,18 @@ int main() {
     if (!renderer) {
         return 3;
     }
+    if (device->vertex_shader_source.find("a_texcoord1") == std::string::npos ||
+        device->vertex_shader_source.find("a_color") == std::string::npos ||
+        device->fragment_shader_source.find("mapped_uv") == std::string::npos ||
+        device->fragment_shader_source.find("u_alpha_mode") == std::string::npos ||
+        device->fragment_shader_source.find("u_emissive_texture") == std::string::npos) {
+        return 31;
+    }
     FakeRenderTarget target;
     const auto first = renderer.value()->render(scene, camera.value(), target, {}, {});
     const auto second = renderer.value()->render(scene, camera.value(), target, {}, {});
-    const elf3d::RenderStatistics expected_first{2, 2, 6, 6, 3, 3, 3, 0, 0};
-    const elf3d::RenderStatistics expected_second{2, 2, 6, 6, 3, 0, 3, 0, 0};
+    const elf3d::RenderStatistics expected_first{2, 2, 6, 6, 5, 3, 3, 0, 0};
+    const elf3d::RenderStatistics expected_second{2, 2, 6, 6, 5, 0, 3, 0, 0};
     if (!first || !second || first.value() != expected_first || second.value() != expected_second ||
         device->upload_count != 1 || device->draw_count != 4 || device->draws.size() != 4 ||
         device->texture_upload_count != 3 || device->texture_descriptions.size() != 3 ||
@@ -260,7 +290,19 @@ int main() {
         device->texture_descriptions[2].wrap_u !=
             elf3d::graphics::TextureAddressMode::clamp_to_edge ||
         !device->draws[0].front_face_clockwise || device->draws[0].double_sided ||
-        !device->draws[1].front_face_clockwise || !device->draws[1].double_sided) {
+        device->draws[0].texture_mappings[0].texcoord_set != 1U ||
+        device->draws[0].texture_mappings[0].transform.offset != elf3d::Float2{0.25F, 0.5F} ||
+        device->draws[0].texture_mappings[0].transform.scale != elf3d::Float2{2.0F, 3.0F} ||
+        !nearly_equal(device->draws[0].texture_mappings[0].transform.rotation_radians, 0.5F) ||
+        device->draws[0].alpha_mode != elf3d::AlphaMode::mask ||
+        !nearly_equal(device->draws[0].alpha_cutoff, 0.35F) ||
+        device->draws[0].occlusion_texture == nullptr ||
+        device->draws[0].emissive_texture == nullptr ||
+        device->draws[0].emissive_factor != elf3d::Float3{0.2F, 0.3F, 0.4F} ||
+        !nearly_equal(device->draws[0].ior, 1.33F) ||
+        !nearly_equal(device->draws[0].specular_factor, 0.75F) || !device->draws[0].unlit ||
+        !device->draws[1].front_face_clockwise || !device->draws[1].double_sided ||
+        device->draws[1].alpha_mode != elf3d::AlphaMode::blend) {
         return 4;
     }
 
@@ -268,17 +310,18 @@ int main() {
     device->picking_pixel = elf3d::graphics::PickingPixel{2U, 1U, 0U, 0.5F, true};
     const elf3d::scene::VisibilityFilter visibility =
         elf3d::scene::make_visibility_filter(scene, std::nullopt).value();
-    const auto gpu_pick = renderer.value()->gpu_pick(
-        scene, camera.value(), picking_target, {319.5F, 179.5F}, visibility,
-        elf3d::clipping::disabled_filter());
+    const auto gpu_pick =
+        renderer.value()->gpu_pick(scene, camera.value(), picking_target, {319.5F, 179.5F},
+                                   visibility, elf3d::clipping::disabled_filter());
     if (!gpu_pick || !gpu_pick.value().hit.has_value() || gpu_pick.value().draw_calls != 2 ||
         gpu_pick.value().pixels_read != 1 || picking_target.clear_count != 1 ||
         device->picking_draw_count != 2 || device->picking_draws.size() != 2 ||
-        device->picking_draws[0].object_id != 1U || device->picking_draws[0].primitive_index != 0U ||
-        device->picking_draws[1].object_id != 2U || device->picking_draws[1].primitive_index != 1U ||
+        device->picking_draws[0].object_id != 1U ||
+        device->picking_draws[0].primitive_index != 0U ||
+        device->picking_draws[1].object_id != 2U ||
+        device->picking_draws[1].primitive_index != 1U ||
         gpu_pick.value().hit->entity != model.value() ||
-        gpu_pick.value().hit->mesh != mesh.value() ||
-        gpu_pick.value().hit->primitive_index != 1U ||
+        gpu_pick.value().hit->mesh != mesh.value() || gpu_pick.value().hit->primitive_index != 1U ||
         gpu_pick.value().hit->triangle_index != 0U) {
         return 45;
     }
@@ -289,17 +332,17 @@ int main() {
         elf3d::EntityHighlight{model.value(), elf3d::Color4{1.0F, 0.2F, 0.0F, 1.0F}, 0.6F};
     const auto highlighted =
         renderer.value()->render(scene, camera.value(), target, {}, {}, highlight_options);
-    const elf3d::RenderStatistics expected_highlighted{3, 3, 9, 9, 5, 0, 3, 0, 0};
+    const elf3d::RenderStatistics expected_highlighted{3, 3, 9, 9, 9, 0, 3, 0, 0};
     if (!shared_model || !highlighted || highlighted.value() != expected_highlighted ||
         device->draws.size() != 7 || device->draws[4].highlight_strength != 0.6F ||
-        device->draws[5].highlight_strength != 0.6F ||
-        device->draws[6].highlight_strength != 0.0F) {
+        device->draws[5].highlight_strength != 0.0F ||
+        device->draws[6].highlight_strength != 0.6F) {
         return 41;
     }
     const auto hidden_visibility = scene.set_entity_visible(model.value(), false);
     const auto hidden_render =
         renderer.value()->render(scene, camera.value(), target, {}, {}, highlight_options);
-    const elf3d::RenderStatistics expected_hidden{1, 1, 3, 3, 2, 0, 3, 0, 0};
+    const elf3d::RenderStatistics expected_hidden{1, 1, 3, 3, 4, 0, 3, 0, 0};
     if (!hidden_visibility || !hidden_render || hidden_render.value() != expected_hidden ||
         device->draws.size() != 8 || device->draws.back().highlight_strength != 0.0F) {
         return 42;
@@ -336,8 +379,8 @@ int main() {
     const elf3d::clipping::ClippingFilter cutting_filter =
         elf3d::clipping::make_filter(cutting_plane, {}, 101).value();
     const elf3d::Result<elf3d::renderer::RenderList> clipped_list =
-        elf3d::renderer::build_render_list(scene, camera.value(), {640, 360},
-                                           clipping_visibility, cutting_filter);
+        elf3d::renderer::build_render_list(scene, camera.value(), {640, 360}, clipping_visibility,
+                                           cutting_filter);
     if (!clipped_list || clipped_list.value().items.size() != 3 ||
         clipped_list.value().clipping_bounds_tested != 3 ||
         clipped_list.value().clipping_bounds_rejected != 0 ||

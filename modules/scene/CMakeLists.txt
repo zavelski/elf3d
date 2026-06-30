@@ -19,7 +19,6 @@ target_compile_definitions(elf3d_scene PRIVATE ELF3D_BUILDING_LIBRARY)
 target_include_directories(
     elf3d_scene
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/include
 )
 target_link_libraries(elf3d_scene PUBLIC elf3d_assets elf3d_math elf3d_core)

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     Elf3D
-    VERSION 0.4.0
+    VERSION 0.5.0
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
@@ -21,6 +21,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>")
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 option(ELF3D_BUILD_VIEWER "Build the Elf3D reference viewer" ON)
+set(ELF3D_GLTF_CORPUS_DIR "" CACHE PATH
+    "Optional local/private glTF corpus directory registered as a CTest validation")
 
 include(cmake/compiler_options.cmake)
 include(cmake/dependencies.cmake)

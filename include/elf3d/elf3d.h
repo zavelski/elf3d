@@ -1,15 +1,16 @@
 #ifndef ELF3D_ELF3D_H
 #define ELF3D_ELF3D_H
 
+#include <elf3d/clipping.h>
 #include <elf3d/core/api.h>
 #include <elf3d/core/result.h>
 #include <elf3d/core/version.h>
-#include <elf3d/clipping.h>
 #include <elf3d/graphics.h>
 #include <elf3d/measurement.h>
 #include <elf3d/navigation.h>
 #include <elf3d/picking.h>
 #include <elf3d/scene.h>
+#include <elf3d/scene_load.h>
 #include <elf3d/selection.h>
 #include <elf3d/viewport.h>
 
@@ -21,6 +22,11 @@ namespace elf3d {
 [[nodiscard]] ELF3D_API Version version() noexcept;
 
 [[nodiscard]] ELF3D_API const char *version_string() noexcept;
+
+struct LoadedScene {
+    std::unique_ptr<Scene> scene;
+    SceneLoadReport report;
+};
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -50,6 +56,8 @@ class ELF3D_API Engine {
     // Loading is synchronous. The existing scene, if any, is not modified.
     [[nodiscard]] Result<std::unique_ptr<Scene>> load_scene(const std::filesystem::path &path,
                                                             const SceneLoadOptions &options = {});
+    [[nodiscard]] Result<LoadedScene> load_scene_with_report(const std::filesystem::path &path,
+                                                             const SceneLoadOptions &options = {});
 
     // Native texture access is non-owning and requires the owning graphics
     // thread with a compatible host OpenGL context current.

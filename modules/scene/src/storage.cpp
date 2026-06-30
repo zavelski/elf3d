@@ -402,6 +402,23 @@ Storage::create_perspective_camera(const PerspectiveCameraDescription &descripti
     return entity_result.value();
 }
 
+Result<void> Storage::attach_perspective_camera(EntityId entity_id,
+                                                const PerspectiveCameraDescription &description) {
+    Result<EntityRecord *> record = mutable_entity(entity_id);
+    if (!record) {
+        return record.error();
+    }
+    if (!valid_camera_description(description)) {
+        return Error{ErrorCode::invalid_camera_configuration,
+                     "A perspective camera requires a field of view in (0, pi), positive near "
+                     "plane, and farther far plane"};
+    }
+    record.value()->camera = description;
+    increment_revision();
+    increment_hierarchy_revision();
+    return {};
+}
+
 Result<PerspectiveCameraDescription>
 Storage::perspective_camera(EntityId entity_id) const noexcept {
     const Result<const EntityRecord *> record = entity(entity_id);
@@ -682,6 +699,15 @@ SceneStatistics Storage::statistics() const noexcept {
         if (material.description.metallic_roughness_texture.is_valid()) {
             ++result.materials_with_metallic_roughness_textures;
         }
+        if (material.description.normal_texture.is_valid()) {
+            ++result.materials_with_normal_textures;
+        }
+        if (material.description.occlusion_texture.is_valid()) {
+            ++result.materials_with_occlusion_textures;
+        }
+        if (material.description.emissive_texture.is_valid()) {
+            ++result.materials_with_emissive_textures;
+        }
     }
     return result;
 }
@@ -904,8 +930,7 @@ Result<VisibilityFilter> make_visibility_filter(const Storage &scene,
         }
         std::sort(filter.isolated_entity_values.begin(), filter.isolated_entity_values.end());
         filter.isolated_entity_values.erase(
-            std::unique(filter.isolated_entity_values.begin(),
-                        filter.isolated_entity_values.end()),
+            std::unique(filter.isolated_entity_values.begin(), filter.isolated_entity_values.end()),
             filter.isolated_entity_values.end());
         return filter;
     } catch (...) {

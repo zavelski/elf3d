@@ -1,8 +1,10 @@
 # Third-Party Software
 
-Dependencies are fetched from their official repositories by CMake FetchContent
-and pinned to reproducible revisions. Project warning-as-error settings are not
-applied to their implementation files.
+Dependencies are vendored from their official repositories as ordinary tracked
+source subsets under `third_party/` and pinned to reproducible revisions. A
+normal configure/build does not run FetchContent, clone repositories, download
+archives, or depend on `_deps/*-src` directories. Project warning-as-error
+settings are not applied to third-party implementation files.
 
 Elf3D original source code is licensed under the MIT License in the root
 `LICENSE` file. Third-party components listed here remain governed by their own
@@ -15,13 +17,14 @@ licenses and are not relicensed as Elf3D source code.
 - Pinned commit: `036bf939b6f8d74ad76bcf926b757c56e68c54ff`
 - Revision resolved: 2026-06-22
 - License: MIT
-- Integration: CMake FetchContent and dedicated `elf3d_third_party_imgui` static target
+- Vendored path: `third_party/imgui`
+- Integration: dedicated `elf3d_third_party_imgui` static target
 - Compiled core sources: `imgui.cpp`, `imgui_draw.cpp`, `imgui_tables.cpp`,
   `imgui_widgets.cpp`, and `imgui_demo.cpp`
 - Compiled backends: `backends/imgui_impl_glfw.cpp` and
   `backends/imgui_impl_opengl3.cpp`
 
-The upstream license notice is preserved in `third_party/licenses/imgui-LICENSE.txt`.
+The upstream license notice is preserved in `third_party/imgui/LICENSE.txt`.
 
 ## GLFW
 
@@ -29,10 +32,11 @@ The upstream license notice is preserved in `third_party/licenses/imgui-LICENSE.
 - Stable release: `3.4`
 - Pinned commit: `a74efa0d5628b74adc0426af4c5710e287fa7c2c`
 - License: zlib/libpng
-- Integration: CMake FetchContent with examples, tests, documentation, and install
-  rules disabled
+- Vendored path: `third_party/glfw`
+- Integration: local GLFW CMake project with examples, tests, documentation,
+  Wayland, and install rules disabled
 
-The upstream license notice is preserved in `third_party/licenses/glfw-LICENSE.md`.
+The upstream license notice is preserved in `third_party/glfw/LICENSE.md`.
 
 ## GLM
 
@@ -41,10 +45,11 @@ The upstream license notice is preserved in `third_party/licenses/glfw-LICENSE.m
 - Pinned commit: `8d1fd52e5ab5590e2c81768ace50c72bae28f2ed`
 - Release inspected: 2026-06-22
 - License: Happy Bunny License or MIT License
-- Integration: CMake FetchContent using the official exact-commit archive with SHA-256 verification
+- Vendored path: `third_party/glm`
+- Integration: local `glm::glm` interface target
 - Scope: implementation dependency of the internal `elf3d_math` target only
 
-The upstream license notice is preserved in `third_party/licenses/glm-copying.txt`.
+The upstream license notice is preserved in `third_party/glm/copying.txt`.
 
 ## GLAD
 
@@ -58,7 +63,7 @@ The upstream license notice is preserved in `third_party/licenses/glm-copying.tx
 - Scope: private dependency of `elf3d_backend_opengl` only
 
 The generator was invoked with `--api gl:core=4.1 --extensions " " --reproducible c`.
-The upstream license notice is preserved in `third_party/licenses/glad-LICENSE.txt`.
+The upstream license notice is preserved in `third_party/glad/LICENSE.txt`.
 
 ## cgltf
 
@@ -67,14 +72,14 @@ The upstream license notice is preserved in `third_party/licenses/glad-LICENSE.t
 - Pinned commit: `360db1a95480fe102ae9c69b27c5d101167ff5ba`
 - Release inspected: 2026-06-22
 - License: MIT
-- Integration: CMake FetchContent plus a dedicated `elf3d_third_party_cgltf`
-  static target
+- Vendored path: `third_party/cgltf`
+- Integration: dedicated `elf3d_third_party_cgltf` static target
 - Scope: private dependency of the internal `elf3d_gltf` target only
 
 `CGLTF_IMPLEMENTATION` is defined in exactly one private project source file,
 `modules/gltf/src/cgltf_implementation.cpp`. cgltf headers and types do not
 propagate through Elf3D public interfaces. The upstream license notice is
-preserved in `third_party/licenses/cgltf-LICENSE.txt`.
+preserved in `third_party/cgltf/LICENSE`.
 
 ## stb
 
@@ -82,15 +87,15 @@ preserved in `third_party/licenses/cgltf-LICENSE.txt`.
 - Pinned commit: `31c1ad37456438565541f4919958214b6e762fb4`
 - Revision inspected: 2026-06-22 (commit dated 2026-04-15)
 - License: MIT or public domain, at the user's choice
-- Integration: CMake FetchContent plus a dedicated `elf3d_third_party_stb` static target
+- Vendored path: `third_party/stb`
+- Integration: dedicated `elf3d_third_party_stb` static target
 - Enabled decoder formats: PNG and JPEG only
 - Scope: private implementation dependency of the internal `elf3d_image` target only
 
 `STB_IMAGE_IMPLEMENTATION` is defined in exactly one private project source file,
 `modules/image/src/stb_image_implementation.cpp`. The same file limits stb_image
 to PNG and JPEG. stb headers and types do not propagate through Elf3D public
-interfaces. The upstream license notice is preserved in
-`third_party/licenses/stb-LICENSE.txt`.
+interfaces. The upstream license notice is preserved in `third_party/stb/LICENSE`.
 
 ## Droid Sans
 
@@ -105,4 +110,4 @@ interfaces. The upstream license notice is preserved in
 
 The copied `DroidSans.ttf` file was verified to be byte-identical to the AOSP
 font at the revision above. The upstream Apache License 2.0 notice is preserved
-in `third_party/licenses/droidsans-APACHE-2.0.txt`.
+in `apps/viewer/assets/font/DroidSans-LICENSE-APACHE-2.0.txt`.

@@ -1,13 +1,14 @@
 # Module Map
 
-Purpose: Record the actual Elf3D 0.4.0 CMake targets, responsibilities,
-dependency direction, and current C++20 named-module migration state.
+Purpose: Record the actual Elf3D 0.5.0 CMake targets, responsibilities,
+dependency direction, and C++20 named-module state.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
-Document status: Living build/module map for the 0.4.0 release source.
+Document status: Living build/module map for the 0.5.0 development source.
 
-Last verified Git commit: pending 0.4.0 release source commit
+Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
+0.5.0 validation applies to the current worktree.
 
 Implementation source paths: `CMakeLists.txt`, `cmake/dependencies.cmake`,
 `cmake/compiler_options.cmake`, `modules/*/CMakeLists.txt`,
@@ -25,7 +26,7 @@ Related documents: `PUBLIC_API_OVERVIEW.md`, `RENDERING_PIPELINE.md`,
 
 ## Top-Level Build
 
-The root project is `Elf3D` version `0.4.0`. It requires CMake 3.28 or newer,
+The root project is `Elf3D` version `0.5.0`. It requires CMake 3.28 or newer,
 C++20, compiler extensions disabled, and MSVC dynamic runtime selection:
 
 - Debug: `/MDd`
@@ -89,42 +90,6 @@ Module policy:
 - ordinary standard-library `#include` use remains the default;
 - generated BMI, IFC, PCM, GCM, and similar artifacts are build outputs.
 
-## Removed Internal Import Shims
-
-The named-module migration previously retained import-only headers under
-`modules/*/include`. They were internal target sources, were not part of the
-public `include/elf3d` tree, and were not installed or exported. All repository
-call sites now use the corresponding direct module import, and the following
-shims have been removed:
-
-| Removed internal header | Replacement |
-| --- | --- |
-| `modules/core/include/elf3d/core/version_data.h` | `import elf.core;` |
-| `modules/math/include/elf3d/math/conventions.h` | `import elf.math;` |
-| `modules/assets/include/elf3d/assets/handle_access.h` | `import elf.assets;` |
-| `modules/assets/include/elf3d/assets/storage.h` | `import elf.assets;` |
-| `modules/backend_opengl/include/elf3d/backend/opengl/device_factory.h` | `import elf.backend.opengl;` |
-| `modules/clipping/include/elf3d/clipping/filter.h` | `import elf.clipping;` |
-| `modules/gltf/include/elf3d/gltf/importer.h` | `import elf.gltf;` |
-| `modules/graphics/include/elf3d/graphics/device.h` | `import elf.graphics;` |
-| `modules/graphics/include/elf3d/graphics/texture_handle_access.h` | `import elf.graphics;` |
-| `modules/image/include/elf3d/image/decoder.h` | `import elf.image;` |
-| `modules/interaction/include/elf3d/interaction/viewport_interaction.h` | `import elf.interaction;` |
-| `modules/navigation/include/elf3d/navigation/orbit_navigation.h` | `import elf.navigation;` |
-| `modules/picking/include/elf3d/picking/service.h` | `import elf.picking;` |
-| `modules/renderer/include/elf3d/renderer/renderer.h` | `import elf.renderer;` |
-| `modules/scene/include/elf3d/scene/access.h` | `import elf.scene;` |
-| `modules/scene/include/elf3d/scene/import_builder.h` | `import elf.scene;` |
-| `modules/scene/include/elf3d/scene/storage.h` | `import elf.scene;` |
-| `modules/tools/clipping/include/elf3d/tools/clipping/clipping_controller.h` | `import elf.tool.clipping;` |
-| `modules/tools/measurement/include/elf3d/tools/measurement/distance_measurement.h` | `import elf.tool.measurement;` |
-| `modules/tools/selection/include/elf3d/tools/selection/selection_controller.h` | `import elf.tool.selection;` |
-| `modules/tools/visibility/include/elf3d/tools/visibility/visibility_controller.h` | `import elf.tool.visibility;` |
-| `modules/viewport/include/elf3d/viewport/offscreen_viewport.h` | `import elf.viewport;` |
-
-This removal does not affect the public DLL API or the ordinary public headers
-under `include/elf3d`. No public compatibility shim required deprecation.
-
 ## Target Map
 
 Internal engine targets are CMake OBJECT libraries linked into the final
@@ -154,18 +119,23 @@ needed object files explicitly through `elf3d_link_object_libraries`.
 | `elf3d` | Shared | Public DLL facade and composition root. | public include directory | all internal engine OBJECT modules |
 | `elf3d_imgui` | Static | Optional Dear ImGui texture/context helper. | `elf3d::elf3d`, `elf3d::third_party_imgui` | none |
 | `elf3d_viewer` | Executable | Reference application, graphical testbed, and packaged UI asset host. | none | `elf3d::elf3d`, `elf3d::imgui`, Windows WIC system libraries on Windows |
+| `elf3d_gltf_probe` | Executable | Public-API recursive local/private glTF corpus validator. | `elf3d::elf3d` | none |
 
 Third-party helper targets:
 
 - `elf3d_third_party_glad`: checked-in generated GLAD OpenGL 4.1 core loader.
-- `elf3d_third_party_cgltf`: cgltf implementation unit.
-- `elf3d_third_party_stb`: stb image implementation unit.
-- `elf3d_third_party_imgui`: Dear ImGui core and GLFW/OpenGL3 backends.
-- `glfw`: FetchContent GLFW target.
-- `glm::glm`: FetchContent GLM target.
+- `elf3d_third_party_cgltf`: cgltf implementation unit using
+  `third_party/cgltf`.
+- `elf3d_third_party_stb`: stb image implementation unit using
+  `third_party/stb`.
+- `elf3d_third_party_imgui`: Dear ImGui core and GLFW/OpenGL3 backends using
+  `third_party/imgui`.
+- `glfw`: local GLFW target from `third_party/glfw`.
+- `glm::glm`: local interface target from `third_party/glm`.
 
 Third-party targets remain ordinary library/header targets. They are not
-converted to C++ named modules.
+converted to C++ named modules. Normal configure/build uses the vendored
+sources and does not use CMake FetchContent or `_deps/*-src` source checkouts.
 
 ## Plain-Text Dependency Graph
 
@@ -209,13 +179,8 @@ elf3d_viewer
 - Scene does not depend on renderer.
 - Renderer consumes scene and asset data but does not own logical scene state.
 
-## Current Deviations or Gaps
+## Current Limitations
 
-- Named-module declarations are owned by real module interface units for every
-  built-in engine OBJECT library.
-- Module implementation units are present for every built-in engine OBJECT
-  library. Internal source files and tests use direct imports; the former
-  import-only compatibility headers have been removed.
 - GLM-backed aliases and conversions are implementation details under the math
   detail include path; exported named-module surfaces use project-owned public
   value types instead of GLM types.

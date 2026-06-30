@@ -49,10 +49,10 @@ int main() {
     static_assert(!std::is_convertible_v<elf3d::ImageHandle, elf3d::TextureAssetHandle>);
 
     const elf3d::Version current = elf3d::version();
-    if (current.major != 0 || current.minor != 4 || current.patch != 0) {
+    if (current.major != 0 || current.minor != 5 || current.patch != 0) {
         return 1;
     }
-    if (std::strcmp(elf3d::version_string(), "0.4.0") != 0) {
+    if (std::strcmp(elf3d::version_string(), "0.5.0") != 0) {
         return 2;
     }
 
@@ -82,13 +82,11 @@ int main() {
     if (texture.is_valid() || native_view.is_valid() || inactive_input.is_hovered ||
         inactive_input.left_button_down || inactive_input.wheel_delta != 0.0F ||
         default_ray.direction != elf3d::Float3{0.0F, 0.0F, -1.0F} ||
-        selection_settings.click_drag_threshold_pixels <= 0.0F ||
-        section_plane.enabled ||
+        selection_settings.click_drag_threshold_pixels <= 0.0F || section_plane.enabled ||
         section_plane.retained_half_space != elf3d::PlaneHalfSpace::positive ||
         clipping_box.minimum != elf3d::Float3{-0.5F, -0.5F, -0.5F} ||
-        clipping_box.maximum != elf3d::Float3{0.5F, 0.5F, 0.5F} ||
-        !clipping_box.enabled || clipping_snapshot.box_count != 0 ||
-        !clipping_snapshot.helpers.visible ||
+        clipping_box.maximum != elf3d::Float3{0.5F, 0.5F, 0.5F} || !clipping_box.enabled ||
+        clipping_snapshot.box_count != 0 || !clipping_snapshot.helpers.visible ||
         measurement_settings.display_unit != elf3d::LengthDisplayUnit::automatic_metric ||
         measurement_settings.depth_mode != elf3d::OverlayDepthMode::always_visible ||
         measurement_settings.line_thickness_pixels <= 0.0F ||
@@ -200,21 +198,30 @@ int main() {
                      static_cast<std::streamsize>(sizeof(imported_positions)));
         std::ofstream gltf{directory / "triangle.gltf", std::ios::binary};
         constexpr char json[] =
-            R"json({"asset":{"version":"2.0"},"buffers":[{"uri":"triangle.bin","byteLength":36}],"bufferViews":[{"buffer":0,"byteLength":36}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"nodes":[{"name":"Triangle","mesh":0}],"scenes":[{"nodes":[0]}]})json";
+            R"json({"asset":{"version":"2.0"},"extensionsUsed":["KHR_lights_punctual"],"buffers":[{"uri":"triangle.bin","byteLength":36}],"bufferViews":[{"buffer":0,"byteLength":36}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"nodes":[{"name":"Triangle","mesh":0}],"scenes":[{"nodes":[0]}]})json";
         gltf.write(json, static_cast<std::streamsize>(sizeof(json) - 1));
         if (!buffer || !gltf) {
             return 11;
         }
     }
 
-    elf3d::Result<std::unique_ptr<elf3d::Scene>> loaded_result =
-        assigned_engine.load_scene(directory / "triangle.gltf");
+    elf3d::Result<elf3d::LoadedScene> loaded_result =
+        assigned_engine.load_scene_with_report(directory / "triangle.gltf");
     if (!loaded_result ||
-        loaded_result.value()->statistics() != elf3d::SceneStatistics{1, 1, 1, 1, 1, 3, 3, 1} ||
-        !loaded_result.value()->world_bounds().is_valid) {
+        loaded_result.value().scene->statistics() !=
+            elf3d::SceneStatistics{1, 1, 1, 1, 1, 3, 3, 1} ||
+        !loaded_result.value().scene->world_bounds().is_valid ||
+        loaded_result.value().report.diagnostics.size() < 2 ||
+        loaded_result.value().report.diagnostics[0].category !=
+            elf3d::SceneLoadDiagnosticCategory::light) {
         return 12;
     }
-    std::unique_ptr<elf3d::Scene> loaded = std::move(loaded_result).value();
+    std::unique_ptr<elf3d::Scene> loaded = std::move(loaded_result).value().scene;
+    const elf3d::Result<std::unique_ptr<elf3d::Scene>> compatibility_load =
+        assigned_engine.load_scene(directory / "triangle.gltf");
+    if (!compatibility_load) {
+        return 121;
+    }
     if (assigned_engine.load_scene(directory / "missing.gltf").error().code() !=
             elf3d::ErrorCode::source_file_not_found ||
         loaded->statistics().model_entities != 1) {

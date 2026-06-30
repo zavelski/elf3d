@@ -165,6 +165,26 @@ Result<std::unique_ptr<Scene>> Engine::create_scene() {
 
 Result<std::unique_ptr<Scene>> Engine::load_scene(const std::filesystem::path &path,
                                                   const SceneLoadOptions &options) {
+    Result<LoadedScene> loaded_result = load_scene_with_report(path, options);
+    if (!loaded_result) {
+        return loaded_result.error();
+    }
+    LoadedScene loaded = std::move(loaded_result).value();
+    for (const SceneLoadDiagnostic &diagnostic : loaded.report.diagnostics) {
+        if (diagnostic.severity != SceneLoadDiagnosticSeverity::warning) {
+            continue;
+        }
+        std::clog << "Elf3D scene import warning: " << diagnostic.message;
+        if (!diagnostic.source_context.empty()) {
+            std::clog << " [" << diagnostic.source_context << ']';
+        }
+        std::clog << '\n';
+    }
+    return std::move(loaded.scene);
+}
+
+Result<LoadedScene> Engine::load_scene_with_report(const std::filesystem::path &path,
+                                                   const SceneLoadOptions &options) {
     Result<std::unique_ptr<Scene>> scene_result = create_scene();
     if (!scene_result) {
         return scene_result.error();
@@ -181,10 +201,7 @@ Result<std::unique_ptr<Scene>> Engine::load_scene(const std::filesystem::path &p
     if (!import_result) {
         return import_result.error();
     }
-    for (const std::string &warning : import_result.value().warnings) {
-        std::clog << "Elf3D scene import warning: " << warning << '\n';
-    }
-    return scene;
+    return LoadedScene{std::move(scene), SceneLoadReport{import_result.value().diagnostics}};
 }
 
 Result<NativeTextureView> Engine::native_texture_view(TextureHandle texture) const {
@@ -264,8 +281,7 @@ Result<void> Viewport::update_navigation(Scene &scene, EntityId camera,
     }
 }
 
-Result<void> Viewport::set_examine_pivot(Scene &scene, EntityId camera,
-                                         Float3 world_position) {
+Result<void> Viewport::set_examine_pivot(Scene &scene, EntityId camera, Float3 world_position) {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -278,8 +294,7 @@ Result<void> Viewport::set_examine_pivot(Scene &scene, EntityId camera,
         }
         return impl_->viewport->set_examine_pivot(*storage, camera, world_position);
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport pivot update threw an exception"};
+        return Error{ErrorCode::unexpected_exception, "Viewport pivot update threw an exception"};
     }
 }
 

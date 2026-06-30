@@ -1,153 +1,122 @@
 # Rendering Pipeline
 
-Purpose: Document the verified Elf3D 0.4.0 renderer, OpenGL backend, color
-policy, caches, and limitations.
+Purpose: Document the verified Elf3D 0.5.0 renderer, OpenGL backend, material
+path, caches, and limitations.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
-Document status: Verified from renderer/backend source, tests, and validation
-on 2026-06-27.
-
-Last verified Git commit: pending 0.4.0 release source commit
+Document status: Living pipeline description verified from renderer/backend
+source and tests.
 
 Implementation source paths: `modules/graphics`, `modules/backend_opengl`,
-`modules/renderer`, `modules/viewport`, `facade/elf3d/src/engine.cpp`,
-`modules/renderer/tests/renderer_test.cpp`
+`modules/renderer`, `modules/viewport`, `facade/elf3d/src/engine.cpp`
 
-Known limitations: Rendering is opaque-only, OpenGL-only, off-screen-only, and
-uses one directional light. No shadows, IBL, environment maps, normal maps,
-occlusion, emissive, alpha masking/blending, post-processing, or multiple
-graphics backends are implemented.
+Known limitations: Rendering is OpenGL 4.1 and off-screen only. Lighting uses
+one viewport directional light. There are no shadows, IBL, tangent-space normal
+mapping, layered materials, transmission, or order-independent transparency.
 
 Related documents: `MODULE_MAP.md`, `GLTF_SUPPORT.md`,
 `LIFETIME_AND_THREADING.md`, `VIEWPORT_AND_TOOLS.md`
 
 ## Architecture
 
-The public `Engine` composes:
+The public `Engine` composes neutral graphics interfaces, the OpenGL backend,
+renderer preparation/caches, and off-screen viewport ownership. Renderer reads
+Scene and Asset data and never owns or silently mutates the logical scene.
 
-- neutral graphics interfaces in `elf3d_graphics`
-- the OpenGL 4.1 backend in `elf3d_backend_opengl`
-- renderer preparation and caches in `elf3d_renderer`
-- off-screen viewport ownership in `elf3d_viewport`
+## OpenGL Context and Target
 
-The renderer consumes scene and asset data. It does not own or silently mutate
-logical scene state.
+The host creates and keeps current an OpenGL 4.1 core-compatible context.
+Viewport creation, resize, rendering, native texture access, and destruction
+are graphics-thread operations.
 
-## OpenGL Context Requirements
+Each viewport owns an off-screen non-sRGB `GL_RGBA8` color attachment and a
+`GL_DEPTH_COMPONENT24` depth attachment. GPU picking uses a private
+`GL_RGBA32UI` identifier target plus depth.
 
-The host creates an OpenGL 4.1 core-compatible context, makes it current, and
-passes a generic procedure loader to `Engine::create`. The backend loads GLAD,
-verifies a compatible context, and records the owning thread.
+## Vertex and Primitive Path
 
-Viewport creation, resize, rendering, native texture view access, and
-destruction are graphics-thread operations. GPU resources should be destroyed
-while the compatible context is still current.
+The material vertex layout is fixed and interleaved:
 
-## Off-Screen Render Target
+- position;
+- normal;
+- `TEXCOORD_0`;
+- `TEXCOORD_1`;
+- vertex color.
 
-Each viewport owns an off-screen color framebuffer:
+glTF triangle strips and fans are converted to triangle-list indices during
+import, so graphics submission remains indexed `GL_TRIANGLES`. Negative model
+scales select the correct front-face winding. Normal matrices are calculated
+per model primitive.
 
-- color attachment: `GL_RGBA8`
-- depth attachment: `GL_DEPTH_COMPONENT24` renderbuffer
-- framebuffer is recreated on resize
-- zero width or height releases the current target and produces no color texture
+## Material Shader
 
-The host presents the viewport color texture through `NativeTextureView`, often
-through `elf3d_imgui` in the reference viewer.
+The material shader supports:
 
-Each viewport also owns a private picking framebuffer used only for GPU-first
-surface picking:
+- base-color RGBA factor, sRGB texture, and vertex color;
+- metallic and roughness factors plus linear metallic-roughness texture;
+- independent UV0/UV1 selection for each rendered texture slot;
+- independent offset, scale, and rotation for each rendered texture slot;
+- emissive factor and sRGB emissive texture;
+- ambient occlusion red channel and strength;
+- IOR and dielectric specular factor/color;
+- unlit materials;
+- double-sided normal flipping;
+- selection highlight;
+- section-plane and clipping-box discard.
 
-- ID attachment: `GL_RGBA32UI`
-- depth attachment: `GL_DEPTH_COMPONENT24` renderbuffer
-- framebuffer is recreated on resize with the color target
-- the backend reads one ID/depth pixel for each picking request
+Normal texture data is imported and preserved but intentionally not sampled.
+Correct normal mapping requires imported/generated tangents, handedness, and a
+tested tangent-space path; the importer returns a warning instead of applying a
+fake normal-map approximation.
 
-## Render Preparation
+The shader calculates in linear space. sRGB textures decode through their
+OpenGL internal format, and the final linear color is encoded to sRGB once for
+the non-sRGB viewport target.
 
-The renderer builds a render list from visible scene model entities, camera
-state, materials, meshes, and clipping filters. Bounds are transformed to world
-space. Clipping broad-phase statistics record tested, rejected, and
-intersecting bounds.
+## Alpha Policy
 
-Negative scaling is handled by model determinant checks and front-face
-orientation. Normal matrices are computed from model transforms for lighting.
+- `OPAQUE`: factor/texture alpha is ignored and fragment alpha is one.
+- `MASK`: fragments below `alphaCutoff` are discarded; retained fragments are
+  opaque.
+- `BLEND`: simple output-space source-over blending is enabled and depth writes are disabled.
+  Blended model primitives are submitted after opaque/masked primitives and
+  sorted back-to-front by squared distance from camera to model origin.
 
-## Shader Path
+This blend policy is deterministic and useful for ordinary separated
+transparent objects. It does not solve intersecting transparent meshes or
+per-triangle ordering. Picking and CPU triangle queries do not sample material
+alpha, so transparent texels remain pickable geometry.
 
-The material shader implements a compact opaque metallic-roughness lighting
-path:
+## Texture and Mesh Caches
 
-- base color factor and optional base-color texture
-- metallic and roughness factors and optional metallic-roughness texture
-- one directional light
-- ambient term
-- GGX-style specular term
-- double-sided normal flip via `gl_FrontFacing`
-- selection highlight tint mixed before final encode
-- per-fragment section-plane and clipping-box discard
+Static GPU meshes are cached by scene/mesh identity. GPU textures are cached by
+scene, image, color-space role, and sampler. The same image may therefore have
+separate sRGB and linear GPU representations while several material slots with
+the same role share a representation.
 
-The fragment alpha output is always `1.0`.
-
-## Color Space
-
-Base-color textures are uploaded as sRGB textures. Metallic-roughness textures
-are uploaded as linear `GL_RGBA8`. The off-screen target is non-sRGB `GL_RGBA8`;
-the shader manually encodes the final linear color to sRGB exactly once.
-
-## GPU Caches
-
-The renderer maintains:
-
-- static GPU mesh cache keyed by scene and mesh identity
-- texture cache keyed by scene, image, color-space role, and sampler
-
-Scene destruction releases renderer and picking caches through the private scene
-release context. After Goal 4, late scene destruction after engine teardown
-does not dereference a freed engine implementation pointer.
+Scene destruction releases renderer and picking caches through the private
+scene release context. GPU resources must still be destroyed before the host
+destroys the current graphics context.
 
 ## OpenGL State
 
-The backend uses state guards around allocation, draw, clear, and overlay paths.
-The draw path restores framebuffer bindings, viewport, clear state, color and
-depth masks, selected enable states, program, VAO/VBO, texture bindings for
-units used by the renderer, depth function, blend settings, culling, front face,
-polygon mode, and depth range.
+The backend guards allocation, clear, material, picking, and overlay state.
+Material draws now preserve texture bindings for units 0 through 3 in addition
+to framebuffer, viewport, masks, enabled state, program, VAO/VBO, depth,
+blending, culling, polygon mode, and depth range.
 
-## Tool Overlays
+## Picking and Overlays
 
-Measurement and clipping helpers are rendered through neutral overlay line and
-point-marker primitives. Overlay primitives are produced by tool controllers,
-not by ImGui, and then drawn by the backend.
-
-## Picking Pass
-
-The renderer reuses render-list construction for GPU picking, including
-persistent visibility, viewport isolation, material sidedness, front-face
-orientation, and clipping filters. Each visible primitive is drawn with a
-nonzero object ID and its model primitive index. The picking fragment shader
-writes object ID, primitive index, and `gl_PrimitiveID` to the integer target
-after applying the same section-plane and clipping-box discard rules as the
-visible material shader.
-
-The viewport maps the readback ID to a scene entity, mesh, primitive, and
-triangle candidate, then asks the CPU picking service to refine that single
-triangle against the public viewport ray. If the GPU path fails or the candidate
-cannot be confirmed, the viewport falls back to the full CPU BVH picker.
-
-## Statistics
-
-`RenderStatistics` reports draw calls, triangles, vertices, indices, texture
-bindings, GPU texture uploads, current unique GPU texture count, overlay counts,
-and clipping broad-phase counters.
-
-`PickingStatistics` reports GPU picking requests, hits, misses, picking draw
-calls, pixels read, pass/readback timing, CPU refinements, and CPU fallbacks in
-addition to the existing CPU BVH counters.
+GPU picking reuses the visibility/clipping render list and performs CPU
+triangle refinement. Measurement and clipping helpers use backend-neutral line
+and point-marker primitives. Neither path depends on Dear ImGui.
 
 ## Validation
 
-Debug and Release builds and CTest are part of the 0.4.0 release gate. The
-exact local, CI, and viewer smoke results are recorded under
-`docs/releases/0.4.0/`.
+`elf3d.renderer` uses a fake graphics device to verify material values, UV-set
+selection, texture-transform values, alpha modes, unlit state, texture color
+roles/cache reuse, shader-path presence, draw ordering, clipping, overlays, and
+GPU-pick orchestration. Real shader compilation is exercised when the viewer is
+launched with a real OpenGL context; automated reference-pixel testing remains
+future work.

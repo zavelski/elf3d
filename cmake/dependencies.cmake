@@ -1,5 +1,3 @@
-include(FetchContent)
-
 set(ELF3D_GLM_VERSION "1.0.3")
 set(ELF3D_GLM_COMMIT_SHA "8d1fd52e5ab5590e2c81768ace50c72bae28f2ed")
 set(ELF3D_GLAD_VERSION "v2.0.8")
@@ -12,64 +10,43 @@ set(ELF3D_CGLTF_VERSION "1.15")
 set(ELF3D_CGLTF_COMMIT_SHA "360db1a95480fe102ae9c69b27c5d101167ff5ba")
 set(ELF3D_STB_COMMIT_SHA "31c1ad37456438565541f4919958214b6e762fb4")
 
-set(GLM_BUILD_LIBRARY OFF CACHE BOOL "" FORCE)
-set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(GLM_BUILD_INSTALL OFF CACHE BOOL "" FORCE)
+set(ELF3D_THIRD_PARTY_DIR "${PROJECT_SOURCE_DIR}/third_party")
+set(cgltf_SOURCE_DIR "${ELF3D_THIRD_PARTY_DIR}/cgltf")
+set(stb_SOURCE_DIR "${ELF3D_THIRD_PARTY_DIR}/stb")
+set(imgui_SOURCE_DIR "${ELF3D_THIRD_PARTY_DIR}/imgui")
 
-FetchContent_Declare(
-    glm
-    URL https://github.com/g-truc/glm/archive/${ELF3D_GLM_COMMIT_SHA}.tar.gz
-    URL_HASH SHA256=36eefbae41503e6822e8d9e1b4cc85c6a6621f17676f6258aaf0a64c2de0a09c
-    DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+add_library(elf3d_third_party_glm INTERFACE)
+add_library(glm::glm ALIAS elf3d_third_party_glm)
+target_include_directories(
+    elf3d_third_party_glm
+    SYSTEM INTERFACE
+        ${ELF3D_THIRD_PARTY_DIR}/glm
 )
-
-FetchContent_MakeAvailable(glm)
-
-FetchContent_Declare(
-    cgltf
-    GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
-    GIT_TAG ${ELF3D_CGLTF_COMMIT_SHA}
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
+set_target_properties(
+    elf3d_third_party_glm
+    PROPERTIES
+        FOLDER "Third Party"
 )
-
-FetchContent_MakeAvailable(cgltf)
-
-FetchContent_Declare(
-    stb
-    GIT_REPOSITORY https://github.com/nothings/stb.git
-    GIT_TAG ${ELF3D_STB_COMMIT_SHA}
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-)
-
-FetchContent_MakeAvailable(stb)
 
 add_library(
     elf3d_third_party_glad
     STATIC
-        ${PROJECT_SOURCE_DIR}/third_party/glad/include/glad/gl.h
-        ${PROJECT_SOURCE_DIR}/third_party/glad/include/KHR/khrplatform.h
-        ${PROJECT_SOURCE_DIR}/third_party/glad/src/gl.c
+        ${ELF3D_THIRD_PARTY_DIR}/glad/include/glad/gl.h
+        ${ELF3D_THIRD_PARTY_DIR}/glad/include/KHR/khrplatform.h
+        ${ELF3D_THIRD_PARTY_DIR}/glad/src/gl.c
 )
 add_library(elf3d::third_party_glad ALIAS elf3d_third_party_glad)
 target_compile_features(elf3d_third_party_glad PRIVATE c_std_11)
 target_include_directories(
     elf3d_third_party_glad
     SYSTEM PUBLIC
-        ${PROJECT_SOURCE_DIR}/third_party/glad/include
+        ${ELF3D_THIRD_PARTY_DIR}/glad/include
 )
 set_target_properties(
     elf3d_third_party_glad
     PROPERTIES
         FOLDER "Third Party"
         POSITION_INDEPENDENT_CODE ON
-)
-set_target_properties(
-    glm-header-only
-    PROPERTIES
-        FOLDER "Third Party"
-        SYSTEM ON
 )
 
 if(NOT ELF3D_BUILD_VIEWER)
@@ -79,25 +56,14 @@ endif()
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 
-FetchContent_Declare(
-    imgui
-    GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG ${ELF3D_IMGUI_COMMIT_SHA}
-    GIT_SHALLOW FALSE
-    GIT_PROGRESS TRUE
+add_subdirectory(
+    ${ELF3D_THIRD_PARTY_DIR}/glfw
+    ${CMAKE_BINARY_DIR}/third_party/glfw
+    EXCLUDE_FROM_ALL
 )
-
-FetchContent_Declare(
-    glfw
-    GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG ${ELF3D_GLFW_COMMIT_SHA}
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-)
-
-FetchContent_MakeAvailable(imgui glfw)
 
 find_package(OpenGL REQUIRED)
 

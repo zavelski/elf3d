@@ -190,10 +190,10 @@ class RenderStateGuard final {
         glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertex_array_);
         glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &array_buffer_);
         glGetIntegerv(GL_ACTIVE_TEXTURE, &active_texture_);
-        glActiveTexture(GL_TEXTURE0);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture_unit_0_);
-        glActiveTexture(GL_TEXTURE1);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture_unit_1_);
+        for (std::size_t index = 0; index < texture_units_.size(); ++index) {
+            glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture_units_[index]);
+        }
         glActiveTexture(static_cast<GLenum>(active_texture_));
         glGetIntegerv(GL_DEPTH_FUNC, &depth_function_);
         glGetIntegerv(GL_BLEND_SRC_RGB, &blend_source_rgb_);
@@ -239,10 +239,10 @@ class RenderStateGuard final {
         glUseProgram(static_cast<GLuint>(program_));
         glBindVertexArray(static_cast<GLuint>(vertex_array_));
         glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(array_buffer_));
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_unit_0_));
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_unit_1_));
+        for (std::size_t index = 0; index < texture_units_.size(); ++index) {
+            glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_units_[index]));
+        }
         glActiveTexture(static_cast<GLenum>(active_texture_));
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(draw_framebuffer_));
         glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(read_framebuffer_));
@@ -281,8 +281,7 @@ class RenderStateGuard final {
     GLint vertex_array_ = 0;
     GLint array_buffer_ = 0;
     GLint active_texture_ = GL_TEXTURE0;
-    GLint texture_unit_0_ = 0;
-    GLint texture_unit_1_ = 0;
+    std::array<GLint, 4> texture_units_{};
     GLint depth_function_ = GL_LESS;
     GLint blend_source_rgb_ = GL_ONE;
     GLint blend_destination_rgb_ = GL_ZERO;
@@ -515,8 +514,7 @@ class OpenGLPickingTarget final : public graphics::PickingTarget {
             glGenFramebuffers(1, &new_framebuffer);
             glGenTextures(1, &new_id_texture);
             glGenRenderbuffers(1, &new_depth_renderbuffer);
-            if (new_framebuffer == 0 || new_id_texture == 0 ||
-                new_depth_renderbuffer == 0) {
+            if (new_framebuffer == 0 || new_id_texture == 0 || new_depth_renderbuffer == 0) {
                 delete_picking_objects(new_framebuffer, new_id_texture, new_depth_renderbuffer);
                 return Error{ErrorCode::framebuffer_creation_failed,
                              "OpenGL failed to allocate picking framebuffer objects"};
@@ -528,8 +526,8 @@ class OpenGLPickingTarget final : public graphics::PickingTarget {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, static_cast<GLsizei>(extent.width),
-                         static_cast<GLsizei>(extent.height), 0, GL_RGBA_INTEGER,
-                         GL_UNSIGNED_INT, nullptr);
+                         static_cast<GLsizei>(extent.height), 0, GL_RGBA_INTEGER, GL_UNSIGNED_INT,
+                         nullptr);
 
             glBindRenderbuffer(GL_RENDERBUFFER, new_depth_renderbuffer);
             glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
@@ -691,12 +689,28 @@ struct UniformLocations {
     GLint diffuse_intensity = -1;
     GLint metallic_factor = -1;
     GLint roughness_factor = -1;
+    GLint emissive_factor = -1;
+    GLint occlusion_strength = -1;
+    GLint ior = -1;
+    GLint specular_factor = -1;
+    GLint specular_color_factor = -1;
     GLint highlight_color = -1;
     GLint highlight_strength = -1;
     GLint has_base_color_texture = -1;
     GLint has_metallic_roughness_texture = -1;
+    GLint has_occlusion_texture = -1;
+    GLint has_emissive_texture = -1;
     GLint base_color_texture = -1;
     GLint metallic_roughness_texture = -1;
+    GLint occlusion_texture = -1;
+    GLint emissive_texture = -1;
+    GLint texture_texcoord_sets = -1;
+    GLint texture_offsets = -1;
+    GLint texture_scales = -1;
+    GLint texture_rotations = -1;
+    GLint alpha_mode = -1;
+    GLint alpha_cutoff = -1;
+    GLint unlit = -1;
     GLint clipping_section_plane_enabled = -1;
     GLint clipping_section_plane_normal = -1;
     GLint clipping_section_plane_offset = -1;
@@ -709,13 +723,17 @@ struct UniformLocations {
         return model >= 0 && view >= 0 && projection >= 0 && normal >= 0 && base_color >= 0 &&
                camera_world_position >= 0 && light_direction >= 0 && light_color >= 0 &&
                ambient_intensity >= 0 && diffuse_intensity >= 0 && metallic_factor >= 0 &&
-               roughness_factor >= 0 && highlight_color >= 0 && highlight_strength >= 0 &&
-               has_base_color_texture >= 0 && has_metallic_roughness_texture >= 0 &&
-               base_color_texture >= 0 && metallic_roughness_texture >= 0 &&
+               roughness_factor >= 0 && emissive_factor >= 0 && occlusion_strength >= 0 &&
+               ior >= 0 && specular_factor >= 0 && specular_color_factor >= 0 &&
+               highlight_color >= 0 && highlight_strength >= 0 && has_base_color_texture >= 0 &&
+               has_metallic_roughness_texture >= 0 && has_occlusion_texture >= 0 &&
+               has_emissive_texture >= 0 && base_color_texture >= 0 &&
+               metallic_roughness_texture >= 0 && occlusion_texture >= 0 && emissive_texture >= 0 &&
+               texture_texcoord_sets >= 0 && texture_offsets >= 0 && texture_scales >= 0 &&
+               texture_rotations >= 0 && alpha_mode >= 0 && alpha_cutoff >= 0 && unlit >= 0 &&
                clipping_section_plane_enabled >= 0 && clipping_section_plane_normal >= 0 &&
                clipping_section_plane_offset >= 0 && clipping_retain_positive_half_space >= 0 &&
-               clipping_box_count >= 0 && clipping_box_minimums >= 0 &&
-               clipping_box_maximums >= 0;
+               clipping_box_count >= 0 && clipping_box_minimums >= 0 && clipping_box_maximums >= 0;
     }
 };
 
@@ -1148,15 +1166,20 @@ class OpenGLDevice final : public graphics::Device {
         }
         if (description.vertex_layout != graphics::VertexLayout::position_normal_float3 &&
             description.vertex_layout !=
-                graphics::VertexLayout::position_normal_float3_texcoord_float2) {
+                graphics::VertexLayout::position_normal_float3_texcoord_float2 &&
+            description.vertex_layout !=
+                graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4) {
             return Error{ErrorCode::unsupported_vertex_layout,
                          "The OpenGL backend does not support the requested vertex layout"};
         }
-        const std::size_t vertex_stride =
-            description.vertex_layout ==
-                    graphics::VertexLayout::position_normal_float3_texcoord_float2
-                ? sizeof(float) * 8
-                : sizeof(float) * 6;
+        std::size_t vertex_stride = sizeof(float) * 6;
+        if (description.vertex_layout ==
+            graphics::VertexLayout::position_normal_float3_texcoord_float2) {
+            vertex_stride = sizeof(float) * 8;
+        } else if (description.vertex_layout ==
+                   graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4) {
+            vertex_stride = sizeof(float) * 14;
+        }
         if (description.vertex_count == 0 || description.indices.empty() ||
             description.vertex_bytes.size() !=
                 static_cast<std::size_t>(description.vertex_count) * vertex_stride ||
@@ -1196,11 +1219,19 @@ class OpenGLDevice final : public graphics::Device {
             glEnableVertexAttribArray(1);
             glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vertex_stride),
                                   reinterpret_cast<const void *>(sizeof(float) * 3));
-            if (description.vertex_layout ==
-                graphics::VertexLayout::position_normal_float3_texcoord_float2) {
+            if (description.vertex_layout != graphics::VertexLayout::position_normal_float3) {
                 glEnableVertexAttribArray(2);
                 glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vertex_stride),
                                       reinterpret_cast<const void *>(sizeof(float) * 6));
+            }
+            if (description.vertex_layout ==
+                graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4) {
+                glEnableVertexAttribArray(3);
+                glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vertex_stride),
+                                      reinterpret_cast<const void *>(sizeof(float) * 8));
+                glEnableVertexAttribArray(4);
+                glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vertex_stride),
+                                      reinterpret_cast<const void *>(sizeof(float) * 10));
             }
 
             if (glGetError() != GL_NO_ERROR) {
@@ -1302,9 +1333,9 @@ class OpenGLDevice final : public graphics::Device {
             return validation.error();
         }
         if (description.vertex_layout !=
-            graphics::VertexLayout::position_normal_float3_texcoord_float2) {
+            graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4) {
             return Error{ErrorCode::unsupported_vertex_layout,
-                         "The PBR pipeline requires position, normal, and TEXCOORD_0 vertices"};
+                         "The PBR pipeline requires position, normal, two UV sets, and color"};
         }
 
         try {
@@ -1342,12 +1373,28 @@ class OpenGLDevice final : public graphics::Device {
                 glGetUniformLocation(program, "u_diffuse_intensity"),
                 glGetUniformLocation(program, "u_metallic_factor"),
                 glGetUniformLocation(program, "u_roughness_factor"),
+                glGetUniformLocation(program, "u_emissive_factor"),
+                glGetUniformLocation(program, "u_occlusion_strength"),
+                glGetUniformLocation(program, "u_ior"),
+                glGetUniformLocation(program, "u_specular_factor"),
+                glGetUniformLocation(program, "u_specular_color_factor"),
                 glGetUniformLocation(program, "u_highlight_color"),
                 glGetUniformLocation(program, "u_highlight_strength"),
                 glGetUniformLocation(program, "u_has_base_color_texture"),
                 glGetUniformLocation(program, "u_has_metallic_roughness_texture"),
+                glGetUniformLocation(program, "u_has_occlusion_texture"),
+                glGetUniformLocation(program, "u_has_emissive_texture"),
                 glGetUniformLocation(program, "u_base_color_texture"),
                 glGetUniformLocation(program, "u_metallic_roughness_texture"),
+                glGetUniformLocation(program, "u_occlusion_texture"),
+                glGetUniformLocation(program, "u_emissive_texture"),
+                glGetUniformLocation(program, "u_texture_texcoord_sets[0]"),
+                glGetUniformLocation(program, "u_texture_offsets[0]"),
+                glGetUniformLocation(program, "u_texture_scales[0]"),
+                glGetUniformLocation(program, "u_texture_rotations[0]"),
+                glGetUniformLocation(program, "u_alpha_mode"),
+                glGetUniformLocation(program, "u_alpha_cutoff"),
+                glGetUniformLocation(program, "u_unlit"),
                 glGetUniformLocation(program, "u_clipping_section_plane_enabled"),
                 glGetUniformLocation(program, "u_clipping_section_plane_normal"),
                 glGetUniformLocation(program, "u_clipping_section_plane_offset"),
@@ -1384,13 +1431,17 @@ class OpenGLDevice final : public graphics::Device {
         auto *base_color_texture = dynamic_cast<OpenGLTexture2D *>(description.base_color_texture);
         auto *metallic_roughness_texture =
             dynamic_cast<OpenGLTexture2D *>(description.metallic_roughness_texture);
+        auto *occlusion_texture = dynamic_cast<OpenGLTexture2D *>(description.occlusion_texture);
+        auto *emissive_texture = dynamic_cast<OpenGLTexture2D *>(description.emissive_texture);
         if (opengl_target == nullptr || opengl_pipeline == nullptr || opengl_mesh == nullptr) {
             return Error{ErrorCode::backend_mismatch,
                          "Indexed drawing requires resources created by the same OpenGL backend"};
         }
         if ((description.base_color_texture != nullptr && base_color_texture == nullptr) ||
             (description.metallic_roughness_texture != nullptr &&
-             metallic_roughness_texture == nullptr)) {
+             metallic_roughness_texture == nullptr) ||
+            (description.occlusion_texture != nullptr && occlusion_texture == nullptr) ||
+            (description.emissive_texture != nullptr && emissive_texture == nullptr)) {
             return Error{ErrorCode::backend_mismatch,
                          "Material textures were created by a different graphics backend"};
         }
@@ -1404,14 +1455,21 @@ class OpenGLDevice final : public graphics::Device {
         glViewport(0, 0, static_cast<GLsizei>(extent.width), static_cast<GLsizei>(extent.height));
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_FRAMEBUFFER_SRGB);
-        glDisable(GL_BLEND);
+        if (description.alpha_mode == AlphaMode::blend) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBlendEquation(GL_FUNC_ADD);
+            glDepthMask(GL_FALSE);
+        } else {
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
+        }
         glDisable(GL_STENCIL_TEST);
         glDisable(GL_DEPTH_CLAMP);
         glDisable(GL_POLYGON_OFFSET_FILL);
         glDisable(GL_PRIMITIVE_RESTART);
         glDisable(GL_RASTERIZER_DISCARD);
         glEnable(GL_DEPTH_TEST);
-        glDepthMask(GL_TRUE);
         glDepthFunc(GL_LESS);
         glDepthRange(0.0, 1.0);
         if (description.double_sided) {
@@ -1444,6 +1502,13 @@ class OpenGLDevice final : public graphics::Device {
         glUniform1f(uniforms.diffuse_intensity, description.diffuse_intensity);
         glUniform1f(uniforms.metallic_factor, description.metallic_factor);
         glUniform1f(uniforms.roughness_factor, description.roughness_factor);
+        glUniform3f(uniforms.emissive_factor, description.emissive_factor.x,
+                    description.emissive_factor.y, description.emissive_factor.z);
+        glUniform1f(uniforms.occlusion_strength, description.occlusion_strength);
+        glUniform1f(uniforms.ior, description.ior);
+        glUniform1f(uniforms.specular_factor, description.specular_factor);
+        glUniform3f(uniforms.specular_color_factor, description.specular_color_factor.x,
+                    description.specular_color_factor.y, description.specular_color_factor.z);
         glUniform4f(uniforms.highlight_color, description.highlight_color.red,
                     description.highlight_color.green, description.highlight_color.blue,
                     description.highlight_color.alpha);
@@ -1451,6 +1516,34 @@ class OpenGLDevice final : public graphics::Device {
         glUniform1i(uniforms.has_base_color_texture, base_color_texture != nullptr ? 1 : 0);
         glUniform1i(uniforms.has_metallic_roughness_texture,
                     metallic_roughness_texture != nullptr ? 1 : 0);
+        glUniform1i(uniforms.has_occlusion_texture, occlusion_texture != nullptr ? 1 : 0);
+        glUniform1i(uniforms.has_emissive_texture, emissive_texture != nullptr ? 1 : 0);
+        std::array<GLint, 4> texcoord_sets{};
+        std::array<float, 8> texture_offsets{};
+        std::array<float, 8> texture_scales{};
+        std::array<float, 4> texture_rotations{};
+        for (std::size_t index = 0; index < description.texture_mappings.size(); ++index) {
+            const TextureMapping &mapping = description.texture_mappings[index];
+            texcoord_sets[index] = static_cast<GLint>(mapping.texcoord_set);
+            texture_offsets[index * 2] = mapping.transform.offset.x;
+            texture_offsets[index * 2 + 1] = mapping.transform.offset.y;
+            texture_scales[index * 2] = mapping.transform.scale.x;
+            texture_scales[index * 2 + 1] = mapping.transform.scale.y;
+            texture_rotations[index] = mapping.transform.rotation_radians;
+        }
+        glUniform1iv(uniforms.texture_texcoord_sets, static_cast<GLsizei>(texcoord_sets.size()),
+                     texcoord_sets.data());
+        glUniform2fv(uniforms.texture_offsets,
+                     static_cast<GLsizei>(description.texture_mappings.size()),
+                     texture_offsets.data());
+        glUniform2fv(uniforms.texture_scales,
+                     static_cast<GLsizei>(description.texture_mappings.size()),
+                     texture_scales.data());
+        glUniform1fv(uniforms.texture_rotations, static_cast<GLsizei>(texture_rotations.size()),
+                     texture_rotations.data());
+        glUniform1i(uniforms.alpha_mode, static_cast<GLint>(description.alpha_mode));
+        glUniform1f(uniforms.alpha_cutoff, description.alpha_cutoff);
+        glUniform1i(uniforms.unlit, description.unlit ? 1 : 0);
         glUniform1i(uniforms.clipping_section_plane_enabled,
                     description.clipping_section_plane_enabled ? 1 : 0);
         glUniform3f(uniforms.clipping_section_plane_normal,
@@ -1489,6 +1582,13 @@ class OpenGLDevice final : public graphics::Device {
                                          ? metallic_roughness_texture->texture()
                                          : 0);
         glUniform1i(uniforms.metallic_roughness_texture, 1);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D,
+                      occlusion_texture != nullptr ? occlusion_texture->texture() : 0);
+        glUniform1i(uniforms.occlusion_texture, 2);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, emissive_texture != nullptr ? emissive_texture->texture() : 0);
+        glUniform1i(uniforms.emissive_texture, 3);
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(opengl_mesh->index_count()),
                        GL_UNSIGNED_INT, nullptr);
 
@@ -1645,10 +1745,8 @@ class OpenGLDevice final : public graphics::Device {
         glUseProgram(picking_program_);
         glBindVertexArray(opengl_mesh->vertex_array());
 
-        glUniformMatrix4fv(picking_uniforms_.model, 1, GL_FALSE,
-                           description.model_matrix.data());
-        glUniformMatrix4fv(picking_uniforms_.view, 1, GL_FALSE,
-                           description.view_matrix.data());
+        glUniformMatrix4fv(picking_uniforms_.model, 1, GL_FALSE, description.model_matrix.data());
+        glUniformMatrix4fv(picking_uniforms_.view, 1, GL_FALSE, description.view_matrix.data());
         glUniformMatrix4fv(picking_uniforms_.projection, 1, GL_FALSE,
                            description.projection_matrix.data());
         glUniform1ui(picking_uniforms_.object_id, description.object_id);
@@ -1679,11 +1777,9 @@ class OpenGLDevice final : public graphics::Device {
         }
         glUniform1i(picking_uniforms_.clipping_box_count, static_cast<GLint>(box_count));
         glUniform3fv(picking_uniforms_.clipping_box_minimums,
-                     static_cast<GLsizei>(maximum_clipping_boxes),
-                     clipping_box_minimums.data());
+                     static_cast<GLsizei>(maximum_clipping_boxes), clipping_box_minimums.data());
         glUniform3fv(picking_uniforms_.clipping_box_maximums,
-                     static_cast<GLsizei>(maximum_clipping_boxes),
-                     clipping_box_maximums.data());
+                     static_cast<GLsizei>(maximum_clipping_boxes), clipping_box_maximums.data());
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(opengl_mesh->index_count()),
                        GL_UNSIGNED_INT, nullptr);
 
@@ -1722,9 +1818,9 @@ class OpenGLDevice final : public graphics::Device {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, opengl_target->framebuffer());
         glReadBuffer(GL_COLOR_ATTACHMENT0);
         const GLint read_x = static_cast<GLint>(std::floor(position_pixels.x));
-        const GLint read_y = static_cast<GLint>(
-            static_cast<std::int64_t>(extent.height) - 1 -
-            static_cast<std::int64_t>(std::floor(position_pixels.y)));
+        const GLint read_y =
+            static_cast<GLint>(static_cast<std::int64_t>(extent.height) - 1 -
+                               static_cast<std::int64_t>(std::floor(position_pixels.y)));
         GLuint ids[4]{0U, 0U, 0U, 0U};
         GLfloat depth = 1.0F;
         glReadPixels(read_x, read_y, 1, 1, GL_RGBA_INTEGER, GL_UNSIGNED_INT, ids);

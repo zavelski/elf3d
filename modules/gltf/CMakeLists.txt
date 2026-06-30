@@ -29,8 +29,6 @@ target_sources(
 )
 target_include_directories(
     elf3d_gltf
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${cgltf_SOURCE_DIR}
 )

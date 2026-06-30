@@ -29,8 +29,6 @@ target_sources(
 )
 target_include_directories(
     elf3d_image
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${stb_SOURCE_DIR}
 )

@@ -1,26 +1,21 @@
-# Elf3D 0.4.0 Project State
+# Elf3D 0.5.0 Project State
 
-Purpose: Living project-state baseline for the Elf3D 0.4.0 release source.
+Purpose: Living project-state baseline for the glTF compatibility development
+milestone after the audited 0.4.0 source.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
-Document status: Living project-state document.
+Document status: Living development-state document. Versioned 0.4.0 release
+records under `docs/releases/0.4.0/` remain immutable.
 
-Last verified implementation commit: pending 0.4.0 release source commit
+Baseline implementation commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
-`CMakePresets.json`, `README.md`, `LICENSE`, `THIRD_PARTY.md`, `.github`,
-`scripts`
+`CMakePresets.json`, `README.md`, `.github`, `scripts`
 
-Known limitations: The local 0.4.0 release record is under
-`docs/releases/0.4.0/`. The latest public release remains 0.2.0 until a
-`v0.4.0` tag and GitHub Release are published and verified. Historical release
-snapshots remain immutable.
-
-Related documents: `docs/README.md`, `docs/MODULE_MAP.md`, `docs/TESTING.md`,
-`docs/releases/0.4.0/RELEASE_CHECKLIST.md`,
-`docs/releases/0.4.0/VALIDATION_SUMMARY.md`
+Related documents: `docs/GLTF_SUPPORT.md`, `docs/RENDERING_PIPELINE.md`,
+`docs/PUBLIC_API_OVERVIEW.md`, `docs/TESTING.md`, `docs/ROADMAP.md`
 
 ## Repository State
 
@@ -28,75 +23,87 @@ Related documents: `docs/README.md`, `docs/MODULE_MAP.md`, `docs/TESTING.md`,
 - Public library: `elf3d.dll`
 - Optional integration: `elf3d_imgui`
 - Reference app: `elf3d_viewer`
-- Release source branch: local `main`, synchronized locally with `develop`
-- Previous public release tag: `v0.2.0`
-- Current release target: `v0.4.0`
-- Primary validated local toolchain: Visual Studio 2022 v17.14.35, MSVC
-  19.44.35228.0, CMake 3.31.6-msvc6
+- Internal composition: 18 CMake OBJECT libraries with named C++20 modules
+- Primary validated toolchain: Visual Studio 2022/MSVC on Windows x64
+- Graphics backend: OpenGL 4.1 core
 
 ## Implemented Vertical Slice
 
-Elf3D 0.4.0 implements:
+Elf3D 0.5.0 includes the 0.4.0 visualization/tool baseline plus:
 
-- public `Engine`, `Scene`, `Viewport`, and `SceneHierarchySnapshot` facades
-- version API returning `0.4.0`
-- one public `elf3d` DLL assembled from 18 internal engine OBJECT libraries
-- real C++20 named-module interfaces and implementation units for every
-  internal engine OBJECT-library boundary
-- direct internal module imports with no retained import-only shim headers
-- GLM-neutral exported module boundaries and project-owned public value types
-- scene entities, hierarchy, transforms, explicit local matrices, cameras,
-  models, persistent visibility, bounds, hierarchy snapshots, and statistics
-- scene-owned CPU mesh, image, texture, sampler, and material assets
-- private glTF/GLB importer for bounded static triangle geometry
-- private PNG/JPEG decode to RGBA8
-- OpenGL 4.1 off-screen viewport rendering
-- opaque metallic-roughness directional-light shader path
-- GPU mesh and texture caches
-- GPU-first viewport picking with CPU triangle refinement and CPU BVH fallback
-- viewport orbit/pan/zoom navigation, dynamic examine pivot, fit, and reset
-- selection, visibility, isolation, distance measurement, section plane, and
-  clipping-box tools
-- Dear ImGui/GLFW reference viewer with docking, Droid Sans, generated toolbar
-  icons, a Blender-like Open File dialog, and Windows GUI-subsystem startup
+- fixed bounded UV0/UV1 vertex storage;
+- independent material texture `texCoord` selection;
+- full supported-slot `KHR_texture_transform` offset, scale, rotation, and UV
+  override;
+- vertex `COLOR_0`;
+- base-color alpha, alpha mask/cutoff, and simple sorted alpha blending;
+- emissive factor/texture and emissive strength;
+- occlusion texture/strength;
+- unlit materials;
+- IOR and specular factor/color shading;
+- normal texture/scale/mapping preservation with a structured render fallback;
+- triangle-strip and triangle-fan conversion;
+- perspective-camera import;
+- structured public load diagnostics through `load_scene_with_report`;
+- viewer display of successful-load diagnostics;
+- a repeatable public-API private-corpus probe.
 
 ## Architecture Boundaries
 
-Confirmed boundaries:
+The change preserves the existing dependency direction:
 
-- `elf3d` does not depend on Dear ImGui or GLFW.
-- Dear ImGui and GLFW are limited to `elf3d_imgui`, its third-party target, and
-  `elf3d_viewer`.
-- OpenGL and GLAD are isolated in `elf3d_backend_opengl` and viewer final
-  presentation code.
-- Viewer PNG toolbar decoding uses Windows WIC only inside `elf3d_viewer`.
-- GLM and cgltf do not appear in public Elf3D headers.
-- Scene does not depend on Renderer.
-- Renderer consumes scene and asset data but does not own logical scene state.
-- C++ named-module export is separate from DLL symbol export; public symbols
-  remain controlled through `ELF3D_API`.
+- cgltf remains private to `elf3d_gltf`;
+- OpenGL/GLAD remain private to `elf3d_backend_opengl`;
+- Scene and Assets remain format-neutral;
+- Scene does not depend on Renderer;
+- Renderer consumes Scene/Asset values without mutating them;
+- the viewer uses only the public `elf3d` API and optional ImGui integration;
+- no third-party type was added to a public header;
+- no dependency revision changed.
+
+The public API addition is source-compatible at the entry-point level:
+`Engine::load_scene` remains available, while `Engine::load_scene_with_report`
+returns a `LoadedScene` and `SceneLoadReport`. Public vertex/material value
+layouts changed, so matched-toolchain DLL consumers must rebuild for 0.5.0.
+
+## Compatibility Behavior
+
+Fully rendered extension paths:
+
+- `KHR_texture_transform`
+- `KHR_materials_unlit`
+- `KHR_materials_emissive_strength`
+- `KHR_materials_ior`
+- `KHR_mesh_quantization` for imported supported attributes
+
+`KHR_materials_specular` factors/color render; its textures use a diagnostic
+fallback. Optional advanced material, compression, KTX2/BasisU, light,
+variant, and GPU-instancing extensions load core/fallback data where possible
+and report diagnostics. Unsupported required extensions fail clearly.
 
 ## Validation State
 
-Local 0.4.0 validation is recorded in
-`docs/releases/0.4.0/VALIDATION_SUMMARY.md`.
+Fresh Windows Debug and Release configurations build all targets under the
+warning-as-error policy, and both configurations pass all 17 default CTest
+tests. The conditional local-corpus CTest also passes against the project
+fixture. Manual Release-viewer validation covered the procedural scene, the
+project-owned textured fixture, and the generated UV1/texture-transform
+fixture; rendering, scene statistics, and load diagnostics were visible.
 
-Not verified locally:
-
-- complete manual viewer interaction and visual checklist
-- GitHub branch CI, tag workflow, release assets, and public clone
-- external model corpus
-- performance benchmark metrics
+No user-provided real-file corpus was attached or found in the workspace. The
+project-owned `tests/fixtures/textured_pbr.gltf` probe passes without hard
+errors or diagnostics; this does not replace the pending user corpus.
 
 ## Known Limitations
 
-- C++ DLL ABI requires a compatible compiler, standard library, and runtime.
-- No stable C ABI or runtime plugin ABI.
-- Named-module BMI/IFC artifacts are internal build outputs, not SDK artifacts.
-- Only the OpenGL 4.1 backend is implemented and validated.
-- Rendering is opaque-only; glTF alpha modes are not rendered.
-- No animations, skins, morph targets, compression extensions, KTX2, cameras,
-  lights, normal maps, occlusion, or emissive material support.
-- One selected entity and one distance measurement per viewport.
-- Clipping boxes are axis aligned.
-- Scene mutation and rendering are single-threaded.
+- UV sets are intentionally bounded to `TEXCOORD_0` and `TEXCOORD_1`.
+- Normal textures are preserved but not rendered until tangent import/
+  generation and handedness are implemented.
+- Blend sorting is per model origin, not per triangle or order-independent.
+- Picking does not sample alpha-masked or blended texture alpha.
+- No animation playback, skinning, morph deformation, scene-light model,
+  orthographic camera model, Draco/meshopt decoder, or KTX2/BasisU decoder.
+- No clearcoat, sheen, transmission, volume, or material-variant render model.
+- Loading remains synchronous and scene mutation/rendering remain
+  single-threaded.
+- The public API remains a matched-toolchain C++ ABI, not a stable C ABI.

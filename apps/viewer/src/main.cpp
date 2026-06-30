@@ -17,19 +17,19 @@
 
 #if defined(_WIN32)
 #include <objbase.h>
-#include <windows.h>
 #include <wincodec.h>
+#include <windows.h>
 #endif
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <iomanip>
@@ -197,6 +197,7 @@ struct ViewerScene {
     bool camera_needs_reset = true;
     bool hierarchy_snapshot_valid = false;
     elf3d::SceneHierarchySnapshot hierarchy_snapshot;
+    elf3d::SceneLoadReport load_report;
 
     [[nodiscard]] bool is_imported() const noexcept {
         return !source_path.empty();
@@ -977,11 +978,12 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
 
 [[nodiscard]] elf3d::Result<ViewerScene> load_model_scene(elf3d::Engine &engine,
                                                           const std::filesystem::path &path) {
-    elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.load_scene(path);
-    if (!scene_result) {
-        return scene_result.error();
+    elf3d::Result<elf3d::LoadedScene> loaded_result = engine.load_scene_with_report(path);
+    if (!loaded_result) {
+        return loaded_result.error();
     }
-    std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
+    elf3d::LoadedScene loaded = std::move(loaded_result).value();
+    std::unique_ptr<elf3d::Scene> scene = std::move(loaded.scene);
     const elf3d::SceneStatistics source_statistics = scene->statistics();
     const elf3d::Bounds3 bounds = scene->world_bounds();
     const elf3d::Result<elf3d::EntityId> camera_result = create_viewer_camera(*scene);
@@ -989,7 +991,7 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
         return camera_result.error();
     }
 
-    return ViewerScene{std::move(scene),
+    ViewerScene result{std::move(scene),
                        camera_result.value(),
                        std::nullopt,
                        std::nullopt,
@@ -997,6 +999,8 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
                        source_statistics,
                        bounds,
                        true};
+    result.load_report = std::move(loaded.report);
+    return result;
 }
 
 void glfw_error_callback(int error_code, const char *description) {
@@ -1403,14 +1407,13 @@ void draw_compact_tab_close_buttons(ImGuiDockNode *node) {
         const ImVec2 button_pos{
             std::max(tab_rect.Min.x, tab_rect.Max.x - frame_padding.x - button_size),
             tab_rect.Min.y + frame_padding.y};
-        const ImRect button_rect{
-            button_pos, ImVec2{button_pos.x + button_size, button_pos.y + button_size}};
+        const ImRect button_rect{button_pos,
+                                 ImVec2{button_pos.x + button_size, button_pos.y + button_size}};
         const bool button_hovered =
             ImGui::IsMouseHoveringRect(button_rect.Min, button_rect.Max, false);
         const ImU32 background =
-            button_hovered
-                ? ImGui::GetColorU32(ImGuiCol_ButtonHovered)
-                : ImGui::GetColorU32(tab_selected ? ImGuiCol_TabActive : ImGuiCol_Tab);
+            button_hovered ? ImGui::GetColorU32(ImGuiCol_ButtonHovered)
+                           : ImGui::GetColorU32(tab_selected ? ImGuiCol_TabActive : ImGuiCol_Tab);
         draw_list->AddRectFilled(button_rect.Min, button_rect.Max, background);
 
         const ImVec2 raw_center = button_rect.GetCenter();
@@ -1970,6 +1973,15 @@ void build_model_information(ImGuiID dockspace_id, ViewerState &state, const Vie
         ImGui::Text("Metallic-roughness textured materials: %llu",
                     static_cast<unsigned long long>(
                         scene.source_statistics.materials_with_metallic_roughness_textures));
+        ImGui::Text("Normal-textured materials: %llu",
+                    static_cast<unsigned long long>(
+                        scene.source_statistics.materials_with_normal_textures));
+        ImGui::Text("Occlusion-textured materials: %llu",
+                    static_cast<unsigned long long>(
+                        scene.source_statistics.materials_with_occlusion_textures));
+        ImGui::Text("Emissive-textured materials: %llu",
+                    static_cast<unsigned long long>(
+                        scene.source_statistics.materials_with_emissive_textures));
         ImGui::Text("Primitives: %llu",
                     static_cast<unsigned long long>(scene.source_statistics.primitives));
         ImGui::Text("Vertices: %llu",
@@ -2008,8 +2020,23 @@ void build_model_information(ImGuiID dockspace_id, ViewerState &state, const Vie
         ImGui::Text("Clipping bounds intersecting: %llu",
                     static_cast<unsigned long long>(state.statistics.clipping_bounds_intersecting));
         ImGui::TextUnformatted("Image formats: PNG, JPEG");
-        ImGui::TextWrapped("PBR: one directional light, no IBL, shadows, normal maps, emissive, "
-                           "occlusion, alpha mask, or alpha blend. Materials are opaque.");
+        ImGui::TextWrapped("PBR: one directional light with vertex color, UV0/UV1 texture "
+                           "mapping, texture transforms, emissive, occlusion, unlit, alpha mask, "
+                           "and simple sorted alpha blending. Normal maps are preserved but use a "
+                           "documented fallback until tangent-space rendering is available.");
+        if (scene.is_imported()) {
+            ImGui::Separator();
+            ImGui::Text("Import diagnostics: %llu",
+                        static_cast<unsigned long long>(scene.load_report.diagnostics.size()));
+            for (const elf3d::SceneLoadDiagnostic &diagnostic : scene.load_report.diagnostics) {
+                ImGui::BulletText("%s", diagnostic.message.c_str());
+                if (!diagnostic.source_context.empty()) {
+                    ImGui::Indent();
+                    ImGui::TextWrapped("Context: %s", diagnostic.source_context.c_str());
+                    ImGui::Unindent();
+                }
+            }
+        }
     }
     ImGui::End();
     ImGui::PopStyleColor();
@@ -3053,10 +3080,10 @@ void build_open_browser_top_bar(ViewerState &state) {
         navigate_open_browser_history(state, -1);
     }
     ImGui::SameLine();
-    if (open_browser_icon_button(
-            ">", "Forward",
-            !state.open_browser_history.empty() &&
-                state.open_browser_history_index + 1U < state.open_browser_history.size())) {
+    if (open_browser_icon_button(">", "Forward",
+                                 !state.open_browser_history.empty() &&
+                                     state.open_browser_history_index + 1U <
+                                         state.open_browser_history.size())) {
         navigate_open_browser_history(state, 1);
     }
     ImGui::SameLine();
@@ -3079,8 +3106,7 @@ void build_open_browser_top_bar(ViewerState &state) {
     const float search_width = 190.0F;
     ImGui::SetNextItemWidth(-(search_width + ImGui::GetStyle().ItemSpacing.x));
     if (ImGui::InputText("##OpenFolderPath", state.open_folder_path.data(),
-                         state.open_folder_path.size(),
-                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+                         state.open_folder_path.size(), ImGuiInputTextFlags_EnterReturnsTrue)) {
         set_open_browser_directory(state,
                                    path_from_utf8(std::string{state.open_folder_path.data()}));
     }
@@ -3096,8 +3122,7 @@ void build_open_browser_file_table(ViewerState &state,
     const std::string search_text = lowercase_ascii(std::string{state.open_search.data()});
     constexpr ImGuiTableFlags table_flags =
         ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersInnerH |
-        ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp |
-        ImGuiTableFlags_ScrollY;
+        ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY;
     if (!ImGui::BeginTable("##OpenBrowserTable", 3, table_flags)) {
         return;
     }
@@ -3117,11 +3142,9 @@ void build_open_browser_file_table(ViewerState &state,
         has_visible_entry = true;
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        const std::string display_label =
-            (entry.directory ? "[DIR]  " : "[GLB]  ") + entry.label;
-        const bool selected =
-            !entry.directory && !state.open_browser_selected_path.empty() &&
-            same_path_key(entry.path, state.open_browser_selected_path);
+        const std::string display_label = (entry.directory ? "[DIR]  " : "[GLB]  ") + entry.label;
+        const bool selected = !entry.directory && !state.open_browser_selected_path.empty() &&
+                              same_path_key(entry.path, state.open_browser_selected_path);
         if (ImGui::Selectable(display_label.c_str(), selected,
                               ImGuiSelectableFlags_SpanAllColumns |
                                   ImGuiSelectableFlags_AllowDoubleClick)) {
@@ -3230,7 +3253,8 @@ void build_open_browser_file_table(ViewerState &state,
         std::optional<std::filesystem::path> file_request;
         const float footer_height = ImGui::GetFrameHeightWithSpacing() + 6.0F;
         const float sidebar_width = 275.0F;
-        if (ImGui::BeginChild("##OpenBrowserSidebar", ImVec2{sidebar_width, -footer_height}, true)) {
+        if (ImGui::BeginChild("##OpenBrowserSidebar", ImVec2{sidebar_width, -footer_height},
+                              true)) {
             build_open_browser_sidebar(state);
         }
         ImGui::EndChild();

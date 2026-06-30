@@ -28,6 +28,8 @@ struct RenderItem {
     Float4x4 model_matrix{};
     math::Matrix3x3 normal_matrix{};
     bool orientation_reversed = false;
+    AlphaMode alpha_mode = AlphaMode::opaque;
+    float camera_distance_squared = 0.0F;
 };
 
 struct RenderList {
@@ -63,10 +65,10 @@ struct GpuPickResult {
 [[nodiscard]] Result<RenderList> build_render_list(const scene::Storage &scene, EntityId camera,
                                                    Extent2D extent,
                                                    const scene::VisibilityFilter &visibility);
-[[nodiscard]] Result<RenderList>
-build_render_list(const scene::Storage &scene, EntityId camera, Extent2D extent,
-                  const scene::VisibilityFilter &visibility,
-                  const clipping::ClippingFilter &clipping_filter);
+[[nodiscard]] Result<RenderList> build_render_list(const scene::Storage &scene, EntityId camera,
+                                                   Extent2D extent,
+                                                   const scene::VisibilityFilter &visibility,
+                                                   const clipping::ClippingFilter &clipping_filter);
 
 class Renderer final {
   public:
@@ -81,19 +83,22 @@ class Renderer final {
                                                   graphics::RenderTarget &target,
                                                   Color4 clear_color, const BasicLighting &lighting,
                                                   const ViewportRenderOptions &options = {});
-    [[nodiscard]] Result<RenderStatistics>
-    render(const scene::Storage &scene, EntityId camera, graphics::RenderTarget &target,
-           Color4 clear_color, const BasicLighting &lighting, const ViewportRenderOptions &options,
-           const scene::VisibilityFilter &visibility);
-    [[nodiscard]] Result<RenderStatistics>
-    render(const scene::Storage &scene, EntityId camera, graphics::RenderTarget &target,
-           Color4 clear_color, const BasicLighting &lighting, const ViewportRenderOptions &options,
-           const scene::VisibilityFilter &visibility,
-           const clipping::ClippingFilter &clipping_filter);
-    [[nodiscard]] Result<GpuPickResult>
-    gpu_pick(const scene::Storage &scene, EntityId camera, graphics::PickingTarget &target,
-             Float2 position_pixels, const scene::VisibilityFilter &visibility,
-             const clipping::ClippingFilter &clipping_filter);
+    [[nodiscard]] Result<RenderStatistics> render(const scene::Storage &scene, EntityId camera,
+                                                  graphics::RenderTarget &target,
+                                                  Color4 clear_color, const BasicLighting &lighting,
+                                                  const ViewportRenderOptions &options,
+                                                  const scene::VisibilityFilter &visibility);
+    [[nodiscard]] Result<RenderStatistics> render(const scene::Storage &scene, EntityId camera,
+                                                  graphics::RenderTarget &target,
+                                                  Color4 clear_color, const BasicLighting &lighting,
+                                                  const ViewportRenderOptions &options,
+                                                  const scene::VisibilityFilter &visibility,
+                                                  const clipping::ClippingFilter &clipping_filter);
+    [[nodiscard]] Result<GpuPickResult> gpu_pick(const scene::Storage &scene, EntityId camera,
+                                                 graphics::PickingTarget &target,
+                                                 Float2 position_pixels,
+                                                 const scene::VisibilityFilter &visibility,
+                                                 const clipping::ClippingFilter &clipping_filter);
     void release_scene(SceneId scene) noexcept;
 
   private:

@@ -4,10 +4,12 @@ module;
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
 #include <elf3d/scene.h>
+#include <elf3d/scene_load.h>
 
 #include <cgltf.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
@@ -20,6 +22,7 @@ module;
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -45,6 +48,60 @@ constexpr cgltf_size maximum_accessor_count = 262144;
 constexpr std::uint64_t maximum_total_vertices = 50000000;
 constexpr std::uint64_t maximum_total_indices = 150000000;
 constexpr std::uint64_t maximum_total_decoded_image_bytes = 512ULL * 1024ULL * 1024ULL;
+
+void add_diagnostic(std::vector<SceneLoadDiagnostic> &diagnostics,
+                    SceneLoadDiagnosticCategory category, SceneLoadDiagnosticCode code,
+                    std::string message, std::string source_context = {}) {
+    diagnostics.push_back(SceneLoadDiagnostic{SceneLoadDiagnosticSeverity::warning, category, code,
+                                              std::move(message), std::move(source_context)});
+}
+
+[[nodiscard]] bool supported_required_extension(std::string_view extension) noexcept {
+    return extension == "KHR_texture_transform" || extension == "KHR_materials_unlit" ||
+           extension == "KHR_materials_emissive_strength" || extension == "KHR_materials_ior" ||
+           extension == "KHR_mesh_quantization";
+}
+
+[[nodiscard]] bool extension_has_full_support(std::string_view extension) noexcept {
+    return supported_required_extension(extension) || extension == "KHR_materials_specular";
+}
+
+void add_optional_extension_diagnostic(std::vector<SceneLoadDiagnostic> &diagnostics,
+                                       std::string_view extension) {
+    SceneLoadDiagnosticCategory category = SceneLoadDiagnosticCategory::extension;
+    SceneLoadDiagnosticCode code = SceneLoadDiagnosticCode::unsupported_optional_extension;
+    std::string behavior = "is unsupported and was ignored";
+    if (extension == "KHR_lights_punctual") {
+        category = SceneLoadDiagnosticCategory::light;
+        code = SceneLoadDiagnosticCode::ignored_lights;
+        behavior = "was parsed by cgltf, but Elf3D has no scene-light model; lights were ignored";
+    } else if (extension == "EXT_mesh_gpu_instancing") {
+        category = SceneLoadDiagnosticCategory::geometry;
+        code = SceneLoadDiagnosticCode::ignored_instancing;
+        behavior = "is unsupported; ordinary node/mesh data was loaded without GPU instances";
+    } else if (extension == "KHR_materials_specular") {
+        category = SceneLoadDiagnosticCategory::material;
+        code = SceneLoadDiagnosticCode::material_fallback;
+        behavior = "factors are rendered, but extension textures use the documented fallback";
+    } else if (extension == "KHR_materials_variants") {
+        category = SceneLoadDiagnosticCategory::material;
+        behavior = "is unsupported; each primitive's default material was used";
+    } else if (extension.starts_with("KHR_materials_")) {
+        category = SceneLoadDiagnosticCategory::material;
+        code = SceneLoadDiagnosticCode::material_fallback;
+        behavior = "is unsupported; the core metallic-roughness material fallback was used";
+    } else if (extension == "KHR_draco_mesh_compression" ||
+               extension == "EXT_meshopt_compression") {
+        category = SceneLoadDiagnosticCategory::geometry;
+        behavior = "is unsupported; import succeeds only where ordinary fallback geometry exists";
+    } else if (extension == "KHR_texture_basisu" || extension == "EXT_texture_webp") {
+        category = SceneLoadDiagnosticCategory::texture;
+        behavior = "is unsupported; ordinary PNG/JPEG fallback images are used when present";
+    }
+    add_diagnostic(diagnostics, category, code,
+                   "Optional extension " + std::string{extension} + " " + behavior,
+                   std::string{extension});
+}
 
 enum class ImageMime {
     png,
@@ -344,13 +401,31 @@ void release_external_file(const cgltf_memory_options *memory, const cgltf_file_
 }
 
 [[nodiscard]] Result<void> validate_required_extensions(const cgltf_data &data) {
-    if (data.extensions_required_count == 0) {
-        return {};
+    for (cgltf_size index = 0; index < data.extensions_required_count; ++index) {
+        const char *extension = data.extensions_required[index];
+        const std::string_view name = extension != nullptr ? extension : "<unnamed>";
+        if (supported_required_extension(name)) {
+            continue;
+        }
+        if (name == "KHR_materials_specular") {
+            bool uses_specular_textures = false;
+            for (cgltf_size material_index = 0; material_index < data.materials_count;
+                 ++material_index) {
+                const cgltf_material &material = data.materials[material_index];
+                uses_specular_textures =
+                    uses_specular_textures ||
+                    (material.has_specular &&
+                     (material.specular.specular_texture.texture != nullptr ||
+                      material.specular.specular_color_texture.texture != nullptr));
+            }
+            if (!uses_specular_textures) {
+                continue;
+            }
+        }
+        return Error{ErrorCode::unsupported_required_extension,
+                     "Unsupported required glTF extension: " + std::string{name}};
     }
-    const char *extension = data.extensions_required[0];
-    const std::string message = "Unsupported required glTF extension: " +
-                                std::string{extension != nullptr ? extension : "<unnamed>"};
-    return Error{ErrorCode::unsupported_required_extension, message};
+    return {};
 }
 
 [[nodiscard]] Result<void> validate_buffer_uris(const cgltf_data &data) {
@@ -401,8 +476,8 @@ void release_external_file(const cgltf_memory_options *memory, const cgltf_file_
             const int second = base64_value(payload[index + 1]);
             const int third = pad2 ? 0 : base64_value(payload[index + 2]);
             const int fourth = pad3 ? 0 : base64_value(payload[index + 3]);
-            if (first < 0 || second < 0 || third < 0 || fourth < 0 ||
-                (pad2 && !pad3) || ((pad2 || pad3) && !final_group)) {
+            if (first < 0 || second < 0 || third < 0 || fourth < 0 || (pad2 && !pad3) ||
+                ((pad2 || pad3) && !final_group)) {
                 return Error{ErrorCode::invalid_base64_payload,
                              "Image data URI contains malformed base64 padding or characters"};
             }
@@ -586,9 +661,8 @@ struct EncodedImage {
         }
         const std::filesystem::path image_path =
             gltf_path.parent_path() / path_from_utf8(decoded_uri.value());
-        Result<ImageMime> mime = source.mime_type != nullptr
-                                     ? mime_from_text(source.mime_type)
-                                     : mime_from_extension(image_path);
+        Result<ImageMime> mime = source.mime_type != nullptr ? mime_from_text(source.mime_type)
+                                                             : mime_from_extension(image_path);
         if (!mime) {
             return mime.error();
         }
@@ -639,11 +713,11 @@ struct EncodedImage {
     }
 }
 
-[[nodiscard]] Result<ImageHandle>
-image_for(const cgltf_data &data, const cgltf_image *source,
-          const std::filesystem::path &gltf_path, scene::ImportBuilder &builder,
-          std::vector<std::optional<ImageHandle>> &images,
-          std::uint64_t &total_decoded_image_bytes) {
+[[nodiscard]] Result<ImageHandle> image_for(const cgltf_data &data, const cgltf_image *source,
+                                            const std::filesystem::path &gltf_path,
+                                            scene::ImportBuilder &builder,
+                                            std::vector<std::optional<ImageHandle>> &images,
+                                            std::uint64_t &total_decoded_image_bytes) {
     if (source == nullptr || source < data.images || source >= data.images + data.images_count) {
         return Error{ErrorCode::invalid_image_handle,
                      "A glTF texture references an image outside the image table"};
@@ -666,9 +740,9 @@ image_for(const cgltf_data &data, const cgltf_image *source,
         return Error{ErrorCode::image_resource_limit_exceeded,
                      "Imported scene images exceed the 512 MiB decoded-image limit"};
     }
-    const Result<ImageHandle> created = builder.create_image(ImageDescription{
-        decoded.value().width, decoded.value().height, PixelFormat::rgba8_unorm,
-        decoded.value().pixels});
+    const Result<ImageHandle> created =
+        builder.create_image(ImageDescription{decoded.value().width, decoded.value().height,
+                                              PixelFormat::rgba8_unorm, decoded.value().pixels});
     if (!created) {
         return created.error();
     }
@@ -766,20 +840,24 @@ image_for(const cgltf_data &data, const cgltf_image *source,
             const cgltf_primitive &primitive = mesh.primitives[primitive_index];
             const cgltf_accessor *positions =
                 cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0);
-            const cgltf_accessor *texcoords =
-                cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, 0);
-            if (texcoords == nullptr) {
-                continue;
-            }
-            if (texcoords->type != cgltf_type_vec2 || texcoords->count == 0) {
-                return Error{ErrorCode::invalid_texcoord,
-                             mesh_context(mesh, mesh_index, primitive_index) +
-                                 " TEXCOORD_0 must be a non-empty VEC2 accessor"};
-            }
-            if (positions != nullptr && texcoords->count != positions->count) {
-                return Error{ErrorCode::mismatched_texcoord_count,
-                             mesh_context(mesh, mesh_index, primitive_index) +
-                                 " TEXCOORD_0 count does not match POSITION"};
+            for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets);
+                 ++set) {
+                const cgltf_accessor *texcoords =
+                    cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, set);
+                if (texcoords == nullptr) {
+                    continue;
+                }
+                const std::string semantic = " TEXCOORD_" + std::to_string(set);
+                if (texcoords->type != cgltf_type_vec2 || texcoords->count == 0) {
+                    return Error{ErrorCode::invalid_texcoord,
+                                 mesh_context(mesh, mesh_index, primitive_index) + semantic +
+                                     " must be a non-empty VEC2 accessor"};
+                }
+                if (positions != nullptr && texcoords->count != positions->count) {
+                    return Error{ErrorCode::mismatched_texcoord_count,
+                                 mesh_context(mesh, mesh_index, primitive_index) + semantic +
+                                     " count does not match POSITION"};
+                }
             }
         }
     }
@@ -801,13 +879,12 @@ texture_for(const cgltf_data &data, const cgltf_texture *source,
     if (textures[index].has_value()) {
         return textures[index].value();
     }
-    if (source->has_basisu || source->has_webp || source->image == nullptr) {
+    if (source->image == nullptr) {
         return Error{ErrorCode::unsupported_image_mime_type,
-                     "This import stage supports only ordinary PNG and JPEG glTF textures"};
+                     "The glTF texture has no ordinary PNG/JPEG fallback image"};
     }
     Result<ImageHandle> image =
-        image_for(data, source->image, gltf_path, builder, images,
-                  total_decoded_image_bytes);
+        image_for(data, source->image, gltf_path, builder, images, total_decoded_image_bytes);
     if (!image) {
         return image.error();
     }
@@ -922,8 +999,8 @@ unpack_float3(const cgltf_accessor &accessor, ErrorCode error_code, std::string_
     }
 }
 
-[[nodiscard]] Result<std::vector<float>>
-unpack_float2(const cgltf_accessor &accessor, std::string_view context) {
+[[nodiscard]] Result<std::vector<float>> unpack_float2(const cgltf_accessor &accessor,
+                                                       std::string_view context) {
     if (accessor.count > std::numeric_limits<std::size_t>::max() / 2) {
         return Error{ErrorCode::size_overflow,
                      std::string{context} + " accessor size overflows addressable memory"};
@@ -946,56 +1023,220 @@ unpack_float2(const cgltf_accessor &accessor, std::string_view context) {
     }
 }
 
+[[nodiscard]] Result<std::vector<float>> unpack_color(const cgltf_accessor &accessor,
+                                                      std::string_view context) {
+    const std::size_t components = accessor.type == cgltf_type_vec3   ? 3U
+                                   : accessor.type == cgltf_type_vec4 ? 4U
+                                                                      : 0U;
+    if (components == 0 || accessor.count == 0 ||
+        accessor.count > std::numeric_limits<std::size_t>::max() / components) {
+        return Error{ErrorCode::invalid_accessor,
+                     std::string{context} + " requires a non-empty VEC3 or VEC4 accessor"};
+    }
+    try {
+        const std::size_t float_count = static_cast<std::size_t>(accessor.count) * components;
+        std::vector<float> values(float_count);
+        if (cgltf_accessor_unpack_floats(&accessor, values.data(), float_count) != float_count) {
+            return Error{ErrorCode::invalid_accessor,
+                         std::string{context} + " could not be decoded from its accessor"};
+        }
+        return values;
+    } catch (...) {
+        return Error{ErrorCode::unexpected_exception,
+                     std::string{context} + " could not allocate decoded accessor storage"};
+    }
+}
+
+[[nodiscard]] Result<TextureMapping> texture_mapping(const cgltf_texture_view &view,
+                                                     std::string_view context) {
+    const cgltf_int selected_set =
+        view.has_transform && view.transform.has_texcoord ? view.transform.texcoord : view.texcoord;
+    if (selected_set < 0 ||
+        selected_set >= static_cast<cgltf_int>(maximum_texture_coordinate_sets)) {
+        return Error{ErrorCode::invalid_texcoord,
+                     std::string{context} + " references unsupported TEXCOORD_" +
+                         std::to_string(selected_set) + "; Elf3D supports UV sets 0 and 1"};
+    }
+
+    TextureMapping mapping;
+    mapping.texcoord_set = static_cast<std::uint32_t>(selected_set);
+    if (view.has_transform) {
+        mapping.transform.offset = {view.transform.offset[0], view.transform.offset[1]};
+        mapping.transform.scale = {view.transform.scale[0], view.transform.scale[1]};
+        mapping.transform.rotation_radians = view.transform.rotation;
+    }
+    if (!std::isfinite(mapping.transform.offset.x) || !std::isfinite(mapping.transform.offset.y) ||
+        !std::isfinite(mapping.transform.scale.x) || !std::isfinite(mapping.transform.scale.y) ||
+        !std::isfinite(mapping.transform.rotation_radians)) {
+        return Error{ErrorCode::invalid_texcoord,
+                     std::string{context} + " contains a non-finite texture transform"};
+    }
+    return mapping;
+}
+
+struct ImportedTextureView {
+    TextureAssetHandle texture;
+    TextureMapping mapping;
+};
+
+[[nodiscard]] Result<ImportedTextureView>
+import_texture_view(const cgltf_data &data, const cgltf_texture_view &view,
+                    std::string_view slot_name, const std::filesystem::path &gltf_path,
+                    scene::ImportBuilder &builder, std::vector<std::optional<ImageHandle>> &images,
+                    std::vector<std::optional<TextureAssetHandle>> &textures,
+                    std::vector<SceneLoadDiagnostic> &diagnostics,
+                    std::uint64_t &total_decoded_image_bytes, std::string_view context) {
+    Result<TextureMapping> mapping = texture_mapping(view, context);
+    if (!mapping) {
+        return mapping.error();
+    }
+    if (view.texture == nullptr) {
+        return ImportedTextureView{{}, mapping.value()};
+    }
+    if (view.texture->image == nullptr && (view.texture->has_basisu || view.texture->has_webp)) {
+        add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::texture,
+                       SceneLoadDiagnosticCode::material_fallback,
+                       std::string{slot_name} +
+                           " texture uses an unsupported compressed/WebP source and has no "
+                           "ordinary PNG/JPEG fallback; the slot was disabled",
+                       std::string{context});
+        return ImportedTextureView{{}, mapping.value()};
+    }
+    Result<TextureAssetHandle> texture = texture_for(data, view.texture, gltf_path, builder, images,
+                                                     textures, total_decoded_image_bytes);
+    if (!texture) {
+        return texture.error();
+    }
+    return ImportedTextureView{texture.value(), mapping.value()};
+}
+
+[[nodiscard]] Result<void> validate_primitive_texture_coordinates(const cgltf_primitive &primitive,
+                                                                  std::string_view context) {
+    if (primitive.material == nullptr) {
+        return {};
+    }
+    const cgltf_material &material = *primitive.material;
+    std::array<const cgltf_texture_view *, 6> views{
+        material.has_pbr_metallic_roughness ? &material.pbr_metallic_roughness.base_color_texture
+                                            : nullptr,
+        material.has_pbr_metallic_roughness
+            ? &material.pbr_metallic_roughness.metallic_roughness_texture
+            : nullptr,
+        &material.normal_texture,
+        &material.occlusion_texture,
+        &material.emissive_texture,
+        !material.has_pbr_metallic_roughness && material.has_pbr_specular_glossiness
+            ? &material.pbr_specular_glossiness.diffuse_texture
+            : nullptr,
+    };
+    for (const cgltf_texture_view *view : views) {
+        if (view == nullptr || view->texture == nullptr) {
+            continue;
+        }
+        Result<TextureMapping> mapping = texture_mapping(*view, context);
+        if (!mapping) {
+            return mapping.error();
+        }
+        const cgltf_accessor *accessor =
+            cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord,
+                                static_cast<cgltf_int>(mapping.value().texcoord_set));
+        if (accessor == nullptr) {
+            return Error{ErrorCode::invalid_texcoord,
+                         std::string{context} + " material references TEXCOORD_" +
+                             std::to_string(mapping.value().texcoord_set) +
+                             " but the primitive does not provide that UV set"};
+        }
+    }
+    return {};
+}
+
 [[nodiscard]] Result<std::vector<std::uint32_t>> import_indices(const cgltf_primitive &primitive,
                                                                 std::size_t vertex_count,
                                                                 std::string_view context) {
     try {
-        std::vector<std::uint32_t> indices;
+        std::vector<std::uint32_t> source_indices;
         if (primitive.indices == nullptr) {
-            if (vertex_count % 3 != 0 ||
-                vertex_count >
-                    static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+            if (vertex_count >
+                static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+                return Error{ErrorCode::invalid_accessor,
+                             std::string{context} + " has too many non-indexed vertices"};
+            }
+            source_indices.resize(vertex_count);
+            for (std::size_t index = 0; index < vertex_count; ++index) {
+                source_indices[index] = static_cast<std::uint32_t>(index);
+            }
+        } else {
+            const cgltf_accessor &accessor = *primitive.indices;
+            if (accessor.type != cgltf_type_scalar) {
+                return Error{ErrorCode::invalid_accessor,
+                             std::string{context} + " uses a non-scalar index accessor"};
+            }
+            if (accessor.component_type != cgltf_component_type_r_8u &&
+                accessor.component_type != cgltf_component_type_r_16u &&
+                accessor.component_type != cgltf_component_type_r_32u) {
+                return Error{ErrorCode::unsupported_index_type,
+                             std::string{context} +
+                                 " uses an unsupported signed or non-integer index type"};
+            }
+            if (accessor.count == 0 || accessor.is_sparse) {
                 return Error{ErrorCode::invalid_accessor,
                              std::string{context} +
-                                 " has a non-indexed vertex count not divisible by three"};
+                                 " requires a non-empty, non-sparse index accessor"};
             }
-            indices.resize(vertex_count);
-            for (std::size_t index = 0; index < vertex_count; ++index) {
-                indices[index] = static_cast<std::uint32_t>(index);
+            source_indices.resize(accessor.count);
+            if (cgltf_accessor_unpack_indices(&accessor, source_indices.data(),
+                                              sizeof(std::uint32_t),
+                                              accessor.count) != accessor.count) {
+                return Error{ErrorCode::invalid_accessor,
+                             std::string{context} + " index accessor could not be decoded"};
             }
-            return indices;
         }
-
-        const cgltf_accessor &accessor = *primitive.indices;
-        if (accessor.type != cgltf_type_scalar) {
-            return Error{ErrorCode::invalid_accessor,
-                         std::string{context} + " uses a non-scalar index accessor"};
-        }
-        if (accessor.component_type != cgltf_component_type_r_8u &&
-            accessor.component_type != cgltf_component_type_r_16u &&
-            accessor.component_type != cgltf_component_type_r_32u) {
-            return Error{ErrorCode::unsupported_index_type,
-                         std::string{context} +
-                             " uses an unsupported signed or non-integer index type"};
-        }
-        if (accessor.count == 0 || accessor.count % 3 != 0 || accessor.is_sparse) {
-            return Error{ErrorCode::invalid_accessor,
-                         std::string{context} +
-                             " requires a non-sparse index count divisible by three"};
-        }
-        indices.resize(accessor.count);
-        if (cgltf_accessor_unpack_indices(&accessor, indices.data(), sizeof(std::uint32_t),
-                                          accessor.count) != accessor.count) {
-            return Error{ErrorCode::invalid_accessor,
-                         std::string{context} + " index accessor could not be decoded"};
-        }
-        for (const std::uint32_t index : indices) {
+        for (const std::uint32_t index : source_indices) {
             if (static_cast<std::size_t>(index) >= vertex_count) {
                 return Error{ErrorCode::imported_index_out_of_range,
                              std::string{context} + " contains an index outside POSITION"};
             }
         }
-        return indices;
+
+        if (primitive.type == cgltf_primitive_type_triangles) {
+            if (source_indices.size() % 3 != 0) {
+                return Error{ErrorCode::invalid_accessor,
+                             std::string{context} +
+                                 " triangle-list index count is not divisible by three"};
+            }
+            return source_indices;
+        }
+        if (primitive.type != cgltf_primitive_type_triangle_strip &&
+            primitive.type != cgltf_primitive_type_triangle_fan) {
+            return Error{ErrorCode::unsupported_primitive_mode,
+                         std::string{context} +
+                             " uses an unsupported points or lines primitive mode"};
+        }
+        if (source_indices.size() < 3 ||
+            source_indices.size() - 2 > std::numeric_limits<std::size_t>::max() / 3) {
+            return Error{ErrorCode::invalid_accessor,
+                         std::string{context} +
+                             " triangle strip/fan requires at least three indices"};
+        }
+
+        std::vector<std::uint32_t> triangles;
+        triangles.reserve((source_indices.size() - 2) * 3);
+        for (std::size_t index = 0; index + 2 < source_indices.size(); ++index) {
+            if (primitive.type == cgltf_primitive_type_triangle_fan) {
+                triangles.push_back(source_indices[0]);
+                triangles.push_back(source_indices[index + 1]);
+                triangles.push_back(source_indices[index + 2]);
+            } else if (index % 2 == 0) {
+                triangles.push_back(source_indices[index]);
+                triangles.push_back(source_indices[index + 1]);
+                triangles.push_back(source_indices[index + 2]);
+            } else {
+                triangles.push_back(source_indices[index + 1]);
+                triangles.push_back(source_indices[index]);
+                triangles.push_back(source_indices[index + 2]);
+            }
+        }
+        return triangles;
     } catch (...) {
         return Error{ErrorCode::unexpected_exception,
                      std::string{context} + " could not allocate index storage"};
@@ -1042,18 +1283,16 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord> &vertices,
     }
 }
 
-[[nodiscard]] Result<MaterialHandle>
-material_for(const cgltf_data &data, const cgltf_material *material,
-             const std::filesystem::path &gltf_path, scene::ImportBuilder &builder,
-             std::vector<std::optional<MaterialHandle>> &materials,
-             std::vector<std::optional<ImageHandle>> &images,
-             std::vector<std::optional<TextureAssetHandle>> &textures,
-             std::optional<MaterialHandle> &default_material, std::vector<std::string> &warnings,
-             std::uint64_t &total_decoded_image_bytes) {
+[[nodiscard]] Result<MaterialHandle> material_for(
+    const cgltf_data &data, const cgltf_material *material, const std::filesystem::path &gltf_path,
+    scene::ImportBuilder &builder, std::vector<std::optional<MaterialHandle>> &materials,
+    std::vector<std::optional<ImageHandle>> &images,
+    std::vector<std::optional<TextureAssetHandle>> &textures,
+    std::optional<MaterialHandle> &default_material, std::vector<SceneLoadDiagnostic> &diagnostics,
+    std::uint64_t &total_decoded_image_bytes) {
     if (material == nullptr) {
         if (!default_material.has_value()) {
-            const Result<MaterialHandle> created =
-                builder.create_material(MaterialDescription{{1.0F, 1.0F, 1.0F, 1.0F}, false});
+            const Result<MaterialHandle> created = builder.create_material(MaterialDescription{});
             if (!created) {
                 return created.error();
             }
@@ -1072,49 +1311,148 @@ material_for(const cgltf_data &data, const cgltf_material *material,
     }
 
     MaterialDescription description;
+    const std::string material_name =
+        material->name != nullptr ? material->name : std::to_string(index);
+    const std::string context = "material " + material_name;
     if (material->has_pbr_metallic_roughness) {
         const cgltf_pbr_metallic_roughness &pbr = material->pbr_metallic_roughness;
         description.base_color = Color4{pbr.base_color_factor[0], pbr.base_color_factor[1],
-                                        pbr.base_color_factor[2], 1.0F};
+                                        pbr.base_color_factor[2], pbr.base_color_factor[3]};
         description.metallic_factor = pbr.metallic_factor;
         description.roughness_factor = pbr.roughness_factor;
-        const auto import_texture_view =
-            [&](const cgltf_texture_view &view) -> Result<TextureAssetHandle> {
-            if (view.has_transform || view.texcoord != 0) {
-                return Error{ErrorCode::invalid_texcoord,
-                             "Only untransformed TEXCOORD_0 material textures are supported"};
-            }
-            return texture_for(data, view.texture, gltf_path, builder, images, textures,
-                               total_decoded_image_bytes);
-        };
         if (pbr.base_color_texture.texture != nullptr) {
-            Result<TextureAssetHandle> texture = import_texture_view(pbr.base_color_texture);
+            Result<ImportedTextureView> texture = import_texture_view(
+                data, pbr.base_color_texture, "Base-color", gltf_path, builder, images, textures,
+                diagnostics, total_decoded_image_bytes, context + " base-color texture");
             if (!texture) {
                 return texture.error();
             }
-            description.base_color_texture = texture.value();
+            description.base_color_texture = texture.value().texture;
+            description.base_color_texture_mapping = texture.value().mapping;
         }
         if (pbr.metallic_roughness_texture.texture != nullptr) {
-            Result<TextureAssetHandle> texture =
-                import_texture_view(pbr.metallic_roughness_texture);
+            Result<ImportedTextureView> texture = import_texture_view(
+                data, pbr.metallic_roughness_texture, "Metallic-roughness", gltf_path, builder,
+                images, textures, diagnostics, total_decoded_image_bytes,
+                context + " metallic-roughness texture");
             if (!texture) {
                 return texture.error();
             }
-            description.metallic_roughness_texture = texture.value();
+            description.metallic_roughness_texture = texture.value().texture;
+            description.metallic_roughness_texture_mapping = texture.value().mapping;
+        }
+    } else if (material->has_pbr_specular_glossiness) {
+        const cgltf_pbr_specular_glossiness &pbr = material->pbr_specular_glossiness;
+        description.base_color = Color4{pbr.diffuse_factor[0], pbr.diffuse_factor[1],
+                                        pbr.diffuse_factor[2], pbr.diffuse_factor[3]};
+        description.metallic_factor = 0.0F;
+        description.roughness_factor = 1.0F - pbr.glossiness_factor;
+        if (pbr.diffuse_texture.texture != nullptr) {
+            Result<ImportedTextureView> texture = import_texture_view(
+                data, pbr.diffuse_texture, "Specular-glossiness diffuse", gltf_path, builder,
+                images, textures, diagnostics, total_decoded_image_bytes,
+                context + " specular-glossiness diffuse texture");
+            if (!texture) {
+                return texture.error();
+            }
+            description.base_color_texture = texture.value().texture;
+            description.base_color_texture_mapping = texture.value().mapping;
+        }
+        if (pbr.specular_glossiness_texture.texture != nullptr) {
+            add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::material,
+                           SceneLoadDiagnosticCode::material_fallback,
+                           "KHR_materials_pbrSpecularGlossiness diffuse data was approximated, "
+                           "but its specular-glossiness texture is ignored",
+                           context);
         }
     }
+    description.emissive_factor = {material->emissive_factor[0], material->emissive_factor[1],
+                                   material->emissive_factor[2]};
+    if (material->has_emissive_strength) {
+        description.emissive_factor.x *= material->emissive_strength.emissive_strength;
+        description.emissive_factor.y *= material->emissive_strength.emissive_strength;
+        description.emissive_factor.z *= material->emissive_strength.emissive_strength;
+    }
+    description.unlit = material->unlit != 0;
+    description.ior = material->has_ior ? material->ior.ior : 1.5F;
+    if (material->has_specular) {
+        description.specular_factor = material->specular.specular_factor;
+        description.specular_color_factor = {material->specular.specular_color_factor[0],
+                                             material->specular.specular_color_factor[1],
+                                             material->specular.specular_color_factor[2]};
+        if (material->specular.specular_texture.texture != nullptr ||
+            material->specular.specular_color_texture.texture != nullptr) {
+            add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::material,
+                           SceneLoadDiagnosticCode::material_fallback,
+                           "KHR_materials_specular factors are rendered, but its optional "
+                           "textures are ignored",
+                           context);
+        }
+    }
+    if (material->normal_texture.texture != nullptr) {
+        Result<ImportedTextureView> texture = import_texture_view(
+            data, material->normal_texture, "Normal", gltf_path, builder, images, textures,
+            diagnostics, total_decoded_image_bytes, context + " normal texture");
+        if (!texture) {
+            return texture.error();
+        }
+        description.normal_texture = texture.value().texture;
+        description.normal_texture_mapping = texture.value().mapping;
+        description.normal_scale = material->normal_texture.scale;
+        add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::material,
+                       SceneLoadDiagnosticCode::normal_map_fallback,
+                       "Normal texture was imported and preserved but is not rendered because "
+                       "Elf3D does not yet have a complete tangent-space path",
+                       context);
+    }
+    if (material->occlusion_texture.texture != nullptr) {
+        Result<ImportedTextureView> texture = import_texture_view(
+            data, material->occlusion_texture, "Occlusion", gltf_path, builder, images, textures,
+            diagnostics, total_decoded_image_bytes, context + " occlusion texture");
+        if (!texture) {
+            return texture.error();
+        }
+        description.occlusion_texture = texture.value().texture;
+        description.occlusion_texture_mapping = texture.value().mapping;
+        description.occlusion_strength = material->occlusion_texture.scale;
+    }
+    if (material->emissive_texture.texture != nullptr) {
+        Result<ImportedTextureView> texture = import_texture_view(
+            data, material->emissive_texture, "Emissive", gltf_path, builder, images, textures,
+            diagnostics, total_decoded_image_bytes, context + " emissive texture");
+        if (!texture) {
+            return texture.error();
+        }
+        description.emissive_texture = texture.value().texture;
+        description.emissive_texture_mapping = texture.value().mapping;
+    }
+    switch (material->alpha_mode) {
+    case cgltf_alpha_mode_opaque:
+        description.alpha_mode = AlphaMode::opaque;
+        break;
+    case cgltf_alpha_mode_mask:
+        description.alpha_mode = AlphaMode::mask;
+        break;
+    case cgltf_alpha_mode_blend:
+        description.alpha_mode = AlphaMode::blend;
+        break;
+    default:
+        return Error{ErrorCode::scene_import_failed, context + " contains an invalid alpha mode"};
+    }
+    description.alpha_cutoff = material->alpha_cutoff;
     if (!std::isfinite(description.base_color.red) ||
         !std::isfinite(description.base_color.green) ||
         !std::isfinite(description.base_color.blue) ||
+        !std::isfinite(description.base_color.alpha) ||
         !std::isfinite(description.metallic_factor) ||
-        !std::isfinite(description.roughness_factor)) {
+        !std::isfinite(description.roughness_factor) ||
+        !math::is_finite(description.emissive_factor) || !std::isfinite(description.normal_scale) ||
+        !std::isfinite(description.occlusion_strength) || !std::isfinite(description.ior) ||
+        !std::isfinite(description.specular_factor) ||
+        !math::is_finite(description.specular_color_factor) ||
+        !std::isfinite(description.alpha_cutoff)) {
         return Error{ErrorCode::scene_import_failed,
-                     "A glTF material contains a non-finite PBR factor"};
-    }
-    if (material->alpha_mode != cgltf_alpha_mode_opaque) {
-        const std::string name = material->name != nullptr ? material->name : std::to_string(index);
-        warnings.push_back("Material " + name +
-                           " uses MASK or BLEND and was imported as fully opaque");
+                     context + " contains a non-finite material factor"};
     }
 
     description.double_sided = material->double_sided != 0;
@@ -1129,11 +1467,11 @@ material_for(const cgltf_data &data, const cgltf_material *material,
 [[nodiscard]] Result<std::vector<ModelPrimitiveBinding>>
 import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_index,
             const std::filesystem::path &gltf_path, const SceneLoadOptions &options,
-            scene::ImportBuilder &builder,
-            std::vector<std::optional<MaterialHandle>> &materials,
+            scene::ImportBuilder &builder, std::vector<std::optional<MaterialHandle>> &materials,
             std::vector<std::optional<ImageHandle>> &images,
             std::vector<std::optional<TextureAssetHandle>> &textures,
-            std::optional<MaterialHandle> &default_material, std::vector<std::string> &warnings,
+            std::optional<MaterialHandle> &default_material,
+            std::vector<SceneLoadDiagnostic> &diagnostics,
             std::uint64_t &total_decoded_image_bytes) {
     try {
         std::vector<ModelPrimitiveBinding> bindings;
@@ -1142,9 +1480,11 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
              ++primitive_index) {
             const cgltf_primitive &primitive = mesh.primitives[primitive_index];
             const std::string context = mesh_context(mesh, mesh_index, primitive_index);
-            if (primitive.type != cgltf_primitive_type_triangles) {
+            if (primitive.type != cgltf_primitive_type_triangles &&
+                primitive.type != cgltf_primitive_type_triangle_strip &&
+                primitive.type != cgltf_primitive_type_triangle_fan) {
                 return Error{ErrorCode::unsupported_primitive_mode,
-                             context + " is not a triangle-list primitive"};
+                             context + " uses unsupported points or lines geometry"};
             }
 
             const cgltf_accessor *position_accessor =
@@ -1166,6 +1506,12 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
                 return indices.error();
             }
 
+            const Result<void> texture_coordinate_validation =
+                validate_primitive_texture_coordinates(primitive, context);
+            if (!texture_coordinate_validation) {
+                return texture_coordinate_validation.error();
+            }
+
             std::vector<VertexPositionNormalTexCoord> vertices(vertex_count);
             for (std::size_t index = 0; index < vertex_count; ++index) {
                 const Float3 position{positions.value()[index * 3],
@@ -1178,15 +1524,20 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
                 vertices[index].position = position;
             }
 
-            const cgltf_accessor *texcoord_accessor =
-                cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, 0);
-            if (texcoord_accessor != nullptr) {
+            for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets);
+                 ++set) {
+                const cgltf_accessor *texcoord_accessor =
+                    cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, set);
+                if (texcoord_accessor == nullptr) {
+                    continue;
+                }
+                const std::string semantic = "TEXCOORD_" + std::to_string(set);
                 if (texcoord_accessor->count != position_accessor->count) {
                     return Error{ErrorCode::mismatched_texcoord_count,
-                                 context + " TEXCOORD_0 count does not match POSITION"};
+                                 context + " " + semantic + " count does not match POSITION"};
                 }
                 Result<std::vector<float>> texcoords =
-                    unpack_float2(*texcoord_accessor, context + " TEXCOORD_0");
+                    unpack_float2(*texcoord_accessor, context + " " + semantic);
                 if (!texcoords) {
                     return texcoords.error();
                 }
@@ -1195,19 +1546,55 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
                                           texcoords.value()[index * 2 + 1]};
                     if (!std::isfinite(texcoord.x) || !std::isfinite(texcoord.y)) {
                         return Error{ErrorCode::invalid_texcoord,
-                                     context + " contains a non-finite TEXCOORD_0 value"};
+                                     context + " contains a non-finite " + semantic + " value"};
                     }
-                    vertices[index].texcoord0 = texcoord;
+                    if (set == 0) {
+                        vertices[index].texcoord0 = texcoord;
+                    } else {
+                        vertices[index].texcoord1 = texcoord;
+                    }
                 }
-            } else if (primitive.material != nullptr &&
-                       primitive.material->has_pbr_metallic_roughness &&
-                       (primitive.material->pbr_metallic_roughness.base_color_texture.texture !=
-                            nullptr ||
-                        primitive.material->pbr_metallic_roughness.metallic_roughness_texture
-                                .texture != nullptr)) {
-                warnings.push_back(context +
-                                   " uses a supported texture without TEXCOORD_0; default (0,0) "
-                                   "coordinates were used");
+            }
+
+            for (cgltf_size attribute_index = 0; attribute_index < primitive.attributes_count;
+                 ++attribute_index) {
+                const cgltf_attribute &attribute = primitive.attributes[attribute_index];
+                if (attribute.type == cgltf_attribute_type_texcoord &&
+                    attribute.index >= static_cast<cgltf_int>(maximum_texture_coordinate_sets)) {
+                    add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::geometry,
+                                   SceneLoadDiagnosticCode::material_fallback,
+                                   "Additional UV sets beyond TEXCOORD_1 are not preserved unless "
+                                   "referenced, and referenced sets beyond 1 are rejected",
+                                   context);
+                    break;
+                }
+            }
+
+            const cgltf_accessor *color_accessor =
+                cgltf_find_accessor(&primitive, cgltf_attribute_type_color, 0);
+            if (color_accessor != nullptr) {
+                if (color_accessor->count != position_accessor->count) {
+                    return Error{ErrorCode::invalid_accessor,
+                                 context + " COLOR_0 count does not match POSITION"};
+                }
+                Result<std::vector<float>> colors =
+                    unpack_color(*color_accessor, context + " COLOR_0");
+                if (!colors) {
+                    return colors.error();
+                }
+                const std::size_t components = color_accessor->type == cgltf_type_vec3 ? 3U : 4U;
+                for (std::size_t index = 0; index < vertex_count; ++index) {
+                    Color4 color{colors.value()[index * components],
+                                 colors.value()[index * components + 1],
+                                 colors.value()[index * components + 2],
+                                 components == 4U ? colors.value()[index * components + 3] : 1.0F};
+                    if (!std::isfinite(color.red) || !std::isfinite(color.green) ||
+                        !std::isfinite(color.blue) || !std::isfinite(color.alpha)) {
+                        return Error{ErrorCode::invalid_accessor,
+                                     context + " contains a non-finite COLOR_0 value"};
+                    }
+                    vertices[index].color = color;
+                }
             }
 
             const cgltf_accessor *normal_accessor =
@@ -1246,22 +1633,28 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
                 std::uint64_t fallback_count = 0;
                 generate_normals(vertices, indices.value(), degenerate_count, fallback_count);
                 if (degenerate_count != 0 || fallback_count != 0) {
-                    warnings.push_back(context + " ignored " + std::to_string(degenerate_count) +
+                    add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::geometry,
+                                   SceneLoadDiagnosticCode::degenerate_geometry,
+                                   "Generated normals ignored " + std::to_string(degenerate_count) +
                                        " degenerate triangles and used +Y fallback normals for " +
-                                       std::to_string(fallback_count) + " vertices");
+                                       std::to_string(fallback_count) + " vertices",
+                                   context);
+                } else {
+                    add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::geometry,
+                                   SceneLoadDiagnosticCode::generated_normals,
+                                   "Generated missing vertex normals", context);
                 }
             }
 
-            const Result<MeshHandle> mesh_result =
-                builder.create_mesh(TexturedMeshDataView{
-                    std::span<const VertexPositionNormalTexCoord>{vertices},
-                    std::span<const std::uint32_t>{indices.value()}});
+            const Result<MeshHandle> mesh_result = builder.create_mesh(
+                TexturedMeshDataView{std::span<const VertexPositionNormalTexCoord>{vertices},
+                                     std::span<const std::uint32_t>{indices.value()}});
             if (!mesh_result) {
                 return mesh_result.error();
             }
-            const Result<MaterialHandle> material_result = material_for(
-                data, primitive.material, gltf_path, builder, materials, images, textures,
-                default_material, warnings, total_decoded_image_bytes);
+            const Result<MaterialHandle> material_result =
+                material_for(data, primitive.material, gltf_path, builder, materials, images,
+                             textures, default_material, diagnostics, total_decoded_image_bytes);
             if (!material_result) {
                 return material_result.error();
             }
@@ -1274,12 +1667,10 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
     }
 }
 
-[[nodiscard]] Result<void> construct_scene(const cgltf_data &data,
-                                           const std::vector<bool> &reachable,
-                                           const std::filesystem::path &gltf_path,
-                                           const SceneLoadOptions &options,
-                                           scene::ImportBuilder &builder,
-                                           std::vector<std::string> &warnings) {
+[[nodiscard]] Result<void>
+construct_scene(const cgltf_data &data, const std::vector<bool> &reachable,
+                const std::filesystem::path &gltf_path, const SceneLoadOptions &options,
+                scene::ImportBuilder &builder, std::vector<SceneLoadDiagnostic> &diagnostics) {
     try {
         std::vector<bool> used_meshes(data.meshes_count, false);
         for (cgltf_size node_index = 0; node_index < data.nodes_count; ++node_index) {
@@ -1305,10 +1696,9 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
             if (!used_meshes[mesh_index]) {
                 continue;
             }
-            Result<std::vector<ModelPrimitiveBinding>> imported =
-                import_mesh(data, data.meshes[mesh_index], mesh_index, gltf_path, options, builder,
-                            materials, images, textures, default_material, warnings,
-                            total_decoded_image_bytes);
+            Result<std::vector<ModelPrimitiveBinding>> imported = import_mesh(
+                data, data.meshes[mesh_index], mesh_index, gltf_path, options, builder, materials,
+                images, textures, default_material, diagnostics, total_decoded_image_bytes);
             if (!imported) {
                 return imported.error();
             }
@@ -1350,6 +1740,46 @@ import_mesh(const cgltf_data &data, const cgltf_mesh &mesh, cgltf_size mesh_inde
                     node.name != nullptr ? node.name : std::to_string(node_index);
                 return Error{matrix_result.error().code(),
                              "Node " + node_name + ": " + matrix_result.error().message()};
+            }
+
+            if (node.camera != nullptr) {
+                const std::string node_label =
+                    node.name != nullptr ? std::string{node.name} : std::to_string(node_index);
+                const std::string node_context = "node " + node_label;
+                if (node.camera->type == cgltf_camera_type_perspective) {
+                    PerspectiveCameraDescription camera;
+                    camera.vertical_field_of_view_radians = node.camera->data.perspective.yfov;
+                    camera.near_plane = node.camera->data.perspective.znear;
+                    camera.far_plane = node.camera->data.perspective.has_zfar
+                                           ? node.camera->data.perspective.zfar
+                                           : 1.0e9F;
+                    const Result<void> camera_result =
+                        builder.set_perspective_camera(entity.value(), camera);
+                    if (!camera_result) {
+                        return Error{camera_result.error().code(),
+                                     node_context + ": " + camera_result.error().message()};
+                    }
+                    if (!node.camera->data.perspective.has_zfar) {
+                        add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::camera,
+                                       SceneLoadDiagnosticCode::camera_fallback,
+                                       "Infinite-far perspective camera was bounded to 1e9 world "
+                                       "units",
+                                       node_context);
+                    }
+                    if (node.camera->data.perspective.has_aspect_ratio) {
+                        add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::camera,
+                                       SceneLoadDiagnosticCode::camera_fallback,
+                                       "Authored camera aspect ratio is not stored; the active "
+                                       "viewport aspect ratio is used",
+                                       node_context);
+                    }
+                } else if (node.camera->type == cgltf_camera_type_orthographic) {
+                    add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::camera,
+                                   SceneLoadDiagnosticCode::camera_fallback,
+                                   "Orthographic camera is not representable and was left as a "
+                                   "transform-only entity",
+                                   node_context);
+                }
             }
         }
 
@@ -1480,13 +1910,55 @@ Result<ImportReport> import_scene(const std::filesystem::path &path,
         ImportReport report;
         for (cgltf_size index = 0; index < data->extensions_used_count; ++index) {
             const char *extension_name = data->extensions_used[index];
-            if (extension_name != nullptr) {
-                report.warnings.push_back("Optional extension " + std::string{extension_name} +
-                                          " was not interpreted by this import stage");
+            if (extension_name != nullptr && !extension_has_full_support(extension_name)) {
+                add_optional_extension_diagnostic(report.diagnostics, extension_name);
             }
         }
+        if (data->animations_count != 0) {
+            add_diagnostic(report.diagnostics, SceneLoadDiagnosticCategory::animation,
+                           SceneLoadDiagnosticCode::ignored_animation,
+                           "Animation clips and channels are not imported; static node transforms "
+                           "were used");
+        }
+        bool has_reachable_skin = false;
+        bool has_reachable_morph_targets = false;
+        bool has_reachable_instancing = false;
+        for (cgltf_size node_index = 0; node_index < data->nodes_count; ++node_index) {
+            if (!reachable.value()[node_index]) {
+                continue;
+            }
+            const cgltf_node &node = data->nodes[node_index];
+            has_reachable_skin = has_reachable_skin || node.skin != nullptr;
+            has_reachable_instancing =
+                has_reachable_instancing || node.has_mesh_gpu_instancing != 0;
+            if (node.mesh != nullptr) {
+                for (cgltf_size primitive_index = 0; primitive_index < node.mesh->primitives_count;
+                     ++primitive_index) {
+                    has_reachable_morph_targets =
+                        has_reachable_morph_targets ||
+                        node.mesh->primitives[primitive_index].targets_count != 0;
+                }
+            }
+        }
+        if (has_reachable_skin) {
+            add_diagnostic(report.diagnostics, SceneLoadDiagnosticCategory::animation,
+                           SceneLoadDiagnosticCode::ignored_skin,
+                           "Skinning is not imported; meshes use their undeformed bind geometry");
+        }
+        if (has_reachable_morph_targets) {
+            add_diagnostic(
+                report.diagnostics, SceneLoadDiagnosticCategory::animation,
+                SceneLoadDiagnosticCode::ignored_morph_targets,
+                "Morph targets and weights are not imported; base mesh geometry is used");
+        }
+        if (has_reachable_instancing) {
+            add_diagnostic(report.diagnostics, SceneLoadDiagnosticCategory::geometry,
+                           SceneLoadDiagnosticCode::ignored_instancing,
+                           "EXT_mesh_gpu_instancing attributes are not expanded; the base node is "
+                           "loaded once");
+        }
         const Result<void> construction_result =
-            construct_scene(*data, reachable.value(), path, options, builder, report.warnings);
+            construct_scene(*data, reachable.value(), path, options, builder, report.diagnostics);
         if (!construction_result) {
             return construction_result.error();
         }

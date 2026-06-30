@@ -3,8 +3,8 @@ module elf.core;
 namespace elf3d::core {
 namespace {
 
-constexpr VersionData elf3d_version{0, 4, 0};
-constexpr char elf3d_version_string[] = "0.4.0";
+constexpr VersionData elf3d_version{0, 5, 0};
+constexpr char elf3d_version_string[] = "0.5.0";
 
 } // namespace
 

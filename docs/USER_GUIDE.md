@@ -1,12 +1,13 @@
 # User Guide
 
-Purpose: Explain how to use the actual Elf3D 0.4.0 reference viewer.
+Purpose: Explain how to use the actual Elf3D 0.5.0 reference viewer.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
 Document status: Living guide verified from viewer code and README.
 
-Last verified Git commit: pending 0.4.0 release source commit
+Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
+0.5.0 validation applies to the current worktree.
 
 Implementation source paths: `apps/viewer/src/main.cpp`, `integrations/imgui`,
 `include/elf3d`, `tests/fixtures/textured_pbr.gltf`
@@ -53,6 +54,10 @@ Model loading options:
 
 Loading is synchronous and can temporarily block the viewer UI. Failed loading
 keeps the current scene.
+
+Successful loads may contain compatibility diagnostics. Open `Model
+Information` to review warnings for unsupported optional extensions or visual
+fallbacks. The viewer retains these diagnostics with the loaded scene.
 
 ## Viewer Style And Assets
 
@@ -185,11 +190,18 @@ The Rendering panel contains viewport and scene-display controls:
 - ambient intensity
 - reset lighting
 
+Imported materials may use UV0 or UV1 independently per texture, texture
+offset/scale/rotation, vertex color, alpha mask, simple alpha blend, emissive,
+occlusion, unlit, IOR, and specular factors. Normal textures are retained but
+render with vertex normals and a visible diagnostic until tangent-space support
+is complete.
+
 ## Error Messages
 
 Model load failures are shown in a modal with source path, error category, and
-message. The viewer also writes some failures to `std::cerr`. Import warnings
-from the engine currently go to `std::clog`.
+message. The viewer also writes some failures to `std::cerr`. Successful-load
+diagnostics are shown in `Model Information`; they no longer depend on
+`std::clog` in the viewer path.
 
 ## Shutdown
 
@@ -199,8 +211,9 @@ context.
 
 ## Current Limitations
 
-- No full glTF material support.
-- No alpha masking or blending.
-- No animations, skins, morphs, cameras, lights, compression extensions, or KTX2.
+- No tangent-space normal mapping or advanced layered/transmissive materials.
+- Alpha blending uses a simple model-origin sort, not order-independent transparency.
+- No animations, skin deformation, morph deformation, scene lights,
+  orthographic-camera import, compression decoders, or KTX2.
 - No scene editing, transform gizmos, undo/redo, multi-selection, or annotations.
 - No benchmarks recorded.

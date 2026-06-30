@@ -5,7 +5,7 @@
 Elf3D is a modular C++20 3D visualization engine for loading, rendering, and
 interactively inspecting glTF 2.0 scenes in desktop applications.
 
-Current version: 0.4.0.
+Current development version: 0.5.0.
 
 Maturity: first public baseline. The project is useful as an embeddable
 Windows/OpenGL visualization slice and reference viewer, but it is not a
@@ -13,17 +13,18 @@ complete game engine, editor, or stable cross-toolchain binary SDK.
 
 Validated baseline: Windows desktop x64, Visual Studio 2022 v17.14.35, MSVC
 19.44.35228.0, dynamic MSVC runtime, and OpenGL 4.1 core profile. Linux and
-macOS are architectural goals, but they are not validated platforms for 0.4.0.
+macOS are architectural goals, but they are not validated platforms for 0.5.0.
 
 ## Features
 
 - Public `elf3d` shared library with `Engine`, `Scene`, and `Viewport` facades.
 - Optional `elf3d_imgui` host-integration library.
 - `elf3d_viewer` reference application and graphical testbed.
-- Static glTF/GLB loading for bounded triangle geometry.
+- Static glTF/GLB loading with UV0/UV1, texture transforms, practical material
+  diagnostics, triangle strips/fans, and perspective cameras.
 - Scene hierarchy, transforms, cameras, mesh/material/image assets, and bounds.
-- OpenGL 4.1 off-screen viewport rendering with opaque metallic-roughness
-  shading.
+- OpenGL 4.1 off-screen viewport rendering with metallic-roughness, emissive,
+  occlusion, unlit, alpha-mask, and simple alpha-blend paths.
 - Orbit, pan, wheel/drag dolly, dynamic examine pivot, fit, and reset navigation.
 - GPU-first picking with CPU refinement/fallback, one selected entity per viewport, visibility, and isolation.
 - One point-to-point distance measurement per viewport.
@@ -49,16 +50,20 @@ plus the optional ImGui integration target.
 
 ## glTF Scope
 
-Elf3D 0.4.0 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
-images, node hierarchy, TRS and matrix transforms, reusable meshes, triangle
-primitives, indexed and non-indexed geometry, positions, normals, `TEXCOORD_0`,
-base-color textures, metallic/roughness factors, metallic-roughness textures,
-sampler wrap/filter values, and generated normals when enabled.
+Elf3D 0.5.0 supports `.gltf` and `.glb`, external/data/GLB buffers, PNG/JPEG
+images, node hierarchy, TRS/matrices, reusable meshes, triangle lists/strips/
+fans, positions, normals, generated normals, `TEXCOORD_0`, `TEXCOORD_1`,
+`COLOR_0`, per-slot `texCoord`, `KHR_texture_transform`, base-color alpha,
+`OPAQUE`/`MASK`/simple `BLEND`, emissive and occlusion textures, unlit,
+emissive strength, IOR/specular factors, mesh quantization, and perspective
+cameras. `Engine::load_scene_with_report` exposes structured compatibility
+diagnostics to hosts.
 
-Unsupported or partial areas include animation, skins, morph targets, cameras,
-lights, normal maps, occlusion, emissive maps, texture transforms, additional
-UV sets, Draco, meshopt, KTX2, alpha blending, alpha masking, shadows,
-image-based lighting, scene editing, runtime plugins, and a stable C ABI.
+Normal textures are imported and preserved but not rendered until a complete
+tangent-space path exists. Animation, skin/morph deformation, scene lights,
+orthographic cameras, layered/transmissive materials, Draco, meshopt, KTX2/
+BasisU, shadows, IBL, scene editing, runtime plugins, and a stable C ABI remain
+unsupported or diagnostic fallbacks. See the support matrix for exact behavior.
 
 ## Requirements
 
@@ -67,7 +72,6 @@ image-based lighting, scene editing, runtime plugins, and a stable C ABI.
   workload.
 - CMake 3.28 or newer. Visual Studio 2022 v17.14.35 provides CMake
   3.31.6-msvc6, which is the current validated local tool.
-- Git, used by CMake FetchContent.
 - Graphics driver supporting an OpenGL 4.1 core-profile context.
 
 ## Build
@@ -91,6 +95,10 @@ ctest --preset windows-release --output-on-failure
 
 The presets build tests and the viewer. Generated files are written under
 `out/`.
+
+All third-party source subsets required for the normal build are checked in
+under `third_party/`. Ordinary configure/build steps do not download
+dependencies and do not depend on CMake `_deps/*-src` directories.
 
 Generated C++ module artifacts such as BMI, IFC, PCM, and GCM files are build
 outputs. They are not SDK artifacts and must not be committed.
@@ -117,6 +125,13 @@ Project-owned fixture:
 
 ```powershell
 .\out\build\windows-debug\bin\Debug\elf3d_viewer.exe .\tests\fixtures\textured_pbr.gltf
+```
+
+Validate private real-file corpora without committing them:
+
+```powershell
+.\out\build\windows-debug\bin\Debug\elf3d_gltf_probe.exe `
+    .\out\local-gltf-corpus
 ```
 
 ## Minimal Integration Example
@@ -167,7 +182,7 @@ modules/                Internal engine modules and tests
 integrations/imgui/     Optional Dear ImGui integration target
 apps/viewer/            Reference viewer application
 tests/                  Public API tests and fixtures
-third_party/            Checked-in generated GLAD loader and license notices
+third_party/            Vendored third-party source subsets and license notices
 cmake/                  Build configuration helpers
 docs/                   Technical documentation and release records
 ```

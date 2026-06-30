@@ -1,18 +1,19 @@
 # Public API Overview
 
-Purpose: Describe the verified Elf3D 0.4.0 public C++ API and host integration
+Purpose: Describe the verified Elf3D 0.5.0 public C++ API and host integration
 contract.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
 Document status: Verified against public headers and validation on 2026-06-27.
 
-Last verified Git commit: pending 0.4.0 release source commit
+Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
+0.5.0 validation applies to the current worktree.
 
 Implementation source paths: `include/elf3d`, `facade/elf3d/src/engine.cpp`,
 `tests/public_api_test.cpp`
 
-Known limitations: This is a C++ API, not a stable C ABI. The 0.4.0 DLL surface
+Known limitations: This is a C++ API, not a stable C ABI. The 0.5.0 DLL surface
 uses standard library types and is intended for compatible compiler, standard
 library, and MSVC runtime configurations.
 
@@ -24,6 +25,8 @@ Related documents: `LIFETIME_AND_THREADING.md`, `MODULE_MAP.md`,
 - `include/elf3d/elf3d.h`: version functions, `Engine`, primary facade include.
 - `include/elf3d/scene.h`: `Scene`, hierarchy snapshots, scene load options,
   cameras, entities, assets, visibility, bounds, statistics.
+- `include/elf3d/scene_load.h`: host-visible import diagnostic severity,
+  category, code, message/context, and `SceneLoadReport`.
 - `include/elf3d/viewport.h`: `Viewport`, rendering, navigation, picking,
   selection, visibility, measurement, clipping, lighting, statistics.
 - `include/elf3d/assets.h`: asset handles and mesh, image, texture, sampler,
@@ -87,9 +90,10 @@ backend and cannot create viewports.
 ## Scene API
 
 `Engine::create_scene()` creates an empty logical scene. `Engine::load_scene()`
-synchronously imports a glTF or GLB file into a new scene and returns that scene
-only after successful import. Failed loads leave existing caller-owned scenes
-unchanged.
+synchronously imports a glTF or GLB file and preserves the original return
+type. `Engine::load_scene_with_report()` is the additive diagnostic form; it
+returns `LoadedScene`, containing the new Scene plus a `SceneLoadReport`.
+Failed loads return `Error` and leave existing caller-owned scenes unchanged.
 
 `Scene` owns:
 
@@ -141,18 +145,23 @@ errors where practical.
 Normal absence uses `std::optional`, for example no pick hit or no selected
 entity.
 
-Import warnings currently go to `std::clog` from `Engine::load_scene()`. They
-are not returned through a public load report in 0.4.0.
+`SceneLoadDiagnostic` includes severity, category, stable diagnostic code,
+message, and optional source context. `Engine::load_scene_with_report()` does
+not write warnings to a global stream. The compatibility `load_scene()` method
+continues to write warning diagnostics to `std::clog` for existing hosts.
 
 ## Thread and ABI Notes
 
-Scene mutation and rendering are single-threaded in 0.4.0. Viewport creation,
+Scene mutation and rendering are single-threaded in 0.5.0. Viewport creation,
 resize, render, native texture access, and destruction are graphics-thread
 operations and require a compatible current OpenGL context.
 
-The 0.4.0 public headers add `OrbitNavigationSettings::invert_vertical_orbit`
-relative to 0.2.0. Because Elf3D exposes a C++ ABI rather than a stable C ABI,
-hosts must rebuild against the matching 0.4.0 headers and compatible toolchain.
+The 0.5.0 public headers add the load-report types/API and extend the public
+vertex/material value descriptions with UV1, vertex color, texture mappings,
+alpha, emissive, occlusion, normal-map preservation, unlit, IOR, and specular
+factors. Existing loading and scene-creation entry points remain source
+compatible. Because Elf3D exposes a C++ ABI rather than a stable C ABI, hosts
+must rebuild against matching 0.5.0 headers and a compatible toolchain.
 
 The public ABI uses standard library types including `std::unique_ptr`,
 `std::filesystem::path`, `std::optional`, `std::span`, `std::string_view`, and
@@ -163,7 +172,8 @@ dynamic runtime (`/MDd` for Debug, `/MD` for Release).
 
 ```cpp
 auto engine = elf3d::Engine::create(configuration).value();
-auto scene = engine->load_scene("model.glb").value();
+auto loaded = engine->load_scene_with_report("model.glb").value();
+auto scene = std::move(loaded.scene);
 auto viewport = engine->create_viewport({1280, 720}).value();
 
 elf3d::EntityId camera = scene->create_perspective_camera({}).value();

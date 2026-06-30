@@ -1,74 +1,114 @@
 # glTF Support
 
 Purpose: Record the verified static glTF and GLB support status for Elf3D
-0.4.0.
+0.5.0.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
-Document status: Verified from importer code, tests, README, and
-Debug/Release CTest on 2026-06-27.
+Document status: Living compatibility matrix verified from importer, renderer,
+public API, viewer, and tests.
 
-Last verified Git commit: pending 0.4.0 release source commit
+Implementation source paths: `modules/gltf`, `modules/assets`, `modules/scene`,
+`modules/renderer`, `modules/backend_opengl`, `facade/elf3d`,
+`tests/gltf_corpus_probe.cpp`
 
-Implementation source paths: `modules/gltf/src/importer.cpp`,
-`modules/gltf/tests/gltf_importer_test.cpp`, `tests/fixtures/textured_pbr.gltf`,
-`modules/image/src/image_decoder.cpp`, `modules/assets/src/storage.cpp`
-
-Known limitations: This is not full glTF 2.0 support. Animation, skins, morph
-targets, Draco, meshopt, KTX2, normal maps, occlusion, emissive, texture
-transforms, additional UV sets, cameras, and lights are not imported.
+Known limitations: This is not full glTF 2.0 support. Animation, skinning,
+morph deformation, scene lights, orthographic cameras, tangent-space normal
+mapping, compression decoders, KTX2/BasisU, material variants, and advanced
+layered/transmissive materials remain outside the implemented render path.
 
 Related documents: `PUBLIC_API_OVERVIEW.md`, `RENDERING_PIPELINE.md`,
 `USER_GUIDE.md`, `TESTING.md`
 
 ## Summary
 
-Elf3D 0.4.0 imports bounded static triangle geometry from `.gltf` and `.glb`
-files synchronously. Successful import creates a new `Scene`. Failed import
-returns a structured error and does not modify the caller's existing scene.
+Elf3D 0.5.0 imports bounded static geometry from `.gltf` and `.glb`
+synchronously. UV sets 0 and 1, per-texture UV selection, and
+`KHR_texture_transform` are preserved through the asset model and renderer.
+Successful imports may return structured diagnostics through
+`Engine::load_scene_with_report`; failed imports return a structured `Error` and
+do not replace an existing caller-owned scene.
 
-## Feature Matrix
+## Core Feature Matrix
 
 | Area | Status | Behavior |
 | --- | --- | --- |
-| `.gltf` JSON files | Supported | Parsed through cgltf with file type checked against extension. |
-| `.glb` binary files | Supported | GLB container accepted when file type matches extension. |
-| External buffers | Supported | Relative local buffers accepted with size limits. |
-| GLB buffers | Supported | Embedded GLB buffer data accepted. |
-| Data URI buffers | Supported | Accepted through cgltf buffer loading. |
-| Remote URI buffers/images | Unsupported | Rejected. |
-| Default scene | Supported | Imports `scene`; falls back to first scene, then parentless nodes. |
-| Node hierarchy | Supported | Reachable nodes imported with parent links and deterministic order. |
-| Node names | Supported | Imported when enabled by `SceneLoadOptions`. |
-| TRS transforms | Supported | Converted to exact local matrices. |
-| Explicit node matrices | Supported | Preserved as matrices. |
-| Mesh reuse | Supported | Mesh assets can be reused by multiple nodes. |
-| Triangle primitives | Supported | Only `TRIANGLES` primitives are imported. |
-| Non-triangle primitive modes | Unsupported | Return `unsupported_primitive_mode`. |
-| Indexed geometry | Supported | Unsigned 8-, 16-, and 32-bit indices accepted. |
-| Non-indexed geometry | Supported | Converted when vertex count is divisible by three. |
-| Accessor offsets and strides | Supported | Handled by cgltf unpacking. |
-| Normalized accessors | Supported | Normalized conversion handled by cgltf unpacking. |
-| Sparse index accessor | Unsupported | Sparse indices are rejected. |
-| `POSITION` | Required | Missing positions reject the primitive. |
-| `NORMAL` | Supported | Used when present. |
-| Generated normals | Supported | Generated when normals are absent and option allows it. |
-| `TEXCOORD_0` | Supported | Used for supported textures. |
-| Additional UV sets | Unsupported | Texture views with `texcoord != 0` are rejected. |
-| Texture transforms | Unsupported | Texture views with transforms are rejected. |
-| PBR metallic-roughness | Partially supported | RGB base color, metallic, roughness, base-color texture, metallic-roughness texture, and double-sided flag. |
-| `baseColorFactor` alpha | Ignored | Material alpha is forced to `1.0F`; rendering is opaque. |
-| Alpha `MASK` and `BLEND` | Partially supported | Imported as opaque and produce a load warning. |
-| PNG/JPEG external images | Supported | Decoded to tightly packed RGBA8. |
-| PNG/JPEG data URI images | Supported | Base64 data URI images accepted. |
-| PNG/JPEG GLB buffer-view images | Supported | Requires supported MIME type/signature. |
-| Other image formats | Unsupported | Rejected. |
-| Sampler wrap/filter | Supported subset | glTF wrap/filter mapped to renderer sampler descriptions. |
-| Optional extensions | Not interpreted | Optional extensions may load but do not change behavior. |
-| Required unknown extensions | Unsupported | Rejected before import. |
-| Cameras/lights | Unsupported | Not imported. |
-| Animations/skins/morphs | Unsupported | Not imported. |
-| Compression extensions | Unsupported | Required compression extensions fail. |
+| `.gltf` / `.glb` | Supported | JSON glTF and GLB 2.0 containers with local, data-URI, or GLB buffers. |
+| Node hierarchy and transforms | Supported | Selected-scene hierarchy, names, TRS, and matrices are preserved. |
+| Mesh reuse | Supported | Imported mesh assets may be referenced by several nodes. |
+| `TRIANGLES` | Supported | Indexed and non-indexed triangle lists. |
+| `TRIANGLE_STRIP` / `TRIANGLE_FAN` | Supported | Converted to triangle-list indices with strip winding preserved. |
+| Points and line modes | Unsupported | Import fails with `unsupported_primitive_mode`. |
+| `POSITION` / `NORMAL` | Supported | Normals are normalized; optional deterministic generation is available. |
+| `TEXCOORD_0` / `TEXCOORD_1` | Supported | Both fixed UV sets are stored per vertex and selectable independently per texture slot. |
+| `TEXCOORD_n`, `n >= 2` | Bounded fallback | Unreferenced sets are ignored with a diagnostic; a referenced set above 1 fails clearly. |
+| Missing referenced UV set | Rejected | A texture that selects an absent UV set fails with `invalid_texcoord`; UV0 is never silently substituted for UV1. |
+| `COLOR_0` | Supported | VEC3/VEC4, including normalized integer accessors, multiplies base color. |
+| `TANGENT` | Not rendered | Tangents are not preserved because normal mapping is not yet rendered. |
+| Sparse vertex accessors | Supported | cgltf float unpacking applies sparse values for supported attributes. |
+| Sparse index accessors | Unsupported | Rejected because cgltf does not unpack sparse index accessors. |
+| PNG / JPEG | Supported | External, data-URI, and buffer-view images decode to bounded RGBA8. |
+| Other core image formats | Unsupported | Clear MIME/extension/decode errors are returned. |
+| Perspective cameras | Supported | Imported on their authored node; infinite far planes use a documented 1e9 fallback. |
+| Orthographic cameras | Diagnostic fallback | Node remains transform-only and the load report explains the missing camera model. |
+| Animations | Diagnostic fallback | Static authored node transforms load; animation clips/channels are ignored. |
+| Skins | Diagnostic fallback | Undeformed mesh geometry loads with a warning. |
+| Morph targets | Diagnostic fallback | Base mesh geometry loads with a warning. |
+
+The vertex layout intentionally has a fixed limit of two UV sets. This avoids
+an unbounded per-vertex representation while covering the practical
+`TEXCOORD_1` blocker. Raising the limit later requires an explicit asset and GPU
+layout change.
+
+## Material Feature Matrix
+
+| Area | Status | Behavior |
+| --- | --- | --- |
+| Base-color factor RGBA | Supported | RGB and alpha are preserved. |
+| Base-color texture | Supported | sRGB sampling, UV0/UV1 selection, independent transform. |
+| Metallic/roughness factors and texture | Supported | Linear sampling, UV0/UV1 selection, independent transform. |
+| `OPAQUE` | Supported | Base alpha is ignored and output remains opaque. |
+| `MASK` / `alphaCutoff` | Supported | Fragments below cutoff are discarded. |
+| `BLEND` | Supported, simple policy | Output-space source-over blending, depth writes disabled, blended model primitives sorted back-to-front by model origin. Intersecting transparent geometry is not order-independent. |
+| Emissive factor / texture | Supported | Emissive RGB is added in linear space; texture has independent UV selection/transform. |
+| Occlusion texture / strength | Supported | Red channel attenuates ambient contribution; independent UV selection/transform. |
+| Normal texture / scale | Preserved fallback | Texture, scale, UV selection, and transform are imported, but rendering emits a diagnostic and uses vertex normals until tangents/tangent generation are implemented. |
+| Double-sided | Supported | Culling and back-face normal handling are retained. |
+| Unlit | Supported | Base color/texture/vertex color render without the lighting BRDF. |
+| IOR | Supported | Dielectric F0 derives from the imported index of refraction. |
+| Specular factor/color | Supported | Factors participate in dielectric Fresnel. Specular textures are ignored with a diagnostic. |
+
+Alpha-masked transparent texels are discarded in the visible render pass.
+Picking remains geometry-based and does not sample material alpha.
+
+## Extension Matrix
+
+| Extension | Classification | Behavior |
+| --- | --- | --- |
+| `KHR_texture_transform` | Fully implemented and rendered | Offset, scale, counter-clockwise rotation, and extension `texCoord` override apply independently per supported core texture slot. |
+| `KHR_materials_unlit` | Fully implemented and rendered | Uses the unlit base-color path. |
+| `KHR_materials_emissive_strength` | Fully implemented and rendered | Multiplies the emissive factor before rendering. |
+| `KHR_materials_ior` | Fully implemented and rendered | Changes dielectric Fresnel. |
+| `KHR_materials_specular` | Partially implemented | Factor/color render; optional textures are ignored with a material diagnostic. Required usage is accepted only when those textures are absent. |
+| `KHR_mesh_quantization` | Implemented for imported attributes | Supported component types are converted through cgltf accessor unpacking. |
+| `KHR_lights_punctual` | Parsed, diagnostic fallback | Optional lights do not block geometry loading; no scene-light model exists yet. Required use fails. |
+| `KHR_materials_clearcoat` | Core-material fallback | Optional usage loads with a warning; required usage fails. |
+| `KHR_materials_sheen` | Core-material fallback | Optional usage loads with a warning; required usage fails. |
+| `KHR_materials_transmission` | Core-material fallback | Optional usage loads with a warning; required usage fails. |
+| `KHR_materials_volume` | Core-material fallback | Optional usage loads with a warning; required usage fails. |
+| `KHR_materials_pbrSpecularGlossiness` | Approximate fallback | Without a core material, diffuse factor/texture and glossiness-to-roughness are approximated; the specular-glossiness texture is ignored with diagnostics. Required usage fails. |
+| `KHR_materials_variants` | Default-material fallback | Primitive default material is used with a warning; required usage fails. |
+| `KHR_draco_mesh_compression` | No decoder | Optional usage can load ordinary fallback geometry; required usage fails. |
+| `EXT_meshopt_compression` | No decoder | Optional usage can load ordinary fallback buffer data; required usage fails. |
+| `KHR_texture_basisu` | No decoder | Optional usage uses ordinary PNG/JPEG fallback or disables the slot with a warning; required usage fails. |
+| `EXT_texture_webp` | No decoder | Optional usage uses an ordinary PNG/JPEG fallback or disables the slot with a warning; required usage fails. |
+| `EXT_mesh_gpu_instancing` | No expansion | Base node loads once with a warning; required usage fails. |
+| Unknown optional extension | Ignored with diagnostic | Core/fallback data is loaded where possible. |
+| Unknown required extension | Rejected | `unsupported_required_extension` identifies the extension. |
+
+Clearcoat, sheen, transmission, volume, Draco, meshopt, and KTX2/BasisU need
+larger renderer or third-party dependency decisions. They are not presented as
+full-fidelity support.
 
 ## Resource Limits
 
@@ -78,7 +118,7 @@ returns a structured error and does not modify the caller's existing scene.
 - cgltf allocation budget: 2 GiB
 - Encoded image: 64 MiB
 - Decoded image: 256 MiB
-- Total decoded image storage per imported scene: 512 MiB
+- Total decoded image storage per scene: 512 MiB
 - Image dimension: 16384 pixels per axis
 - Nodes: 65,536
 - Meshes: 65,536
@@ -87,12 +127,18 @@ returns a structured error and does not modify the caller's existing scene.
 - Vertices: 50 million
 - Indices: 150 million
 
-## Proven by Tests
+## Validation Coverage
 
-`elf3d.gltf_import` passed in Debug and Release during Goal 3 and after the
-Goal 4 lifetime remediation. The test suite covers static imports, GLB, missing
-normals, data URI paths, malformed input failures, unsupported extensions,
-resource limits, buffer-view images, normalized texture coordinates, and alpha
-mode warnings.
+`elf3d.gltf_import` covers UV0/UV1 preservation, explicit `texCoord: 1`,
+missing referenced UV sets, all `KHR_texture_transform` fields, vertex color,
+alpha factors/modes/cutoff, emissive/normal/occlusion slots, unlit, emissive
+strength, IOR, specular factors, supported and unsupported required extensions,
+optional extension diagnostics, perspective cameras, and indexed/non-indexed
+strip/fan conversion. Renderer tests validate that mappings and material values
+reach the graphics boundary and that the shader contains the corresponding
+paths.
 
-The project-owned visual fixture is `tests/fixtures/textured_pbr.gltf`.
+The repeatable private-corpus workflow is documented in `TESTING.md`. No
+user-provided real-file corpus was present in the workspace for this milestone
+run; the project-owned `tests/fixtures/textured_pbr.gltf` probe passed without
+hard errors or diagnostics.

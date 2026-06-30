@@ -2,11 +2,12 @@
 
 Purpose: Index the verified Elf3D technical documentation set.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
-Document status: Living index for the 0.4.0 release source.
+Document status: Living index for the 0.5.0 development source.
 
-Last verified implementation commit: pending 0.4.0 release source commit
+Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
+0.5.0 validation applies to the current worktree.
 
 Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,

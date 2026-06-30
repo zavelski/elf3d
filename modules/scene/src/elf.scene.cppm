@@ -88,6 +88,8 @@ class Storage final {
     set_model_primitives(EntityId entity, std::span<const ModelPrimitiveBinding> primitives);
     [[nodiscard]] Result<EntityId>
     create_perspective_camera(const PerspectiveCameraDescription &description);
+    [[nodiscard]] Result<void>
+    attach_perspective_camera(EntityId entity, const PerspectiveCameraDescription &description);
     [[nodiscard]] Result<PerspectiveCameraDescription>
     perspective_camera(EntityId entity) const noexcept;
     [[nodiscard]] Result<void>
@@ -142,11 +144,12 @@ class ImportBuilder final {
     [[nodiscard]] Result<MeshHandle> create_mesh(const MeshDataView &data);
     [[nodiscard]] Result<MeshHandle> create_mesh(const TexturedMeshDataView &data);
     [[nodiscard]] Result<ImageHandle> create_image(const ImageDescription &description);
-    [[nodiscard]] Result<TextureAssetHandle>
-    create_texture(const TextureDescription &description);
+    [[nodiscard]] Result<TextureAssetHandle> create_texture(const TextureDescription &description);
     [[nodiscard]] Result<MaterialHandle> create_material(const MaterialDescription &description);
     [[nodiscard]] Result<void>
     set_model_primitives(EntityId entity, std::span<const ModelPrimitiveBinding> primitives);
+    [[nodiscard]] Result<void>
+    set_perspective_camera(EntityId entity, const PerspectiveCameraDescription &description);
 
   private:
     Storage *storage_ = nullptr;

@@ -167,7 +167,7 @@ as `ELF3D_API`. Do not expose third-party types through exported project module
 interfaces, and do not treat BMI, IFC, PCM, or GCM files as distributable
 artifacts.
 
-For the current named-module migration:
+For internal C++20 named modules:
 
 - use meaningful dotted names such as `elf.core`, `elf.math`, `elf.assets`,
   and `elf.render`;
@@ -356,6 +356,17 @@ For every task:
 
 Do not claim that GUI or rendering behavior was verified when the viewer could
 not be launched.
+
+## Local Workspace Authorization
+
+The repository owner has explicitly pre-authorized Codex in this local
+workspace to run commands and make file changes inside `Z:\Elf3D` and its
+subdirectories without asking for additional user confirmation in chat.
+
+This authorization is limited to the local workspace path above. It does not
+authorize changes outside `Z:\Elf3D`, remote publication, force-pushes, moving
+published tags, sending messages, exposing secrets, or bypassing system/tool
+approval requirements enforced by the execution environment.
 
 ## Working Style
 

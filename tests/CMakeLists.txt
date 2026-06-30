@@ -12,6 +12,24 @@ elf3d_enable_warnings(elf3d_public_api_test)
 add_test(NAME elf3d.public_api_lifetime COMMAND elf3d_public_api_test)
 
 add_executable(
+    elf3d_gltf_probe
+    gltf_corpus_probe.cpp
+)
+
+target_compile_features(elf3d_gltf_probe PRIVATE cxx_std_20)
+target_link_libraries(elf3d_gltf_probe PRIVATE elf3d::elf3d)
+set_target_properties(elf3d_gltf_probe PROPERTIES FOLDER "Elf3D/Tools")
+
+elf3d_enable_warnings(elf3d_gltf_probe)
+
+if(ELF3D_GLTF_CORPUS_DIR)
+    add_test(
+        NAME elf3d.gltf_local_corpus
+        COMMAND elf3d_gltf_probe "${ELF3D_GLTF_CORPUS_DIR}"
+    )
+endif()
+
+add_executable(
     elf3d_module_import_smoke
     module_import_smoke.cpp
 )

@@ -2,9 +2,9 @@ module;
 
 #include <elf3d/core/result.h>
 #include <elf3d/scene.h>
+#include <elf3d/scene_load.h>
 
 #include <filesystem>
-#include <string>
 #include <vector>
 
 export module elf.gltf;
@@ -16,7 +16,7 @@ class ImportBuilder;
 export namespace elf3d::gltf {
 
 struct ImportReport {
-    std::vector<std::string> warnings;
+    std::vector<SceneLoadDiagnostic> diagnostics;
 };
 
 [[nodiscard]] Result<ImportReport> import_scene(const std::filesystem::path &path,

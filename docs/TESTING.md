@@ -1,13 +1,14 @@
 # Testing
 
-Purpose: Document how Elf3D 0.4.0 is configured, built, tested, and manually
+Purpose: Document how Elf3D 0.5.0 is configured, built, tested, and manually
 validated.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
-Document status: Living testing guide for the 0.4.0 release source.
+Document status: Living testing and compatibility-validation guide.
 
-Last verified Git commit: pending 0.4.0 release source commit
+Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
+0.5.0 validation applies to the current worktree.
 
 Implementation source paths: `CMakePresets.json`, `.github/workflows/ci.yml`,
 `.github/workflows/release.yml`, `scripts/package_release.ps1`, `tests`,
@@ -40,9 +41,9 @@ The project currently requires CMake 3.28 or newer because C++20 named modules
 are declared through `FILE_SET CXX_MODULES`. Visual Studio 2022 v17.14.35
 provides a suitable bundled CMake version.
 
-Visual Studio 2026 is not required for this migration. It may become useful
-later if its module tooling proves materially better, but that would be an
-optional future improvement rather than a build requirement.
+Visual Studio 2026 is not required for the current named-module build. It may
+become useful later if its module tooling proves materially better, but that
+would be an optional future improvement rather than a build requirement.
 
 ## Configure, Build, Test
 
@@ -90,6 +91,10 @@ The Debug and Release presets use separate build directories:
 | `elf3d.viewport_lifetime` | `elf3d_viewport_test` | viewport with fake graphics device |
 | `elf3d.public_api_lifetime` | `elf3d_public_api_test` | public API smoke, version, load, lifetime |
 | `elf3d.module_import_smoke` | `elf3d_module_import_smoke` | imports every internal C++20 named-module interface |
+
+`elf3d_gltf_probe` is a public-API corpus tool built when `BUILD_TESTING=ON`.
+It is not registered as a default CTest because private corpus availability is
+machine-specific.
 
 Internal module tests link the needed OBJECT-library object files explicitly
 through the project helper `elf3d_link_object_libraries`. This keeps tests close
@@ -168,16 +173,65 @@ Goal 7 compiled every public header under `include/elf3d` individually as a
 forced include using MSVC C++20, `/permissive-`, `/W4`, and `/WX`. This checks
 that each public header can be included first by a host translation unit.
 
-C++ named-module interfaces are internal implementation artifacts in this
-migration. Public headers remain the consumer-facing API and should continue to
-be self-contained.
+C++ named-module interfaces are internal implementation artifacts. Public
+headers remain the consumer-facing API and should continue to be self-contained.
 
 ## Fixtures
 
 `tests/fixtures/textured_pbr.gltf` is project-owned and used for visual
-validation. It contains asymmetric color corners, repeated and clamped
-sampling, multiple materials, metallic and non-metallic surfaces, and no
-external asset license requirement.
+validation. Importer tests also generate small license-safe fixtures for UV1,
+texture transforms, vertex color, material slots, cameras, extension behavior,
+and triangle strips/fans.
+
+## Private glTF Compatibility Corpus
+
+Place private or customer compatibility files under the ignored directory:
+
+```text
+out/local-gltf-corpus/
+```
+
+Do not copy those files into `tests/fixtures` unless their license and intended
+publication are explicit. After a Debug build, run:
+
+```powershell
+.\out\build\windows-debug\bin\Debug\elf3d_gltf_probe.exe `
+    .\out\local-gltf-corpus
+```
+
+The probe recursively finds `.gltf` and `.glb` files and reports per file:
+
+- path and success/failure;
+- hard error code/message;
+- structured diagnostics and source context;
+- load time;
+- entity, model, primitive, triangle, vertex, material, texture, and image
+  counts;
+- counts for base-color, metallic-roughness, normal, occlusion, and emissive
+  texture features.
+
+It returns nonzero if any file fails. To register the local corpus as a CTest on
+one machine, configure with:
+
+```powershell
+cmake --fresh --preset windows-debug `
+    -DELF3D_GLTF_CORPUS_DIR="$PWD/out/local-gltf-corpus"
+cmake --build --preset windows-debug
+ctest --preset windows-debug -R elf3d.gltf_local_corpus --output-on-failure
+```
+
+For the 0.5.0 milestone run, no user-provided corpus directory or attached
+model files were present. The same probe was run against
+`tests/fixtures/textured_pbr.gltf`; that file passed with no hard errors and no
+diagnostics. This project fixture result is not a substitute for the pending
+user corpus.
+
+The Release viewer was also launched manually for this milestone. The
+procedural cube rendered, `textured_pbr.gltf` rendered with two draws and four
+triangles, and the generated `dual_uv.gltf` regression fixture rendered with
+its UV1/texture-transform material path. The Model Information panel displayed
+the expected generated-normal and normal-map fallback diagnostics. No
+user-provided failing model was available for a separate manual run.
 
 ## Viewer Smoke Procedure
 

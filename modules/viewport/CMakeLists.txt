@@ -13,11 +13,6 @@ target_sources(
         FILES
             src/elf.viewport.cppm
 )
-target_include_directories(
-    elf3d_viewport
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
 target_link_libraries(
     elf3d_viewport
     PUBLIC

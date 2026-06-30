@@ -19,7 +19,7 @@ import elf.viewport;
 
 int main() {
     const auto version = elf3d::core::version_data();
-    if (version.major != 0U || version.minor != 4U || version.patch != 0U) {
+    if (version.major != 0U || version.minor != 5U || version.patch != 0U) {
         return 1;
     }
 
@@ -38,10 +38,12 @@ int main() {
 
     [[maybe_unused]] auto *create_opengl_device = &elf3d::backend::opengl::create_device;
     [[maybe_unused]] auto *clamp_color = &elf3d::math::clamp_color;
-    [[maybe_unused]] auto *selection_controller = static_cast<elf3d::tools::selection::SelectionController *>(nullptr);
+    [[maybe_unused]] auto *selection_controller =
+        static_cast<elf3d::tools::selection::SelectionController *>(nullptr);
     [[maybe_unused]] auto *visibility_controller =
         static_cast<elf3d::tools::visibility::VisibilityController *>(nullptr);
-    [[maybe_unused]] auto *offscreen_viewport = static_cast<elf3d::viewport::OffscreenViewport *>(nullptr);
+    [[maybe_unused]] auto *offscreen_viewport =
+        static_cast<elf3d::viewport::OffscreenViewport *>(nullptr);
 
     return 0;
 }

@@ -1,12 +1,13 @@
 # Roadmap
 
-Purpose: Track completed 0.4.0 work and candidate or exploratory follow-up work.
+Purpose: Track completed 0.5.0 work and candidate or exploratory follow-up work.
 
-Applicable version: 0.4.0
+Applicable version: 0.5.0
 
 Document status: Living roadmap derived from audit findings and current code.
 
-Last verified implementation commit before release snapshot: pending 0.4.0 release source commit
+Baseline Git commit: `e974ff9ddf1bee8bf3ae4f0e645b3840280e3943`;
+0.5.0 validation applies to the current worktree.
 
 Implementation source paths: `docs/audits/ELF3D_0.1.0_AUDIT.md`,
 `docs/audits/ELF3D_0.1.0_REMEDIATION_LOG.md`, `README.md`, `modules`,
@@ -59,12 +60,24 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | Debug diagnostics for skipped GL deletes | Make shutdown mistakes visible. | Backend policy decision. | Easier host integration debugging. | Low-level logging policy must stay clean. | Backend tests where possible plus manual shutdown. |
 | Public header self-containment test | Verify include quality. | Build script/test addition. | Catches missing includes. | More test target maintenance. | CTest target. |
 
-## Proposed 0.5.x Scope Candidates
+## Completed For 0.5.0
 
 | Item | Motivation | Dependency | Expected benefit | Risk | Validation |
 | --- | --- | --- | --- | --- | --- |
-| Broader glTF materials | Improve model fidelity. | Renderer material model. | Normal, occlusion, emissive support. | Larger shader/material complexity. | Fixture corpus and visual tests. |
-| Alpha mask/blend rendering | Support more glTF assets. | Render sorting/blend policy. | Transparent and cutout assets. | Sorting and depth interactions. | Visual regression cases. |
+| UV1 and texture transforms | Remove a practical production-file blocker. | Bounded vertex/material mappings. | `TEXCOORD_1`, per-slot `texCoord`, and `KHR_texture_transform` render correctly. | Fixed two-set limit must be explicit. | Importer, renderer, public API, and viewer tests/builds. |
+| Broader static materials | Improve model fidelity. | Renderer material model. | Alpha, vertex color, emissive, occlusion, unlit, IOR, and specular factors. | Normal mapping still requires a tangent-space program. | Generated fixtures, shader-contract tests, viewer validation. |
+| Structured import diagnostics | Make fallbacks host-visible. | Additive public API. | GUI hosts can display warnings without relying on `std::clog`. | Public C++ ABI requires rebuild. | Public API test and viewer Model Information panel. |
+| Primitive/camera compatibility | Load more valid static scenes. | Existing triangle renderer and scene camera model. | Strip/fan conversion and perspective-camera import. | Orthographic/lights remain fallback-only. | Importer fixtures. |
+| Private corpus probe | Validate uncommitted real files repeatably. | Public load-report API. | Per-file errors, diagnostics, statistics, and timing without publishing models. | Results depend on locally supplied corpus. | Project fixture probe plus optional CTest registration. |
+
+## Proposed Next glTF Compatibility Scope
+
+| Item | Motivation | Dependency | Expected benefit | Risk | Validation |
+| --- | --- | --- | --- | --- | --- |
+| Tangent-space normal mapping | Complete the most visible remaining core material gap. | Tangent import/generation and shader basis. | Correct normal textures on production assets. | Mirrored UVs and handedness require rigorous tests. | Khronos feature fixtures plus real corpus and pixel checks. |
+| KTX2/BasisU and compression decision | Many production assets use compressed geometry/textures. | Approved pinned decoder dependencies. | More files load without fallback assets. | Dependency, licensing, memory, and security surface. | Licensed corpus, malformed inputs, memory limits. |
+| Scene punctual lights | Preserve authored lighting. | Scene light model and renderer integration. | `KHR_lights_punctual` fidelity. | Must not force light policy into Viewport or break scene boundaries. | Scene/renderer/importer tests and visual cases. |
+| Transparent render validation | Raise confidence in mask/blend behavior. | Real OpenGL test path. | Catch shader/state/order regressions. | Golden-image stability. | Reference pixels/images and viewer corpus. |
 | Scene-wide acceleration | Improve picking scale. | Scene revision invalidation. | Faster large-scene picking. | Cache invalidation complexity. | Picking benchmarks and tests. |
 | Viewer file UX improvements | Better reference app workflow. | Current viewer. | Easier validation. | Keep viewer from becoming a full editor. | Manual viewer checklist. |
 | Performance baseline tooling | Ground optimization work. | Instrumentation procedure. | Repeatable metrics. | Bad metrics can mislead. | Benchmark docs and scripts. |

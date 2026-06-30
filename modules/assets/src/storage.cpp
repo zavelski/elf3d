@@ -14,7 +14,21 @@ namespace {
 
 bool finite_vertex(const VertexPositionNormalTexCoord &vertex) noexcept {
     return math::is_finite(vertex.position) && math::is_finite(vertex.normal) &&
-           std::isfinite(vertex.texcoord0.x) && std::isfinite(vertex.texcoord0.y);
+           std::isfinite(vertex.texcoord0.x) && std::isfinite(vertex.texcoord0.y) &&
+           std::isfinite(vertex.texcoord1.x) && std::isfinite(vertex.texcoord1.y) &&
+           std::isfinite(vertex.color.red) && std::isfinite(vertex.color.green) &&
+           std::isfinite(vertex.color.blue) && std::isfinite(vertex.color.alpha);
+}
+
+bool finite_mapping(const TextureMapping &mapping) noexcept {
+    return mapping.texcoord_set < 2U && std::isfinite(mapping.transform.offset.x) &&
+           std::isfinite(mapping.transform.offset.y) && std::isfinite(mapping.transform.scale.x) &&
+           std::isfinite(mapping.transform.scale.y) &&
+           std::isfinite(mapping.transform.rotation_radians);
+}
+
+bool valid_alpha_mode(AlphaMode mode) noexcept {
+    return mode == AlphaMode::opaque || mode == AlphaMode::mask || mode == AlphaMode::blend;
 }
 
 bool valid_sampler(const SamplerDescription &sampler) noexcept {
@@ -40,7 +54,50 @@ MaterialDescription sanitized_material(const MaterialDescription &description) n
     result.base_color = math::clamp_color(description.base_color);
     result.metallic_factor = std::clamp(description.metallic_factor, 0.0F, 1.0F);
     result.roughness_factor = std::clamp(description.roughness_factor, 0.0F, 1.0F);
+    result.emissive_factor.x = std::max(description.emissive_factor.x, 0.0F);
+    result.emissive_factor.y = std::max(description.emissive_factor.y, 0.0F);
+    result.emissive_factor.z = std::max(description.emissive_factor.z, 0.0F);
+    result.occlusion_strength = std::clamp(description.occlusion_strength, 0.0F, 1.0F);
+    result.ior = std::max(description.ior, 1.0F);
+    result.specular_factor = std::clamp(description.specular_factor, 0.0F, 1.0F);
+    result.specular_color_factor.x = std::clamp(description.specular_color_factor.x, 0.0F, 1.0F);
+    result.specular_color_factor.y = std::clamp(description.specular_color_factor.y, 0.0F, 1.0F);
+    result.specular_color_factor.z = std::clamp(description.specular_color_factor.z, 0.0F, 1.0F);
     return result;
+}
+
+Result<void> validate_material(const MaterialDescription &description,
+                               const Storage &storage) noexcept {
+    const auto valid_texture = [&storage](TextureAssetHandle texture) {
+        return !texture.is_valid() || static_cast<bool>(storage.texture(texture));
+    };
+    if (!valid_texture(description.base_color_texture) ||
+        !valid_texture(description.metallic_roughness_texture) ||
+        !valid_texture(description.normal_texture) ||
+        !valid_texture(description.occlusion_texture) ||
+        !valid_texture(description.emissive_texture)) {
+        return Error{ErrorCode::invalid_texture_asset_handle,
+                     "Material textures must belong to the same scene asset storage"};
+    }
+    if (!finite_mapping(description.base_color_texture_mapping) ||
+        !finite_mapping(description.metallic_roughness_texture_mapping) ||
+        !finite_mapping(description.normal_texture_mapping) ||
+        !finite_mapping(description.occlusion_texture_mapping) ||
+        !finite_mapping(description.emissive_texture_mapping)) {
+        return Error{ErrorCode::invalid_texcoord,
+                     "Material texture mappings require UV set 0 or 1 and finite transforms"};
+    }
+    if (!valid_alpha_mode(description.alpha_mode) || !std::isfinite(description.alpha_cutoff) ||
+        !std::isfinite(description.metallic_factor) ||
+        !std::isfinite(description.roughness_factor) ||
+        !math::is_finite(description.emissive_factor) || !std::isfinite(description.normal_scale) ||
+        !std::isfinite(description.occlusion_strength) || !std::isfinite(description.ior) ||
+        !std::isfinite(description.specular_factor) ||
+        !math::is_finite(description.specular_color_factor)) {
+        return Error{ErrorCode::invalid_material_handle,
+                     "Material factors, alpha values, and colors must be finite"};
+    }
+    return {};
 }
 
 } // namespace
@@ -56,7 +113,7 @@ Result<MeshHandle> Storage::create_mesh(const MeshDataView &data) {
         std::vector<VertexPositionNormalTexCoord> vertices;
         vertices.reserve(data.vertices.size());
         for (const VertexPositionNormal &vertex : data.vertices) {
-            vertices.push_back(VertexPositionNormalTexCoord{vertex.position, vertex.normal, {}});
+            vertices.push_back(VertexPositionNormalTexCoord{vertex.position, vertex.normal});
         }
         return create_mesh(TexturedMeshDataView{vertices, data.indices});
     } catch (...) {
@@ -80,7 +137,7 @@ Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView &data) {
     for (const VertexPositionNormalTexCoord &vertex : data.vertices) {
         if (!finite_vertex(vertex)) {
             return Error{ErrorCode::invalid_mesh_data,
-                         "Mesh positions and normals must contain only finite values"};
+                         "Mesh vertex positions, normals, UVs, and colors must be finite"};
         }
         minimum.x = std::min(minimum.x, vertex.position.x);
         minimum.y = std::min(minimum.y, vertex.position.y);
@@ -135,7 +192,8 @@ Result<ImageHandle> Storage::create_image(const ImageDescription &description) {
                      "Image asset pixels must be tightly packed RGBA8 rows"};
     }
     if (images_.size() >= static_cast<std::size_t>(std::numeric_limits<std::uint64_t>::max() - 1)) {
-        return Error{ErrorCode::invalid_image_handle, "The scene image identifier space is exhausted"};
+        return Error{ErrorCode::invalid_image_handle,
+                     "The scene image identifier space is exhausted"};
     }
     try {
         ImageAsset asset;
@@ -180,17 +238,9 @@ Result<MaterialHandle> Storage::create_material(const MaterialDescription &descr
         return Error{ErrorCode::invalid_material_handle,
                      "The scene material identifier space is exhausted"};
     }
-    if ((description.base_color_texture.is_valid() &&
-         !texture(description.base_color_texture)) ||
-        (description.metallic_roughness_texture.is_valid() &&
-         !texture(description.metallic_roughness_texture))) {
-        return Error{ErrorCode::invalid_texture_asset_handle,
-                     "Material textures must belong to the same scene asset storage"};
-    }
-    if (!std::isfinite(description.metallic_factor) ||
-        !std::isfinite(description.roughness_factor)) {
-        return Error{ErrorCode::invalid_material_handle,
-                     "Material metallic and roughness factors must be finite"};
+    const Result<void> validation = validate_material(description, *this);
+    if (!validation) {
+        return validation.error();
     }
     try {
         materials_.push_back(MaterialAsset{sanitized_material(description)});
@@ -209,17 +259,9 @@ Result<void> Storage::set_material(MaterialHandle material,
     }
     const std::size_t index =
         static_cast<std::size_t>(detail::SceneHandleAccess::value(material) - 1);
-    if ((description.base_color_texture.is_valid() &&
-         !texture(description.base_color_texture)) ||
-        (description.metallic_roughness_texture.is_valid() &&
-         !texture(description.metallic_roughness_texture))) {
-        return Error{ErrorCode::invalid_texture_asset_handle,
-                     "Material textures must belong to the same scene asset storage"};
-    }
-    if (!std::isfinite(description.metallic_factor) ||
-        !std::isfinite(description.roughness_factor)) {
-        return Error{ErrorCode::invalid_material_handle,
-                     "Material metallic and roughness factors must be finite"};
+    const Result<void> validation = validate_material(description, *this);
+    if (!validation) {
+        return validation.error();
     }
     materials_[index].description = sanitized_material(description);
     return {};

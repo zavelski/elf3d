@@ -2,8 +2,9 @@
 #include <elf3d/core/result.h>
 #include <elf3d/scene.h>
 
-#include <bit>
+#include <algorithm>
 #include <array>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -21,12 +22,12 @@ import elf.scene;
 
 namespace {
 
-constexpr std::array<std::uint8_t, 77> asymmetric_png{{
-    0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0x00,0x00,0x00,0x0d,0x49,0x48,0x44,0x52,
-    0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x02,0x08,0x02,0x00,0x00,0x00,0xfd,0xd4,0x9a,
-    0x73,0x00,0x00,0x00,0x14,0x49,0x44,0x41,0x54,0x78,0x9c,0x63,0xf8,0xcf,0xc0,0xc0,
-    0x00,0xc2,0x0c,0xff,0xff,0xff,0x67,0x00,0x00,0x1e,0xef,0x04,0xfc,0xa3,0xc8,0xb4,
-    0xf7,0x00,0x00,0x00,0x00,0x49,0x45,0x4e,0x44,0xae,0x42,0x60,0x82}};
+constexpr std::array<std::uint8_t, 77> asymmetric_png{
+    {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+     0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x08, 0x02, 0x00, 0x00, 0x00, 0xfd, 0xd4, 0x9a,
+     0x73, 0x00, 0x00, 0x00, 0x14, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xc0,
+     0x00, 0xc2, 0x0c, 0xff, 0xff, 0xff, 0x67, 0x00, 0x00, 0x1e, 0xef, 0x04, 0xfc, 0xa3, 0xc8, 0xb4,
+     0xf7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82}};
 
 std::span<const std::byte> byte_span(std::span<const std::uint8_t> values) {
     return std::as_bytes(values);
@@ -138,30 +139,120 @@ void append_float(std::vector<std::byte> &bytes, float value) {
     return bytes;
 }
 
+[[nodiscard]] std::vector<std::byte> dual_uv_geometry() {
+    std::vector<std::byte> bytes = triangle_positions();
+    for (const float value : {0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F}) {
+        append_float(bytes, value);
+    }
+    for (const float value : {0.25F, 0.25F, 0.75F, 0.25F, 0.25F, 0.75F}) {
+        append_float(bytes, value);
+    }
+    for (const float value :
+         {1.0F, 0.0F, 0.0F, 0.5F, 0.0F, 1.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 1.0F}) {
+        append_float(bytes, value);
+    }
+    return bytes;
+}
+
+[[nodiscard]] std::string dual_uv_json() {
+    return R"json({
+  "asset":{"version":"2.0"},
+  "extensionsUsed":["KHR_texture_transform","KHR_materials_unlit","KHR_materials_emissive_strength","KHR_materials_ior","KHR_materials_specular"],
+  "extensionsRequired":["KHR_texture_transform","KHR_materials_unlit","KHR_materials_emissive_strength","KHR_materials_ior","KHR_materials_specular"],
+  "buffers":[{"uri":"dual_uv.bin","byteLength":132}],
+  "bufferViews":[
+    {"buffer":0,"byteLength":36},
+    {"buffer":0,"byteOffset":36,"byteLength":24},
+    {"buffer":0,"byteOffset":60,"byteLength":24},
+    {"buffer":0,"byteOffset":84,"byteLength":48}
+  ],
+  "accessors":[
+    {"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},
+    {"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"},
+    {"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"},
+    {"bufferView":3,"componentType":5126,"count":3,"type":"VEC4"}
+  ],
+  "images":[{"uri":"asymmetric.png"}],
+  "textures":[{"source":0}],
+  "materials":[{
+    "pbrMetallicRoughness":{
+      "baseColorFactor":[0.5,0.6,0.7,0.4],
+      "baseColorTexture":{"index":0,"texCoord":0,"extensions":{"KHR_texture_transform":{"offset":[0.25,0.5],"scale":[2.0,3.0],"rotation":0.5,"texCoord":1}}},
+      "metallicRoughnessTexture":{"index":0,"texCoord":0}
+    },
+    "normalTexture":{"index":0,"texCoord":1,"scale":0.75},
+    "occlusionTexture":{"index":0,"texCoord":1,"strength":0.6},
+    "emissiveTexture":{"index":0,"texCoord":1},
+    "emissiveFactor":[0.1,0.2,0.3],
+    "alphaMode":"MASK",
+    "alphaCutoff":0.35,
+    "extensions":{
+      "KHR_materials_unlit":{},
+      "KHR_materials_emissive_strength":{"emissiveStrength":2.0},
+      "KHR_materials_ior":{"ior":1.33},
+      "KHR_materials_specular":{"specularFactor":0.75,"specularColorFactor":[0.8,0.9,1.0]}
+    }
+  }],
+  "cameras":[{"type":"perspective","perspective":{"yfov":0.8,"znear":0.05,"zfar":500.0}}],
+  "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1,"TEXCOORD_1":2,"COLOR_0":3},"material":0}]}],
+  "nodes":[{"name":"DualUvCameraModel","mesh":0,"camera":0}],
+  "scenes":[{"nodes":[0]}],"scene":0
+})json";
+}
+
+[[nodiscard]] std::vector<std::byte> quad_geometry(bool include_indices) {
+    std::vector<std::byte> bytes;
+    for (const float value :
+         {0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 1.0F, 1.0F, 0.0F}) {
+        append_float(bytes, value);
+    }
+    if (include_indices) {
+        constexpr std::array<std::uint8_t, 4> indices{{0U, 1U, 2U, 3U}};
+        for (const std::uint8_t index : indices) {
+            append_byte(bytes, index);
+        }
+    }
+    return bytes;
+}
+
+[[nodiscard]] std::vector<std::byte> quantized_positions() {
+    constexpr std::array<std::uint16_t, 9> values{{0, 0, 0, 65535, 0, 0, 0, 65535, 0}};
+    std::vector<std::byte> bytes;
+    for (const std::uint16_t value : values) {
+        append_u16(bytes, value);
+    }
+    return bytes;
+}
+
 [[nodiscard]] std::string textured_json(std::string_view image_member,
                                         std::string_view sampler_member) {
-    return std::string{R"json({"asset":{"version":"2.0"},"buffers":[{"uri":"textured.bin","byteLength":60}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":24}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}],"images":[{)json"} +
-           std::string{image_member} + R"json(}],"samplers":[{)json" +
-           std::string{sampler_member} +
+    return std::string{
+               R"json({"asset":{"version":"2.0"},"buffers":[{"uri":"textured.bin","byteLength":60}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":24}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}],"images":[{)json"} +
+           std::string{image_member} + R"json(}],"samplers":[{)json" + std::string{sampler_member} +
            R"json(}],"textures":[{"sampler":0,"source":0}],"materials":[{"pbrMetallicRoughness":{"baseColorFactor":[0.5,0.6,0.7,0.8],"metallicFactor":0.25,"roughnessFactor":0.75,"baseColorTexture":{"index":0},"metallicRoughnessTexture":{"index":0}},"doubleSided":true}],"meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"material":0}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}],"scene":0})json";
 }
 
 [[nodiscard]] std::vector<std::byte> decode_test_base64(std::string_view source) {
     const auto value = [](char character) -> std::uint32_t {
-        if (character >= 'A' && character <= 'Z') return character - 'A';
-        if (character >= 'a' && character <= 'z') return character - 'a' + 26;
-        if (character >= '0' && character <= '9') return character - '0' + 52;
+        if (character >= 'A' && character <= 'Z')
+            return character - 'A';
+        if (character >= 'a' && character <= 'z')
+            return character - 'a' + 26;
+        if (character >= '0' && character <= '9')
+            return character - '0' + 52;
         return character == '+' ? 62U : character == '/' ? 63U : 0U;
     };
     std::vector<std::byte> result;
     for (std::size_t index = 0; index < source.size(); index += 4) {
-        const std::uint32_t combined = (value(source[index]) << 18U) |
-                                       (value(source[index + 1]) << 12U) |
-                                       ((source[index + 2] == '=' ? 0U : value(source[index + 2])) << 6U) |
-                                       (source[index + 3] == '=' ? 0U : value(source[index + 3]));
+        const std::uint32_t combined =
+            (value(source[index]) << 18U) | (value(source[index + 1]) << 12U) |
+            ((source[index + 2] == '=' ? 0U : value(source[index + 2])) << 6U) |
+            (source[index + 3] == '=' ? 0U : value(source[index + 3]));
         result.push_back(static_cast<std::byte>((combined >> 16U) & 0xffU));
-        if (source[index + 2] != '=') result.push_back(static_cast<std::byte>((combined >> 8U) & 0xffU));
-        if (source[index + 3] != '=') result.push_back(static_cast<std::byte>(combined & 0xffU));
+        if (source[index + 2] != '=')
+            result.push_back(static_cast<std::byte>((combined >> 8U) & 0xffU));
+        if (source[index + 3] != '=')
+            result.push_back(static_cast<std::byte>(combined & 0xffU));
     }
     return result;
 }
@@ -312,7 +403,7 @@ int main(int argument_count, char **arguments) {
     const auto &first_mesh = rich_storage.assets().meshes()[0];
     if (!nearly_equal(first_mesh.vertices[1].position.x, 1.0F) ||
         !nearly_equal(first_mesh.vertices[0].normal.z, 1.0F) ||
-        rich_storage.assets().materials()[0].description.base_color.alpha != 1.0F ||
+        rich_storage.assets().materials()[0].description.base_color.alpha != 0.5F ||
         !rich_storage.assets().materials()[0].description.double_sided ||
         rich_storage.assets().materials()[2].description.base_color !=
             elf3d::Color4{1.0F, 1.0F, 1.0F, 1.0F}) {
@@ -362,7 +453,7 @@ int main(int argument_count, char **arguments) {
     elf3d::scene::ImportBuilder degenerate_builder{degenerate_storage};
     const auto degenerate_result =
         elf3d::gltf::import_scene(degenerate_path, {}, degenerate_builder);
-    if (!degenerate_result || degenerate_result.value().warnings.empty() ||
+    if (!degenerate_result || degenerate_result.value().diagnostics.empty() ||
         degenerate_storage.assets().meshes()[0].vertices[0].normal !=
             elf3d::Float3{0.0F, 1.0F, 0.0F}) {
         return 13;
@@ -520,10 +611,8 @@ int main(int argument_count, char **arguments) {
     }
     elf3d::scene::Storage textured_storage{scene_id(7)};
     elf3d::scene::ImportBuilder textured_builder{textured_storage};
-    const auto textured_result =
-        elf3d::gltf::import_scene(textured_path, {}, textured_builder);
-    const elf3d::SceneStatistics expected_textured{1, 1, 1, 1, 1, 3, 3, 1,
-                                                   1, 1, 1, 16, 1, 1};
+    const auto textured_result = elf3d::gltf::import_scene(textured_path, {}, textured_builder);
+    const elf3d::SceneStatistics expected_textured{1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 16, 1, 1};
     if (!textured_result || textured_storage.statistics() != expected_textured ||
         textured_storage.assets().images().size() != 1 ||
         textured_storage.assets().textures().size() != 1) {
@@ -549,8 +638,8 @@ int main(int argument_count, char **arguments) {
     }
 
     const std::filesystem::path data_image_path = temporary.path() / "data_image.gltf";
-    const std::string image_data_uri = "\"uri\":\"data:image/png;base64," +
-                                       base64(byte_span(asymmetric_png)) + "\"";
+    const std::string image_data_uri =
+        "\"uri\":\"data:image/png;base64," + base64(byte_span(asymmetric_png)) + "\"";
     if (!write_text(data_image_path, textured_json(image_data_uri, ""))) {
         return 37;
     }
@@ -600,26 +689,22 @@ int main(int argument_count, char **arguments) {
     if (!write_text(mismatch_path, mismatch_json)) {
         return 42;
     }
-    const auto mismatch_result =
-        elf3d::gltf::import_scene(mismatch_path, {}, invalid_builder);
-    if (mismatch_result || mismatch_result.error().code() !=
-                               elf3d::ErrorCode::mismatched_texcoord_count) {
+    const auto mismatch_result = elf3d::gltf::import_scene(mismatch_path, {}, invalid_builder);
+    if (mismatch_result ||
+        mismatch_result.error().code() != elf3d::ErrorCode::mismatched_texcoord_count) {
         return 42;
     }
 
     constexpr std::array<int, 6> gltf_filters{{9728, 9729, 9984, 9985, 9986, 9987}};
-    constexpr std::array<elf3d::TextureFilter, 6> expected_filters{{
-        elf3d::TextureFilter::nearest, elf3d::TextureFilter::linear,
-        elf3d::TextureFilter::nearest_mipmap_nearest,
-        elf3d::TextureFilter::linear_mipmap_nearest,
-        elf3d::TextureFilter::nearest_mipmap_linear,
-        elf3d::TextureFilter::linear_mipmap_linear}};
+    constexpr std::array<elf3d::TextureFilter, 6> expected_filters{
+        {elf3d::TextureFilter::nearest, elf3d::TextureFilter::linear,
+         elf3d::TextureFilter::nearest_mipmap_nearest, elf3d::TextureFilter::linear_mipmap_nearest,
+         elf3d::TextureFilter::nearest_mipmap_linear, elf3d::TextureFilter::linear_mipmap_linear}};
     for (std::size_t index = 0; index < gltf_filters.size(); ++index) {
         const std::filesystem::path filter_path =
             temporary.path() / ("filter_" + std::to_string(index) + ".gltf");
         const std::string sampler = "\"minFilter\":" + std::to_string(gltf_filters[index]);
-        if (!write_text(filter_path,
-                        textured_json("\"uri\":\"asymmetric.png\"", sampler))) {
+        if (!write_text(filter_path, textured_json("\"uri\":\"asymmetric.png\"", sampler))) {
             return 43;
         }
         elf3d::scene::Storage filter_storage{scene_id(20 + index)};
@@ -632,13 +717,17 @@ int main(int argument_count, char **arguments) {
     }
 
     constexpr std::string_view jpeg_base64 =
-        "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAABv/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJAB58//2Q==";
+        "/9j/4AAQSkZJRgABAQAAAQABAAD/"
+        "2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKS"
+        "j/"
+        "2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKC"
+        "j/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/"
+        "8QAFAEBAAAAAAAAAAAAAAAAAAAABv/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJAB58//2Q==";
     const std::vector<std::byte> jpeg_bytes = decode_test_base64(jpeg_base64);
     const std::filesystem::path jpeg_path = temporary.path() / "external.jpg";
     const std::filesystem::path jpeg_gltf_path = temporary.path() / "jpeg.gltf";
     if (!write_bytes(jpeg_path, jpeg_bytes) ||
-        !write_text(jpeg_gltf_path,
-                    textured_json("\"uri\":\"external.jpg\"", ""))) {
+        !write_text(jpeg_gltf_path, textured_json("\"uri\":\"external.jpg\"", ""))) {
         return 45;
     }
     elf3d::scene::Storage jpeg_storage{scene_id(30)};
@@ -683,8 +772,8 @@ int main(int argument_count, char **arguments) {
     }
     const auto missing_uv_result =
         elf3d::gltf::import_scene(missing_uv_path, {}, missing_uv_builder);
-    if (!missing_uv_result || missing_uv_result.value().warnings.size() != 1 ||
-        missing_uv_storage.assets().meshes()[0].vertices[1].texcoord0 != elf3d::Float2{}) {
+    if (missing_uv_result ||
+        missing_uv_result.error().code() != elf3d::ErrorCode::invalid_texcoord) {
         return 50;
     }
 
@@ -699,26 +788,146 @@ int main(int argument_count, char **arguments) {
         return 51;
     }
     const auto alpha_result = elf3d::gltf::import_scene(alpha_path, {}, alpha_builder);
-    if (!alpha_result || alpha_result.value().warnings.size() != 1) {
+    if (!alpha_result ||
+        alpha_storage.assets().materials()[0].description.alpha_mode != elf3d::AlphaMode::blend ||
+        !nearly_equal(alpha_storage.assets().materials()[0].description.base_color.alpha, 0.8F)) {
         return 52;
     }
 
     const std::filesystem::path bad_sampler_path = temporary.path() / "bad_sampler.gltf";
     if (!write_text(bad_sampler_path,
-                    textured_json("\"uri\":\"asymmetric.png\"",
-                                  "\"magFilter\":9987")) ||
+                    textured_json("\"uri\":\"asymmetric.png\"", "\"magFilter\":9987")) ||
         elf3d::gltf::import_scene(bad_sampler_path, {}, invalid_builder).error().code() !=
             elf3d::ErrorCode::invalid_sampler_filter) {
         return 53;
     }
 
+    const std::vector<std::byte> dual_uv_bytes = dual_uv_geometry();
+    const std::filesystem::path dual_uv_path = temporary.path() / "dual_uv.gltf";
+    if (dual_uv_bytes.size() != 132 ||
+        !write_bytes(temporary.path() / "dual_uv.bin", dual_uv_bytes) ||
+        !write_text(dual_uv_path, dual_uv_json())) {
+        return 56;
+    }
+    elf3d::scene::Storage dual_uv_storage{scene_id(40)};
+    elf3d::scene::ImportBuilder dual_uv_builder{dual_uv_storage};
+    const auto dual_uv_result = elf3d::gltf::import_scene(dual_uv_path, {}, dual_uv_builder);
+    if (!dual_uv_result || dual_uv_storage.assets().meshes().size() != 1 ||
+        dual_uv_storage.assets().materials().size() != 1 ||
+        !dual_uv_storage.entities()[0]->camera.has_value()) {
+        return 57;
+    }
+    const auto &dual_vertex = dual_uv_storage.assets().meshes()[0].vertices[1];
+    const auto &dual_material = dual_uv_storage.assets().materials()[0].description;
+    if (dual_vertex.texcoord0 != elf3d::Float2{1.0F, 0.0F} ||
+        dual_vertex.texcoord1 != elf3d::Float2{0.75F, 0.25F} ||
+        dual_vertex.color != elf3d::Color4{0.0F, 1.0F, 0.0F, 1.0F} ||
+        dual_material.base_color_texture_mapping.texcoord_set != 1U ||
+        dual_material.base_color_texture_mapping.transform.offset != elf3d::Float2{0.25F, 0.5F} ||
+        dual_material.base_color_texture_mapping.transform.scale != elf3d::Float2{2.0F, 3.0F} ||
+        !nearly_equal(dual_material.base_color_texture_mapping.transform.rotation_radians, 0.5F) ||
+        dual_material.metallic_roughness_texture_mapping.texcoord_set != 0U ||
+        dual_material.normal_texture_mapping.texcoord_set != 1U ||
+        dual_material.occlusion_texture_mapping.texcoord_set != 1U ||
+        dual_material.emissive_texture_mapping.texcoord_set != 1U ||
+        dual_material.base_color_texture != dual_material.normal_texture ||
+        dual_material.base_color_texture != dual_material.occlusion_texture ||
+        dual_material.base_color_texture != dual_material.emissive_texture ||
+        dual_material.alpha_mode != elf3d::AlphaMode::mask ||
+        !nearly_equal(dual_material.alpha_cutoff, 0.35F) ||
+        !nearly_equal(dual_material.base_color.alpha, 0.4F) || !dual_material.unlit ||
+        !nearly_equal(dual_material.emissive_factor.x, 0.2F) ||
+        !nearly_equal(dual_material.emissive_factor.y, 0.4F) ||
+        !nearly_equal(dual_material.emissive_factor.z, 0.6F) ||
+        !nearly_equal(dual_material.normal_scale, 0.75F) ||
+        !nearly_equal(dual_material.occlusion_strength, 0.6F) ||
+        !nearly_equal(dual_material.ior, 1.33F) ||
+        !nearly_equal(dual_material.specular_factor, 0.75F) ||
+        dual_material.specular_color_factor != elf3d::Float3{0.8F, 0.9F, 1.0F}) {
+        return 58;
+    }
+    const elf3d::SceneStatistics dual_statistics = dual_uv_storage.statistics();
+    if (dual_statistics.materials_with_normal_textures != 1 ||
+        dual_statistics.materials_with_occlusion_textures != 1 ||
+        dual_statistics.materials_with_emissive_textures != 1 ||
+        std::none_of(
+            dual_uv_result.value().diagnostics.begin(), dual_uv_result.value().diagnostics.end(),
+            [](const elf3d::SceneLoadDiagnostic &diagnostic) {
+                return diagnostic.code == elf3d::SceneLoadDiagnosticCode::normal_map_fallback;
+            })) {
+        return 59;
+    }
+
+    std::string missing_uv1_json = dual_uv_json();
+    const std::string uv1_attribute = "\"TEXCOORD_1\":2,";
+    missing_uv1_json.erase(missing_uv1_json.find(uv1_attribute), uv1_attribute.size());
+    const std::filesystem::path missing_uv1_path = temporary.path() / "missing_uv1.gltf";
+    elf3d::scene::Storage missing_uv1_storage{scene_id(41)};
+    elf3d::scene::ImportBuilder missing_uv1_builder{missing_uv1_storage};
+    if (!write_text(missing_uv1_path, missing_uv1_json) ||
+        elf3d::gltf::import_scene(missing_uv1_path, {}, missing_uv1_builder).error().code() !=
+            elf3d::ErrorCode::invalid_texcoord) {
+        return 60;
+    }
+
+    const std::vector<std::byte> strip_bytes = quad_geometry(true);
+    const std::filesystem::path strip_path = temporary.path() / "strip.gltf";
+    const std::string strip_json =
+        R"json({"asset":{"version":"2.0"},"buffers":[{"uri":"strip.bin","byteLength":52}],"bufferViews":[{"buffer":0,"byteLength":48},{"buffer":0,"byteOffset":48,"byteLength":4}],"accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3"},{"bufferView":1,"componentType":5121,"count":4,"type":"SCALAR"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1,"mode":5}]}],"nodes":[{"mesh":0}]})json";
+    if (!write_bytes(temporary.path() / "strip.bin", strip_bytes) ||
+        !write_text(strip_path, strip_json)) {
+        return 61;
+    }
+    elf3d::scene::Storage strip_storage{scene_id(42)};
+    elf3d::scene::ImportBuilder strip_builder{strip_storage};
+    if (!elf3d::gltf::import_scene(strip_path, {}, strip_builder) ||
+        strip_storage.assets().meshes()[0].indices !=
+            std::vector<std::uint32_t>{0, 1, 2, 2, 1, 3}) {
+        return 62;
+    }
+
+    const std::vector<std::byte> fan_bytes = quad_geometry(false);
+    const std::filesystem::path fan_path = temporary.path() / "fan.gltf";
+    const std::string fan_json =
+        R"json({"asset":{"version":"2.0"},"extensionsUsed":["KHR_materials_clearcoat"],"buffers":[{"uri":"fan.bin","byteLength":48}],"bufferViews":[{"buffer":0,"byteLength":48}],"accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":6}]}],"nodes":[{"mesh":0}]})json";
+    if (!write_bytes(temporary.path() / "fan.bin", fan_bytes) || !write_text(fan_path, fan_json)) {
+        return 63;
+    }
+    elf3d::scene::Storage fan_storage{scene_id(43)};
+    elf3d::scene::ImportBuilder fan_builder{fan_storage};
+    const auto fan_result = elf3d::gltf::import_scene(fan_path, {}, fan_builder);
+    if (!fan_result ||
+        fan_storage.assets().meshes()[0].indices != std::vector<std::uint32_t>{0, 1, 2, 0, 2, 3} ||
+        std::none_of(fan_result.value().diagnostics.begin(), fan_result.value().diagnostics.end(),
+                     [](const elf3d::SceneLoadDiagnostic &diagnostic) {
+                         return diagnostic.code ==
+                                elf3d::SceneLoadDiagnosticCode::material_fallback;
+                     })) {
+        return 64;
+    }
+
+    const std::vector<std::byte> quantized_bytes = quantized_positions();
+    const std::filesystem::path quantized_path = temporary.path() / "quantized.gltf";
+    const std::string quantized_json =
+        R"json({"asset":{"version":"2.0"},"extensionsUsed":["KHR_mesh_quantization"],"extensionsRequired":["KHR_mesh_quantization"],"buffers":[{"uri":"quantized.bin","byteLength":18}],"bufferViews":[{"buffer":0,"byteLength":18}],"accessors":[{"bufferView":0,"componentType":5123,"normalized":true,"count":3,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"nodes":[{"mesh":0}]})json";
+    if (!write_bytes(temporary.path() / "quantized.bin", quantized_bytes) ||
+        !write_text(quantized_path, quantized_json)) {
+        return 65;
+    }
+    elf3d::scene::Storage quantized_storage{scene_id(44)};
+    elf3d::scene::ImportBuilder quantized_builder{quantized_storage};
+    const auto quantized_result = elf3d::gltf::import_scene(quantized_path, {}, quantized_builder);
+    if (!quantized_result ||
+        !nearly_equal(quantized_storage.assets().meshes()[0].vertices[1].position.x, 1.0F) ||
+        !nearly_equal(quantized_storage.assets().meshes()[0].vertices[2].position.y, 1.0F)) {
+        return 66;
+    }
+
     const std::filesystem::path visual_fixture =
-        std::filesystem::path{ELF3D_TEST_SOURCE_DIR} / "tests" / "fixtures" /
-        "textured_pbr.gltf";
+        std::filesystem::path{ELF3D_TEST_SOURCE_DIR} / "tests" / "fixtures" / "textured_pbr.gltf";
     elf3d::scene::Storage fixture_storage{scene_id(34)};
     elf3d::scene::ImportBuilder fixture_builder{fixture_storage};
-    const auto fixture_result =
-        elf3d::gltf::import_scene(visual_fixture, {}, fixture_builder);
+    const auto fixture_result = elf3d::gltf::import_scene(visual_fixture, {}, fixture_builder);
     if (!fixture_result) {
         std::cerr << fixture_result.error().message() << '\n';
         return 54;

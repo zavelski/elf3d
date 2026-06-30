@@ -19,6 +19,7 @@ export namespace elf3d::graphics {
 enum class VertexLayout {
     position_normal_float3,
     position_normal_float3_texcoord_float2,
+    position_normal_float3_texcoord2_float2_color_float4,
 };
 
 enum class TextureFormat {
@@ -77,10 +78,21 @@ struct DrawIndexedDescription {
     float diffuse_intensity = 0.0F;
     float metallic_factor = 1.0F;
     float roughness_factor = 1.0F;
+    Float3 emissive_factor;
+    float occlusion_strength = 1.0F;
+    float ior = 1.5F;
+    float specular_factor = 1.0F;
+    Float3 specular_color_factor{1.0F, 1.0F, 1.0F};
     Color4 highlight_color{1.0F, 0.55F, 0.05F, 1.0F};
     float highlight_strength = 0.0F;
     class Texture2D *base_color_texture = nullptr;
     class Texture2D *metallic_roughness_texture = nullptr;
+    class Texture2D *occlusion_texture = nullptr;
+    class Texture2D *emissive_texture = nullptr;
+    std::array<TextureMapping, 4> texture_mappings{};
+    AlphaMode alpha_mode = AlphaMode::opaque;
+    float alpha_cutoff = 0.5F;
+    bool unlit = false;
     bool double_sided = false;
     bool front_face_clockwise = false;
     bool clipping_section_plane_enabled = false;
