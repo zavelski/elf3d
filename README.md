@@ -199,18 +199,18 @@ docs/                   Technical documentation and release records
 - [Performance baseline](docs/PERFORMANCE_BASELINE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [User guide](docs/USER_GUIDE.md)
-- [0.7.1 local release records](docs/releases/0.7.1/)
+- [0.7.1 release records](docs/releases/0.7.1/)
 - [Previous 0.6.0 local release records](docs/releases/0.6.0/)
 - [Previous 0.4.0 release candidate records](docs/releases/0.4.0/)
-- [Latest public release records](docs/releases/0.2.0/)
+- [Previous 0.2.0 public release records](docs/releases/0.2.0/)
 - [Previous 0.1.0 release records](docs/releases/0.1.0/)
 
 ## Release
 
-The `0.7.1` release source is prepared locally. GitHub publication, CI,
-GitHub Release creation, asset upload, and public clone verification are left
-for manual follow-up. The latest public release remains 0.2.0, published from
-tag `v0.2.0` as [Elf3D 0.2.0](https://github.com/zavelski/elf3d/releases/tag/v0.2.0).
+The latest public release is 0.7.1, published from tag `v0.7.1` as
+[Elf3D 0.7.1](https://github.com/zavelski/elf3d/releases/tag/v0.7.1).
+The previous public release remains 0.2.0, published from tag `v0.2.0` as
+[Elf3D 0.2.0](https://github.com/zavelski/elf3d/releases/tag/v0.2.0).
 The previous 0.1.0 release remains available from tag `v0.1.0`.
 
 ## Contributing

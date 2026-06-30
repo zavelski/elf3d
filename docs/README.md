@@ -13,8 +13,7 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `CMakePresets.json`
 
 Known limitations: This index is not an immutable release snapshot. The latest
-public release records remain under `releases/0.2.0/`; the current local
-release records are under `releases/0.7.1/`.
+public release records are under `releases/0.7.1/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 `releases/0.7.1/RELEASE_CHECKLIST.md`
@@ -35,7 +34,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `DOCUMENTATION_POLICY.md`: documentation ownership and review rules.
 - `DOCUMENTATION_UPDATE_CHECKLIST.md`: task checklist for documentation updates.
 
-## 0.7.1 Local Release Records
+## 0.7.1 Release Records
 
 - `releases/0.7.1/PROJECT_STATE_EN.md`
 - `releases/0.7.1/VALIDATION_SUMMARY.md`
@@ -44,6 +43,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `releases/0.7.1/RELEASE_ARTIFACTS.md`
 - `releases/0.7.1/PUBLIC_CONTENT_AUDIT.md`
 - `releases/0.7.1/GITHUB_RELEASE_NOTES.md`
+- `releases/0.7.1/PUBLICATION_REPORT.md`
 
 ## Previous 0.6.0 Local Release Records
 
@@ -65,7 +65,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `releases/0.4.0/PUBLIC_CONTENT_AUDIT.md`
 - `releases/0.4.0/GITHUB_RELEASE_NOTES.md`
 
-## Latest Public Release Snapshot
+## Previous Public Release Snapshot
 
 - `releases/0.2.0/PROJECT_STATE_EN.md`
 - `releases/0.2.0/VALIDATION_SUMMARY.md`
@@ -94,7 +94,6 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 ## Current Release Readiness
 
-The 0.7.1 source, local package, and automated validation are tracked under
-`releases/0.7.1/`. GitHub publication, CI, release asset upload, and public
-clone verification are intentionally deferred to manual follow-up. The latest
-immutable public release snapshot remains 0.2.0.
+The 0.7.1 source, local package, automated validation, GitHub publication, CI,
+release asset download, checksum verification, and public clone verification
+are tracked under `releases/0.7.1/`.
