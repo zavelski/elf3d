@@ -16,9 +16,8 @@ Known limitations: This roadmap is not a promise of delivery. Candidate and
 exploratory items require separate design, implementation, and validation.
 Manual viewer validation for the 0.1.0 publication baseline was completed by
 the user on the packaged Windows Release viewer. 0.2.0 release validation is
-tracked under `docs/releases/0.2.0/`. Published 0.7.1 verification is recorded
-under `docs/releases/0.7.1/PUBLICATION_REPORT.md`; local 0.7.2 release
-validation is tracked under `docs/releases/0.7.2/`.
+tracked under `docs/releases/0.2.0/`. Published 0.7.1 and 0.7.2 verification is
+recorded under their release directories.
 
 Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 `PERFORMANCE_BASELINE.md`, `TESTING.md`
@@ -48,7 +47,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `GLTF_SUPPORT.md`,
 | --- | --- | --- | --- | --- | --- |
 | Manual viewer validation | Verify the actual user-facing rendering/tool path. | Packaged Windows Release viewer. | Confirms graphics and interaction behavior. | Manual validation is not automated. | Required before public publication. |
 | Final release decision | Decide readiness honestly. | Validation and documentation. | Blocks premature version tags. | None if required validation remains respected. | Record `GO - ready for public release` only after every gate passes. |
-| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Completed for `v0.1.0` and `v0.7.1`: branch CI, tag-triggered GitHub Release, asset download/checksum verification, and public clone test passed. |
+| Publication verification | Verify the public repository, CI, release assets, and clone path. | GitHub publication steps. | Confirms the published artifact is usable. | Publication must stop if CI or clone validation fails. | Completed for `v0.1.0`, `v0.7.1`, and `v0.7.2`: branch CI, tag-triggered GitHub Release, asset download/checksum verification, and public clone test passed. |
 
 ## 0.1.x Candidate Corrections
 

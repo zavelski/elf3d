@@ -135,6 +135,13 @@ No visible/manual viewer interaction pass was rerun after the 0.7.2 renderer
 and importer fixes, so the local release does not claim visual inspection of the
 packaged viewer beyond the hidden-context OpenGL smoke and process launch.
 
+Post-release publication verification passed: remote `main`, remote `develop`,
+and the peeled `v0.7.2` tag all resolve to
+`cf57a46e6a1f06078270aeded6a27e8d36ede09c`; GitHub CI and the tag-triggered
+release workflow completed successfully; the published ZIP checksum matched the
+published `SHA256SUMS.txt`; a fresh public clone of `v0.7.2` resolved to the
+release source commit.
+
 No user-provided real-file corpus was attached or found in the workspace. The
 project-owned `tests/fixtures/textured_pbr.gltf` probe passes without hard
 errors or diagnostics; this does not replace the pending user corpus.

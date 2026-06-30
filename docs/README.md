@@ -12,9 +12,8 @@ Implementation source paths: `include/elf3d`, `modules`, `facade/elf3d`,
 `integrations/imgui`, `apps/viewer`, `tests`, `CMakeLists.txt`,
 `CMakePresets.json`
 
-Known limitations: This index is not an immutable release snapshot. The current
-local release records are under `releases/0.7.2/`; the latest public release
-records are under `releases/0.7.1/`.
+Known limitations: This index is not an immutable release snapshot. The latest
+public release records are under `releases/0.7.2/`.
 
 Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 `releases/0.7.2/RELEASE_CHECKLIST.md`
@@ -44,6 +43,7 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 - `releases/0.7.2/RELEASE_ARTIFACTS.md`
 - `releases/0.7.2/PUBLIC_CONTENT_AUDIT.md`
 - `releases/0.7.2/GITHUB_RELEASE_NOTES.md`
+- `releases/0.7.2/PUBLICATION_REPORT.md`
 
 ## Previous 0.7.1 Release Records
 
@@ -105,6 +105,6 @@ Related documents: `../PROJECT_STATE_EN.md`, `../README.md`,
 
 ## Current Release Readiness
 
-The 0.7.2 source, local package, and automated validation are tracked under
-`releases/0.7.2/`. GitHub publication, CI, release asset download, checksum
-verification, and public clone verification are release follow-up gates.
+The 0.7.2 source, local package, automated validation, GitHub publication, CI,
+release asset download, checksum verification, and public clone verification
+are tracked under `releases/0.7.2/`.

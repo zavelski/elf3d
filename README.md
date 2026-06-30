@@ -208,10 +208,10 @@ docs/                   Technical documentation and release records
 
 ## Release
 
-The `0.7.2` release source is prepared locally. GitHub publication, CI,
-GitHub Release creation, asset upload, and public clone verification are left
-for release follow-up. The latest public release is 0.7.1, published from tag
-`v0.7.1` as [Elf3D 0.7.1](https://github.com/zavelski/elf3d/releases/tag/v0.7.1).
+The latest public release is 0.7.2, published from tag `v0.7.2` as
+[Elf3D 0.7.2](https://github.com/zavelski/elf3d/releases/tag/v0.7.2).
+The previous 0.7.1 release remains available from tag `v0.7.1` as
+[Elf3D 0.7.1](https://github.com/zavelski/elf3d/releases/tag/v0.7.1).
 The previous 0.2.0 public release remains available from tag `v0.2.0` as
 [Elf3D 0.2.0](https://github.com/zavelski/elf3d/releases/tag/v0.2.0).
 The previous 0.1.0 release remains available from tag `v0.1.0`.
