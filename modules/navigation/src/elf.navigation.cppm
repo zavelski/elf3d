@@ -62,6 +62,8 @@ class OrbitNavigationController final {
     [[nodiscard]] Result<void> apply_screen_anchor_orbit(scene::Storage& scene, EntityId camera,
                                                          Float2 delta,
                                                          std::optional<Bounds3> bounds);
+    [[nodiscard]] Result<void> apply_eye_orbit(scene::Storage& scene, EntityId camera,
+                                               Float2 delta, std::optional<Bounds3> bounds);
     [[nodiscard]] Result<void> synchronize_from_camera(const scene::Storage& scene, EntityId camera,
                                                        bool preserve_existing_pivot);
     [[nodiscard]] Result<void> apply_camera(scene::Storage& scene, EntityId camera);
@@ -74,6 +76,7 @@ class OrbitNavigationController final {
     bool enabled_ = true;
     bool has_valid_state_ = false;
     bool keyboard_navigation_used_ = false;
+    bool eye_orbit_active_ = false;
     SceneId scene_;
     EntityId camera_;
     Float4x4 camera_world_;

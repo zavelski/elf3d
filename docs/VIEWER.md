@@ -39,6 +39,7 @@ Keep the pointer over **3D View**.
 | Input | Action |
 | --- | --- |
 | Left drag | Orbit |
+| `Space` + left drag | Look around from current position |
 | `X` + left drag | Pan |
 | `Z` + left drag | Dolly |
 | Middle drag | Pan |

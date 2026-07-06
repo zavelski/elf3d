@@ -73,9 +73,9 @@ int main() {
     const elf3d::ProjectedViewportPoint projected_point;
     if (texture.is_valid() || native_view.is_valid() || inactive_input.is_hovered ||
         inactive_input.left_button_down || inactive_input.wheel_delta != 0.0F ||
-        inactive_input.w_pressed || inactive_input.s_pressed || inactive_input.a_pressed ||
-        inactive_input.d_pressed || inactive_input.q_pressed || inactive_input.e_pressed ||
-        default_ray.direction != elf3d::Float3{0.0F, 0.0F, -1.0F} ||
+        inactive_input.space_down || inactive_input.w_pressed || inactive_input.s_pressed ||
+        inactive_input.a_pressed || inactive_input.d_pressed || inactive_input.q_pressed ||
+        inactive_input.e_pressed || default_ray.direction != elf3d::Float3{0.0F, 0.0F, -1.0F} ||
         selection_settings.click_drag_threshold_pixels <= 0.0F || section_plane.enabled ||
         section_plane.retained_half_space != elf3d::PlaneHalfSpace::positive ||
         clipping_box.minimum != elf3d::Float3{-0.5F, -0.5F, -0.5F} ||

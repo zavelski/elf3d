@@ -303,7 +303,9 @@ int main() {
     }
     input.pointer_position_pixels = {300.0F, 300.0F};
     input.pointer_delta_pixels = {290.0F, 290.0F};
-    if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold)) {
+    const elf3d::Result<elf3d::navigation::NavigationUpdate> orbit_start =
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold);
+    if (!orbit_start || !orbit_start.value().orbit_start_position_pixels.has_value()) {
         return 4;
     }
     const elf3d::NavigationSnapshot first_drag = navigation.snapshot();
@@ -342,6 +344,66 @@ int main() {
     if (navigation.snapshot().is_pointer_captured) {
         return 10;
     }
+
+    if (!navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
+        return 142;
+    }
+    const elf3d::NavigationSnapshot before_eye_orbit = navigation.snapshot();
+    const elf3d::Float3 eye_orbit_position = camera_position(fixture.scene, fixture.camera);
+    const elf3d::Float3 eye_orbit_forward = camera_forward(fixture.scene, fixture.camera);
+    input = hovered_input();
+    input.left_button_down = true;
+    input.space_down = true;
+    input.pointer_position_pixels = {20.0F, 20.0F};
+    if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold)) {
+        return 143;
+    }
+    input.pointer_position_pixels = {40.0F, 20.0F};
+    input.pointer_delta_pixels = {20.0F, 0.0F};
+    const elf3d::Result<elf3d::navigation::NavigationUpdate> eye_orbit_start =
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold);
+    if (!eye_orbit_start || eye_orbit_start.value().orbit_start_position_pixels.has_value() ||
+        !navigation.snapshot().is_orbiting || !navigation.snapshot().is_pointer_captured ||
+        navigation.has_screen_anchor()) {
+        return 144;
+    }
+    input.space_down = false;
+    input.pointer_position_pixels = {100.0F, 20.0F};
+    input.pointer_delta_pixels = {60.0F, 0.0F};
+    if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold)) {
+        return 145;
+    }
+    const elf3d::NavigationSnapshot after_eye_orbit = navigation.snapshot();
+    if (!nearly_equal(camera_position(fixture.scene, fixture.camera), eye_orbit_position) ||
+        nearly_equal(camera_forward(fixture.scene, fixture.camera), eye_orbit_forward) ||
+        nearly_equal(after_eye_orbit.yaw_radians, before_eye_orbit.yaw_radians) ||
+        !camera_looks_at(fixture.scene, fixture.camera, after_eye_orbit.pivot) ||
+        navigation.has_screen_anchor()) {
+        return 146;
+    }
+    input.left_button_down = false;
+    input.pointer_delta_pixels = {};
+    if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold) ||
+        navigation.snapshot().is_pointer_captured) {
+        return 147;
+    }
+    input = hovered_input();
+    input.left_button_down = true;
+    input.pointer_position_pixels = {10.0F, 10.0F};
+    static_cast<void>(
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
+    input.pointer_position_pixels = {40.0F, 10.0F};
+    input.pointer_delta_pixels = {30.0F, 0.0F};
+    const elf3d::Result<elf3d::navigation::NavigationUpdate> normal_orbit_after_eye =
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold);
+    if (!normal_orbit_after_eye ||
+        !normal_orbit_after_eye.value().orbit_start_position_pixels.has_value()) {
+        return 148;
+    }
+    input.left_button_down = false;
+    input.pointer_delta_pixels = {};
+    static_cast<void>(
+        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
 
     if (!navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
         return 104;

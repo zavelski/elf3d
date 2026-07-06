@@ -28,6 +28,7 @@ struct ViewportInput {
     bool alt_down = false;
     bool x_down = false;
     bool z_down = false;
+    bool space_down = false;
 
     // Current-frame keyboard navigation state. Host integrations should set
     // these from physical key-down polling, not queued key-repeat events.

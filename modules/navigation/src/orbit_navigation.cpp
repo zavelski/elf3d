@@ -588,9 +588,22 @@ OrbitNavigationController::update(scene::Storage& scene, EntityId camera, Extent
         !input.x_down && !input.z_down;
     const bool orbit_drag_started =
         interaction.drag_started && interaction.mode == interaction::InteractionMode::orbit;
+    const bool eye_orbit_started = orbit_drag_started && input.space_down;
     if (left_keyboard_navigation_started || orbit_drag_started) {
         screen_anchor_.reset();
+    }
+    if (eye_orbit_started) {
+        eye_orbit_active_ = true;
+    } else if (orbit_drag_started) {
+        eye_orbit_active_ = false;
         update_result.orbit_start_position_pixels = input.pointer_position_pixels;
+    } else if (left_keyboard_navigation_started) {
+        update_result.orbit_start_position_pixels = input.pointer_position_pixels;
+    }
+    if ((interaction.drag_started && interaction.mode != interaction::InteractionMode::orbit) ||
+        interaction.drag_ended || !interaction.drag_active ||
+        interaction.mode != interaction::InteractionMode::orbit) {
+        eye_orbit_active_ = false;
     }
     if (keyboard_translation_active) {
         keyboard_navigation_used_ = true;
@@ -635,7 +648,13 @@ OrbitNavigationController::update(scene::Storage& scene, EntityId camera, Extent
     }
     if (interaction.drag_active && interaction.mode == interaction::InteractionMode::orbit &&
         (delta.x != 0.0F || delta.y != 0.0F)) {
-        if (screen_anchor_.has_value()) {
+        if (eye_orbit_active_) {
+            const Result<void> orbit =
+                apply_eye_orbit(scene, camera, delta, scene.visible_world_bounds(visibility));
+            if (!orbit) {
+                return orbit.error();
+            }
+        } else if (screen_anchor_.has_value()) {
             const Result<void> orbit = apply_screen_anchor_orbit(
                 scene, camera, delta, scene.visible_world_bounds(visibility));
             if (!orbit) {
@@ -840,6 +859,7 @@ void OrbitNavigationController::cancel_interaction() noexcept {
     interaction_.cancel();
     screen_anchor_.reset();
     keyboard_navigation_used_ = false;
+    eye_orbit_active_ = false;
 }
 
 void OrbitNavigationController::set_enabled(bool enabled) noexcept {
@@ -1076,6 +1096,58 @@ Result<void> OrbitNavigationController::apply_screen_anchor_orbit(
     camera_ = camera;
     camera_world_ = camera_world_result.value();
     has_valid_state_ = true;
+    return {};
+}
+
+Result<void> OrbitNavigationController::apply_eye_orbit(scene::Storage& scene, EntityId camera,
+                                                        Float2 delta,
+                                                        std::optional<Bounds3> bounds_value) {
+    const Result<CameraBasis> basis = camera_basis(scene, camera);
+    if (!basis) {
+        return basis.error();
+    }
+
+    float next_yaw = yaw_radians_;
+    float next_pitch = pitch_radians_;
+    angles_from_direction(basis.value().forward, next_yaw, next_pitch);
+    apply_orbit_delta(delta, settings_, next_yaw, next_pitch);
+
+    const math::Vector3 direction = direction_from_angles(next_yaw, next_pitch);
+    const Transform transform = look_at_transform(basis.value().position, direction);
+    const Result<void> transform_result = set_camera_world_transform(scene, camera, transform);
+    if (!transform_result) {
+        return transform_result.error();
+    }
+
+    const Result<CameraBasis> new_basis = camera_basis(scene, camera);
+    if (!new_basis) {
+        return new_basis.error();
+    }
+    const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
+    if (!camera_world_result) {
+        return camera_world_result.error();
+    }
+
+    angles_from_direction(new_basis.value().forward, yaw_radians_, pitch_radians_);
+    pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
+                                settings_.maximum_pitch_radians);
+    yaw_radians_ = std::remainder(yaw_radians_, pi * 2.0F);
+
+    const BoundsInfo bounds = bounds_info(bounds_value);
+    const DistanceLimits limits = effective_distance_limits(settings_, bounds);
+    distance_ = std::clamp(sanitized_motion_reference(distance_), limits.minimum, limits.maximum);
+    pivot_ = math::to_float3(new_basis.value().position + new_basis.value().forward * distance_);
+    scene_ = scene.id();
+    camera_ = camera;
+    camera_world_ = camera_world_result.value();
+    has_valid_state_ = true;
+    screen_anchor_.reset();
+
+    const Result<void> clip_result =
+        update_clip_planes(scene, camera, distance_, bounds.radius);
+    if (!clip_result) {
+        return clip_result.error();
+    }
     return {};
 }
 

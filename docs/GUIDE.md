@@ -59,6 +59,7 @@ Keep the pointer over the **3D View**.
 | Input | Action |
 | --- | --- |
 | Left drag | Orbit around the current working center. |
+| `Space` + left drag | Look around from the current camera position. |
 | `X` + left drag | Pan. |
 | `Z` + left drag | Dolly forward or backward. |
 | Middle drag | Pan. |
@@ -80,7 +81,9 @@ A useful workflow is:
 5. Press `F` if you get lost.
 
 When no explicit surface anchor exists, starting a new orbit chooses a working
-center from the visible scene.
+center from the visible scene. Hold `Space` while starting a left-drag orbit to
+skip that center update and rotate the camera in place from its current world
+position; the mode stays fixed until the drag ends.
 
 During an active drag, Elf3D hides and captures the pointer. You can therefore
 continue dragging beyond the edge of the 3D panel. Switching between held mouse

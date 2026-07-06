@@ -392,6 +392,57 @@ int main() {
     }
 
     if (!viewport->reset_view(scene, camera_result.value())) {
+        return 867;
+    }
+    device->picking_depths.assign(focus_anchor_pixel_count, 0.5F);
+    device->picking_depths_read_count = 0;
+    device->picking_pixel_read_count = 0;
+    elf3d::ViewportInput eye_orbit_input;
+    eye_orbit_input.is_focused = true;
+    eye_orbit_input.is_hovered = true;
+    eye_orbit_input.space_down = true;
+    eye_orbit_input.left_button_down = true;
+    eye_orbit_input.pointer_position_pixels = {16.0F, 16.0F};
+    if (!viewport->update_navigation(*renderer_result.value(), picking_service, scene,
+                                     camera_result.value(), eye_orbit_input)) {
+        return 868;
+    }
+    eye_orbit_input.pointer_position_pixels = {32.0F, 16.0F};
+    eye_orbit_input.pointer_delta_pixels = {16.0F, 0.0F};
+    if (!viewport->update_navigation(*renderer_result.value(), picking_service, scene,
+                                     camera_result.value(), eye_orbit_input)) {
+        return 869;
+    }
+    std::optional<elf3d::NavigationSnapshot> eye_orbit_snapshot =
+        viewport->navigation_snapshot();
+    if (device->picking_depths_read_count != 0 || device->picking_pixel_read_count != 0 ||
+        !eye_orbit_snapshot.has_value() || !eye_orbit_snapshot->is_pointer_captured ||
+        eye_orbit_snapshot->interaction_mode != elf3d::NavigationInteractionMode::orbit) {
+        return 870;
+    }
+    const float eye_orbit_yaw = eye_orbit_snapshot->yaw_radians;
+    eye_orbit_input.space_down = false;
+    eye_orbit_input.pointer_position_pixels = {64.0F, 16.0F};
+    eye_orbit_input.pointer_delta_pixels = {32.0F, 0.0F};
+    if (!viewport->update_navigation(*renderer_result.value(), picking_service, scene,
+                                     camera_result.value(), eye_orbit_input)) {
+        return 871;
+    }
+    eye_orbit_snapshot = viewport->navigation_snapshot();
+    if (device->picking_depths_read_count != 0 || device->picking_pixel_read_count != 0 ||
+        !eye_orbit_snapshot.has_value() ||
+        nearly_equal(eye_orbit_snapshot->yaw_radians, eye_orbit_yaw)) {
+        return 872;
+    }
+    eye_orbit_input.left_button_down = false;
+    eye_orbit_input.pointer_delta_pixels = {};
+    if (!viewport->update_navigation(*renderer_result.value(), picking_service, scene,
+                                     camera_result.value(), eye_orbit_input) ||
+        viewport->navigation_snapshot()->is_pointer_captured) {
+        return 873;
+    }
+
+    if (!viewport->reset_view(scene, camera_result.value())) {
         return 858;
     }
     device->picking_depths_read_count = 0;

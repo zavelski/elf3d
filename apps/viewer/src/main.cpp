@@ -183,6 +183,8 @@ struct ViewerState {
     bool imgui_cursor_change_disabled_by_capture = false;
     bool imgui_cursor_change_was_disabled = false;
     std::optional<ImVec2> navigation_cursor_position;
+    float navigation_wheel_delta = 0.0F;
+    std::optional<ImVec2> navigation_wheel_position;
     std::optional<elf3d::EntityId> last_revealed_hierarchy_selection;
     float main_menu_height = 0.0F;
     float toolbar_height = 0.0F;
@@ -1021,6 +1023,27 @@ void glfw_drop_callback(GLFWwindow *window, int path_count, const char **paths) 
     }
 }
 
+void glfw_navigation_scroll_callback(GLFWwindow *window, double, double y_offset) {
+    auto *state = static_cast<ViewerState *>(glfwGetWindowUserPointer(window));
+    const float delta = static_cast<float>(y_offset);
+    if (state == nullptr || !std::isfinite(delta) || delta == 0.0F) {
+        return;
+    }
+
+    double x = 0.0;
+    double y = 0.0;
+    glfwGetCursorPos(window, &x, &y);
+    const ImVec2 position{static_cast<float>(x), static_cast<float>(y)};
+    const float accumulated_delta = state->navigation_wheel_delta + delta;
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+        !std::isfinite(accumulated_delta)) {
+        return;
+    }
+
+    state->navigation_wheel_delta = accumulated_delta;
+    state->navigation_wheel_position = position;
+}
+
 [[nodiscard]] bool has_nonzero_extent(elf3d::Extent2D extent) noexcept;
 
 void build_main_menu(GLFWwindow *window, ViewerState &state, const ViewerScene &scene,
@@ -1779,6 +1802,20 @@ void sync_navigation_cursor(GLFWwindow *window, ViewerState &state,
     return window != nullptr && glfwGetMouseButton(window, button) == GLFW_PRESS;
 }
 
+[[nodiscard]] float navigation_wheel_delta_for_view(const ViewerState &state, ImVec2 item_min,
+                                                     ImVec2 item_size,
+                                                     bool input_available) noexcept {
+    if (!input_available || !state.navigation_wheel_position.has_value()) {
+        return 0.0F;
+    }
+
+    const ImVec2 position = state.navigation_wheel_position.value();
+    const ImVec2 item_max{item_min.x + item_size.x, item_min.y + item_size.y};
+    const bool inside = position.x >= item_min.x && position.x < item_max.x &&
+                        position.y >= item_min.y && position.y < item_max.y;
+    return inside ? state.navigation_wheel_delta : 0.0F;
+}
+
 [[nodiscard]] elf3d::ViewportInput
 viewport_input_from_imgui(GLFWwindow *window, ViewerState &state, ImVec2 item_min,
                           bool item_hovered, bool item_focused, bool pointer_captured,
@@ -1804,8 +1841,10 @@ viewport_input_from_imgui(GLFWwindow *window, ViewerState &state, ImVec2 item_mi
     };
     input.pointer_delta_pixels = {cursor_sample.delta.x * x_scale,
                                   cursor_sample.delta.y * y_scale};
-    input.wheel_delta = item_hovered ? io.MouseWheel : 0.0F;
-    input.is_hovered = item_hovered;
+    input.wheel_delta = navigation_wheel_delta_for_view(
+        state, item_min, item_size,
+        state.application_focused && !navigation_blocked_by_modal());
+    input.is_hovered = item_hovered || input.wheel_delta != 0.0F;
     input.is_focused = item_focused || pointer_captured;
     input.left_button_down = left_button_down;
     input.middle_button_down = middle_button_down;
@@ -1816,6 +1855,7 @@ viewport_input_from_imgui(GLFWwindow *window, ViewerState &state, ImVec2 item_mi
     input.x_down = glfw_key_down(window, GLFW_KEY_X);
     input.z_down = glfw_key_down(window, GLFW_KEY_Z);
     if (!io.WantTextInput) {
+        input.space_down = glfw_key_down(window, GLFW_KEY_SPACE);
         input.w_pressed = glfw_key_down(window, GLFW_KEY_W);
         input.s_pressed = glfw_key_down(window, GLFW_KEY_S);
         input.a_pressed = glfw_key_down(window, GLFW_KEY_A);
@@ -3678,6 +3718,10 @@ int run_viewer(int argument_count, char **arguments) {
     }
     ViewerScene active_scene = std::move(demo_result).value();
 
+    ViewerState state;
+    glfwSetWindowUserPointer(window.get(), &state);
+    glfwSetScrollCallback(window.get(), glfw_navigation_scroll_callback);
+
     const std::string font_path_utf8 = path_to_utf8(asset_root / "font" / "DroidSans.ttf");
     elf3d::imgui::ContextOptions imgui_options;
     imgui_options.font_path_utf8 = font_path_utf8;
@@ -3691,18 +3735,18 @@ int run_viewer(int argument_count, char **arguments) {
     std::unique_ptr<elf3d::imgui::Context> imgui = std::move(imgui_result).value();
 
     ToolbarIcons toolbar_icons = load_toolbar_icons(asset_root);
-    ViewerState state;
     state.panel_title_font =
         load_viewer_font(window.get(), font_path_utf8.c_str(), panel_title_font_size_pixels);
     state.panel_content_font =
         load_viewer_font(window.get(), font_path_utf8.c_str(), panel_content_font_size_pixels);
-    glfwSetWindowUserPointer(window.get(), &state);
     glfwSetDropCallback(window.get(), glfw_drop_callback);
     if (argument_count >= 2 && arguments[1] != nullptr) {
         attempt_model_load(*engine, *engine_viewport, state, active_scene, arguments[1]);
     }
 
     while (glfwWindowShouldClose(window.get()) == GLFW_FALSE) {
+        state.navigation_wheel_delta = 0.0F;
+        state.navigation_wheel_position.reset();
         glfwPollEvents();
         state.application_focused = glfwGetWindowAttrib(window.get(), GLFW_FOCUSED) == GLFW_TRUE;
         if (!state.application_focused) {
