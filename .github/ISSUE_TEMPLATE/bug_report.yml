@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a reproducible Elf3D problem
+title: "[Bug] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Elf3D version
+      placeholder: 0.7.6 or source revision
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows version, GPU, and graphics-driver version
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Error or diagnostics
+      render: text
+  - type: checkboxes
+    id: data
+    attributes:
+      label: Data confirmation
+      options:
+        - label: I have not included confidential, personal, credential-bearing, or license-restricted data.
+          required: true
