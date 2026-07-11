@@ -4,10 +4,39 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <string>
 #include <type_traits>
 #include <utility>
 
+namespace {
+
+[[nodiscard]] std::string path_to_utf8(const std::filesystem::path &path) {
+    const std::u8string utf8 = path.u8string();
+    std::string result;
+    result.reserve(utf8.size());
+    for (const char8_t character : utf8) {
+        result.push_back(static_cast<char>(character));
+    }
+    return result;
+}
+
+} // namespace
+
 int main() {
+    static_assert(sizeof(elf3d::Error) <= 256);
+    static_assert(noexcept(elf3d::Engine::create(elf3d::EngineConfiguration{})));
+    static_assert(noexcept(std::declval<elf3d::Engine &>().~Engine()));
+    static_assert(noexcept(std::declval<elf3d::Engine &>().create_scene()));
+    static_assert(noexcept(std::declval<elf3d::Engine &>().create_viewport(elf3d::Extent2D{})));
+    static_assert(noexcept(std::declval<elf3d::Engine &>().load_scene(std::string_view{})));
+    static_assert(
+        noexcept(std::declval<elf3d::Engine &>().load_scene_with_report(std::string_view{})));
+    static_assert(noexcept(std::declval<elf3d::SceneLoadReport &>().diagnostic_count()));
+    static_assert(noexcept(std::declval<elf3d::SceneLoadReport &>().diagnostic(0)));
+    static_assert(noexcept(std::declval<elf3d::SceneLoadReport &>().has_warnings()));
+    static_assert(noexcept(std::declval<elf3d::Result<elf3d::SceneStatistics> &>().value()));
+    static_assert(noexcept(std::declval<elf3d::Result<elf3d::SceneStatistics> &>().error()));
+
     static_assert(std::is_standard_layout_v<elf3d::Float2>);
     static_assert(std::is_standard_layout_v<elf3d::Color4>);
     static_assert(std::is_standard_layout_v<elf3d::Float3>);
@@ -51,7 +80,15 @@ int main() {
     static_assert(!std::is_move_assignable_v<elf3d::Engine>);
     static_assert(!std::is_move_constructible_v<elf3d::Scene>);
 
-    elf3d::Engine engine;
+    elf3d::EngineConfiguration cpu_configuration;
+    cpu_configuration.graphics_backend = elf3d::GraphicsBackend::none;
+    elf3d::Result<std::unique_ptr<elf3d::Engine>> cpu_engine_result =
+        elf3d::Engine::create(cpu_configuration);
+    if (!cpu_engine_result) {
+        return 51;
+    }
+    std::unique_ptr<elf3d::Engine> engine_owner = std::move(cpu_engine_result).value();
+    elf3d::Engine &engine = *engine_owner;
 
     const elf3d::Float2 position{4.0F, 8.0F};
     const elf3d::Color4 color{0.1F, 0.2F, 0.3F, 1.0F};
@@ -200,23 +237,25 @@ int main() {
     }
 
     elf3d::Result<elf3d::LoadedScene> loaded_result =
-        engine.load_scene_with_report(directory / "triangle.gltf");
+        engine.load_scene_with_report(path_to_utf8(directory / "triangle.gltf"));
+    const elf3d::Result<elf3d::SceneLoadDiagnosticView> first_diagnostic =
+        loaded_result ? loaded_result.value().report.diagnostic(0)
+                      : elf3d::Error{elf3d::ErrorCode::invalid_argument, "Load failed"};
     if (!loaded_result ||
         loaded_result.value().scene->statistics() !=
             elf3d::SceneStatistics{1, 1, 1, 1, 1, 3, 3, 1} ||
         !loaded_result.value().scene->world_bounds().has_value() ||
-        loaded_result.value().report.diagnostics.size() < 2 ||
-        loaded_result.value().report.diagnostics[0].category !=
-            elf3d::SceneLoadDiagnosticCategory::light) {
+        loaded_result.value().report.diagnostic_count() < 2 || !first_diagnostic ||
+        first_diagnostic.value().category != elf3d::SceneLoadDiagnosticCategory::light) {
         return 12;
     }
     std::unique_ptr<elf3d::Scene> loaded = std::move(loaded_result).value().scene;
     const elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_only_load =
-        engine.load_scene(directory / "triangle.gltf");
+        engine.load_scene(path_to_utf8(directory / "triangle.gltf"));
     if (!scene_only_load) {
         return 121;
     }
-    if (engine.load_scene(directory / "missing.gltf").error().code() !=
+    if (engine.load_scene(path_to_utf8(directory / "missing.gltf")).error().code() !=
             elf3d::ErrorCode::source_file_not_found ||
         loaded->statistics().model_entities != 1) {
         return 13;
@@ -224,7 +263,12 @@ int main() {
     loaded.reset();
     std::filesystem::remove_all(directory, filesystem_error);
 
-    std::unique_ptr<elf3d::Engine> lifetime_engine = std::make_unique<elf3d::Engine>();
+    elf3d::Result<std::unique_ptr<elf3d::Engine>> lifetime_engine_result =
+        elf3d::Engine::create(cpu_configuration);
+    if (!lifetime_engine_result) {
+        return 141;
+    }
+    std::unique_ptr<elf3d::Engine> lifetime_engine = std::move(lifetime_engine_result).value();
     elf3d::Result<std::unique_ptr<elf3d::Scene>> late_scene_result =
         lifetime_engine->create_scene();
     if (!late_scene_result) {

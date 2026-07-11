@@ -53,7 +53,9 @@ enum class ErrorCode {
     transform_requires_matrix_api,
     source_file_not_found,
     source_file_read_failed,
+    source_file_write_failed,
     unsupported_scene_format,
+    unsupported_model_format,
     malformed_gltf,
     malformed_glb,
     gltf_validation_failed,
@@ -81,6 +83,7 @@ enum class ErrorCode {
     invalid_image_buffer_view,
     image_range_out_of_bounds,
     image_decode_failed,
+    image_encode_failed,
     zero_image_dimensions,
     excessive_image_dimensions,
     decoded_image_size_overflow,
@@ -109,7 +112,7 @@ enum class ErrorCode {
 
 class Error final {
   public:
-    static constexpr std::size_t message_capacity = 2047;
+    static constexpr std::size_t message_capacity = 239;
 
     constexpr Error(ErrorCode code, std::string_view message) noexcept : code_(code) {
         const std::size_t count = std::min(message.size(), message_capacity);
@@ -123,7 +126,7 @@ class Error final {
         return code_;
     }
 
-    [[nodiscard]] constexpr const char *message() const noexcept {
+    [[nodiscard]] constexpr const char* message() const noexcept {
         return message_.data();
     }
 
@@ -131,6 +134,8 @@ class Error final {
     ErrorCode code_;
     std::array<char, message_capacity + 1> message_{};
 };
+
+static_assert(sizeof(Error) <= 256);
 
 } // namespace elf3d
 

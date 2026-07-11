@@ -12,6 +12,11 @@ import elf.math;
 namespace elf3d::assets {
 namespace {
 
+// The high bit remains available to Scene for document-backed runtime mesh
+// handles, so public convenience meshes occupy the lower half of the value range.
+constexpr std::uint64_t maximum_compatibility_mesh_handle_value =
+    std::numeric_limits<std::uint64_t>::max() >> 1U;
+
 bool finite_vertex(const VertexPositionNormalTexCoord &vertex) noexcept {
     return math::is_finite(vertex.position) && math::is_finite(vertex.normal) &&
            std::isfinite(vertex.texcoord0.x) && std::isfinite(vertex.texcoord0.y) &&
@@ -148,7 +153,7 @@ Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView &data) {
                          "A mesh index is outside the submitted vertex range"};
         }
     }
-    if (meshes_.size() >= static_cast<std::size_t>(std::numeric_limits<std::uint64_t>::max() - 1)) {
+    if (static_cast<std::uint64_t>(meshes_.size()) >= maximum_compatibility_mesh_handle_value) {
         return Error{ErrorCode::invalid_mesh_data, "The scene mesh identifier space is exhausted"};
     }
 

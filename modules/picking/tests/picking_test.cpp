@@ -1,6 +1,7 @@
 #include <elf3d/assets.h>
 #include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
+#include <elf3d/model.h>
 #include <elf3d/picking.h>
 #include <elf3d/scene.h>
 
@@ -10,6 +11,7 @@
 #include <utility>
 
 import elf.assets;
+import elf.model;
 import elf.picking;
 import elf.scene;
 
@@ -38,7 +40,7 @@ struct PickScene {
     elf3d::EntityId camera;
 };
 
-[[nodiscard]] elf3d::MeshHandle create_triangle_mesh(elf3d::scene::Storage &scene, elf3d::Float3 a,
+[[nodiscard]] elf3d::MeshHandle create_triangle_mesh(elf3d::scene::Storage& scene, elf3d::Float3 a,
                                                      elf3d::Float3 b, elf3d::Float3 c) {
     const std::array<elf3d::VertexPositionNormal, 3> vertices{{
         {a, {0.0F, 0.0F, 1.0F}},
@@ -49,7 +51,7 @@ struct PickScene {
     return scene.create_mesh({vertices, indices}).value();
 }
 
-[[nodiscard]] elf3d::MaterialHandle create_material(elf3d::scene::Storage &scene,
+[[nodiscard]] elf3d::MaterialHandle create_material(elf3d::scene::Storage& scene,
                                                     bool double_sided = false) {
     elf3d::MaterialDescription material_description;
     material_description.double_sided = double_sided;
@@ -58,14 +60,30 @@ struct PickScene {
 
 [[nodiscard]] PickScene make_pick_scene() {
     elf3d::scene::Storage scene{scene_id(1)};
-    const elf3d::MeshHandle mesh = create_triangle_mesh(scene, {-0.75F, -0.75F, 0.0F},
-                                                        {0.75F, -0.75F, 0.0F}, {0.0F, 0.75F, 0.0F});
-    const elf3d::MaterialHandle material = create_material(scene);
-    const elf3d::EntityId far_model = scene.create_model(mesh, material).value();
+    const std::array<elf3d::Float3, 3> positions{{
+        {-0.75F, -0.75F, 0.0F},
+        {0.75F, -0.75F, 0.0F},
+        {0.0F, 0.75F, 0.0F},
+    }};
+    const std::array<std::uint32_t, 3> indices{{0, 1, 2}};
+    elf3d::Document document;
+    const elf3d::MaterialId document_material = document.create_material({}).value();
+    const elf3d::MeshId document_mesh = document.create_mesh().value();
+    const elf3d::PrimitiveId document_primitive =
+        document
+            .create_primitive(document_mesh, document_material,
+                              {positions, {}, {}, {}, {}, indices})
+            .value();
+    static_cast<void>(scene.set_document(std::move(document)));
+
+    const std::array<elf3d::PrimitiveId, 1> document_primitives{{document_primitive}};
+    const elf3d::EntityId far_model = scene.create_entity().value();
+    static_cast<void>(scene.set_model_document_primitives(far_model, document_primitives));
     elf3d::Transform far_transform;
     far_transform.translation = {0.0F, 0.0F, -4.0F};
     static_cast<void>(scene.set_local_transform(far_model, far_transform));
-    const elf3d::EntityId near_model = scene.create_model(mesh, material).value();
+    const elf3d::EntityId near_model = scene.create_entity().value();
+    static_cast<void>(scene.set_model_document_primitives(near_model, document_primitives));
     elf3d::Transform near_transform;
     near_transform.translation = {0.0F, 0.0F, -2.0F};
     static_cast<void>(scene.set_local_transform(near_model, near_transform));
@@ -76,8 +94,8 @@ struct PickScene {
 
 [[nodiscard]] PickScene make_slanted_depth_scene() {
     elf3d::scene::Storage scene{scene_id(7)};
-    const elf3d::MeshHandle mesh = create_triangle_mesh(
-        scene, {-1.0F, -1.0F, 0.5F}, {1.0F, -1.0F, 0.5F}, {0.0F, 1.0F, -0.5F});
+    const elf3d::MeshHandle mesh =
+        create_triangle_mesh(scene, {-1.0F, -1.0F, 0.5F}, {1.0F, -1.0F, 0.5F}, {0.0F, 1.0F, -0.5F});
     const elf3d::MaterialHandle material = create_material(scene, true);
     const elf3d::EntityId far_model = scene.create_model(mesh, material).value();
     elf3d::Transform far_transform;
@@ -94,7 +112,7 @@ struct PickScene {
 
 } // namespace
 
-int main() {
+int elf3d_picking_test() {
     elf3d::Ray3 ray{{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}};
     elf3d::Ray3 miss_ray{{2.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}};
     elf3d::Ray3 inside_ray{{0.0F, 0.0F, -1.5F}, {0.0F, 0.0F, -1.0F}};
@@ -163,11 +181,14 @@ int main() {
 
     const elf3d::Result<std::optional<elf3d::PickHit>> pick =
         service.pick(fixture.scene, fixture.camera, {800, 600}, {399.5F, 299.5F});
+    const elf3d::Result<elf3d::scene::RuntimePrimitiveView> document_primitive =
+        fixture.scene.runtime_primitive(fixture.near_model, 0);
     const elf3d::PickingStatistics first_statistics = service.statistics();
     const elf3d::Result<std::optional<elf3d::PickHit>> second_pick =
         service.pick(fixture.scene, fixture.camera, {800, 600}, {399.5F, 299.5F});
     const elf3d::PickingStatistics second_statistics = service.statistics();
     if (!pick || !pick.value().has_value() || !second_pick || !second_pick.value().has_value() ||
+        !document_primitive || !document_primitive.value().document_primitive.is_valid() ||
         pick.value()->entity != fixture.near_model || pick.value()->triangle_index != 0 ||
         pick.value()->primitive_index != 0 ||
         !nearly_equal(pick.value()->world_position, {0.0F, 0.0F, -2.0F}) ||
@@ -187,9 +208,8 @@ int main() {
     depth_plane.normal = {0.0F, 0.0F, -1.0F};
     const elf3d::clipping::ClippingFilter depth_filter =
         elf3d::clipping::make_filter(depth_plane, {}, 1).value();
-    const elf3d::Result<std::optional<elf3d::PickHit>> clipped_nearest =
-        clipping_service.pick_ray(slanted_fixture.scene, ray, elf3d::PickOptions{},
-                                  slanted_visibility, depth_filter);
+    const elf3d::Result<std::optional<elf3d::PickHit>> clipped_nearest = clipping_service.pick_ray(
+        slanted_fixture.scene, ray, elf3d::PickOptions{}, slanted_visibility, depth_filter);
     const elf3d::PickingStatistics clipped_statistics = clipping_service.statistics();
     if (!clipped_nearest || !clipped_nearest.value().has_value() ||
         clipped_nearest.value()->entity != slanted_fixture.far_model ||
@@ -206,9 +226,8 @@ int main() {
     }};
     const elf3d::clipping::ClippingFilter box_filter =
         elf3d::clipping::make_filter(elf3d::SectionPlane{}, union_boxes, 2).value();
-    const elf3d::Result<std::optional<elf3d::PickHit>> box_clipped =
-        clipping_service.pick_ray(slanted_fixture.scene, ray, elf3d::PickOptions{},
-                                  slanted_visibility, box_filter);
+    const elf3d::Result<std::optional<elf3d::PickHit>> box_clipped = clipping_service.pick_ray(
+        slanted_fixture.scene, ray, elf3d::PickOptions{}, slanted_visibility, box_filter);
     const elf3d::PickingStatistics box_statistics = clipping_service.statistics();
     if (!box_clipped || !box_clipped.value().has_value() ||
         box_clipped.value()->entity != slanted_fixture.far_model ||

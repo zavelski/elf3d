@@ -10,6 +10,17 @@ include is:
 Build the `elf3d` target and link the resulting shared library and import
 library with a compatible Visual Studio C++20 configuration.
 
+The source-integrated static model library is exposed separately through:
+
+```cpp
+#include <elf3d/model.h>
+```
+
+Build and link `elf3d_model` / `elf3d::model` when an application needs the
+canonical CPU-side `elf3d::Document` without renderer, backend, viewport, or
+viewer targets. This is not a stable DLL ABI; bulk model DTOs may own standard
+library storage, while read-only access uses temporary spans and string views.
+
 ## Creating the Engine
 
 A rendering engine requires a current OpenGL context and a host-provided
@@ -28,8 +39,16 @@ if (!engine_result) {
 auto engine = std::move(engine_result).value();
 ```
 
-A default-created engine can manage CPU scene data. Rendering viewports require
-the configured graphics backend.
+CPU-only scene work uses the same factory with `GraphicsBackend::none`:
+
+```cpp
+elf3d::EngineConfiguration configuration;
+configuration.graphics_backend = elf3d::GraphicsBackend::none;
+
+auto engine_result = elf3d::Engine::create(configuration);
+```
+
+Rendering viewports require a configured graphics backend.
 
 ## Loading a Scene
 
@@ -42,12 +61,16 @@ if (!loaded_result) {
 
 auto loaded = std::move(loaded_result).value();
 auto scene = std::move(loaded.scene);
-for (const elf3d::SceneLoadDiagnostic& diagnostic : loaded.diagnostics) {
-    present_diagnostic(diagnostic);
+for (std::size_t index = 0; index < loaded.report.diagnostic_count(); ++index) {
+    auto diagnostic_result = loaded.report.diagnostic(index);
+    if (diagnostic_result) {
+        present_diagnostic(diagnostic_result.value());
+    }
 }
 ```
 
-Use `load_scene()` when the compatibility report is not required.
+Loading paths are UTF-8 strings. Use `load_scene()` when the compatibility
+report is not required.
 
 ## Creating and Rendering a Viewport
 
@@ -71,12 +94,33 @@ and texture presentation.
 
 ## Main API Areas
 
+- `Document`: CPU-side ownership of all imported scenes, the optional authored
+  default scene, document-scoped IDs, bounded indexed primitives, perspective
+  cameras, materials, images, textures, samplers, read-only source metadata,
+  bounds/statistics, validation, and topology-changing primitive replacement.
+  `load_document()` imports glTF/GLB and `save_document()` exports the supported
+  subset in `elf3d_model`; `ModelWriteReport` carries non-fatal fidelity
+  diagnostics.
 - `Engine`: scene and viewport creation, loading, and native texture access.
-- `Scene`: hierarchy, transforms, cameras, assets, visibility, bounds, and
-  statistics.
+- `Scene`: hierarchy, transforms, cameras, model-backed loaded data,
+  Scene-created convenience assets, visibility, bounds, and statistics.
 - `Viewport`: rendering, navigation, picking, selection, visibility,
   measurement, clipping, overlays, and statistics.
 - `Result<T>` and `Error`: expected operation results and error context.
+
+All exported functions, destructors, and callbacks are explicitly `noexcept`.
+Memory exhaustion is fatal by default and is not reported as a recoverable
+`Result`.
+
+Imported images retain optional original PNG/JPEG bytes and MIME; export reuses
+them while they still decode exactly to the current pixels and otherwise
+reports PNG re-encoding. Bounded raw glTF `extras` and unknown extensions are
+available as read-only metadata views. Any successful Document mutation marks
+that complete preserved set stale, so validation warns and export omits it
+rather than risking invalid unknown references. The attachment bridge is
+private to the importer/model implementation; the public Document API has no
+raw-metadata setter. Image placement uses
+`ModelImageWritePolicy::automatic`, `external`, or `embedded`.
 
 ## Ownership and Shutdown
 

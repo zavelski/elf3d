@@ -1,9 +1,15 @@
 #include <elf3d/elf3d.h>
+#include <elf3d/model.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <new>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 import elf.backend.opengl;
 import elf.gltf;
@@ -13,7 +19,146 @@ import elf.renderer;
 import elf.scene;
 import elf.viewport;
 
+#include "viewport_impl.h"
+
 namespace elf3d {
+namespace {
+
+[[noreturn]] void fatal_allocation_failure() noexcept {
+    fatal_error("Elf3D memory allocation failed");
+}
+
+[[noreturn]] void fatal_unexpected_boundary_exception() noexcept {
+    fatal_error("Elf3D boundary encountered an unexpected exception");
+}
+
+[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value) {
+    std::u8string utf8;
+    utf8.reserve(value.size());
+    for (const char character : value) {
+        utf8.push_back(static_cast<char8_t>(static_cast<unsigned char>(character)));
+    }
+    return std::filesystem::path{utf8};
+}
+
+[[nodiscard]] SceneLoadDiagnosticSeverity
+scene_diagnostic_severity(ModelLoadDiagnosticSeverity severity) noexcept {
+    switch (severity) {
+    case ModelLoadDiagnosticSeverity::information:
+        return SceneLoadDiagnosticSeverity::information;
+    case ModelLoadDiagnosticSeverity::warning:
+        return SceneLoadDiagnosticSeverity::warning;
+    }
+    return SceneLoadDiagnosticSeverity::warning;
+}
+
+[[nodiscard]] SceneLoadDiagnosticCategory
+scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept {
+    switch (category) {
+    case ModelLoadDiagnosticCategory::geometry:
+        return SceneLoadDiagnosticCategory::geometry;
+    case ModelLoadDiagnosticCategory::material:
+        return SceneLoadDiagnosticCategory::material;
+    case ModelLoadDiagnosticCategory::texture:
+        return SceneLoadDiagnosticCategory::texture;
+    case ModelLoadDiagnosticCategory::extension:
+        return SceneLoadDiagnosticCategory::extension;
+    case ModelLoadDiagnosticCategory::camera:
+        return SceneLoadDiagnosticCategory::camera;
+    case ModelLoadDiagnosticCategory::light:
+        return SceneLoadDiagnosticCategory::light;
+    case ModelLoadDiagnosticCategory::animation:
+        return SceneLoadDiagnosticCategory::animation;
+    case ModelLoadDiagnosticCategory::scene:
+        return SceneLoadDiagnosticCategory::scene;
+    }
+    return SceneLoadDiagnosticCategory::scene;
+}
+
+[[nodiscard]] SceneLoadDiagnosticCode scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
+    switch (code) {
+    case ModelLoadDiagnosticCode::generated_normals:
+        return SceneLoadDiagnosticCode::generated_normals;
+    case ModelLoadDiagnosticCode::degenerate_geometry:
+        return SceneLoadDiagnosticCode::degenerate_geometry;
+    case ModelLoadDiagnosticCode::missing_texture_coordinates:
+        return SceneLoadDiagnosticCode::missing_texture_coordinates;
+    case ModelLoadDiagnosticCode::unsupported_optional_extension:
+        return SceneLoadDiagnosticCode::unsupported_optional_extension;
+    case ModelLoadDiagnosticCode::material_fallback:
+        return SceneLoadDiagnosticCode::material_fallback;
+    case ModelLoadDiagnosticCode::normal_map_fallback:
+        return SceneLoadDiagnosticCode::normal_map_fallback;
+    case ModelLoadDiagnosticCode::camera_fallback:
+        return SceneLoadDiagnosticCode::camera_fallback;
+    case ModelLoadDiagnosticCode::ignored_lights:
+        return SceneLoadDiagnosticCode::ignored_lights;
+    case ModelLoadDiagnosticCode::ignored_animation:
+        return SceneLoadDiagnosticCode::ignored_animation;
+    case ModelLoadDiagnosticCode::ignored_skin:
+        return SceneLoadDiagnosticCode::ignored_skin;
+    case ModelLoadDiagnosticCode::ignored_morph_targets:
+        return SceneLoadDiagnosticCode::ignored_morph_targets;
+    case ModelLoadDiagnosticCode::ignored_instancing:
+        return SceneLoadDiagnosticCode::ignored_instancing;
+    case ModelLoadDiagnosticCode::skipped_invalid_transform:
+        return SceneLoadDiagnosticCode::skipped_invalid_transform;
+    case ModelLoadDiagnosticCode::texture_fallback:
+        return SceneLoadDiagnosticCode::texture_fallback;
+    case ModelLoadDiagnosticCode::skipped_unsupported_primitive:
+        return SceneLoadDiagnosticCode::skipped_unsupported_primitive;
+    }
+    return SceneLoadDiagnosticCode::material_fallback;
+}
+
+} // namespace
+
+class SceneLoadReport::Impl final {
+  public:
+    std::vector<ModelLoadDiagnostic> diagnostics;
+};
+
+SceneLoadReport::SceneLoadReport() noexcept = default;
+
+SceneLoadReport::SceneLoadReport(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
+
+SceneLoadReport::~SceneLoadReport() noexcept = default;
+
+SceneLoadReport::SceneLoadReport(SceneLoadReport&&) noexcept = default;
+
+SceneLoadReport& SceneLoadReport::operator=(SceneLoadReport&&) noexcept = default;
+
+std::size_t SceneLoadReport::diagnostic_count() const noexcept {
+    return impl_ != nullptr ? impl_->diagnostics.size() : 0;
+}
+
+Result<SceneLoadDiagnosticView> SceneLoadReport::diagnostic(std::size_t index) const noexcept {
+    if (impl_ == nullptr || index >= impl_->diagnostics.size()) {
+        return Error{ErrorCode::invalid_argument,
+                     "The scene-load diagnostic index is out of range"};
+    }
+    const ModelLoadDiagnostic& diagnostic = impl_->diagnostics[index];
+    std::optional<std::string_view> source_context;
+    if (diagnostic.source_context.has_value()) {
+        source_context = std::string_view{*diagnostic.source_context};
+    }
+    return SceneLoadDiagnosticView{scene_diagnostic_severity(diagnostic.severity),
+                                   scene_diagnostic_category(diagnostic.category),
+                                   scene_diagnostic_code(diagnostic.code),
+                                   std::string_view{diagnostic.message}, source_context};
+}
+
+bool SceneLoadReport::has_warnings() const noexcept {
+    if (impl_ == nullptr) {
+        return false;
+    }
+    for (const ModelLoadDiagnostic& diagnostic : impl_->diagnostics) {
+        if (diagnostic.severity == ModelLoadDiagnosticSeverity::warning) {
+            return true;
+        }
+    }
+    return false;
+}
 
 class Engine::Impl final {
   public:
@@ -43,32 +188,23 @@ class Engine::Impl final {
         }
     }
 
-    GraphicsBackend backend = GraphicsBackend::opengl;
+    GraphicsBackend backend = GraphicsBackend::none;
     std::shared_ptr<renderer::Renderer> renderer;
     std::shared_ptr<picking::PickingService> picking;
     std::uint64_t next_scene_value = 1;
 };
 
-class Viewport::Impl final {
-  public:
-    Impl(std::unique_ptr<viewport::OffscreenViewport> viewport,
-         const std::shared_ptr<renderer::Renderer>& renderer,
-         const std::shared_ptr<picking::PickingService>& picking) noexcept
-        : viewport(std::move(viewport)), renderer(renderer), picking(picking) {}
-
-    std::unique_ptr<viewport::OffscreenViewport> viewport;
-    std::weak_ptr<renderer::Renderer> renderer;
-    std::weak_ptr<picking::PickingService> picking;
-};
-
-Engine::Engine() : impl_(std::make_unique<Impl>()) {}
-
 Engine::Engine(ConstructionKey, std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
 
-Engine::~Engine() = default;
+Engine::~Engine() noexcept = default;
 
 Result<std::unique_ptr<Engine>> Engine::create(const EngineConfiguration& configuration) noexcept {
     try {
+        if (configuration.graphics_backend == GraphicsBackend::none) {
+            auto impl = std::make_unique<Impl>(GraphicsBackend::none);
+            return std::make_unique<Engine>(ConstructionKey{}, std::move(impl));
+        }
+
         Result<std::unique_ptr<graphics::Device>> device_result =
             Error{ErrorCode::invalid_argument, "The requested graphics backend is unsupported"};
 
@@ -94,20 +230,22 @@ Result<std::unique_ptr<Engine>> Engine::create(const EngineConfiguration& config
         impl->renderer = std::shared_ptr<renderer::Renderer>{std::move(renderer_result).value()};
         impl->picking = std::make_shared<picking::PickingService>();
         return std::make_unique<Engine>(ConstructionKey{}, std::move(impl));
+    } catch (const std::bad_alloc&) {
+        fatal_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Elf3D engine creation threw an exception"};
+        fatal_unexpected_boundary_exception();
     }
 }
 
 GraphicsBackend Engine::graphics_backend() const noexcept {
-    return impl_ != nullptr ? impl_->backend : GraphicsBackend::opengl;
+    return impl_ != nullptr ? impl_->backend : GraphicsBackend::none;
 }
 
 bool Engine::graphics_initialized() const noexcept {
     return impl_ != nullptr && impl_->renderer != nullptr;
 }
 
-Result<std::unique_ptr<Viewport>> Engine::create_viewport(Extent2D initial_extent) {
+Result<std::unique_ptr<Viewport>> Engine::create_viewport(Extent2D initial_extent) noexcept {
     if (impl_ == nullptr || impl_->renderer == nullptr || impl_->picking == nullptr) {
         return Error{ErrorCode::graphics_shutdown,
                      "Viewport creation requires an initialized graphics backend"};
@@ -120,38 +258,45 @@ Result<std::unique_ptr<Viewport>> Engine::create_viewport(Extent2D initial_exten
             return viewport_result.error();
         }
 
-        auto viewport_impl = std::make_unique<Viewport::Impl>(
-            std::move(viewport_result).value(), impl_->renderer, impl_->picking);
+        auto viewport_impl = std::make_unique<Viewport::Impl>(std::move(viewport_result).value(),
+                                                              impl_->renderer, impl_->picking);
         return std::make_unique<Viewport>(Viewport::ConstructionKey{}, std::move(viewport_impl));
+    } catch (const std::bad_alloc&) {
+        fatal_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Elf3D viewport facade creation threw an exception"};
+        fatal_unexpected_boundary_exception();
     }
 }
 
-Result<std::unique_ptr<Scene>> Engine::create_scene() {
+Result<std::unique_ptr<Scene>> Engine::create_scene() noexcept {
     if (impl_ == nullptr || impl_->next_scene_value == 0) {
         return Error{ErrorCode::invalid_argument, "Scene creation requires a live Elf3D engine"};
     }
 
-    const std::uint64_t scene_value = impl_->next_scene_value++;
-    auto release_ticket = std::make_unique<Impl::SceneReleaseTicket>();
-    release_ticket->renderer = impl_->renderer;
-    release_ticket->picking = impl_->picking;
-    Scene::ReleaseContext release_context{reinterpret_cast<std::uintptr_t>(release_ticket.get()),
-                                          &Impl::release_scene};
-    Result<std::unique_ptr<Scene>> scene = Scene::create(
-        reinterpret_cast<std::uintptr_t>(impl_.get()), scene_value, std::move(release_context));
-    if (!scene) {
-        return scene.error();
+    try {
+        const std::uint64_t scene_value = impl_->next_scene_value++;
+        auto release_ticket = std::make_unique<Impl::SceneReleaseTicket>();
+        release_ticket->renderer = impl_->renderer;
+        release_ticket->picking = impl_->picking;
+        Scene::ReleaseContext release_context{
+            reinterpret_cast<std::uintptr_t>(release_ticket.get()), &Impl::release_scene};
+        Result<std::unique_ptr<Scene>> scene = Scene::create(
+            reinterpret_cast<std::uintptr_t>(impl_.get()), scene_value, std::move(release_context));
+        if (!scene) {
+            return scene.error();
+        }
+        release_ticket.release();
+        return scene;
+    } catch (const std::bad_alloc&) {
+        fatal_allocation_failure();
+    } catch (...) {
+        fatal_unexpected_boundary_exception();
     }
-    release_ticket.release();
-    return scene;
 }
 
-Result<std::unique_ptr<Scene>> Engine::load_scene(const std::filesystem::path& path,
-                                                  const SceneLoadOptions& options) {
-    Result<LoadedScene> loaded_result = load_scene_with_report(path, options);
+Result<std::unique_ptr<Scene>> Engine::load_scene(std::string_view path_utf8,
+                                                  const SceneLoadOptions& options) noexcept {
+    Result<LoadedScene> loaded_result = load_scene_with_report(path_utf8, options);
     if (!loaded_result) {
         return loaded_result.error();
     }
@@ -159,27 +304,44 @@ Result<std::unique_ptr<Scene>> Engine::load_scene(const std::filesystem::path& p
     return std::move(loaded.scene);
 }
 
-Result<LoadedScene> Engine::load_scene_with_report(const std::filesystem::path& path,
-                                                   const SceneLoadOptions& options) {
-    Result<std::unique_ptr<Scene>> scene_result = create_scene();
-    if (!scene_result) {
-        return scene_result.error();
-    }
-    std::unique_ptr<Scene> scene = std::move(scene_result).value();
-    scene::Storage* storage = scene::Access::storage(*scene);
-    if (storage == nullptr) {
-        return Error{ErrorCode::scene_import_failed,
-                     "Scene loading could not access the new scene construction surface"};
-    }
+Result<LoadedScene> Engine::load_scene_with_report(std::string_view path_utf8,
+                                                   const SceneLoadOptions& options) noexcept {
+    try {
+        Result<std::unique_ptr<Scene>> scene_result = create_scene();
+        if (!scene_result) {
+            return scene_result.error();
+        }
+        std::unique_ptr<Scene> scene = std::move(scene_result).value();
+        scene::Storage* storage = scene::Access::storage(*scene);
+        if (storage == nullptr) {
+            return Error{ErrorCode::scene_import_failed,
+                         "Scene loading could not access the new scene construction surface"};
+        }
 
-    const Result<gltf::ImportReport> import_result = gltf::import_scene(path, options, *storage);
-    if (!import_result) {
-        return import_result.error();
+        const ModelLoadOptions model_options{options.generate_missing_normals,
+                                             options.import_node_names};
+        Result<LoadedDocument> loaded_document =
+            gltf::load_document(path_from_utf8(path_utf8), model_options);
+        if (!loaded_document) {
+            return loaded_document.error();
+        }
+        LoadedDocument loaded = std::move(loaded_document).value();
+        const Result<void> populate_result = scene::populate_from_document(
+            std::move(loaded.document), loaded.default_scene, *storage);
+        if (!populate_result) {
+            return populate_result.error();
+        }
+        auto report_impl = std::make_unique<SceneLoadReport::Impl>();
+        report_impl->diagnostics = std::move(loaded.report.diagnostics);
+        return LoadedScene{std::move(scene), SceneLoadReport{std::move(report_impl)}};
+    } catch (const std::bad_alloc&) {
+        fatal_allocation_failure();
+    } catch (...) {
+        fatal_unexpected_boundary_exception();
     }
-    return LoadedScene{std::move(scene), SceneLoadReport{import_result.value().diagnostics}};
 }
 
-Result<NativeTextureView> Engine::native_texture_view(TextureHandle texture) const {
+Result<NativeTextureView> Engine::native_texture_view(TextureHandle texture) const noexcept {
     if (impl_ == nullptr || impl_->renderer == nullptr) {
         return Error{ErrorCode::graphics_shutdown,
                      "Native texture access requires an initialized graphics backend"};
@@ -187,704 +349,11 @@ Result<NativeTextureView> Engine::native_texture_view(TextureHandle texture) con
 
     try {
         return impl_->renderer->device().native_texture_view(texture);
+    } catch (const std::bad_alloc&) {
+        fatal_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Native texture access threw an exception"};
+        fatal_unexpected_boundary_exception();
     }
-}
-
-Viewport::Viewport(ConstructionKey, std::unique_ptr<Impl> impl) noexcept
-    : impl_(std::move(impl)) {}
-
-Viewport::~Viewport() = default;
-
-Extent2D Viewport::extent() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->extent() : Extent2D{};
-}
-
-Result<void> Viewport::resize(Extent2D extent) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->resize(extent);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport resize threw an exception"};
-    }
-}
-
-void Viewport::set_clear_color(Color4 color) noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->set_clear_color(color);
-    }
-}
-
-Color4 Viewport::clear_color() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->clear_color()
-                                                          : Color4{};
-}
-
-void Viewport::set_basic_lighting(const BasicLighting& lighting) noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->set_basic_lighting(lighting);
-    }
-}
-
-BasicLighting Viewport::basic_lighting() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->basic_lighting()
-                                                          : BasicLighting{};
-}
-
-Result<void> Viewport::update_navigation(Scene& scene, EntityId camera,
-                                         const ViewportInput& input) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const std::shared_ptr<renderer::Renderer> renderer = impl_->renderer.lock();
-        const std::shared_ptr<picking::PickingService> picking = impl_->picking.lock();
-        if (renderer == nullptr || picking == nullptr) {
-            return Error{ErrorCode::graphics_shutdown,
-                         "Viewport navigation requires live engine services"};
-        }
-        scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport navigation requires a live scene"};
-        }
-        return impl_->viewport->update_navigation(*renderer, *picking, *storage, camera, input);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport navigation update threw an exception"};
-    }
-}
-
-Result<void> Viewport::set_examine_pivot(Scene& scene, EntityId camera, Float3 world_position) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument,
-                         "Viewport pivot update requires a live scene"};
-        }
-        return impl_->viewport->set_examine_pivot(*storage, camera, world_position);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport pivot update threw an exception"};
-    }
-}
-
-Result<void> Viewport::fit_to_scene(Scene& scene, EntityId camera) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport fitting requires a live scene"};
-        }
-        return impl_->viewport->fit_to_scene(*storage, camera);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport fitting threw an exception"};
-    }
-}
-
-Result<void> Viewport::reset_view(Scene& scene, EntityId camera) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport reset requires a live scene"};
-        }
-        return impl_->viewport->reset_view(*storage, camera);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport reset threw an exception"};
-    }
-}
-
-Result<void> Viewport::synchronize_navigation(const Scene& scene, EntityId camera) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument,
-                         "Viewport navigation synchronization requires a live scene"};
-        }
-        return impl_->viewport->synchronize_navigation(*storage, camera);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport navigation synchronization threw an exception"};
-    }
-}
-
-void Viewport::cancel_interaction() noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->cancel_interaction();
-    }
-}
-
-void Viewport::set_navigation_enabled(bool enabled) noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->set_navigation_enabled(enabled);
-    }
-}
-
-bool Viewport::navigation_enabled() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr && impl_->viewport->navigation_enabled();
-}
-
-Result<void> Viewport::set_navigation_settings(const OrbitNavigationSettings& settings) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->set_navigation_settings(settings);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport navigation settings update threw an exception"};
-    }
-}
-
-OrbitNavigationSettings Viewport::navigation_settings() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->navigation_settings()
-                                                          : OrbitNavigationSettings{};
-}
-
-std::optional<NavigationSnapshot> Viewport::navigation_snapshot() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->navigation_snapshot()
-                                                          : std::nullopt;
-}
-
-void Viewport::set_active_tool(ViewportTool tool) noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->set_active_tool(tool);
-    }
-}
-
-ViewportTool Viewport::active_tool() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->active_tool()
-                                                          : ViewportTool::selection;
-}
-
-Result<Ray3> Viewport::make_picking_ray(const Scene& scene, EntityId camera,
-                                        Float2 position_pixels) const {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const std::shared_ptr<picking::PickingService> picking = impl_->picking.lock();
-        if (picking == nullptr) {
-            return Error{ErrorCode::graphics_shutdown,
-                         "Viewport picking requires live engine services"};
-        }
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport picking requires a live scene"};
-        }
-        return impl_->viewport->make_picking_ray(*picking, *storage, camera, position_pixels);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport picking ray construction threw an exception"};
-    }
-}
-
-Result<std::optional<PickHit>> Viewport::pick(const Scene& scene, EntityId camera,
-                                              Float2 position_pixels,
-                                              const PickOptions& options) const {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const std::shared_ptr<renderer::Renderer> renderer = impl_->renderer.lock();
-        const std::shared_ptr<picking::PickingService> picking = impl_->picking.lock();
-        if (renderer == nullptr || picking == nullptr) {
-            return Error{ErrorCode::graphics_shutdown,
-                         "Viewport picking requires live engine services"};
-        }
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport picking requires a live scene"};
-        }
-        return impl_->viewport->pick(*renderer, *picking, *storage, camera, position_pixels,
-                                     options);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport picking threw an exception"};
-    }
-}
-
-Result<std::optional<PickHit>> Viewport::select_at(const Scene& scene, EntityId camera,
-                                                   Float2 position_pixels) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const std::shared_ptr<renderer::Renderer> renderer = impl_->renderer.lock();
-        const std::shared_ptr<picking::PickingService> picking = impl_->picking.lock();
-        if (renderer == nullptr || picking == nullptr) {
-            return Error{ErrorCode::graphics_shutdown,
-                         "Viewport selection requires live engine services"};
-        }
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport selection requires a live scene"};
-        }
-        return impl_->viewport->select_at(*renderer, *picking, *storage, camera,
-                                          position_pixels);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport selection threw an exception"};
-    }
-}
-
-Result<void> Viewport::set_selected_entity(const Scene& scene, EntityId entity) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport selection requires a live scene"};
-        }
-        return impl_->viewport->set_selected_entity(*storage, entity);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport hierarchy selection threw an exception"};
-    }
-}
-
-void Viewport::clear_selection() noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->clear_selection();
-    }
-}
-
-bool Viewport::has_selection() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr && impl_->viewport->has_selection();
-}
-
-std::optional<EntityId> Viewport::selected_entity() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->selected_entity()
-                                                          : std::nullopt;
-}
-
-std::optional<PickHit> Viewport::selection_hit() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->selection_hit()
-                                                          : std::nullopt;
-}
-
-SelectionSnapshot Viewport::selection_snapshot() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->selection_snapshot()
-                                                          : SelectionSnapshot{};
-}
-
-void Viewport::set_selection_enabled(bool enabled) noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->set_selection_enabled(enabled);
-    }
-}
-
-bool Viewport::selection_enabled() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr && impl_->viewport->selection_enabled();
-}
-
-Result<void> Viewport::set_selection_settings(const SelectionSettings& settings) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->set_selection_settings(settings);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport selection settings update threw an exception"};
-    }
-}
-
-SelectionSettings Viewport::selection_settings() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->selection_settings()
-                                                          : SelectionSettings{};
-}
-
-Result<PickingStatistics> Viewport::picking_statistics() const noexcept {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-    const std::shared_ptr<picking::PickingService> picking = impl_->picking.lock();
-    if (picking == nullptr) {
-        return Error{ErrorCode::graphics_shutdown,
-                     "Viewport statistics require live engine services"};
-    }
-    return impl_->viewport->picking_statistics(*picking);
-}
-
-Result<void> Viewport::begin_distance_measurement() {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->begin_distance_measurement();
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport measurement activation threw an exception"};
-    }
-}
-
-void Viewport::cancel_distance_measurement() noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->cancel_distance_measurement();
-    }
-}
-
-void Viewport::clear_distance_measurement() noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->clear_distance_measurement();
-    }
-}
-
-DistanceMeasurementSnapshot Viewport::distance_measurement_snapshot(const Scene& scene) const {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        DistanceMeasurementSnapshot result;
-        result.diagnostic =
-            Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-        return result;
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            DistanceMeasurementSnapshot result;
-            result.diagnostic =
-                Error{ErrorCode::invalid_argument, "Viewport measurement requires a live scene"};
-            return result;
-        }
-        return impl_->viewport->distance_measurement_snapshot(*storage);
-    } catch (...) {
-        DistanceMeasurementSnapshot result;
-        result.diagnostic = Error{ErrorCode::unexpected_exception,
-                                  "Viewport measurement snapshot threw an exception"};
-        return result;
-    }
-}
-
-Result<void> Viewport::set_measurement_settings(const DistanceMeasurementSettings& settings) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->set_measurement_settings(settings);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport measurement settings update threw an exception"};
-    }
-}
-
-DistanceMeasurementSettings Viewport::measurement_settings() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->measurement_settings()
-                                                          : DistanceMeasurementSettings{};
-}
-
-MeasurementStatistics Viewport::measurement_statistics() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr
-               ? impl_->viewport->measurement_statistics()
-               : MeasurementStatistics{};
-}
-
-Result<ProjectedViewportPoint> Viewport::project_world_to_viewport(const Scene& scene,
-                                                                   EntityId camera,
-                                                                   Float3 world_position) const {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport projection requires a live scene"};
-        }
-        return impl_->viewport->project_world_to_viewport(*storage, camera, world_position);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport projection threw an exception"};
-    }
-}
-
-Result<void> Viewport::isolate_entity(const Scene& scene, EntityId entity) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport isolation requires a live scene"};
-        }
-        return impl_->viewport->isolate_entity(*storage, entity);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport isolation threw an exception"};
-    }
-}
-
-void Viewport::clear_isolation() noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->clear_isolation();
-    }
-}
-
-bool Viewport::is_isolating() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr && impl_->viewport->is_isolating();
-}
-
-std::optional<EntityId> Viewport::isolated_entity() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->isolated_entity()
-                                                          : std::nullopt;
-}
-
-Result<void> Viewport::hide_selected(Scene& scene) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument,
-                         "Viewport hide-selected requires a live scene"};
-        }
-        return impl_->viewport->hide_selected(*storage);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport hide-selected command threw an exception"};
-    }
-}
-
-Result<void> Viewport::show_selected(Scene& scene) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument,
-                         "Viewport show-selected requires a live scene"};
-        }
-        return impl_->viewport->show_selected(*storage);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport show-selected command threw an exception"};
-    }
-}
-
-Result<void> Viewport::isolate_selected(const Scene& scene) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument,
-                         "Viewport isolate-selected requires a live scene"};
-        }
-        return impl_->viewport->isolate_selected(*storage);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport isolate-selected command threw an exception"};
-    }
-}
-
-Result<std::optional<Bounds3>> Viewport::visible_bounds(const Scene& scene) const {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument,
-                         "Viewport visible-bounds query requires a live scene"};
-        }
-        return impl_->viewport->visible_bounds(*storage);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport visible-bounds query threw an exception"};
-    }
-}
-
-Result<void> Viewport::set_section_plane(const SectionPlane& plane) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->set_section_plane(plane);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport section-plane update threw an exception"};
-    }
-}
-
-void Viewport::clear_section_plane() noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->clear_section_plane();
-    }
-}
-
-Result<std::uint32_t> Viewport::add_clipping_box(const ClippingBox& box) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->add_clipping_box(box);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport clipping-box creation threw an exception"};
-    }
-}
-
-Result<void> Viewport::set_clipping_box(std::uint32_t index, const ClippingBox& box) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->set_clipping_box(index, box);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport clipping-box update threw an exception"};
-    }
-}
-
-Result<void> Viewport::remove_clipping_box(std::uint32_t index) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        return impl_->viewport->remove_clipping_box(index);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport clipping-box removal threw an exception"};
-    }
-}
-
-void Viewport::clear_clipping_boxes() noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->clear_clipping_boxes();
-    }
-}
-
-void Viewport::clear_clipping() noexcept {
-    if (impl_ != nullptr && impl_->viewport != nullptr) {
-        impl_->viewport->clear_clipping();
-    }
-}
-
-Result<void> Viewport::set_clipping_helpers_visible(bool visible) noexcept {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-    return impl_->viewport->set_clipping_helpers_visible(visible);
-}
-
-Result<void>
-Viewport::set_clipping_helper_settings(const ClippingHelperSettings& settings) noexcept {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-    return impl_->viewport->set_clipping_helper_settings(settings);
-}
-
-Result<void> Viewport::reset_clipping_box_to_visible_bounds(const Scene& scene,
-                                                            std::uint32_t index) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument,
-                         "Viewport clipping box reset requires a live scene"};
-        }
-        return impl_->viewport->reset_clipping_box_to_visible_bounds(*storage, index);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport clipping box reset threw an exception"};
-    }
-}
-
-Result<std::uint32_t> Viewport::add_clipping_box_from_visible_bounds(const Scene& scene) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument,
-                         "Viewport clipping box creation requires a live scene"};
-        }
-        return impl_->viewport->add_clipping_box_from_visible_bounds(*storage);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Viewport clipping box creation threw an exception"};
-    }
-}
-
-ClippingSnapshot Viewport::clipping_snapshot() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->clipping_snapshot()
-                                                          : ClippingSnapshot{};
-}
-
-Result<void> Viewport::render(const Scene& scene, EntityId camera) {
-    if (impl_ == nullptr || impl_->viewport == nullptr) {
-        return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
-    }
-
-    try {
-        const std::shared_ptr<renderer::Renderer> renderer = impl_->renderer.lock();
-        if (renderer == nullptr) {
-            return Error{ErrorCode::graphics_shutdown,
-                         "Viewport rendering requires live engine services"};
-        }
-        const scene::Storage* storage = scene::Access::storage(scene);
-        if (storage == nullptr) {
-            return Error{ErrorCode::invalid_argument, "Viewport rendering requires a live scene"};
-        }
-        return impl_->viewport->render(*renderer, *storage, camera);
-    } catch (...) {
-        return Error{ErrorCode::unexpected_exception, "Viewport rendering threw an exception"};
-    }
-}
-
-RenderStatistics Viewport::statistics() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->statistics()
-                                                          : RenderStatistics{};
-}
-
-TextureHandle Viewport::color_texture() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->color_texture()
-                                                          : TextureHandle{};
-}
-
-bool Viewport::framebuffer_valid() const noexcept {
-    return impl_ != nullptr && impl_->viewport != nullptr && impl_->viewport->framebuffer_valid();
 }
 
 } // namespace elf3d

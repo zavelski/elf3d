@@ -57,7 +57,7 @@ class Window final {
     GLFWwindow *window_ = nullptr;
 };
 
-elf3d::GraphicsProcedure load_opengl_procedure(const char *name) {
+elf3d::GraphicsProcedure load_opengl_procedure(const char *name) noexcept {
     return glfwGetProcAddress(name);
 }
 

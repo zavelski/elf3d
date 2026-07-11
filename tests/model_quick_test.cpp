@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace {
@@ -57,8 +58,18 @@ class Window final {
     GLFWwindow *window_ = nullptr;
 };
 
-elf3d::GraphicsProcedure load_opengl_procedure(const char *name) {
+elf3d::GraphicsProcedure load_opengl_procedure(const char *name) noexcept {
     return glfwGetProcAddress(name);
+}
+
+[[nodiscard]] std::string path_to_utf8(const std::filesystem::path &path) {
+    const std::u8string utf8 = path.u8string();
+    std::string result;
+    result.reserve(utf8.size());
+    for (const char8_t character : utf8) {
+        result.push_back(static_cast<char>(character));
+    }
+    return result;
 }
 
 [[nodiscard]] int fail(int code, const char *message) {
@@ -121,7 +132,7 @@ int main() {
                                                  "tests" / "fixtures" / "elf3d_smoke" /
                                                  "elf3d_smoke.gltf";
         elf3d::Result<elf3d::LoadedScene> loaded_result =
-            engine->load_scene_with_report(model_path);
+            engine->load_scene_with_report(path_to_utf8(model_path));
         if (!loaded_result) {
             std::cerr << loaded_result.error().message() << '\n';
             return 3;
@@ -129,7 +140,7 @@ int main() {
         elf3d::LoadedScene loaded = std::move(loaded_result).value();
         const elf3d::SceneStatistics expected_statistics{1, 1, 2, 2, 2,  8, 12,
                                                          4, 1, 2, 2, 16, 2, 1};
-        if (!loaded.report.diagnostics.empty() ||
+        if (loaded.report.diagnostic_count() != 0 ||
             loaded.scene->statistics() != expected_statistics) {
             return fail(4, "Embedded smoke model produced unexpected import facts");
         }

@@ -8,7 +8,6 @@ module;
 
 module elf.tool.measurement;
 
-import elf.assets;
 import elf.clipping;
 import elf.math;
 import elf.scene;
@@ -406,25 +405,26 @@ DistanceMeasurementController::anchor_from_hit(const scene::Storage& scene,
     if (!record) {
         return record.error();
     }
-    if (!record.value()->model.has_value()) {
+    const std::optional<scene::ModelComponent>& model = record.value()->model;
+    if (!model.has_value()) {
         return Error{ErrorCode::invalid_measurement_hit,
                      "A measurement point must refer to a model entity"};
     }
-    if (static_cast<std::size_t>(hit.primitive_index) >= record.value()->model->primitives.size()) {
+    if (static_cast<std::size_t>(hit.primitive_index) >= model->primitives.size()) {
         return Error{ErrorCode::invalid_measurement_hit,
                      "A measurement point refers to an invalid model primitive"};
     }
-    const ModelPrimitiveBinding& primitive = record.value()->model->primitives[hit.primitive_index];
-    if (primitive.mesh != hit.mesh) {
+    const Result<scene::RuntimePrimitiveView> primitive =
+        scene.runtime_primitive(hit.entity, hit.primitive_index);
+    if (!primitive) {
+        return primitive.error();
+    }
+    if (primitive.value().mesh != hit.mesh) {
         return Error{ErrorCode::invalid_measurement_hit,
                      "A measurement point mesh does not match its model primitive"};
     }
-    const Result<const assets::MeshAsset*> mesh_result = scene.assets().mesh(hit.mesh);
-    if (!mesh_result) {
-        return mesh_result.error();
-    }
     const std::size_t base = static_cast<std::size_t>(hit.triangle_index) * 3U;
-    if (base + 2U >= mesh_result.value()->indices.size()) {
+    if (base + 2U >= primitive.value().indices().size()) {
         return Error{ErrorCode::invalid_measurement_hit,
                      "A measurement point refers to an invalid mesh triangle"};
     }
@@ -457,45 +457,44 @@ DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
     if (!record) {
         return record.error();
     }
-    if (!record.value()->model.has_value()) {
+    const std::optional<scene::ModelComponent>& model = record.value()->model;
+    if (!model.has_value()) {
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor entity no longer has model geometry"};
     }
-    if (static_cast<std::size_t>(anchor.primitive_index) >=
-        record.value()->model->primitives.size()) {
+    if (static_cast<std::size_t>(anchor.primitive_index) >= model->primitives.size()) {
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor primitive index is no longer valid"};
     }
-    const ModelPrimitiveBinding& primitive =
-        record.value()->model->primitives[anchor.primitive_index];
-    if (primitive.mesh != anchor.mesh) {
+    const Result<scene::RuntimePrimitiveView> primitive =
+        scene.runtime_primitive(anchor.entity, anchor.primitive_index);
+    if (!primitive) {
+        return primitive.error();
+    }
+    if (primitive.value().mesh != anchor.mesh) {
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor mesh no longer matches its model primitive"};
     }
 
-    const Result<const assets::MeshAsset*> mesh_result = scene.assets().mesh(anchor.mesh);
-    if (!mesh_result) {
-        return mesh_result.error();
-    }
-    const assets::MeshAsset& mesh = *mesh_result.value();
     const std::size_t base = static_cast<std::size_t>(anchor.triangle_index) * 3U;
-    if (base + 2U >= mesh.indices.size()) {
+    const std::span<const std::uint32_t> indices = primitive.value().indices();
+    if (base + 2U >= indices.size()) {
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor triangle index is no longer valid"};
     }
-    const std::uint32_t i0 = mesh.indices[base];
-    const std::uint32_t i1 = mesh.indices[base + 1U];
-    const std::uint32_t i2 = mesh.indices[base + 2U];
-    if (static_cast<std::size_t>(i0) >= mesh.vertices.size() ||
-        static_cast<std::size_t>(i1) >= mesh.vertices.size() ||
-        static_cast<std::size_t>(i2) >= mesh.vertices.size()) {
+    const std::uint32_t i0 = indices[base];
+    const std::uint32_t i1 = indices[base + 1U];
+    const std::uint32_t i2 = indices[base + 2U];
+    if (static_cast<std::size_t>(i0) >= primitive.value().vertex_count() ||
+        static_cast<std::size_t>(i1) >= primitive.value().vertex_count() ||
+        static_cast<std::size_t>(i2) >= primitive.value().vertex_count()) {
         return Error{ErrorCode::mesh_index_out_of_range,
                      "A measurement anchor triangle references a stale mesh index"};
     }
 
-    const Float3 a = mesh.vertices[i0].position;
-    const Float3 b = mesh.vertices[i1].position;
-    const Float3 c = mesh.vertices[i2].position;
+    const Float3 a = primitive.value().position(i0);
+    const Float3 b = primitive.value().position(i1);
+    const Float3 c = primitive.value().position(i2);
     const Float3 local_position = barycentric_point(a, b, c, anchor.barycentric_coordinates);
     const Float3 local_normal = cross(subtract(b, a), subtract(c, a));
     const float local_normal_length = length(local_normal);

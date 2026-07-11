@@ -1,6 +1,6 @@
 import elf.interaction;
 
-int main() {
+int elf3d_interaction_test() {
     constexpr float threshold = 4.0F;
     elf3d::interaction::ViewportInteractionState state;
     const elf3d::interaction::PointerInputSnapshot inactive;

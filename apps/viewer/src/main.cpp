@@ -1,4 +1,5 @@
 #include <elf3d/elf3d.h>
+#include <elf3d/core/assert.h>
 #include <elf3d/imgui/context.h>
 #include <elf3d/imgui/texture.h>
 
@@ -30,16 +31,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <exception>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <new>
 #include <optional>
 #include <span>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -58,6 +60,14 @@ constexpr float viewer_ui_font_size_pixels = 20.0F;
 constexpr float panel_content_font_size_pixels = viewer_ui_font_size_pixels * 0.70F;
 constexpr float panel_title_font_size_pixels = viewer_ui_font_size_pixels * 0.875F;
 constexpr float side_dock_width_fraction = 0.27968F;
+
+[[noreturn]] void fatal_viewer_allocation_failure() noexcept {
+    elf3d::fatal_error("Elf3D viewer memory allocation failed");
+}
+
+[[noreturn]] void fatal_unexpected_viewer_exception() noexcept {
+    elf3d::fatal_error("Elf3D viewer encountered an unexpected exception");
+}
 
 class GlfwRuntime final {
   public:
@@ -381,7 +391,7 @@ void push_unique_directory(std::vector<std::filesystem::path> &directories,
     }
 
     std::error_code error;
-    std::filesystem::path path = absolute_path_no_throw(path_from_utf8(value.value()));
+    std::filesystem::path path = absolute_path_no_throw(path_from_utf8(*value));
     if (!std::filesystem::is_directory(path, error) || error) {
         return std::nullopt;
     }
@@ -397,16 +407,17 @@ void initialize_open_browser_bookmarks(ViewerState &state) {
     const std::optional<std::filesystem::path> one_drive = environment_directory("OneDrive");
     std::vector<std::filesystem::path> defaults;
     if (user_profile.has_value()) {
-        defaults.push_back(user_profile.value());
-        defaults.push_back(user_profile.value() / "Desktop");
-        defaults.push_back(user_profile.value() / "Documents");
-        defaults.push_back(user_profile.value() / "Downloads");
-        defaults.push_back(user_profile.value() / "Pictures");
-        defaults.push_back(user_profile.value() / "Videos");
-        defaults.push_back(user_profile.value() / "Music");
+        const std::filesystem::path& profile_path = *user_profile;
+        defaults.push_back(profile_path);
+        defaults.push_back(profile_path / "Desktop");
+        defaults.push_back(profile_path / "Documents");
+        defaults.push_back(profile_path / "Downloads");
+        defaults.push_back(profile_path / "Pictures");
+        defaults.push_back(profile_path / "Videos");
+        defaults.push_back(profile_path / "Music");
     }
     if (one_drive.has_value()) {
-        defaults.push_back(one_drive.value());
+        defaults.push_back(*one_drive);
     }
     defaults.push_back(fallback_open_directory());
 
@@ -878,7 +889,7 @@ constexpr std::array<ToolbarIconSpec, static_cast<std::size_t>(ToolbarIcon::coun
 struct ToolbarIcons {
     std::array<ToolbarTexture, static_cast<std::size_t>(ToolbarIcon::count)> textures;
 
-    [[nodiscard]] const ToolbarTexture &at(ToolbarIcon icon) const noexcept {
+    [[nodiscard]] const ToolbarTexture &texture(ToolbarIcon icon) const noexcept {
         return textures[static_cast<std::size_t>(icon)];
     }
 };
@@ -890,7 +901,7 @@ struct ToolbarIcons {
         std::optional<DecodedImage> image = decode_png_rgba(icon_root / spec.file_name);
         if (image.has_value()) {
             const bool uploaded =
-                icons.textures[static_cast<std::size_t>(spec.icon)].upload(image.value());
+                icons.textures[static_cast<std::size_t>(spec.icon)].upload(*image);
             (void)uploaded;
         }
     }
@@ -981,7 +992,8 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
 
 [[nodiscard]] elf3d::Result<ViewerScene> load_model_scene(elf3d::Engine &engine,
                                                           const std::filesystem::path &path) {
-    elf3d::Result<elf3d::LoadedScene> loaded_result = engine.load_scene_with_report(path);
+    elf3d::Result<elf3d::LoadedScene> loaded_result =
+        engine.load_scene_with_report(path_to_utf8(path));
     if (!loaded_result) {
         return loaded_result.error();
     }
@@ -1018,8 +1030,12 @@ void glfw_drop_callback(GLFWwindow *window, int path_count, const char **paths) 
     }
     try {
         state->dropped_path = paths[0];
-    } catch (...) {
+    } catch (const std::bad_alloc&) {
+        fatal_viewer_allocation_failure();
+    } catch (const std::length_error&) {
         state->drop_copy_failed = true;
+    } catch (...) {
+        fatal_unexpected_viewer_exception();
     }
 }
 
@@ -1227,7 +1243,7 @@ struct ToolbarButtonPalette {
 bool toolbar_button(const ToolbarIcons &icons, ToolbarIcon icon, const char *id,
                     const char *tooltip_text, float icon_size, bool active = false,
                     bool enabled = true) {
-    const ToolbarTexture &texture = icons.at(icon);
+    const ToolbarTexture &texture = icons.texture(icon);
     const ImVec2 image_size{icon_size, icon_size};
     const ImVec2 fallback_size{icon_size + 6.0F, icon_size + 6.0F};
     const ImVec4 transparent{0.0F, 0.0F, 0.0F, 0.0F};
@@ -1491,7 +1507,7 @@ ImGuiID build_main_dockspace(ViewerState &state) {
     return dockspace_id;
 }
 
-elf3d::GraphicsProcedure load_opengl_procedure(const char *name) {
+elf3d::GraphicsProcedure load_opengl_procedure(const char *name) noexcept {
     return glfwGetProcAddress(name);
 }
 
@@ -1735,7 +1751,7 @@ struct NavigationCursorSample {
         return sample;
     }
 
-    sample.position = cursor_position.value();
+    sample.position = *cursor_position;
     if (state.navigation_cursor_position.has_value()) {
         sample.delta = ImVec2{sample.position.x - state.navigation_cursor_position->x,
                               sample.position.y - state.navigation_cursor_position->y};
@@ -1809,7 +1825,7 @@ void sync_navigation_cursor(GLFWwindow *window, ViewerState &state,
         return 0.0F;
     }
 
-    const ImVec2 position = state.navigation_wheel_position.value();
+    const ImVec2 position = *state.navigation_wheel_position;
     const ImVec2 item_max{item_min.x + item_size.x, item_min.y + item_size.y};
     const bool inside = position.x >= item_min.x && position.x < item_max.x &&
                         position.y >= item_min.y && position.y < item_max.y;
@@ -1878,7 +1894,7 @@ void reset_demo_cube_transform(ViewerState &state, ViewerScene &scene) {
     }
 
     const elf3d::Result<void> reset_result =
-        scene.scene->set_local_transform(scene.cube.value(), elf3d::Transform{});
+        scene.scene->set_local_transform(*scene.cube, elf3d::Transform{});
     if (!reset_result) {
         set_viewport_error(state, reset_result.error());
     }
@@ -1894,7 +1910,7 @@ void update_demo_cube_animation(ViewerState &state, ViewerScene &scene) {
     elf3d::Transform cube_transform;
     cube_transform.rotation = axis_angle({0.0F, 1.0F, 0.0F}, state.rotation_angle);
     const elf3d::Result<void> transform_result =
-        scene.scene->set_local_transform(scene.cube.value(), cube_transform);
+        scene.scene->set_local_transform(*scene.cube, cube_transform);
     if (!transform_result) {
         set_viewport_error(state, transform_result.error());
     }
@@ -1906,7 +1922,7 @@ void apply_demo_cube_color(ViewerState &state, ViewerScene &scene) {
     }
 
     const elf3d::Result<void> material_result = scene.scene->set_material(
-        scene.cube_material.value(),
+        *scene.cube_material,
         elf3d::MaterialDescription{elf3d::Color4{state.cube_color[0], state.cube_color[1],
                                                  state.cube_color[2], state.cube_color[3]}});
     if (!material_result) {
@@ -1940,7 +1956,7 @@ void draw_measurement_label(ViewerState &state, elf3d::Viewport &engine_viewport
         format_distance(meters, engine_viewport.measurement_settings().display_unit);
     const elf3d::Result<elf3d::ProjectedViewportPoint> projected =
         engine_viewport.project_world_to_viewport(*scene.scene, scene.camera,
-                                                  measurement.midpoint_world_position.value());
+                                                  *measurement.midpoint_world_position);
     if (!projected) {
         set_viewport_error(state, projected.error());
         return;
@@ -2222,12 +2238,21 @@ void build_model_information(ImGuiID dockspace_id, ViewerState &state, const Vie
         if (scene.is_imported()) {
             ImGui::Separator();
             ImGui::Text("Import diagnostics: %llu",
-                        static_cast<unsigned long long>(scene.load_report.diagnostics.size()));
-            for (const elf3d::SceneLoadDiagnostic &diagnostic : scene.load_report.diagnostics) {
-                ImGui::BulletText("%s", diagnostic.message.c_str());
+                        static_cast<unsigned long long>(scene.load_report.diagnostic_count()));
+            for (std::size_t index = 0; index < scene.load_report.diagnostic_count(); ++index) {
+                const elf3d::Result<elf3d::SceneLoadDiagnosticView> diagnostic_result =
+                    scene.load_report.diagnostic(index);
+                if (!diagnostic_result) {
+                    continue;
+                }
+                const elf3d::SceneLoadDiagnosticView diagnostic = diagnostic_result.value();
+                ImGui::BulletText("%.*s", static_cast<int>(diagnostic.message.size()),
+                                  diagnostic.message.data());
                 if (diagnostic.source_context.has_value()) {
+                    const std::string_view source_context = *diagnostic.source_context;
                     ImGui::Indent();
-                    ImGui::TextWrapped("Context: %s", diagnostic.source_context->c_str());
+                    ImGui::TextWrapped("Context: %.*s", static_cast<int>(source_context.size()),
+                                       source_context.data());
                     ImGui::Unindent();
                 }
             }
@@ -2361,14 +2386,15 @@ void build_navigation_settings_window(ImGuiID dockspace_id, ViewerState &state,
 [[nodiscard]] std::string entity_label(const ViewerScene &scene, elf3d::EntityId entity) {
     const elf3d::Result<std::string_view> name = scene.scene->entity_name(entity);
     if (name && !name.value().empty()) {
-        return std::string{name.value()};
+        const std::string_view text = name.value();
+        return std::string{text};
     }
     return std::string{"Entity "} + std::to_string(entity.debug_value());
 }
 
 [[nodiscard]] std::string selected_entity_label(const ViewerScene &scene,
                                                 const elf3d::SelectionSnapshot &selection) {
-    return selection.entity.has_value() ? entity_label(scene, selection.entity.value()) : "none";
+    return selection.entity.has_value() ? entity_label(scene, *selection.entity) : "none";
 }
 
 void build_selection_panel(ImGuiID dockspace_id, ViewerState &state, const ViewerScene &scene,
@@ -2418,7 +2444,7 @@ void build_selection_panel(ImGuiID dockspace_id, ViewerState &state, const Viewe
             ImGui::Text("Entity ID: %llu",
                         static_cast<unsigned long long>(selection.entity->debug_value()));
             if (selection.pick_hit.has_value()) {
-                const elf3d::PickHit &hit = selection.pick_hit.value();
+                const elf3d::PickHit &hit = *selection.pick_hit;
                 ImGui::Text("Mesh ID: %llu",
                             static_cast<unsigned long long>(hit.mesh.debug_value()));
                 ImGui::Text("Primitive: %u", hit.primitive_index);
@@ -2452,9 +2478,6 @@ void build_selection_panel(ImGuiID dockspace_id, ViewerState &state, const Viewe
                     static_cast<unsigned long long>(picking.latest_gpu_draw_calls));
         ImGui::Text("GPU pixels read: %llu",
                     static_cast<unsigned long long>(picking.latest_gpu_pixels_read));
-        ImGui::Text("GPU pass / readback: %llu / %llu us",
-                    static_cast<unsigned long long>(picking.latest_gpu_pass_time_microseconds),
-                    static_cast<unsigned long long>(picking.latest_gpu_readback_time_microseconds));
         ImGui::Text("CPU refinements / fallbacks: %llu / %llu",
                     static_cast<unsigned long long>(picking.latest_cpu_refinements),
                     static_cast<unsigned long long>(picking.latest_cpu_fallbacks));
@@ -2646,9 +2669,9 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerState &state, const Viewer
         elf3d::ClippingSnapshot snapshot = engine_viewport.clipping_snapshot();
         const elf3d::Result<std::optional<elf3d::Bounds3>> visible_bounds =
             engine_viewport.visible_bounds(*scene.scene);
+        const bool has_visible_bounds = visible_bounds && visible_bounds.value().has_value();
         ImGui::TextUnformatted(
-            clipping_status(snapshot,
-                            visible_bounds && visible_bounds.value().has_value()).c_str());
+            clipping_status(snapshot, has_visible_bounds).c_str());
 
         if (ImGui::CollapsingHeader("Section Plane", ImGuiTreeNodeFlags_DefaultOpen)) {
             elf3d::SectionPlane plane = snapshot.section_plane;
@@ -2688,10 +2711,9 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerState &state, const Viewer
                 changed = true;
             }
             ImGui::SameLine();
-            ImGui::BeginDisabled(!visible_bounds || !visible_bounds.value().has_value());
-            if (ImGui::SmallButton("Center") && visible_bounds &&
-                visible_bounds.value().has_value()) {
-                plane.point = bounds_center(visible_bounds.value().value());
+            ImGui::BeginDisabled(!has_visible_bounds);
+            if (ImGui::SmallButton("Center") && has_visible_bounds) {
+                plane.point = bounds_center(*visible_bounds.value());
                 changed = true;
             }
             ImGui::EndDisabled();
@@ -2737,7 +2759,7 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerState &state, const Viewer
                         set_viewport_error(state, result.error());
                     }
                 }
-                ImGui::BeginDisabled(!visible_bounds || !visible_bounds.value().has_value());
+                ImGui::BeginDisabled(!has_visible_bounds);
                 if (ImGui::SmallButton("Reset to Visible Bounds")) {
                     const elf3d::Result<void> result =
                         engine_viewport.reset_clipping_box_to_visible_bounds(*scene.scene, index);
@@ -2760,7 +2782,7 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerState &state, const Viewer
 
             ImGui::Separator();
             ImGui::BeginDisabled(snapshot.box_count >= elf3d::maximum_clipping_boxes ||
-                                 !visible_bounds || !visible_bounds.value().has_value());
+                                 !has_visible_bounds);
             if (ImGui::Button("Add Box from Visible Bounds")) {
                 const elf3d::Result<std::uint32_t> result =
                     engine_viewport.add_clipping_box_from_visible_bounds(*scene.scene);
@@ -2855,7 +2877,7 @@ selected_hierarchy_ancestors(const std::vector<elf3d::SceneHierarchyItem> &items
     }
 
     for (std::size_t index = 0; index < items.size(); ++index) {
-        if (items[index].entity == selected.value()) {
+        if (items[index].entity == *selected) {
             selected_index = index;
             break;
         }
@@ -2864,8 +2886,9 @@ selected_hierarchy_ancestors(const std::vector<elf3d::SceneHierarchyItem> &items
         return ancestors;
     }
 
-    std::uint32_t wanted_depth = items[selected_index.value()].depth;
-    for (std::size_t index = selected_index.value(); index > 0 && wanted_depth > 0;) {
+    const std::size_t selected_item_index = *selected_index;
+    std::uint32_t wanted_depth = items[selected_item_index].depth;
+    for (std::size_t index = selected_item_index; index > 0 && wanted_depth > 0;) {
         --index;
         if (items[index].depth + 1U == wanted_depth) {
             ancestors[index] = true;
@@ -2949,7 +2972,7 @@ void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerState &state, Viewe
 
         const std::optional<elf3d::EntityId> isolated = engine_viewport.isolated_entity();
         if (isolated.has_value()) {
-            const std::string label = entity_label(scene, isolated.value());
+            const std::string label = entity_label(scene, *isolated);
             ImGui::Text("Isolation: %s", label.c_str());
             ImGui::SameLine();
             if (ImGui::SmallButton("Exit Isolation")) {
@@ -3045,7 +3068,7 @@ void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerState &state, Viewe
                 apply_hierarchy_error(
                     state, engine_viewport.set_selected_entity(*scene.scene, item.entity));
             }
-            if (should_reveal && selected_index.has_value() && selected_index.value() == index) {
+            if (should_reveal && selected_index.has_value() && *selected_index == index) {
                 ImGui::SetScrollHereY(0.5F);
                 state.last_revealed_hierarchy_selection = item.entity;
             }
@@ -3067,7 +3090,7 @@ void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerState &state, Viewe
                 ImGui::SameLine();
                 ImGui::TextDisabled("inherited hidden");
             }
-            if (isolated.has_value() && isolated.value() == item.entity) {
+            if (isolated.has_value() && *isolated == item.entity) {
                 ImGui::SameLine();
                 ImGui::TextUnformatted("isolated");
             }
@@ -3223,20 +3246,18 @@ void build_open_browser_system_locations(ViewerState &state) {
     build_open_browser_sidebar_section("System");
     const std::optional<std::filesystem::path> user_profile = environment_directory("USERPROFILE");
     if (user_profile.has_value()) {
-        build_open_browser_sidebar_item(state, "[H]", "Home", user_profile.value());
-        build_open_browser_sidebar_item(state, "[D]", "Desktop", user_profile.value() / "Desktop");
-        build_open_browser_sidebar_item(state, "[D]", "Documents",
-                                        user_profile.value() / "Documents");
-        build_open_browser_sidebar_item(state, "[D]", "Downloads",
-                                        user_profile.value() / "Downloads");
-        build_open_browser_sidebar_item(state, "[M]", "Music", user_profile.value() / "Music");
-        build_open_browser_sidebar_item(state, "[P]", "Pictures",
-                                        user_profile.value() / "Pictures");
-        build_open_browser_sidebar_item(state, "[V]", "Videos", user_profile.value() / "Videos");
+        const std::filesystem::path& profile_path = *user_profile;
+        build_open_browser_sidebar_item(state, "[H]", "Home", profile_path);
+        build_open_browser_sidebar_item(state, "[D]", "Desktop", profile_path / "Desktop");
+        build_open_browser_sidebar_item(state, "[D]", "Documents", profile_path / "Documents");
+        build_open_browser_sidebar_item(state, "[D]", "Downloads", profile_path / "Downloads");
+        build_open_browser_sidebar_item(state, "[M]", "Music", profile_path / "Music");
+        build_open_browser_sidebar_item(state, "[P]", "Pictures", profile_path / "Pictures");
+        build_open_browser_sidebar_item(state, "[V]", "Videos", profile_path / "Videos");
     }
     const std::optional<std::filesystem::path> one_drive = environment_directory("OneDrive");
     if (one_drive.has_value()) {
-        build_open_browser_sidebar_item(state, "[O]", "OneDrive", one_drive.value());
+        build_open_browser_sidebar_item(state, "[O]", "OneDrive", *one_drive);
     }
 }
 
@@ -3384,7 +3405,7 @@ void build_open_browser_file_table(ViewerState &state,
 
     ImGui::EndTable();
     if (navigation_request.has_value()) {
-        set_open_browser_directory(state, navigation_request.value());
+        set_open_browser_directory(state, *navigation_request);
     }
 }
 
@@ -3471,13 +3492,13 @@ void build_open_browser_file_table(ViewerState &state,
         if (ImGui::BeginChild("##OpenBrowserFiles", ImVec2{0.0F, -footer_height}, true)) {
             build_open_browser_file_table(state, file_request);
             if (file_request.has_value()) {
-                set_open_browser_selected_file(state, file_request.value());
+                set_open_browser_selected_file(state, *file_request);
             }
         }
         ImGui::EndChild();
 
         if (file_request.has_value()) {
-            requested_path = path_to_utf8(file_request.value());
+            requested_path = path_to_utf8(*file_request);
             ImGui::CloseCurrentPopup();
         }
 
@@ -3493,7 +3514,7 @@ void build_open_browser_file_table(ViewerState &state,
         ImGui::SameLine();
         ImGui::BeginDisabled(!can_open);
         if (ImGui::Button("Open", ImVec2{button_width, 0.0F}) || (open_from_enter && can_open)) {
-            requested_path = path_to_utf8(candidate.value());
+            requested_path = path_to_utf8(*candidate);
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndDisabled();
@@ -3557,7 +3578,7 @@ void build_status_bar(const ViewerState &state, const elf3d::Engine &engine,
         std::string isolation_status = "none";
         const std::optional<elf3d::EntityId> isolated = engine_viewport.isolated_entity();
         if (isolated.has_value()) {
-            isolation_status = entity_label(scene, isolated.value());
+            isolation_status = entity_label(scene, *isolated);
         }
         const elf3d::DistanceMeasurementSnapshot measurement =
             engine_viewport.distance_measurement_snapshot(*scene.scene);
@@ -3646,10 +3667,14 @@ void attempt_model_load(elf3d::Engine &engine, elf3d::Viewport &engine_viewport,
         state.rotation_angle = 0.0F;
         state.statistics = {};
         state.last_revealed_hierarchy_selection.reset();
-    } catch (...) {
+    } catch (const std::bad_alloc&) {
+        fatal_viewer_allocation_failure();
+    } catch (const std::filesystem::filesystem_error&) {
         report_load_failure(state, source_path,
-                            elf3d::Error{elf3d::ErrorCode::unexpected_exception,
+                            elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                          "The viewer could not convert the UTF-8 source path"});
+    } catch (...) {
+        fatal_unexpected_viewer_exception();
     }
 }
 
@@ -3815,7 +3840,7 @@ int run_viewer(int argument_count, char **arguments) {
                 const elf3d::Result<std::optional<elf3d::Bounds3>> bounds =
                     engine_viewport->visible_bounds(*active_scene.scene);
                 if (bounds && bounds.value().has_value()) {
-                    plane.point = bounds_center(bounds.value().value());
+                    plane.point = bounds_center(*bounds.value());
                 }
             }
             const elf3d::Result<void> result = engine_viewport->set_section_plane(plane);
@@ -3933,19 +3958,19 @@ int run_viewer(int argument_count, char **arguments) {
             engine_viewport->clear_isolation();
         }
         if (state.dropped_path.has_value()) {
-            std::string path = std::move(state.dropped_path).value();
+            std::string path = std::move(*state.dropped_path);
             state.dropped_path.reset();
             attempt_model_load(*engine, *engine_viewport, state, active_scene, path);
         }
         if (state.drop_copy_failed) {
             state.drop_copy_failed = false;
             report_load_failure(state, "Dropped file",
-                                elf3d::Error{elf3d::ErrorCode::unexpected_exception,
+                                elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                              "The viewer could not copy the dropped UTF-8 path"});
         }
         const std::optional<std::string> modal_path = build_open_modal(state, active_scene);
         if (modal_path.has_value()) {
-            attempt_model_load(*engine, *engine_viewport, state, active_scene, modal_path.value());
+            attempt_model_load(*engine, *engine_viewport, state, active_scene, *modal_path);
         }
 
         build_rendering_panel(dockspace_id, state, active_scene);
@@ -3983,13 +4008,11 @@ int run_viewer(int argument_count, char **arguments) {
 int run_viewer_entry(int argument_count, char **arguments) {
     try {
         return run_viewer(argument_count, arguments);
-    } catch (const std::exception &exception) {
-        std::cerr << "Elf3D viewer terminated after an unexpected exception: " << exception.what()
-                  << '\n';
+    } catch (const std::bad_alloc&) {
+        fatal_viewer_allocation_failure();
     } catch (...) {
-        std::cerr << "Elf3D viewer terminated after an unknown exception\n";
+        fatal_unexpected_viewer_exception();
     }
-    return 1;
 }
 
 #if defined(_WIN32)

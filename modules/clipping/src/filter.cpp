@@ -324,7 +324,7 @@ Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4 &world) noexcept {
         expand(result, math::transform_point(world, corner));
     }
     ELF3D_ASSERT(result.has_value());
-    return result.value();
+    return *result;
 }
 
 bool contains_point(const ClippingFilter &filter, Float3 world_position) noexcept {
@@ -364,7 +364,7 @@ BoundsClassification classify_bounds(const ClippingFilter &filter,
         any_box_overlap = true;
         const std::optional<Bounds3> overlap = intersect_bounds(world_bounds, box);
         ELF3D_ASSERT(overlap.has_value());
-        if (plane_may_leave_bounds(filter, overlap.value())) {
+        if (plane_may_leave_bounds(filter, *overlap)) {
             any_region_survives_plane = true;
         }
         if (bounds_inside_box(world_bounds, box)) {
@@ -405,7 +405,7 @@ std::optional<Bounds3> clipped_bounds(const ClippingFilter &filter,
             continue;
         }
         const std::optional<Bounds3> clipped =
-            clip_bounds_against_plane(filter, overlapped.value());
+            clip_bounds_against_plane(filter, *overlapped);
         expand(result, clipped);
     }
     return result;

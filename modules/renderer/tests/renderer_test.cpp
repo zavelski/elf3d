@@ -1,6 +1,7 @@
 #include <elf3d/assets.h>
 #include <elf3d/core/result.h>
 #include <elf3d/graphics.h>
+#include <elf3d/model.h>
 #include <elf3d/scene.h>
 #include <elf3d/viewport.h>
 
@@ -16,6 +17,7 @@
 import elf.assets;
 import elf.graphics;
 import elf.math;
+import elf.model;
 import elf.renderer;
 import elf.scene;
 
@@ -28,11 +30,11 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
     [[nodiscard]] elf3d::Extent2D extent() const noexcept override {
         return extent_value;
     }
-    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) override {
+    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) noexcept override {
         extent_value = extent;
         return {};
     }
-    [[nodiscard]] elf3d::Result<void> clear(elf3d::Color4) override {
+    [[nodiscard]] elf3d::Result<void> clear(elf3d::Color4) noexcept override {
         ++clear_count;
         return {};
     }
@@ -55,11 +57,11 @@ class FakePickingTarget final : public elf3d::graphics::PickingTarget {
     [[nodiscard]] elf3d::Extent2D extent() const noexcept override {
         return extent_value;
     }
-    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) override {
+    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) noexcept override {
         extent_value = extent;
         return {};
     }
-    [[nodiscard]] elf3d::Result<void> clear() override {
+    [[nodiscard]] elf3d::Result<void> clear() noexcept override {
         ++clear_count;
         return {};
     }
@@ -115,36 +117,36 @@ class FakeDevice final : public elf3d::graphics::Device {
         return elf3d::GraphicsBackend::opengl;
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::RenderTarget>>
-    create_render_target(elf3d::Extent2D) override {
+    create_render_target(elf3d::Extent2D) noexcept override {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument, "Not used"};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::PickingTarget>>
-    create_picking_target(elf3d::Extent2D initial_extent) override {
+    create_picking_target(elf3d::Extent2D initial_extent) noexcept override {
         auto target = std::make_unique<FakePickingTarget>();
         target->extent_value = initial_extent;
         return std::unique_ptr<elf3d::graphics::PickingTarget>{std::move(target)};
     }
     [[nodiscard]] elf3d::Result<elf3d::NativeTextureView>
-    native_texture_view(elf3d::TextureHandle) const override {
+    native_texture_view(elf3d::TextureHandle) const noexcept override {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument, "Not used"};
     }
-    [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::StaticMesh>>
-    create_static_mesh(const elf3d::graphics::StaticMeshDescription& description) override {
+    [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::StaticMesh>> create_static_mesh(
+        const elf3d::graphics::StaticMeshDescription& description) noexcept override {
         ++upload_count;
         return std::unique_ptr<elf3d::graphics::StaticMesh>{std::make_unique<FakeMesh>(
             description.vertex_count, static_cast<std::uint32_t>(description.indices.size()))};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::Texture2D>>
-    create_texture_2d(const elf3d::graphics::Texture2DDescription& description) override {
+    create_texture_2d(const elf3d::graphics::Texture2DDescription& description) noexcept override {
         ++texture_upload_count;
-        texture_descriptions.push_back(TextureDescriptionSnapshot{
-            description.format, description.wrap_u, description.wrap_v, description.min_filter,
-            description.mag_filter});
+        texture_descriptions.push_back(
+            TextureDescriptionSnapshot{description.format, description.wrap_u, description.wrap_v,
+                                       description.min_filter, description.mag_filter});
         return std::unique_ptr<elf3d::graphics::Texture2D>{std::make_unique<FakeTexture>()};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::GraphicsPipeline>>
     create_graphics_pipeline(
-        const elf3d::graphics::GraphicsPipelineDescription& description) override {
+        const elf3d::graphics::GraphicsPipelineDescription& description) noexcept override {
         vertex_shader_source = description.vertex_shader_source;
         fragment_shader_source = description.fragment_shader_source;
         return std::unique_ptr<elf3d::graphics::GraphicsPipeline>{std::make_unique<FakePipeline>()};
@@ -152,7 +154,7 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<void>
     draw_indexed(elf3d::graphics::RenderTarget&, elf3d::graphics::GraphicsPipeline&,
                  elf3d::graphics::StaticMesh&,
-                 const elf3d::graphics::DrawIndexedDescription& description) override {
+                 const elf3d::graphics::DrawIndexedDescription& description) noexcept override {
         ++draw_count;
         std::array<bool, elf3d::graphics::material_texture_count> texture_presence{};
         for (std::size_t index = 0; index < texture_presence.size(); ++index) {
@@ -167,25 +169,25 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
     [[nodiscard]] elf3d::Result<void>
     draw_overlay(elf3d::graphics::RenderTarget&,
-                 const elf3d::graphics::DrawOverlayDescription& description) override {
+                 const elf3d::graphics::DrawOverlayDescription& description) noexcept override {
         ++overlay_draw_count;
         overlay_line_count += static_cast<int>(description.lines.size());
         overlay_marker_count += static_cast<int>(description.markers.size());
         return {};
     }
-    [[nodiscard]] elf3d::Result<void>
-    draw_picking_indexed(elf3d::graphics::PickingTarget&, elf3d::graphics::StaticMesh&,
-                         const elf3d::graphics::PickingDrawDescription& description) override {
+    [[nodiscard]] elf3d::Result<void> draw_picking_indexed(
+        elf3d::graphics::PickingTarget&, elf3d::graphics::StaticMesh&,
+        const elf3d::graphics::PickingDrawDescription& description) noexcept override {
         ++picking_draw_count;
         picking_draws.push_back(description);
         return {};
     }
     [[nodiscard]] elf3d::Result<std::optional<elf3d::graphics::PickingPixel>>
-    read_picking_pixel(elf3d::graphics::PickingTarget&, elf3d::Float2) override {
+    read_picking_pixel(elf3d::graphics::PickingTarget&, elf3d::Float2) noexcept override {
         return picking_pixel;
     }
     [[nodiscard]] elf3d::Result<std::vector<float>>
-    read_picking_depths(elf3d::graphics::PickingTarget& target) override {
+    read_picking_depths(elf3d::graphics::PickingTarget& target) noexcept override {
         if (!picking_depths.empty()) {
             return picking_depths;
         }
@@ -242,7 +244,7 @@ class FakeDevice final : public elf3d::graphics::Device {
 
 } // namespace
 
-int main() {
+int elf3d_renderer_test() {
     constexpr std::uintptr_t engine_token = 11;
     const elf3d::SceneId id = elf3d::detail::SceneHandleAccess::create_scene(engine_token, 1);
     elf3d::scene::Storage scene{id};
@@ -559,6 +561,67 @@ int main() {
     }
     renderer.value()->release_scene(second_id);
     renderer.value()->release_scene(id);
+
+    const elf3d::SceneId document_scene_id =
+        elf3d::detail::SceneHandleAccess::create_scene(engine_token, 3);
+    elf3d::scene::Storage document_scene{document_scene_id};
+    elf3d::Document document;
+    const auto document_mesh = document.create_mesh("document-quad");
+    elf3d::ModelMaterialDescription document_material_description;
+    document_material_description.base_color = {0.1F, 0.2F, 0.3F, 0.4F};
+    document_material_description.double_sided = true;
+    document_material_description.alpha_mode = elf3d::ModelAlphaMode::blend;
+    const auto document_material = document.create_material(document_material_description);
+    if (!document_mesh || !document_material) {
+        return 49;
+    }
+    elf3d::PrimitiveData document_quad;
+    document_quad.positions = {
+        {-1.0F, -1.0F, 0.0F},
+        {1.0F, -1.0F, 0.0F},
+        {1.0F, 1.0F, 0.0F},
+        {-1.0F, 1.0F, 0.0F},
+    };
+    document_quad.normals = {
+        {0.0F, 0.0F, 1.0F},
+        {0.0F, 0.0F, 1.0F},
+        {0.0F, 0.0F, 1.0F},
+        {0.0F, 0.0F, 1.0F},
+    };
+    document_quad.indices = {0, 1, 2, 0, 2, 3};
+    const auto document_primitive = document.create_primitive(
+        document_mesh.value(), document_material.value(), std::move(document_quad));
+    if (!document_primitive || !document_scene.set_document(std::move(document))) {
+        return 49;
+    }
+    const auto document_model = document_scene.create_entity();
+    const auto document_camera =
+        document_scene.create_perspective_camera(elf3d::PerspectiveCameraDescription{});
+    if (!document_model || !document_camera) {
+        return 49;
+    }
+    const std::array<elf3d::PrimitiveId, 1> document_primitives{{document_primitive.value()}};
+    if (!document_scene.set_model_document_primitives(document_model.value(),
+                                                      document_primitives)) {
+        return 49;
+    }
+    const auto document_list =
+        elf3d::renderer::build_render_list(document_scene, document_camera.value(), {640, 360});
+    const int upload_count_before_document = device->upload_count;
+    const std::size_t draw_count_before_document = device->draws.size();
+    const auto document_render =
+        renderer.value()->render(document_scene, document_camera.value(), target, {}, {});
+    const elf3d::SceneStatistics expected_document_scene{2, 1, 1, 1, 1, 4, 6, 2};
+    const elf3d::RenderStatistics expected_document_render{1, 2, 4, 6, 0, 0, 0, 0, 0};
+    if (!document_list || document_list.value().items.size() != 1 || !document_render ||
+        document_scene.statistics() != expected_document_scene ||
+        document_render.value() != expected_document_render ||
+        device->upload_count != upload_count_before_document + 1 ||
+        device->draws.size() != draw_count_before_document + 1 ||
+        !device->draws.back().double_sided ||
+        device->draws.back().alpha_mode != elf3d::AlphaMode::blend) {
+        return 49;
+    }
 
     target.extent_value = {};
     const auto zero = renderer.value()->render(scene, non_camera.value(), target, {}, {});

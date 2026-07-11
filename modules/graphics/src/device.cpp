@@ -4,16 +4,16 @@ module elf.graphics;
 
 namespace elf3d::graphics {
 
-StaticMesh::~StaticMesh() = default;
+StaticMesh::~StaticMesh() noexcept = default;
 
-Texture2D::~Texture2D() = default;
+Texture2D::~Texture2D() noexcept = default;
 
-GraphicsPipeline::~GraphicsPipeline() = default;
+GraphicsPipeline::~GraphicsPipeline() noexcept = default;
 
-RenderTarget::~RenderTarget() = default;
+RenderTarget::~RenderTarget() noexcept = default;
 
-PickingTarget::~PickingTarget() = default;
+PickingTarget::~PickingTarget() noexcept = default;
 
-Device::~Device() = default;
+Device::~Device() noexcept = default;
 
 } // namespace elf3d::graphics

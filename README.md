@@ -8,7 +8,7 @@ rendering, and inspecting static glTF 2.0 scenes.
 ## Download
 
 Download the current Windows x64 package from the
-[Elf3D 0.7.7 release](https://github.com/zavelski/elf3d/releases/tag/v0.7.7).
+[Elf3D 0.8.0 release](https://github.com/zavelski/elf3d/releases/tag/v0.8.0).
 Extract the ZIP and run `elf3d_viewer.exe`.
 
 Requirements:
@@ -23,6 +23,10 @@ guide, reference, and license notices.
 ## Features
 
 - `.gltf` and `.glb` loading with structured compatibility diagnostics.
+- Source-integrated static `elf3d_model` library with CPU-side
+  `elf3d::Document` construction, material/image/texture/sampler storage,
+  inspection, validation, primitive replacement, and glTF/GLB import/export
+  APIs. Import/export retains all scenes and safe source image/JSON metadata.
 - Scene hierarchy, transforms, perspective cameras, materials, textures,
   visibility, bounds, and model statistics.
 - OpenGL 4.1 rendering with physically based material values, emissive and
@@ -57,12 +61,20 @@ argument, or drop it onto the viewer.
 Release commands, output paths, and troubleshooting are in
 [`docs/BUILDING.md`](docs/BUILDING.md).
 
+For the model-only static library and tests:
+
+```powershell
+cmake --preset windows-model-debug
+cmake --build --preset windows-model-debug --parallel
+ctest --preset windows-model-debug --output-on-failure
+```
+
 ## Repository Layout
 
 ```text
 include/elf3d/       Public C++ headers
 facade/elf3d/        Shared-library entry points
-modules/             Engine source and focused tests
+modules/             Model, engine, import, rendering source, and focused tests
 integrations/imgui/  Dear ImGui presentation integration
 apps/viewer/         Desktop viewer and runtime assets
 tests/               Integration tests and distributable fixture

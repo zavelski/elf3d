@@ -13,7 +13,7 @@ bool nearly_equal(float left, float right) noexcept {
 
 } // namespace
 
-int main() {
+int elf3d_math_conventions_test() {
     const elf3d::Float2 public_value{2.0F, -3.5F};
     const elf3d::math::Vector2 vector = elf3d::math::to_vector(public_value);
     if (vector.x != 2.0F || vector.y != -3.5F || elf3d::math::to_float2(vector) != public_value) {

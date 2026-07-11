@@ -1,6 +1,7 @@
 module;
 
 #include <elf3d/clipping.h>
+#include <elf3d/core/assert.h>
 #include <elf3d/graphics.h>
 #include <elf3d/math/value_types.h>
 #include <elf3d/measurement.h>
@@ -14,6 +15,7 @@ module;
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <new>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -40,6 +42,14 @@ constexpr char thread_failure_message[] =
     "The graphics operation must run on the engine owning graphics thread";
 
 constinit const int opengl_resource_token_anchor = 0;
+
+[[noreturn]] void fatal_opengl_allocation_failure() noexcept {
+    fatal_error("Elf3D OpenGL backend memory allocation failed");
+}
+
+[[noreturn]] void fatal_unexpected_opengl_boundary_exception() noexcept {
+    fatal_error("Elf3D OpenGL backend encountered an unexpected exception");
+}
 
 [[nodiscard]] std::uintptr_t opengl_resource_token() noexcept {
     return reinterpret_cast<std::uintptr_t>(&opengl_resource_token_anchor);
@@ -145,9 +155,10 @@ class OpenGLDeviceState final {
             }
             texture_records_.emplace(candidate, TextureRecord{texture, extent, resolver});
             return detail::TextureHandleAccess::create(candidate);
+        } catch (const std::bad_alloc&) {
+            fatal_opengl_allocation_failure();
         } catch (...) {
-            return Error{ErrorCode::unexpected_exception,
-                         "Failed to register the OpenGL color texture"};
+            fatal_unexpected_opengl_boundary_exception();
         }
     }
 
@@ -410,7 +421,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         return extent_;
     }
 
-    [[nodiscard]] Result<void> resize(Extent2D extent) override {
+    [[nodiscard]] Result<void> resize(Extent2D extent) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -531,7 +542,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         return {};
     }
 
-    [[nodiscard]] Result<void> clear(Color4 color) override {
+    [[nodiscard]] Result<void> clear(Color4 color) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -730,7 +741,7 @@ class OpenGLPickingTarget final : public graphics::PickingTarget {
         return extent_;
     }
 
-    [[nodiscard]] Result<void> resize(Extent2D extent) override {
+    [[nodiscard]] Result<void> resize(Extent2D extent) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -802,7 +813,7 @@ class OpenGLPickingTarget final : public graphics::PickingTarget {
         return {};
     }
 
-    [[nodiscard]] Result<void> clear() override {
+    [[nodiscard]] Result<void> clear() noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -1374,7 +1385,7 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::RenderTarget>>
-    create_render_target(Extent2D initial_extent) override {
+    create_render_target(Extent2D initial_extent) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -1387,14 +1398,15 @@ class OpenGLDevice final : public graphics::Device {
                 return resize_result.error();
             }
             return std::unique_ptr<graphics::RenderTarget>{std::move(target)};
+        } catch (const std::bad_alloc&) {
+            fatal_opengl_allocation_failure();
         } catch (...) {
-            return Error{ErrorCode::unexpected_exception,
-                         "OpenGL viewport target creation threw an exception"};
+            fatal_unexpected_opengl_boundary_exception();
         }
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::PickingTarget>>
-    create_picking_target(Extent2D initial_extent) override {
+    create_picking_target(Extent2D initial_extent) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -1407,19 +1419,20 @@ class OpenGLDevice final : public graphics::Device {
                 return resize_result.error();
             }
             return std::unique_ptr<graphics::PickingTarget>{std::move(target)};
+        } catch (const std::bad_alloc&) {
+            fatal_opengl_allocation_failure();
         } catch (...) {
-            return Error{ErrorCode::unexpected_exception,
-                         "OpenGL picking target creation threw an exception"};
+            fatal_unexpected_opengl_boundary_exception();
         }
     }
 
     [[nodiscard]] Result<NativeTextureView>
-    native_texture_view(TextureHandle texture) const override {
+    native_texture_view(TextureHandle texture) const noexcept override {
         return state_->native_texture_view(texture);
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::StaticMesh>>
-    create_static_mesh(const graphics::StaticMeshDescription& description) override {
+    create_static_mesh(const graphics::StaticMeshDescription& description) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -1505,14 +1518,15 @@ class OpenGLDevice final : public graphics::Device {
             return std::unique_ptr<graphics::StaticMesh>{std::make_unique<OpenGLStaticMesh>(
                 state_, vertex_array, vertex_buffer, index_buffer, description.vertex_count,
                 static_cast<std::uint32_t>(description.indices.size()))};
+        } catch (const std::bad_alloc&) {
+            fatal_opengl_allocation_failure();
         } catch (...) {
-            return Error{ErrorCode::unexpected_exception,
-                         "OpenGL static mesh creation threw an exception"};
+            fatal_unexpected_opengl_boundary_exception();
         }
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::Texture2D>>
-    create_texture_2d(const graphics::Texture2DDescription& description) override {
+    create_texture_2d(const graphics::Texture2DDescription& description) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -1580,14 +1594,15 @@ class OpenGLDevice final : public graphics::Device {
             }
             return std::unique_ptr<graphics::Texture2D>{
                 std::make_unique<OpenGLTexture2D>(state_, texture, description.extent)};
+        } catch (const std::bad_alloc&) {
+            fatal_opengl_allocation_failure();
         } catch (...) {
-            return Error{ErrorCode::unexpected_exception,
-                         "OpenGL texture creation threw an exception"};
+            fatal_unexpected_opengl_boundary_exception();
         }
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::GraphicsPipeline>>
-    create_graphics_pipeline(const graphics::GraphicsPipelineDescription& description) override {
+    create_graphics_pipeline(const graphics::GraphicsPipelineDescription& description) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -1670,16 +1685,17 @@ class OpenGLDevice final : public graphics::Device {
 
             return std::unique_ptr<graphics::GraphicsPipeline>{
                 std::make_unique<OpenGLGraphicsPipeline>(state_, program, uniforms)};
+        } catch (const std::bad_alloc&) {
+            fatal_opengl_allocation_failure();
         } catch (...) {
-            return Error{ErrorCode::unexpected_exception,
-                         "OpenGL graphics pipeline creation threw an exception"};
+            fatal_unexpected_opengl_boundary_exception();
         }
     }
 
     [[nodiscard]] Result<void>
     draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
                  graphics::StaticMesh& mesh,
-                 const graphics::DrawIndexedDescription& description) override {
+                 const graphics::DrawIndexedDescription& description) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -1867,7 +1883,7 @@ class OpenGLDevice final : public graphics::Device {
 
     [[nodiscard]] Result<void>
     draw_overlay(graphics::RenderTarget& target,
-                 const graphics::DrawOverlayDescription& description) override {
+                 const graphics::DrawOverlayDescription& description) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -1924,12 +1940,12 @@ class OpenGLDevice final : public graphics::Device {
                 continue;
             }
             const std::optional<std::array<OverlayVertex, 6>> vertices =
-                line_vertices(start.value(), end.value(), extent, line.thickness_pixels);
+                line_vertices(*start, *end, extent, line.thickness_pixels);
             if (!vertices.has_value()) {
                 continue;
             }
             const Result<void> submit =
-                submit_overlay_vertices(vertices.value(), line.color, line.depth_mode);
+                submit_overlay_vertices(*vertices, line.color, line.depth_mode);
             if (!submit) {
                 return submit.error();
             }
@@ -1942,12 +1958,12 @@ class OpenGLDevice final : public graphics::Device {
                 continue;
             }
             const std::optional<std::array<OverlayVertex, 6>> vertices =
-                marker_vertices(center.value(), extent, marker.radius_pixels);
+                marker_vertices(*center, extent, marker.radius_pixels);
             if (!vertices.has_value()) {
                 continue;
             }
             const Result<void> submit =
-                submit_overlay_vertices(vertices.value(), marker.color, marker.depth_mode);
+                submit_overlay_vertices(*vertices, marker.color, marker.depth_mode);
             if (!submit) {
                 return submit.error();
             }
@@ -1963,7 +1979,7 @@ class OpenGLDevice final : public graphics::Device {
 
     [[nodiscard]] Result<void>
     draw_picking_indexed(graphics::PickingTarget& target, graphics::StaticMesh& mesh,
-                         const graphics::PickingDrawDescription& description) override {
+                         const graphics::PickingDrawDescription& description) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -2060,7 +2076,7 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     [[nodiscard]] Result<std::optional<graphics::PickingPixel>>
-    read_picking_pixel(graphics::PickingTarget& target, Float2 position_pixels) override {
+    read_picking_pixel(graphics::PickingTarget& target, Float2 position_pixels) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -2107,7 +2123,7 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     [[nodiscard]] Result<std::vector<float>>
-    read_picking_depths(graphics::PickingTarget& target) override {
+    read_picking_depths(graphics::PickingTarget& target) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -2147,9 +2163,10 @@ class OpenGLDevice final : public graphics::Device {
                              "OpenGL reported an error while reading picking depths"};
             }
             return depths;
+        } catch (const std::bad_alloc&) {
+            fatal_opengl_allocation_failure();
         } catch (...) {
-            return Error{ErrorCode::unexpected_exception,
-                         "OpenGL picking depth readback failed while allocating storage"};
+            fatal_unexpected_opengl_boundary_exception();
         }
     }
 
@@ -2338,7 +2355,7 @@ create_device(const OpenGLConfiguration& configuration) noexcept {
 
     try {
         static_assert(std::is_same_v<GraphicsProcedure, GLADapiproc>);
-        static_assert(std::is_same_v<GraphicsProcedureLoader, GLADloadfunc>);
+        static_assert(std::is_convertible_v<GraphicsProcedureLoader, GLADloadfunc>);
 
         const int loaded_version = gladLoadGL(configuration.load_procedure);
         if (loaded_version == 0) {
@@ -2367,9 +2384,10 @@ create_device(const OpenGLConfiguration& configuration) noexcept {
 
         auto state = std::make_shared<OpenGLDeviceState>(maximum_texture_size);
         return std::unique_ptr<graphics::Device>{std::make_unique<OpenGLDevice>(std::move(state))};
+    } catch (const std::bad_alloc&) {
+        fatal_opengl_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "OpenGL backend initialization threw an exception"};
+        fatal_unexpected_opengl_boundary_exception();
     }
 }
 

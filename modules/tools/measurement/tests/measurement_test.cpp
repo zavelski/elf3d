@@ -2,6 +2,7 @@
 #include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
 #include <elf3d/measurement.h>
+#include <elf3d/model.h>
 #include <elf3d/picking.h>
 #include <elf3d/scene.h>
 
@@ -12,6 +13,7 @@
 #include <utility>
 
 import elf.assets;
+import elf.model;
 import elf.scene;
 import elf.tool.measurement;
 
@@ -41,19 +43,29 @@ struct MeasurementFixture {
 
 [[nodiscard]] MeasurementFixture make_fixture() {
     elf3d::scene::Storage scene{scene_id(1)};
-    const std::array<elf3d::VertexPositionNormal, 3> vertices{{
-        {{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
-        {{1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
-        {{0.0F, 1.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
-    }};
     const std::array<std::uint32_t, 3> indices{{0, 1, 2}};
-    const elf3d::MeshHandle mesh = scene.create_mesh({vertices, indices}).value();
-    const elf3d::MaterialHandle material = scene.create_material({}).value();
-    const elf3d::EntityId model = scene.create_model(mesh, material).value();
+    const std::array<elf3d::Float3, 3> positions{{
+        {0.0F, 0.0F, 0.0F},
+        {1.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F},
+    }};
+    elf3d::Document document;
+    const elf3d::MaterialId document_material = document.create_material({}).value();
+    const elf3d::MeshId document_mesh = document.create_mesh().value();
+    const elf3d::PrimitiveId document_primitive =
+        document
+            .create_primitive(document_mesh, document_material,
+                              {positions, {}, {}, {}, {}, indices})
+            .value();
+    static_cast<void>(scene.set_document(std::move(document)));
+    const elf3d::EntityId model = scene.create_entity().value();
+    const std::array<elf3d::PrimitiveId, 1> document_primitives{{document_primitive}};
+    static_cast<void>(scene.set_model_document_primitives(model, document_primitives));
+    const elf3d::MeshHandle mesh = scene.runtime_primitive(model, 0).value().mesh;
     return MeasurementFixture{std::move(scene), model, mesh};
 }
 
-[[nodiscard]] elf3d::PickHit make_hit(const MeasurementFixture &fixture,
+[[nodiscard]] elf3d::PickHit make_hit(const MeasurementFixture& fixture,
                                       elf3d::Float3 barycentric) noexcept {
     return elf3d::PickHit{
         fixture.model,      fixture.mesh, 0,   0, {barycentric.y, barycentric.z, 0.0F},
@@ -61,7 +73,7 @@ struct MeasurementFixture {
 }
 
 [[nodiscard]] elf3d::scene::VisibilityFilter
-visibility_filter(const elf3d::scene::Storage &scene,
+visibility_filter(const elf3d::scene::Storage& scene,
                   std::optional<elf3d::EntityId> isolated = std::nullopt) {
     return elf3d::scene::make_visibility_filter(scene, isolated).value();
 }
@@ -73,7 +85,7 @@ visibility_filter(const elf3d::scene::Storage &scene,
 
 } // namespace
 
-int main() {
+int elf3d_tool_measurement_test() {
     using elf3d::LengthDisplayUnit;
     using elf3d::tools::measurement::display_length;
     using elf3d::tools::measurement::DistanceMeasurementController;
@@ -182,8 +194,8 @@ int main() {
     const elf3d::DistanceMeasurementSnapshot clipped_complete = controller.snapshot(
         fixture.scene, visible, anchor_clip_filter, elf3d::ViewportTool::selection);
     if (clipped_complete.state != elf3d::DistanceMeasurementState::complete ||
-        !nearly_equal(clipped_complete.distance_meters, 1.0) ||
-        clipped_complete.overlay_visible || clipped_complete.anchors_currently_visible) {
+        !nearly_equal(clipped_complete.distance_meters, 1.0) || clipped_complete.overlay_visible ||
+        clipped_complete.anchors_currently_visible) {
         return 141;
     }
     const elf3d::Result<elf3d::tools::measurement::MeasurementOverlay> clipped_overlay =

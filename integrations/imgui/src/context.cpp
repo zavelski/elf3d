@@ -1,4 +1,5 @@
 #include <elf3d/imgui/context.h>
+#include <elf3d/core/assert.h>
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -7,12 +8,20 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
-#include <exception>
 #include <memory>
+#include <new>
 #include <string>
 
 namespace elf3d::imgui {
 namespace {
+
+[[noreturn]] void fatal_imgui_allocation_failure() noexcept {
+    fatal_error("Elf3D Dear ImGui integration memory allocation failed");
+}
+
+[[noreturn]] void fatal_unexpected_imgui_boundary_exception() noexcept {
+    fatal_error("Elf3D Dear ImGui integration encountered an unexpected exception");
+}
 
 void apply_elf3d_style(GLFWwindow *window, const ContextOptions &options) noexcept {
     float x_scale = 1.0F;
@@ -99,7 +108,7 @@ void apply_elf3d_style(GLFWwindow *window, const ContextOptions &options) noexce
 
 } // namespace
 
-Context::~Context() {
+Context::~Context() noexcept {
     if (context_ == nullptr) {
         return;
     }
@@ -132,11 +141,10 @@ Result<std::unique_ptr<Context>> Context::create(GLFWwindow *window,
             return initialized.error();
         }
         return context;
-    } catch (const std::exception &exception) {
-        return Error{ErrorCode::unexpected_exception, exception.what()};
+    } catch (const std::bad_alloc&) {
+        fatal_imgui_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Dear ImGui initialization failed with an unknown exception"};
+        fatal_unexpected_imgui_boundary_exception();
     }
 }
 

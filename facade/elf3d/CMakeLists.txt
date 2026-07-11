@@ -2,6 +2,8 @@ add_library(
     elf3d
     SHARED
         src/engine.cpp
+        src/scene.cpp
+        src/viewport.cpp
 )
 add_library(elf3d::elf3d ALIAS elf3d)
 
@@ -14,24 +16,15 @@ target_include_directories(
 )
 elf3d_link_object_libraries(
     elf3d
-        elf3d_core
-        elf3d_math
-        elf3d_graphics
-        elf3d_backend_opengl
-        elf3d_assets
-        elf3d_image
-        elf3d_scene
-        elf3d_interaction
-        elf3d_navigation
-        elf3d_picking
-        elf3d_tool_selection
-        elf3d_tool_visibility
-        elf3d_tool_measurement
-        elf3d_tool_clipping
-        elf3d_clipping
-        elf3d_gltf
-        elf3d_renderer
-        elf3d_viewport
+        elf3d_foundation_modules
+        elf3d_domain_modules
+        elf3d_image_modules
+        elf3d_model_modules
+        elf3d_gltf_modules
+        elf3d_graphics_modules
+        elf3d_opengl_modules
+        elf3d_tools_modules
+        elf3d_view_modules
 )
 set_target_properties(
     elf3d

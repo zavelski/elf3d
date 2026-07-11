@@ -4,8 +4,8 @@
 #include <elf3d/core/assert.h>
 #include <elf3d/core/error.h>
 
-#include <string>
 #include <optional>
+#include <string_view>
 
 namespace elf3d {
 
@@ -21,12 +21,12 @@ enum class LogLevel {
 struct LogRecord {
     LogLevel level = LogLevel::info;
     std::optional<ErrorCode> code;
-    std::string message;
+    std::string_view message;
 };
 
 class LogSink {
   public:
-    virtual ~LogSink() = default;
+    virtual ~LogSink() noexcept = default;
 
     LogSink(const LogSink &) = delete;
     LogSink &operator=(const LogSink &) = delete;

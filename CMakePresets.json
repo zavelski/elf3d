@@ -15,6 +15,7 @@
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "ELF3D_BUILD_ENGINE": "ON",
         "ELF3D_BUILD_VIEWER": "ON"
       }
     },
@@ -27,7 +28,34 @@
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "ELF3D_BUILD_ENGINE": "ON",
         "ELF3D_BUILD_VIEWER": "ON"
+      }
+    },
+    {
+      "name": "windows-model-debug",
+      "displayName": "Windows x64 Model Debug",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/windows-model-debug",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "ELF3D_BUILD_ENGINE": "OFF",
+        "ELF3D_BUILD_VIEWER": "OFF"
+      }
+    },
+    {
+      "name": "windows-model-release",
+      "displayName": "Windows x64 Model Release",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/windows-model-release",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "ELF3D_BUILD_ENGINE": "OFF",
+        "ELF3D_BUILD_VIEWER": "OFF"
       }
     }
   ],
@@ -40,6 +68,16 @@
     {
       "name": "windows-release",
       "configurePreset": "windows-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-model-debug",
+      "configurePreset": "windows-model-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-model-release",
+      "configurePreset": "windows-model-release",
       "configuration": "Release"
     }
   ],
@@ -55,6 +93,22 @@
     {
       "name": "windows-release",
       "configurePreset": "windows-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-model-debug",
+      "configurePreset": "windows-model-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-model-release",
+      "configurePreset": "windows-model-release",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

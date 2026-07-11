@@ -103,8 +103,8 @@ struct SceneHierarchyStatistics {
 #endif
 class ELF3D_API SceneHierarchySnapshot final {
   public:
-    SceneHierarchySnapshot();
-    ~SceneHierarchySnapshot();
+    SceneHierarchySnapshot() noexcept;
+    ~SceneHierarchySnapshot() noexcept;
 
     SceneHierarchySnapshot(const SceneHierarchySnapshot &) = delete;
     SceneHierarchySnapshot &operator=(const SceneHierarchySnapshot &) = delete;
@@ -112,8 +112,8 @@ class ELF3D_API SceneHierarchySnapshot final {
     SceneHierarchySnapshot &operator=(SceneHierarchySnapshot &&) noexcept;
 
     [[nodiscard]] std::size_t size() const noexcept;
-    [[nodiscard]] Result<SceneHierarchyItem> item(std::size_t index) const;
-    [[nodiscard]] Result<std::string_view> name(std::size_t index) const;
+    [[nodiscard]] Result<SceneHierarchyItem> item(std::size_t index) const noexcept;
+    [[nodiscard]] Result<std::string_view> name(std::size_t index) const noexcept;
     [[nodiscard]] std::uint64_t hierarchy_revision() const noexcept;
     [[nodiscard]] std::uint64_t visibility_revision() const noexcept;
 
@@ -142,7 +142,7 @@ class ELF3D_API Scene final {
     // Scene operations are single-threaded and must run on the host thread that
     // coordinates scene updates and rendering. The creating Engine must outlive
     // this Scene.
-    ~Scene();
+    ~Scene() noexcept;
 
     Scene(const Scene &) = delete;
     Scene &operator=(const Scene &) = delete;
@@ -151,48 +151,55 @@ class ELF3D_API Scene final {
 
     [[nodiscard]] SceneId id() const noexcept;
 
-    [[nodiscard]] Result<EntityId> create_entity();
+    [[nodiscard]] Result<EntityId> create_entity() noexcept;
     // Destruction recursively destroys every descendant of the entity.
-    [[nodiscard]] Result<void> destroy_entity(EntityId entity);
-    [[nodiscard]] Result<void> set_parent(EntityId entity, EntityId parent);
-    [[nodiscard]] Result<void> clear_parent(EntityId entity);
-    [[nodiscard]] Result<void> set_local_transform(EntityId entity, const Transform &transform);
-    [[nodiscard]] Result<Transform> local_transform(EntityId entity) const;
-    [[nodiscard]] Result<void> set_local_matrix(EntityId entity, const Float4x4 &matrix);
-    [[nodiscard]] Result<Float4x4> local_matrix(EntityId entity) const;
+    [[nodiscard]] Result<void> destroy_entity(EntityId entity) noexcept;
+    [[nodiscard]] Result<void> set_parent(EntityId entity, EntityId parent) noexcept;
+    [[nodiscard]] Result<void> clear_parent(EntityId entity) noexcept;
+    [[nodiscard]] Result<void> set_local_transform(EntityId entity,
+                                                   const Transform &transform) noexcept;
+    [[nodiscard]] Result<Transform> local_transform(EntityId entity) const noexcept;
+    [[nodiscard]] Result<void> set_local_matrix(EntityId entity,
+                                                const Float4x4 &matrix) noexcept;
+    [[nodiscard]] Result<Float4x4> local_matrix(EntityId entity) const noexcept;
     // Names are copied as UTF-8. The returned view is invalidated by renaming
     // or destroying the entity or Scene.
-    [[nodiscard]] Result<void> set_entity_name(EntityId entity, std::string_view name);
-    [[nodiscard]] Result<std::string_view> entity_name(EntityId entity) const;
-    [[nodiscard]] Result<EntityInfo> entity_info(EntityId entity) const;
-    [[nodiscard]] Result<SceneHierarchySnapshot> hierarchy_snapshot() const;
+    [[nodiscard]] Result<void> set_entity_name(EntityId entity, std::string_view name) noexcept;
+    [[nodiscard]] Result<std::string_view> entity_name(EntityId entity) const noexcept;
+    [[nodiscard]] Result<EntityInfo> entity_info(EntityId entity) const noexcept;
+    [[nodiscard]] Result<SceneHierarchySnapshot> hierarchy_snapshot() const noexcept;
     [[nodiscard]] SceneHierarchyStatistics hierarchy_statistics() const noexcept;
     [[nodiscard]] std::uint64_t hierarchy_revision() const noexcept;
 
-    [[nodiscard]] Result<MeshHandle> create_mesh(const MeshDataView &data);
-    [[nodiscard]] Result<MeshHandle> create_mesh(const TexturedMeshDataView &data);
-    [[nodiscard]] Result<Bounds3> mesh_bounds(MeshHandle mesh) const;
-    [[nodiscard]] Result<ImageHandle> create_image(const ImageDescription &description);
-    [[nodiscard]] Result<TextureAssetHandle> create_texture(const TextureDescription &description);
-    [[nodiscard]] Result<MaterialHandle> create_material(const MaterialDescription &description);
+    [[nodiscard]] Result<MeshHandle> create_mesh(const MeshDataView &data) noexcept;
+    [[nodiscard]] Result<MeshHandle> create_mesh(const TexturedMeshDataView &data) noexcept;
+    [[nodiscard]] Result<Bounds3> mesh_bounds(MeshHandle mesh) const noexcept;
+    [[nodiscard]] Result<ImageHandle> create_image(const ImageDescription &description) noexcept;
+    [[nodiscard]] Result<TextureAssetHandle>
+    create_texture(const TextureDescription &description) noexcept;
+    [[nodiscard]] Result<MaterialHandle>
+    create_material(const MaterialDescription &description) noexcept;
     [[nodiscard]] Result<void> set_material(MaterialHandle material,
-                                            const MaterialDescription &description);
-    [[nodiscard]] Result<MaterialDescription> material(MaterialHandle material) const;
+                                            const MaterialDescription &description) noexcept;
+    [[nodiscard]] Result<MaterialDescription> material(MaterialHandle material) const noexcept;
 
-    [[nodiscard]] Result<EntityId> create_model(MeshHandle mesh, MaterialHandle material);
+    [[nodiscard]] Result<EntityId> create_model(MeshHandle mesh, MaterialHandle material) noexcept;
     [[nodiscard]] Result<void>
-    set_model_primitives(EntityId entity, std::span<const ModelPrimitiveBinding> primitives);
+    set_model_primitives(EntityId entity, std::span<const ModelPrimitiveBinding> primitives)
+        noexcept;
     [[nodiscard]] Result<EntityId>
-    create_perspective_camera(const PerspectiveCameraDescription &description);
-    [[nodiscard]] Result<PerspectiveCameraDescription> perspective_camera(EntityId entity) const;
+    create_perspective_camera(const PerspectiveCameraDescription &description) noexcept;
+    [[nodiscard]] Result<PerspectiveCameraDescription> perspective_camera(EntityId entity) const
+        noexcept;
     [[nodiscard]] Result<void>
-    set_perspective_camera(EntityId entity, const PerspectiveCameraDescription &description);
+    set_perspective_camera(EntityId entity, const PerspectiveCameraDescription &description)
+        noexcept;
 
-    [[nodiscard]] Result<void> set_entity_visible(EntityId entity, bool visible);
-    [[nodiscard]] Result<bool> entity_local_visibility(EntityId entity) const;
-    [[nodiscard]] Result<bool> entity_effective_visibility(EntityId entity) const;
-    [[nodiscard]] Result<void> show_entity_and_ancestors(EntityId entity);
-    [[nodiscard]] Result<void> show_all_entities();
+    [[nodiscard]] Result<void> set_entity_visible(EntityId entity, bool visible) noexcept;
+    [[nodiscard]] Result<bool> entity_local_visibility(EntityId entity) const noexcept;
+    [[nodiscard]] Result<bool> entity_effective_visibility(EntityId entity) const noexcept;
+    [[nodiscard]] Result<void> show_entity_and_ancestors(EntityId entity) noexcept;
+    [[nodiscard]] Result<void> show_all_entities() noexcept;
     [[nodiscard]] std::uint64_t visibility_revision() const noexcept;
 
     [[nodiscard]] std::optional<Bounds3> world_bounds() const noexcept;

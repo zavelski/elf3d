@@ -12,7 +12,6 @@ module;
 
 module elf.tool.clipping;
 
-import elf.assets;
 import elf.clipping;
 import elf.math;
 import elf.scene;
@@ -29,14 +28,14 @@ namespace {
     const auto channel = [](float value, float fallback) noexcept {
         return std::isfinite(value) ? std::clamp(value, 0.0F, 1.0F) : fallback;
     };
-    return Color4{channel(color.red, 1.0F), channel(color.green, 1.0F),
-                  channel(color.blue, 1.0F), channel(color.alpha, 1.0F)};
+    return Color4{channel(color.red, 1.0F), channel(color.green, 1.0F), channel(color.blue, 1.0F),
+                  channel(color.alpha, 1.0F)};
 }
 
-[[nodiscard]] bool valid_helper_settings(const ClippingHelperSettings &settings) noexcept {
+[[nodiscard]] bool valid_helper_settings(const ClippingHelperSettings& settings) noexcept {
     return finite_color(settings.section_plane_color) && finite_color(settings.box_color) &&
-           std::isfinite(settings.line_thickness_pixels) &&
-           settings.line_thickness_pixels > 0.0F && settings.line_thickness_pixels <= 32.0F;
+           std::isfinite(settings.line_thickness_pixels) && settings.line_thickness_pixels > 0.0F &&
+           settings.line_thickness_pixels <= 32.0F;
 }
 
 [[nodiscard]] Float3 subtract(Float3 left, Float3 right) noexcept {
@@ -83,7 +82,7 @@ namespace {
     return std::max(0.5F * length(extent), 0.5F);
 }
 
-void append_line(ClippingOverlay &overlay, Float3 start, Float3 end, Color4 color,
+void append_line(ClippingOverlay& overlay, Float3 start, Float3 end, Color4 color,
                  float thickness) noexcept {
     if (overlay.line_count >= overlay.lines.size()) {
         return;
@@ -92,7 +91,7 @@ void append_line(ClippingOverlay &overlay, Float3 start, Float3 end, Color4 colo
         OverlayLineSegment{start, end, color, thickness, OverlayDepthMode::always_visible};
 }
 
-void append_box(ClippingOverlay &overlay, const ClippingBox &box, Color4 color,
+void append_box(ClippingOverlay& overlay, const ClippingBox& box, Color4 color,
                 float thickness) noexcept {
     const Float3 min = box.minimum;
     const Float3 max = box.maximum;
@@ -120,14 +119,14 @@ void append_box(ClippingOverlay &overlay, const ClippingBox &box, Color4 color,
         {{2, 6}},
         {{3, 7}},
     }};
-    for (const std::array<int, 2> &edge : edges) {
+    for (const std::array<int, 2>& edge : edges) {
         append_line(overlay, corners[static_cast<std::size_t>(edge[0])],
                     corners[static_cast<std::size_t>(edge[1])], color, thickness);
     }
 }
 
-void append_section_plane(ClippingOverlay &overlay, const SectionPlane &plane, Bounds3 helper_bounds,
-                          Color4 color, float thickness) noexcept {
+void append_section_plane(ClippingOverlay& overlay, const SectionPlane& plane,
+                          Bounds3 helper_bounds, Color4 color, float thickness) noexcept {
     const Result<SectionPlane> normalized = elf3d::clipping::normalized_section_plane(plane);
     if (!normalized || !normalized.value().enabled) {
         return;
@@ -137,12 +136,12 @@ void append_section_plane(ClippingOverlay &overlay, const SectionPlane &plane, B
                                                                     : normalized.value().point;
     const float signed_distance = dot(normal, subtract(center, normalized.value().point));
     center = subtract(center, scale(normal, signed_distance));
-    const float radius = elf3d::clipping::is_valid_bounds(helper_bounds) ? bounds_radius(helper_bounds)
-                                                                         : 1.0F;
+    const float radius =
+        elf3d::clipping::is_valid_bounds(helper_bounds) ? bounds_radius(helper_bounds) : 1.0F;
     const Float3 reference =
         std::abs(normal.y) < 0.9F ? Float3{0.0F, 1.0F, 0.0F} : Float3{1.0F, 0.0F, 0.0F};
-    const Float3 first_axis = scale(normalized_or(cross(normal, reference), {1.0F, 0.0F, 0.0F}),
-                                    radius);
+    const Float3 first_axis =
+        scale(normalized_or(cross(normal, reference), {1.0F, 0.0F, 0.0F}), radius);
     const Float3 second_axis =
         scale(normalized_or(cross(normal, first_axis), {0.0F, 0.0F, 1.0F}), radius);
     const std::array<Float3, 4> corners{{
@@ -159,7 +158,7 @@ void append_section_plane(ClippingOverlay &overlay, const SectionPlane &plane, B
 
 } // namespace
 
-Result<void> ClippingController::set_section_plane(const SectionPlane &plane) noexcept {
+Result<void> ClippingController::set_section_plane(const SectionPlane& plane) noexcept {
     const Result<SectionPlane> normalized = elf3d::clipping::normalized_section_plane(plane);
     if (!normalized) {
         return normalized.error();
@@ -180,7 +179,7 @@ void ClippingController::clear_section_plane() noexcept {
     increment_revision();
 }
 
-Result<std::uint32_t> ClippingController::add_box(const ClippingBox &box) {
+Result<std::uint32_t> ClippingController::add_box(const ClippingBox& box) {
     if (box_count_ >= maximum_clipping_boxes) {
         return Error{ErrorCode::clipping_box_limit_exceeded,
                      "A viewport supports at most three clipping boxes"};
@@ -196,8 +195,7 @@ Result<std::uint32_t> ClippingController::add_box(const ClippingBox &box) {
     return index;
 }
 
-Result<void> ClippingController::set_box(std::uint32_t index,
-                                         const ClippingBox &box) noexcept {
+Result<void> ClippingController::set_box(std::uint32_t index, const ClippingBox& box) noexcept {
     if (index >= box_count_) {
         return Error{ErrorCode::invalid_clipping_box_index,
                      "The clipping box index is outside the viewport box range"};
@@ -259,7 +257,7 @@ Result<void> ClippingController::set_helpers_visible(bool visible) noexcept {
 }
 
 Result<void>
-ClippingController::set_helper_settings(const ClippingHelperSettings &settings) noexcept {
+ClippingController::set_helper_settings(const ClippingHelperSettings& settings) noexcept {
     if (!valid_helper_settings(settings)) {
         return Error{ErrorCode::invalid_clipping_settings,
                      "Clipping helper settings require finite colors and positive line thickness"};
@@ -275,9 +273,10 @@ ClippingController::set_helper_settings(const ClippingHelperSettings &settings) 
     return {};
 }
 
-Result<void> ClippingController::reset_box_to_visible_bounds(
-    const scene::Storage &scene, const scene::VisibilityFilter &visibility,
-    std::uint32_t index) noexcept {
+Result<void>
+ClippingController::reset_box_to_visible_bounds(const scene::Storage& scene,
+                                                const scene::VisibilityFilter& visibility,
+                                                std::uint32_t index) noexcept {
     if (index >= box_count_) {
         return Error{ErrorCode::invalid_clipping_box_index,
                      "The clipping box index is outside the viewport box range"};
@@ -289,8 +288,9 @@ Result<void> ClippingController::reset_box_to_visible_bounds(
     return set_box(index, box.value());
 }
 
-Result<std::uint32_t> ClippingController::add_box_from_visible_bounds(
-    const scene::Storage &scene, const scene::VisibilityFilter &visibility) {
+Result<std::uint32_t>
+ClippingController::add_box_from_visible_bounds(const scene::Storage& scene,
+                                                const scene::VisibilityFilter& visibility) {
     const Result<ClippingBox> box = box_from_visible_bounds(scene, visibility);
     if (!box) {
         return box.error();
@@ -311,9 +311,8 @@ ClippingSnapshot ClippingController::snapshot() const noexcept {
 }
 
 Result<elf3d::clipping::ClippingFilter> ClippingController::filter() const {
-    return elf3d::clipping::make_filter(section_plane_,
-                                        std::span<const ClippingBox>{boxes_.data(), box_count_},
-                                        revision_);
+    return elf3d::clipping::make_filter(
+        section_plane_, std::span<const ClippingBox>{boxes_.data(), box_count_}, revision_);
 }
 
 std::uint64_t ClippingController::revision() const noexcept {
@@ -334,7 +333,7 @@ ClippingController::overlay(std::optional<Bounds3> helper_bounds) const noexcept
         return result;
     }
     if (helper_bounds.has_value()) {
-        append_section_plane(result, section_plane_, helper_bounds.value(),
+        append_section_plane(result, section_plane_, *helper_bounds,
                              helper_settings_.section_plane_color,
                              helper_settings_.line_thickness_pixels);
     }
@@ -354,10 +353,8 @@ void ClippingController::increment_revision() noexcept {
     }
 }
 
-Result<ClippingBox>
-ClippingController::box_from_visible_bounds(const scene::Storage &scene,
-                                            const scene::VisibilityFilter &visibility) const
-    noexcept {
+Result<ClippingBox> ClippingController::box_from_visible_bounds(
+    const scene::Storage& scene, const scene::VisibilityFilter& visibility) const noexcept {
     const std::optional<Bounds3> bounds = scene.visible_world_bounds(visibility);
     if (!bounds.has_value()) {
         return Error{ErrorCode::scene_has_no_bounds,
@@ -370,22 +367,24 @@ ClippingController::box_from_visible_bounds(const scene::Storage &scene,
     return box;
 }
 
-std::optional<Bounds3>
-visible_bounds(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
-               const elf3d::clipping::ClippingFilter &filter) noexcept {
+std::optional<Bounds3> visible_bounds(const scene::Storage& scene,
+                                      const scene::VisibilityFilter& visibility,
+                                      const elf3d::clipping::ClippingFilter& filter) noexcept {
     std::optional<Bounds3> result;
-    for (const std::optional<scene::EntityRecord> &record : scene.entities()) {
+    for (const std::optional<scene::EntityRecord>& record : scene.entities()) {
         if (!record.has_value() || !record->model.has_value() ||
             !scene::entity_visible_in_filter(scene, visibility, record->id)) {
             continue;
         }
         const Result<Float4x4> world = scene.world_matrix(record->id);
         ELF3D_ASSERT(world.has_value());
-        for (const ModelPrimitiveBinding &primitive : record->model->primitives) {
-            const Result<const assets::MeshAsset *> mesh = scene.assets().mesh(primitive.mesh);
-            ELF3D_ASSERT(mesh.has_value());
+        for (std::uint32_t primitive_index = 0; primitive_index < record->model->primitives.size();
+             ++primitive_index) {
+            const Result<scene::RuntimePrimitiveView> primitive =
+                scene.runtime_primitive(record->id, primitive_index);
+            ELF3D_ASSERT(primitive.has_value());
             const Bounds3 world_bounds =
-                elf3d::clipping::transform_bounds(mesh.value()->bounds, world.value());
+                elf3d::clipping::transform_bounds(primitive.value().bounds, world.value());
             const std::optional<Bounds3> clipped =
                 elf3d::clipping::clipped_bounds(filter, world_bounds);
             if (!clipped.has_value()) {

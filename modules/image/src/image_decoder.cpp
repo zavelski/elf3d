@@ -1,5 +1,6 @@
 module;
 
+#include <elf3d/core/assert.h>
 #include <elf3d/core/error.h>
 
 #include <jpeglib.h>
@@ -10,6 +11,7 @@ module;
 #include <cstdint>
 #include <iterator>
 #include <memory>
+#include <new>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,6 +21,14 @@ module elf.image;
 
 namespace elf3d::image {
 namespace {
+
+[[noreturn]] void fatal_image_allocation_failure() noexcept {
+    fatal_error("Elf3D image decoder memory allocation failed");
+}
+
+[[noreturn]] void fatal_unexpected_image_boundary_exception() noexcept {
+    fatal_error("Elf3D image decoder encountered an unexpected exception");
+}
 
 [[nodiscard]] Result<std::size_t> rgba8_size(std::uint32_t width, std::uint32_t height) {
     if (width == 0 || height == 0) {
@@ -250,9 +260,10 @@ Result<DecodedImage> decode_png_or_jpeg(std::span<const std::byte> encoded) noex
         }
         return Error{ErrorCode::image_decode_failed,
                      "Encoded image is not a supported PNG or JPEG stream"};
+    } catch (const std::bad_alloc&) {
+        fatal_image_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Image decoding failed while allocating Elf3D-owned pixel storage"};
+        fatal_unexpected_image_boundary_exception();
     }
 }
 

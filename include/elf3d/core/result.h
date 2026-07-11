@@ -35,31 +35,31 @@ template <typename T> class [[nodiscard]] Result final {
         return has_value();
     }
 
-    [[nodiscard]] T &value() & {
+    [[nodiscard]] T &value() & noexcept {
         T *stored = std::get_if<T>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return *stored;
     }
 
-    [[nodiscard]] const T &value() const & {
+    [[nodiscard]] const T &value() const & noexcept {
         const T *stored = std::get_if<T>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return *stored;
     }
 
-    [[nodiscard]] T &&value() && {
+    [[nodiscard]] T &&value() && noexcept {
         T *stored = std::get_if<T>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return std::move(*stored);
     }
 
-    [[nodiscard]] Error &error() & {
+    [[nodiscard]] Error &error() & noexcept {
         Error *stored = std::get_if<Error>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return *stored;
     }
 
-    [[nodiscard]] const Error &error() const & {
+    [[nodiscard]] const Error &error() const & noexcept {
         const Error *stored = std::get_if<Error>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return *stored;
@@ -98,6 +98,8 @@ template <> class [[nodiscard]] Result<void> final {
 };
 
 static_assert(std::is_nothrow_copy_constructible_v<Error>);
+static_assert(std::is_nothrow_move_constructible_v<Error>);
+static_assert(std::is_nothrow_destructible_v<Error>);
 
 } // namespace elf3d
 

@@ -7,7 +7,7 @@
 
 import elf.assets;
 
-int main() {
+int elf3d_assets_test() {
     static_assert(!std::is_convertible_v<elf3d::MeshHandle, elf3d::MaterialHandle>);
     static_assert(!std::is_convertible_v<elf3d::MaterialHandle, elf3d::MeshHandle>);
 

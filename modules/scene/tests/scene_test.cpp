@@ -1,12 +1,16 @@
 #include <elf3d/assets.h>
 #include <elf3d/core/result.h>
+#include <elf3d/model.h>
 #include <elf3d/scene.h>
 
 #include <array>
 #include <cmath>
 #include <optional>
+#include <span>
+#include <utility>
 
 import elf.assets;
+import elf.model;
 import elf.scene;
 
 namespace {
@@ -17,7 +21,7 @@ bool nearly_equal(float left, float right) noexcept {
 
 } // namespace
 
-int main() {
+int elf3d_scene_test() {
     const elf3d::SceneId id = elf3d::detail::SceneHandleAccess::create_scene(5, 1);
     elf3d::scene::Storage scene{id};
     const elf3d::Result<elf3d::EntityId> root = scene.create_entity();
@@ -147,6 +151,46 @@ int main() {
     if (!scene.destroy_entity(root.value()) || scene.entity(child.value()) ||
         scene.entity(grandchild.value())) {
         return 12;
+    }
+
+    elf3d::scene::Storage document_scene{elf3d::detail::SceneHandleAccess::create_scene(5, 3)};
+    elf3d::Document document;
+    const auto document_material = document.create_material({});
+    const auto document_mesh = document.create_mesh("Document mesh");
+    const std::array<elf3d::Float3, 3> document_positions{{
+        {2.0F, 0.0F, 0.0F},
+        {3.0F, 0.0F, 0.0F},
+        {2.0F, 1.0F, 0.0F},
+    }};
+    const auto document_primitive =
+        document.create_primitive(document_mesh.value(), document_material.value(),
+                                  {document_positions, {}, {}, {}, {}, indices});
+    const auto document_node = document.create_node("Document node");
+    const auto document_root = document.create_scene("Document scene");
+    if (!document_material || !document_mesh || !document_primitive || !document_node ||
+        !document_root || !document.set_node_mesh(document_node.value(), document_mesh.value()) ||
+        !document.add_scene_root(document_root.value(), document_node.value()) ||
+        !elf3d::scene::populate_from_document(std::move(document), document_root.value(),
+                                              document_scene)) {
+        return 21;
+    }
+    const std::span<const std::optional<elf3d::scene::EntityRecord>> document_records =
+        document_scene.entities();
+    if (document_records.size() != 1 || !document_records.front().has_value() ||
+        !document_records.front()->model.has_value() || !document_scene.assets().meshes().empty() ||
+        !document_scene.assets().materials().empty() || !document_scene.assets().images().empty() ||
+        !document_scene.assets().textures().empty()) {
+        return 22;
+    }
+    const auto document_runtime = document_scene.runtime_primitive(document_records.front()->id, 0);
+    if (!document_runtime || !document_runtime.value().mesh.is_valid() ||
+        !document_runtime.value().document_primitive.is_valid()) {
+        return 23;
+    }
+    const auto document_bounds = document_scene.mesh_bounds(document_runtime.value().mesh);
+    if (!document_bounds ||
+        document_bounds.value() != elf3d::Bounds3{{2.0F, 0.0F, 0.0F}, {3.0F, 1.0F, 0.0F}}) {
+        return 24;
     }
     return 0;
 }

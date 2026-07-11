@@ -53,8 +53,6 @@ struct PickingStatistics {
     std::uint64_t latest_gpu_misses = 0;
     std::uint64_t latest_gpu_draw_calls = 0;
     std::uint64_t latest_gpu_pixels_read = 0;
-    std::uint64_t latest_gpu_pass_time_microseconds = 0;
-    std::uint64_t latest_gpu_readback_time_microseconds = 0;
     std::uint64_t latest_cpu_refinements = 0;
     std::uint64_t latest_cpu_fallbacks = 0;
 

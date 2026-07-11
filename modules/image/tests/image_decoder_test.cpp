@@ -83,7 +83,7 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
 
 } // namespace
 
-int main() {
+int elf3d_image_decode_test() {
     const auto rgb = elf3d::image::decode_png_or_jpeg(bytes(rgb_png));
     if (!rgb || rgb.value().width != 2 || rgb.value().height != 2 ||
         rgb.value().pixels.size() != 16 || pixel(rgb.value(), 0) != 255 ||

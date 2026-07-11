@@ -1,11 +1,9 @@
 module;
 
-#include <elf3d/assets.h>
 #include <elf3d/viewport.h>
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -16,7 +14,6 @@ module;
 
 module elf.renderer;
 
-import elf.assets;
 import elf.clipping;
 import elf.graphics;
 import elf.math;
@@ -233,217 +230,10 @@ void main()
 }
 )glsl";
 
-graphics::TextureAddressMode address_mode(TextureWrap wrap) noexcept {
-    switch (wrap) {
-    case TextureWrap::repeat:
-        return graphics::TextureAddressMode::repeat;
-    case TextureWrap::mirrored_repeat:
-        return graphics::TextureAddressMode::mirrored_repeat;
-    case TextureWrap::clamp_to_edge:
-        return graphics::TextureAddressMode::clamp_to_edge;
-    }
-    return graphics::TextureAddressMode::repeat;
-}
-
-graphics::TextureFilterMode filter_mode(TextureFilter filter) noexcept {
-    switch (filter) {
-    case TextureFilter::nearest:
-        return graphics::TextureFilterMode::nearest;
-    case TextureFilter::linear:
-        return graphics::TextureFilterMode::linear;
-    case TextureFilter::nearest_mipmap_nearest:
-        return graphics::TextureFilterMode::nearest_mipmap_nearest;
-    case TextureFilter::linear_mipmap_nearest:
-        return graphics::TextureFilterMode::linear_mipmap_nearest;
-    case TextureFilter::nearest_mipmap_linear:
-        return graphics::TextureFilterMode::nearest_mipmap_linear;
-    case TextureFilter::linear_mipmap_linear:
-        return graphics::TextureFilterMode::linear_mipmap_linear;
-    }
-    return graphics::TextureFilterMode::linear;
-}
-
-[[nodiscard]] std::optional<GpuPickHit>
-make_gpu_pick_hit(const RenderList& list, const RenderItem& item, graphics::PickingPixel pixel,
-                  Extent2D extent, Float2 position_pixels) noexcept {
-    if (extent.width == 0 || extent.height == 0 || !std::isfinite(pixel.depth) ||
-        pixel.depth < 0.0F || pixel.depth >= 1.0F) {
-        return std::nullopt;
-    }
-    const Result<Float3> world = math::unproject_viewport_point(
-        list.view_matrix, list.projection_matrix, extent, position_pixels, pixel.depth);
-    if (!world) {
-        return std::nullopt;
-    }
-    const Float3 world_position = world.value();
-    const float world_distance = math::distance(world_position, list.camera_world_position);
-    if (!std::isfinite(world_distance) || world_distance < 0.0F) {
-        return std::nullopt;
-    }
-    return GpuPickHit{item.entity,    item.mesh,   pixel.primitive_index, pixel.triangle_index,
-                      world_position, pixel.depth, world_distance};
-}
-
-[[nodiscard]] double focus_depth_weight(Extent2D extent, std::uint32_t x,
-                                        std::uint32_t y) noexcept {
-    if (extent.width == 0U || extent.height == 0U) {
-        return 0.0;
-    }
-    const double sample_x =
-        (static_cast<double>(x) + 0.5) * 2.0 / static_cast<double>(extent.width) - 1.0;
-    const double sample_y =
-        (static_cast<double>(y) + 0.5) * 2.0 / static_cast<double>(extent.height) - 1.0;
-    const double radius_squared = (sample_x * sample_x + sample_y * sample_y) * 0.5;
-    if (!std::isfinite(radius_squared)) {
-        return 0.0;
-    }
-    const double mass = 1.0 - std::min(radius_squared, 1.0);
-    return mass * mass;
-}
-
 } // namespace
-
-Result<RenderList> build_render_list(const scene::Storage& scene_storage, EntityId camera,
-                                     Extent2D extent) {
-    const Result<scene::VisibilityFilter> visibility =
-        scene::make_visibility_filter(scene_storage, std::nullopt);
-    if (!visibility) {
-        return visibility.error();
-    }
-    return build_render_list(scene_storage, camera, extent, visibility.value());
-}
-
-Result<RenderList> build_render_list(const scene::Storage& scene_storage, EntityId camera,
-                                     Extent2D extent, const scene::VisibilityFilter& visibility) {
-    return build_render_list(scene_storage, camera, extent, visibility,
-                             clipping::disabled_filter());
-}
-
-Result<RenderList> build_render_list(const scene::Storage& scene_storage, EntityId camera,
-                                     Extent2D extent, const scene::VisibilityFilter& visibility,
-                                     const clipping::ClippingFilter& clipping_filter) {
-    const Result<const scene::EntityRecord*> camera_record = scene_storage.entity(camera);
-    if (!camera_record) {
-        return camera_record.error();
-    }
-    if (!camera_record.value()->camera.has_value()) {
-        return Error{ErrorCode::entity_has_no_camera,
-                     "Viewport rendering requires an entity with a perspective camera"};
-    }
-    if (!scene::valid_camera_description(camera_record.value()->camera.value())) {
-        return Error{ErrorCode::invalid_camera_configuration,
-                     "The selected perspective camera configuration is invalid"};
-    }
-    if (extent.width == 0 || extent.height == 0) {
-        return RenderList{};
-    }
-
-    const Result<Float4x4> camera_world = scene_storage.world_matrix(camera);
-    if (!camera_world) {
-        return camera_world.error();
-    }
-    const Result<Float4x4> view = math::camera_view_matrix(camera_world.value());
-    if (!view) {
-        return view.error();
-    }
-    const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-    const PerspectiveCameraDescription& camera_description = camera_record.value()->camera.value();
-    const Result<Float4x4> projection =
-        math::perspective_matrix(camera_description.vertical_field_of_view_radians, aspect,
-                                 camera_description.near_plane, camera_description.far_plane);
-    if (!projection) {
-        return projection.error();
-    }
-
-    RenderList list;
-    list.view_matrix = view.value();
-    list.projection_matrix = projection.value();
-    list.camera_world_position =
-        Float3{camera_world.value().elements[12], camera_world.value().elements[13],
-               camera_world.value().elements[14]};
-    for (const std::optional<scene::EntityRecord>& record : scene_storage.entities()) {
-        if (!record.has_value() || !record->model.has_value() ||
-            !scene::entity_visible_in_filter(scene_storage, visibility, record->id)) {
-            continue;
-        }
-        const Result<Float4x4> model = scene_storage.world_matrix(record->id);
-        if (!model) {
-            return model.error();
-        }
-        const Result<math::Matrix3x3> normals = math::normal_matrix(model.value());
-        if (!normals) {
-            return normals.error();
-        }
-        const Result<bool> orientation = math::orientation_reversed(model.value());
-        if (!orientation) {
-            return orientation.error();
-        }
-        for (std::uint32_t primitive_index = 0; primitive_index < record->model->primitives.size();
-             ++primitive_index) {
-            const ModelPrimitiveBinding& primitive = record->model->primitives[primitive_index];
-            const Result<const assets::MeshAsset*> mesh_result =
-                scene_storage.assets().mesh(primitive.mesh);
-            if (!mesh_result) {
-                return mesh_result.error();
-            }
-            const Result<const assets::MaterialAsset*> material_result =
-                scene_storage.assets().material(primitive.material);
-            if (!material_result) {
-                return material_result.error();
-            }
-            if (clipping_filter.has_clipping()) {
-                ++list.clipping_bounds_tested;
-                const Bounds3 world_bounds =
-                    clipping::transform_bounds(mesh_result.value()->bounds, model.value());
-                const clipping::BoundsClassification classification =
-                    clipping::classify_bounds(clipping_filter, world_bounds);
-                if (classification == clipping::BoundsClassification::outside) {
-                    ++list.clipping_bounds_rejected;
-                    continue;
-                }
-                if (classification == clipping::BoundsClassification::intersecting) {
-                    ++list.clipping_bounds_intersecting;
-                }
-            }
-            const Float3 model_origin{model.value().elements[12], model.value().elements[13],
-                                      model.value().elements[14]};
-            const float delta_x = model_origin.x - list.camera_world_position.x;
-            const float delta_y = model_origin.y - list.camera_world_position.y;
-            const float delta_z = model_origin.z - list.camera_world_position.z;
-            const float distance_squared =
-                delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
-            list.items.push_back(
-                RenderItem{record->id, primitive.mesh, primitive.material, primitive_index,
-                           model.value(), normals.value(), orientation.value(),
-                           material_result.value()->description.alpha_mode, distance_squared});
-        }
-    }
-    std::stable_sort(
-        list.items.begin(), list.items.end(), [](const RenderItem& left, const RenderItem& right) {
-            const bool left_blended = left.alpha_mode == AlphaMode::blend;
-            const bool right_blended = right.alpha_mode == AlphaMode::blend;
-            if (left_blended != right_blended) {
-                return !left_blended;
-            }
-            return left_blended && left.camera_distance_squared > right.camera_distance_squared;
-        });
-    return list;
-}
 
 void apply_clipping_description(const clipping::ClippingFilter& filter,
                                 graphics::DrawIndexedDescription& draw) noexcept {
-    draw.clipping_section_plane_enabled = filter.section_plane_enabled;
-    draw.clipping_section_plane_normal = filter.section_plane_normal;
-    draw.clipping_section_plane_offset = filter.section_plane_offset;
-    draw.clipping_retain_positive_half_space = filter.retain_positive_half_space;
-    draw.clipping_box_count = filter.enabled_box_count;
-    for (std::uint32_t index = 0; index < filter.enabled_box_count; ++index) {
-        draw.clipping_boxes[index] = filter.boxes[index];
-    }
-}
-
-void apply_clipping_description(const clipping::ClippingFilter& filter,
-                                graphics::PickingDrawDescription& draw) noexcept {
     draw.clipping_section_plane_enabled = filter.section_plane_enabled;
     draw.clipping_section_plane_normal = filter.section_plane_normal;
     draw.clipping_section_plane_offset = filter.section_plane_offset;
@@ -506,7 +296,7 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, E
                                           const ViewportRenderOptions& options,
                                           const scene::VisibilityFilter& visibility,
                                           const clipping::ClippingFilter& clipping_filter) {
-    if (detail::SceneHandleAccess::engine_token(scene_storage.id()) != engine_token_) {
+    if (!scene_storage.belongs_to_engine(engine_token_)) {
         return Error{ErrorCode::foreign_engine_object,
                      "The scene was created by a different Elf3D engine instance"};
     }
@@ -536,62 +326,24 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, E
     statistics.clipping_bounds_rejected = list.clipping_bounds_rejected;
     statistics.clipping_bounds_intersecting = list.clipping_bounds_intersecting;
     for (const RenderItem& item : list.items) {
-        const Result<const assets::MeshAsset*> mesh_result = scene_storage.assets().mesh(item.mesh);
-        if (!mesh_result) {
-            return mesh_result.error();
+        const Result<scene::RuntimePrimitiveView> primitive =
+            scene_storage.runtime_primitive(item.entity, item.primitive_index);
+        if (!primitive) {
+            return primitive.error();
         }
-        const Result<const assets::MaterialAsset*> material_result =
-            scene_storage.assets().material(item.material);
-        if (!material_result) {
-            return material_result.error();
+        Result<graphics::StaticMesh*> mesh = cached_mesh(scene_storage.id(), primitive.value());
+        if (!mesh) {
+            return mesh.error();
         }
-        Result<graphics::StaticMesh*> gpu_mesh_result =
-            cached_mesh(scene_storage.id(), item.mesh, *mesh_result.value());
-        if (!gpu_mesh_result) {
-            return gpu_mesh_result.error();
-        }
-
+        graphics::StaticMesh* const gpu_mesh = mesh.value();
+        const MaterialDescription material =
+            runtime_material_description(primitive.value().material_view);
         std::array<graphics::Texture2D*, graphics::material_texture_count> textures{};
-        const MaterialDescription& material = material_result.value()->description;
-        if (material.base_color_texture.is_valid()) {
-            Result<graphics::Texture2D*> texture_result = cached_texture(
-                scene_storage.id(), material.base_color_texture, TextureColorSpace::srgb,
-                scene_storage.assets(), statistics.gpu_texture_uploads);
-            if (!texture_result) {
-                return texture_result.error();
-            }
-            textures[0] = texture_result.value();
-            ++statistics.texture_bindings;
-        }
-        if (material.metallic_roughness_texture.is_valid()) {
-            Result<graphics::Texture2D*> texture_result = cached_texture(
-                scene_storage.id(), material.metallic_roughness_texture, TextureColorSpace::linear,
-                scene_storage.assets(), statistics.gpu_texture_uploads);
-            if (!texture_result) {
-                return texture_result.error();
-            }
-            textures[1] = texture_result.value();
-            ++statistics.texture_bindings;
-        }
-        if (material.occlusion_texture.is_valid()) {
-            Result<graphics::Texture2D*> texture_result = cached_texture(
-                scene_storage.id(), material.occlusion_texture, TextureColorSpace::linear,
-                scene_storage.assets(), statistics.gpu_texture_uploads);
-            if (!texture_result) {
-                return texture_result.error();
-            }
-            textures[2] = texture_result.value();
-            ++statistics.texture_bindings;
-        }
-        if (material.emissive_texture.is_valid()) {
-            Result<graphics::Texture2D*> texture_result = cached_texture(
-                scene_storage.id(), material.emissive_texture, TextureColorSpace::srgb,
-                scene_storage.assets(), statistics.gpu_texture_uploads);
-            if (!texture_result) {
-                return texture_result.error();
-            }
-            textures[3] = texture_result.value();
-            ++statistics.texture_bindings;
+        const Result<void> texture_result =
+            prepare_draw_textures(scene_storage, primitive.value(), textures,
+                                  statistics.gpu_texture_uploads, statistics.texture_bindings);
+        if (!texture_result) {
+            return texture_result.error();
         }
 
         graphics::DrawIndexedDescription draw;
@@ -626,16 +378,15 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, E
         draw.double_sided = material.double_sided;
         draw.front_face_clockwise = item.orientation_reversed;
         apply_clipping_description(clipping_filter, draw);
-        const Result<void> draw_result =
-            device_->draw_indexed(target, *pipeline_, *gpu_mesh_result.value(), draw);
+        const Result<void> draw_result = device_->draw_indexed(target, *pipeline_, *gpu_mesh, draw);
         if (!draw_result) {
             return draw_result.error();
         }
 
         ++statistics.draw_calls;
-        statistics.vertices += gpu_mesh_result.value()->vertex_count();
-        statistics.indices += gpu_mesh_result.value()->index_count();
-        statistics.triangles += gpu_mesh_result.value()->index_count() / 3;
+        statistics.vertices += gpu_mesh->vertex_count();
+        statistics.indices += gpu_mesh->index_count();
+        statistics.triangles += gpu_mesh->index_count() / 3;
     }
 
     if (!options.overlay_lines.empty() || !options.overlay_markers.empty()) {
@@ -656,272 +407,18 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, E
     return statistics;
 }
 
-Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage, EntityId camera,
-                                         graphics::PickingTarget& target,
-                                         Float2 target_position_pixels, Extent2D viewport_extent,
-                                         Float2 viewport_position_pixels,
-                                         const scene::VisibilityFilter& visibility,
-                                         const clipping::ClippingFilter& clipping_filter) {
-    if (detail::SceneHandleAccess::engine_token(scene_storage.id()) != engine_token_) {
-        return Error{ErrorCode::foreign_engine_object,
-                     "The scene was created by a different Elf3D engine instance"};
-    }
-    if (!device_) {
-        return Error{ErrorCode::graphics_shutdown, "Renderer graphics resources are unavailable"};
-    }
-
-    const Extent2D target_extent = target.extent();
-    if (target_extent.width == 0 || target_extent.height == 0) {
-        return GpuPickResult{};
-    }
-    if (!std::isfinite(target_position_pixels.x) || !std::isfinite(target_position_pixels.y) ||
-        target_position_pixels.x < 0.0F || target_position_pixels.y < 0.0F ||
-        target_position_pixels.x >= static_cast<float>(target_extent.width) ||
-        target_position_pixels.y >= static_cast<float>(target_extent.height) ||
-        viewport_extent.width == 0U || viewport_extent.height == 0U ||
-        !std::isfinite(viewport_position_pixels.x) || !std::isfinite(viewport_position_pixels.y) ||
-        viewport_position_pixels.x < 0.0F || viewport_position_pixels.y < 0.0F ||
-        viewport_position_pixels.x >= static_cast<float>(viewport_extent.width) ||
-        viewport_position_pixels.y >= static_cast<float>(viewport_extent.height)) {
-        return Error{ErrorCode::invalid_viewport_position,
-                     "Picking coordinates are outside the viewport extent"};
-    }
-
-    Result<RenderList> list_result =
-        build_render_list(scene_storage, camera, viewport_extent, visibility, clipping_filter);
-    if (!list_result) {
-        return list_result.error();
-    }
-    RenderList& list = list_result.value();
-    if (list.items.empty()) {
-        return GpuPickResult{};
-    }
-    if (list.items.size() >
-        static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()) - 1U) {
-        return Error{ErrorCode::resource_limit_exceeded,
-                     "GPU picking cannot encode the number of visible render items"};
-    }
-
-    GpuPickResult result;
-    const Result<void> clear_result = target.clear();
-    if (!clear_result) {
-        return clear_result.error();
-    }
-
-    std::vector<std::size_t> item_indices;
-    item_indices.reserve(list.items.size() + 1U);
-    item_indices.push_back(0U);
-
-    const auto pass_start = std::chrono::steady_clock::now();
-    for (std::size_t item_index = 0; item_index < list.items.size(); ++item_index) {
-        const RenderItem& item = list.items[item_index];
-        const Result<const assets::MeshAsset*> mesh_result = scene_storage.assets().mesh(item.mesh);
-        if (!mesh_result) {
-            return mesh_result.error();
-        }
-        const Result<const assets::MaterialAsset*> material_result =
-            scene_storage.assets().material(item.material);
-        if (!material_result) {
-            return material_result.error();
-        }
-        Result<graphics::StaticMesh*> gpu_mesh_result =
-            cached_mesh(scene_storage.id(), item.mesh, *mesh_result.value());
-        if (!gpu_mesh_result) {
-            return gpu_mesh_result.error();
-        }
-
-        item_indices.push_back(item_index);
-        graphics::PickingDrawDescription draw;
-        draw.model_matrix = item.model_matrix.elements;
-        draw.view_matrix = list.view_matrix.elements;
-        draw.projection_matrix = list.projection_matrix.elements;
-        draw.object_id = static_cast<std::uint32_t>(item_indices.size() - 1U);
-        draw.primitive_index = item.primitive_index;
-        draw.double_sided = material_result.value()->description.double_sided;
-        draw.front_face_clockwise = item.orientation_reversed;
-        apply_clipping_description(clipping_filter, draw);
-        const Result<void> draw_result =
-            device_->draw_picking_indexed(target, *gpu_mesh_result.value(), draw);
-        if (!draw_result) {
-            return draw_result.error();
-        }
-        ++result.draw_calls;
-    }
-    const auto pass_end = std::chrono::steady_clock::now();
-    result.picking_pass_time_microseconds = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(pass_end - pass_start).count());
-
-    const auto read_start = std::chrono::steady_clock::now();
-    Result<std::optional<graphics::PickingPixel>> pixel_result =
-        device_->read_picking_pixel(target, target_position_pixels);
-    const auto read_end = std::chrono::steady_clock::now();
-    result.readback_time_microseconds = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count());
-    if (!pixel_result) {
-        return pixel_result.error();
-    }
-    result.pixels_read = 1;
-
-    if (!pixel_result.value().has_value()) {
-        return result;
-    }
-    const graphics::PickingPixel pixel = pixel_result.value().value();
-    if (pixel.object_id == 0U || pixel.object_id >= item_indices.size()) {
-        return result;
-    }
-
-    const std::size_t item_index = item_indices[pixel.object_id];
-    result.hit = make_gpu_pick_hit(list, list.items[item_index], pixel, viewport_extent,
-                                   viewport_position_pixels);
-    return result;
-}
-
-Result<GpuFocusDepthAnchorResult>
-Renderer::gpu_focus_depth_anchor(const scene::Storage& scene_storage, EntityId camera,
-                                 graphics::PickingTarget& target, Extent2D viewport_extent,
-                                 const scene::VisibilityFilter& visibility,
-                                 const clipping::ClippingFilter& clipping_filter) {
-    if (detail::SceneHandleAccess::engine_token(scene_storage.id()) != engine_token_) {
-        return Error{ErrorCode::foreign_engine_object,
-                     "The scene was created by a different Elf3D engine instance"};
-    }
-    if (!device_) {
-        return Error{ErrorCode::graphics_shutdown, "Renderer graphics resources are unavailable"};
-    }
-
-    const Extent2D target_extent = target.extent();
-    if (target_extent.width == 0 || target_extent.height == 0 || viewport_extent.width == 0U ||
-        viewport_extent.height == 0U) {
-        return GpuFocusDepthAnchorResult{};
-    }
-
-    Result<RenderList> list_result =
-        build_render_list(scene_storage, camera, viewport_extent, visibility, clipping_filter);
-    if (!list_result) {
-        return list_result.error();
-    }
-    RenderList& list = list_result.value();
-    if (list.items.empty()) {
-        return GpuFocusDepthAnchorResult{};
-    }
-    if (list.items.size() >
-        static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()) - 1U) {
-        return Error{ErrorCode::resource_limit_exceeded,
-                     "GPU picking cannot encode the number of visible render items"};
-    }
-
-    GpuFocusDepthAnchorResult result;
-    const Result<void> clear_result = target.clear();
-    if (!clear_result) {
-        return clear_result.error();
-    }
-
-    const auto pass_start = std::chrono::steady_clock::now();
-    for (std::size_t item_index = 0; item_index < list.items.size(); ++item_index) {
-        const RenderItem& item = list.items[item_index];
-        const Result<const assets::MeshAsset*> mesh_result = scene_storage.assets().mesh(item.mesh);
-        if (!mesh_result) {
-            return mesh_result.error();
-        }
-        const Result<const assets::MaterialAsset*> material_result =
-            scene_storage.assets().material(item.material);
-        if (!material_result) {
-            return material_result.error();
-        }
-        Result<graphics::StaticMesh*> gpu_mesh_result =
-            cached_mesh(scene_storage.id(), item.mesh, *mesh_result.value());
-        if (!gpu_mesh_result) {
-            return gpu_mesh_result.error();
-        }
-
-        graphics::PickingDrawDescription draw;
-        draw.model_matrix = item.model_matrix.elements;
-        draw.view_matrix = list.view_matrix.elements;
-        draw.projection_matrix = list.projection_matrix.elements;
-        draw.object_id = static_cast<std::uint32_t>(item_index + 1U);
-        draw.primitive_index = item.primitive_index;
-        draw.double_sided = material_result.value()->description.double_sided;
-        draw.front_face_clockwise = item.orientation_reversed;
-        apply_clipping_description(clipping_filter, draw);
-        const Result<void> draw_result =
-            device_->draw_picking_indexed(target, *gpu_mesh_result.value(), draw);
-        if (!draw_result) {
-            return draw_result.error();
-        }
-        ++result.draw_calls;
-    }
-    const auto pass_end = std::chrono::steady_clock::now();
-    result.picking_pass_time_microseconds = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(pass_end - pass_start).count());
-
-    const auto read_start = std::chrono::steady_clock::now();
-    Result<std::vector<float>> depths_result = device_->read_picking_depths(target);
-    const auto read_end = std::chrono::steady_clock::now();
-    result.readback_time_microseconds = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count());
-    if (!depths_result) {
-        return depths_result.error();
-    }
-
-    const std::vector<float>& depths = depths_result.value();
-    result.pixels_read = static_cast<std::uint64_t>(depths.size());
-    const std::size_t expected_pixels = static_cast<std::size_t>(target_extent.width) *
-                                        static_cast<std::size_t>(target_extent.height);
-    if (depths.size() < expected_pixels) {
-        return Error{ErrorCode::draw_submission_failed,
-                     "Picking depth readback returned fewer pixels than the picking target extent"};
-    }
-
-    double weighted_depth = 0.0;
-    double total_weight = 0.0;
-    for (std::uint32_t y = 0; y < target_extent.height; ++y) {
-        for (std::uint32_t x = 0; x < target_extent.width; ++x) {
-            const std::size_t index =
-                static_cast<std::size_t>(y) * static_cast<std::size_t>(target_extent.width) +
-                static_cast<std::size_t>(x);
-            const float depth = depths[index];
-            if (!std::isfinite(depth) || depth <= 0.0F || depth >= 1.0F) {
-                continue;
-            }
-            const double weight = focus_depth_weight(target_extent, x, y);
-            if (weight <= 0.0) {
-                continue;
-            }
-            weighted_depth += static_cast<double>(depth) * weight;
-            total_weight += weight;
-        }
-    }
-
-    if (total_weight > 0.0 && std::isfinite(total_weight)) {
-        const Float2 anchor_position{static_cast<float>(viewport_extent.width) * 0.5F,
-                                     static_cast<float>(viewport_extent.height) * 0.5F};
-        const float anchor_depth = static_cast<float>(weighted_depth / total_weight);
-        const Result<Float3> anchor =
-            math::unproject_viewport_point(list.view_matrix, list.projection_matrix,
-                                           viewport_extent, anchor_position, anchor_depth);
-        if (anchor && math::is_finite(anchor.value())) {
-            result.world_position = anchor.value();
-        }
-    }
-    return result;
-}
-
 void Renderer::release_scene(SceneId scene_id) noexcept {
-    const std::uint64_t scene_value = detail::SceneHandleAccess::value(scene_id);
-    for (auto iterator = mesh_cache_.begin(); iterator != mesh_cache_.end();) {
-        if (iterator->first.scene == scene_value) {
-            iterator = mesh_cache_.erase(iterator);
-        } else {
-            ++iterator;
-        }
-    }
-    for (auto iterator = texture_cache_.begin(); iterator != texture_cache_.end();) {
-        if (iterator->first.scene == scene_value) {
-            iterator = texture_cache_.erase(iterator);
-        } else {
-            ++iterator;
-        }
-    }
+    const std::uint64_t scene_value = scene_id.debug_value();
+    mesh_cache_.erase(std::remove_if(mesh_cache_.begin(), mesh_cache_.end(),
+                                     [scene_value](const MeshCacheEntry& entry) noexcept {
+                                         return entry.key.scene == scene_value;
+                                     }),
+                      mesh_cache_.end());
+    texture_cache_.erase(std::remove_if(texture_cache_.begin(), texture_cache_.end(),
+                                        [scene_value](const TextureCacheEntry& entry) noexcept {
+                                            return entry.key.scene == scene_value;
+                                        }),
+                         texture_cache_.end());
 }
 
 graphics::Device& Renderer::device() noexcept {
@@ -932,43 +429,62 @@ const graphics::Device& Renderer::device() const noexcept {
     return *device_;
 }
 
-std::size_t Renderer::TextureCacheHash::operator()(const TextureCacheKey& key) const noexcept {
-    std::size_t result = std::hash<std::uint64_t>{}(key.scene);
-    const auto combine = [&result](std::size_t value) {
-        result ^= value + static_cast<std::size_t>(0x9e3779b9U) + (result << 6U) + (result >> 2U);
-    };
-    combine(std::hash<std::uint64_t>{}(key.image));
-    combine(static_cast<std::size_t>(key.color_space));
-    combine(static_cast<std::size_t>(key.sampler.wrap_u));
-    combine(static_cast<std::size_t>(key.sampler.wrap_v));
-    combine(static_cast<std::size_t>(key.sampler.min_filter));
-    combine(static_cast<std::size_t>(key.sampler.mag_filter));
-    return result;
-}
-
-std::size_t Renderer::MeshCacheHash::operator()(const MeshCacheKey& key) const noexcept {
-    const std::size_t first = std::hash<std::uint64_t>{}(key.scene);
-    const std::size_t second = std::hash<std::uint64_t>{}(key.mesh);
-    return first ^ (second + static_cast<std::size_t>(0x9e3779b9U) + (first << 6U) + (first >> 2U));
-}
-
-Result<graphics::StaticMesh*> Renderer::cached_mesh(SceneId scene_id, MeshHandle handle,
-                                                    const assets::MeshAsset& mesh) {
-    const MeshCacheKey key{detail::SceneHandleAccess::value(scene_id),
-                           detail::SceneHandleAccess::value(handle)};
-    const auto existing = mesh_cache_.find(key);
-    if (existing != mesh_cache_.end()) {
-        return existing->second.get();
+Result<void> Renderer::prepare_draw_textures(
+    const scene::Storage& scene_storage, const scene::RuntimePrimitiveView& primitive,
+    std::array<graphics::Texture2D*, graphics::material_texture_count>& textures,
+    std::uint64_t& upload_count, std::uint64_t& texture_bindings) {
+    constexpr std::array<scene::RuntimeMaterialTextureSlot, graphics::material_texture_count>
+        texture_slots{scene::RuntimeMaterialTextureSlot::base_color,
+                      scene::RuntimeMaterialTextureSlot::metallic_roughness,
+                      scene::RuntimeMaterialTextureSlot::occlusion,
+                      scene::RuntimeMaterialTextureSlot::emissive};
+    constexpr std::array<TextureColorSpace, graphics::material_texture_count> texture_color_spaces{
+        TextureColorSpace::srgb, TextureColorSpace::linear, TextureColorSpace::linear,
+        TextureColorSpace::srgb};
+    for (std::size_t index = 0; index < texture_slots.size(); ++index) {
+        if (!primitive.material_view.has_texture(texture_slots[index])) {
+            continue;
+        }
+        const Result<scene::RuntimeTextureView> texture =
+            scene_storage.runtime_texture(primitive, texture_slots[index]);
+        if (!texture) {
+            return texture.error();
+        }
+        Result<graphics::Texture2D*> gpu_texture = cached_texture(
+            scene_storage.id(), texture.value(), texture_color_spaces[index], upload_count);
+        if (!gpu_texture) {
+            return gpu_texture.error();
+        }
+        textures[index] = gpu_texture.value();
+        ++texture_bindings;
     }
-    if (mesh.vertices.size() >
+    return {};
+}
+
+Result<graphics::StaticMesh*> Renderer::cached_mesh(SceneId scene_id,
+                                                    const scene::RuntimePrimitiveView& primitive) {
+    const bool document_primitive = primitive.document_primitive.is_valid();
+    const std::uint64_t geometry = document_primitive ? primitive.document_primitive.debug_value()
+                                                      : primitive.mesh.debug_value();
+    const MeshCacheKey key{scene_id.debug_value(), geometry, document_primitive};
+    const auto existing =
+        std::find_if(mesh_cache_.begin(), mesh_cache_.end(),
+                     [&key](const MeshCacheEntry& entry) noexcept { return entry.key == key; });
+    if (existing != mesh_cache_.end()) {
+        return existing->mesh.get();
+    }
+    if (primitive.vertex_count() >
         static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
         return Error{ErrorCode::gpu_buffer_creation_failed,
-                     "The mesh vertex count exceeds the graphics abstraction limit"};
+                     "The primitive vertex count exceeds the graphics abstraction limit"};
     }
 
-    const std::span<const VertexPositionNormalTexCoord> vertices{mesh.vertices};
+    const std::vector<VertexPositionNormalTexCoord> vertices =
+        vertices_from_runtime_primitive(primitive);
+    const std::span<const VertexPositionNormalTexCoord> vertex_span{vertices};
     const graphics::StaticMeshDescription description{
-        std::as_bytes(vertices), static_cast<std::uint32_t>(vertices.size()), mesh.indices,
+        std::as_bytes(vertex_span), static_cast<std::uint32_t>(vertex_span.size()),
+        primitive.indices(),
         graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4};
     Result<std::unique_ptr<graphics::StaticMesh>> mesh_result =
         device_->create_static_mesh(description);
@@ -976,58 +492,41 @@ Result<graphics::StaticMesh*> Renderer::cached_mesh(SceneId scene_id, MeshHandle
         return mesh_result.error();
     }
 
-    auto [iterator, inserted] = mesh_cache_.emplace(key, std::move(mesh_result).value());
-    if (!inserted) {
-        return Error{ErrorCode::gpu_buffer_creation_failed,
-                     "The static mesh cache rejected a unique mesh identity"};
-    }
-    return iterator->second.get();
+    mesh_cache_.push_back(MeshCacheEntry{key, std::move(mesh_result).value()});
+    return mesh_cache_.back().mesh.get();
 }
 
-Result<graphics::Texture2D*> Renderer::cached_texture(SceneId scene_id, TextureAssetHandle handle,
+Result<graphics::Texture2D*> Renderer::cached_texture(SceneId scene_id,
+                                                      const scene::RuntimeTextureView& texture,
                                                       TextureColorSpace color_space,
-                                                      const assets::Storage& assets_storage,
                                                       std::uint64_t& upload_count) {
-    const Result<const assets::TextureAsset*> texture_result = assets_storage.texture(handle);
-    if (!texture_result) {
-        return texture_result.error();
-    }
-    const TextureDescription& texture = texture_result.value()->description;
-    const TextureCacheKey key{detail::SceneHandleAccess::value(scene_id),
-                              detail::SceneHandleAccess::value(texture.image), color_space,
-                              texture.sampler};
-    const auto existing = texture_cache_.find(key);
+    const TextureCacheKey key{scene_id.debug_value(), texture.image_identity,
+                              texture.document_image, color_space, texture.sampler};
+    const auto existing =
+        std::find_if(texture_cache_.begin(), texture_cache_.end(),
+                     [&key](const TextureCacheEntry& entry) noexcept { return entry.key == key; });
     if (existing != texture_cache_.end()) {
-        return existing->second.get();
+        return existing->texture.get();
     }
 
-    const Result<const assets::ImageAsset*> image_result = assets_storage.image(texture.image);
-    if (!image_result) {
-        return image_result.error();
-    }
-    const assets::ImageAsset& image = *image_result.value();
     graphics::Texture2DDescription description;
-    description.extent = Extent2D{image.width, image.height};
+    description.extent = Extent2D{texture.width, texture.height};
     description.format = color_space == TextureColorSpace::srgb
                              ? graphics::TextureFormat::rgba8_srgb
                              : graphics::TextureFormat::rgba8_unorm;
-    description.pixels = image.pixels;
-    description.wrap_u = address_mode(texture.sampler.wrap_u);
-    description.wrap_v = address_mode(texture.sampler.wrap_v);
-    description.min_filter = filter_mode(texture.sampler.min_filter);
-    description.mag_filter = filter_mode(texture.sampler.mag_filter);
+    description.pixels = texture.pixels;
+    description.wrap_u = runtime_address_mode(texture.sampler.wrap_u);
+    description.wrap_v = runtime_address_mode(texture.sampler.wrap_v);
+    description.min_filter = runtime_filter_mode(texture.sampler.min_filter);
+    description.mag_filter = runtime_filter_mode(texture.sampler.mag_filter);
     Result<std::unique_ptr<graphics::Texture2D>> gpu_result =
         device_->create_texture_2d(description);
     if (!gpu_result) {
         return gpu_result.error();
     }
-    auto [iterator, inserted] = texture_cache_.emplace(key, std::move(gpu_result).value());
-    if (!inserted) {
-        return Error{ErrorCode::gpu_texture_creation_failed,
-                     "The GPU texture cache rejected a unique texture identity"};
-    }
+    texture_cache_.push_back(TextureCacheEntry{key, std::move(gpu_result).value()});
     ++upload_count;
-    return iterator->second.get();
+    return texture_cache_.back().texture.get();
 }
 
 } // namespace elf3d::renderer

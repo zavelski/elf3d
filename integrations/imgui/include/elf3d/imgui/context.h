@@ -23,7 +23,7 @@ class Context final {
     struct ConstructionKey final {};
 
   public:
-    ~Context();
+    ~Context() noexcept;
 
     Context(const Context &) = delete;
     Context &operator=(const Context &) = delete;

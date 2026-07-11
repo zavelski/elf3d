@@ -1,9 +1,13 @@
 #ifndef ELF3D_SCENE_LOAD_H
 #define ELF3D_SCENE_LOAD_H
 
+#include <elf3d/core/api.h>
+#include <elf3d/core/result.h>
+
+#include <cstddef>
+#include <memory>
 #include <optional>
-#include <string>
-#include <vector>
+#include <string_view>
 
 namespace elf3d {
 
@@ -41,26 +45,44 @@ enum class SceneLoadDiagnosticCode {
     skipped_unsupported_primitive,
 };
 
-struct SceneLoadDiagnostic {
+struct SceneLoadDiagnosticView {
     SceneLoadDiagnosticSeverity severity = SceneLoadDiagnosticSeverity::warning;
     SceneLoadDiagnosticCategory category = SceneLoadDiagnosticCategory::geometry;
     SceneLoadDiagnosticCode code = SceneLoadDiagnosticCode::material_fallback;
-    std::string message;
-    std::optional<std::string> source_context;
+    std::string_view message;
+    std::optional<std::string_view> source_context;
 };
 
-struct SceneLoadReport {
-    std::vector<SceneLoadDiagnostic> diagnostics;
+#if defined(_MSC_VER)
+#pragma warning(push)
+// The exported special members keep unique_ptr operations inside the DLL.
+#pragma warning(disable : 4251)
+#endif
+class ELF3D_API SceneLoadReport final {
+  public:
+    SceneLoadReport() noexcept;
+    ~SceneLoadReport() noexcept;
 
-    [[nodiscard]] bool has_warnings() const noexcept {
-        for (const SceneLoadDiagnostic& diagnostic : diagnostics) {
-            if (diagnostic.severity == SceneLoadDiagnosticSeverity::warning) {
-                return true;
-            }
-        }
-        return false;
-    }
+    SceneLoadReport(const SceneLoadReport &) = delete;
+    SceneLoadReport &operator=(const SceneLoadReport &) = delete;
+    SceneLoadReport(SceneLoadReport &&) noexcept;
+    SceneLoadReport &operator=(SceneLoadReport &&) noexcept;
+
+    [[nodiscard]] std::size_t diagnostic_count() const noexcept;
+    [[nodiscard]] Result<SceneLoadDiagnosticView> diagnostic(std::size_t index) const noexcept;
+    [[nodiscard]] bool has_warnings() const noexcept;
+
+  private:
+    friend class Engine;
+
+    class Impl;
+    explicit SceneLoadReport(std::unique_ptr<Impl> impl) noexcept;
+
+    std::unique_ptr<Impl> impl_;
 };
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 } // namespace elf3d
 

@@ -106,7 +106,7 @@ struct DepthScene {
 
 } // namespace
 
-int main() {
+int elf3d_selection_test() {
     SelectionScene fixture = make_scene();
     elf3d::picking::PickingService picking;
     elf3d::tools::selection::SelectionController selection;

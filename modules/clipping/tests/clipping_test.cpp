@@ -23,7 +23,7 @@ namespace {
 
 } // namespace
 
-int main() {
+int elf3d_clipping_test() {
     elf3d::SectionPlane plane;
     plane.enabled = true;
     plane.normal = {2.0F, 0.0F, 0.0F};

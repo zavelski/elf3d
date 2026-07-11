@@ -2,12 +2,14 @@
 #include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
 #include <elf3d/measurement.h>
+#include <elf3d/model.h>
 #include <elf3d/scene.h>
 
 #include <array>
 #include <cmath>
 
 import elf.assets;
+import elf.model;
 import elf.scene;
 import elf.tool.clipping;
 
@@ -19,20 +21,24 @@ namespace {
 
 [[nodiscard]] elf3d::scene::Storage make_scene() {
     elf3d::scene::Storage scene{scene_id(1)};
-    const std::array<elf3d::VertexPositionNormal, 8> vertices{{
-        {{-1.0F, -1.0F, -1.0F}, {0.0F, 1.0F, 0.0F}},
-        {{1.0F, -1.0F, -1.0F}, {0.0F, 1.0F, 0.0F}},
-        {{-1.0F, 1.0F, -1.0F}, {0.0F, 1.0F, 0.0F}},
-        {{1.0F, 1.0F, -1.0F}, {0.0F, 1.0F, 0.0F}},
-        {{-1.0F, -1.0F, 1.0F}, {0.0F, 1.0F, 0.0F}},
-        {{1.0F, -1.0F, 1.0F}, {0.0F, 1.0F, 0.0F}},
-        {{-1.0F, 1.0F, 1.0F}, {0.0F, 1.0F, 0.0F}},
-        {{1.0F, 1.0F, 1.0F}, {0.0F, 1.0F, 0.0F}},
-    }};
     const std::array<std::uint32_t, 3> indices{{0, 1, 2}};
-    const elf3d::MeshHandle mesh = scene.create_mesh({vertices, indices}).value();
-    const elf3d::MaterialHandle material = scene.create_material({}).value();
-    static_cast<void>(scene.create_model(mesh, material));
+    const std::array<elf3d::Float3, 3> document_positions{{
+        {2.0F, -1.0F, -1.0F},
+        {3.0F, -1.0F, 1.0F},
+        {2.0F, 1.0F, -1.0F},
+    }};
+    elf3d::Document document;
+    const elf3d::MaterialId document_material = document.create_material({}).value();
+    const elf3d::MeshId document_mesh = document.create_mesh().value();
+    const elf3d::PrimitiveId document_primitive =
+        document
+            .create_primitive(document_mesh, document_material,
+                              {document_positions, {}, {}, {}, {}, indices})
+            .value();
+    static_cast<void>(scene.set_document(std::move(document)));
+    const elf3d::EntityId model = scene.create_entity().value();
+    const std::array<elf3d::PrimitiveId, 1> document_primitives{{document_primitive}};
+    static_cast<void>(scene.set_model_document_primitives(model, document_primitives));
     return scene;
 }
 
@@ -42,7 +48,7 @@ namespace {
 
 } // namespace
 
-int main() {
+int elf3d_tool_clipping_test() {
     elf3d::tools::clipping::ClippingController controller;
     if (controller.snapshot().revision != 0 || controller.snapshot().box_count != 0) {
         return 1;
@@ -92,7 +98,7 @@ int main() {
         return 9;
     }
     const elf3d::ClippingBox reset = controller.snapshot().boxes[0];
-    if (!nearly_equal(reset.minimum.x, -1.0F) || !nearly_equal(reset.maximum.x, 1.0F)) {
+    if (!nearly_equal(reset.minimum.x, 2.0F) || !nearly_equal(reset.maximum.x, 3.0F)) {
         return 10;
     }
     controller.clear_boxes();
@@ -111,8 +117,8 @@ int main() {
     const elf3d::clipping::ClippingFilter filter = controller.filter().value();
     const std::optional<elf3d::Bounds3> clipped =
         elf3d::tools::clipping::visible_bounds(scene, visibility, filter);
-    if (!clipped.has_value() || !nearly_equal(clipped->minimum.x, 0.0F) ||
-        !nearly_equal(clipped->maximum.x, 1.0F)) {
+    if (!clipped.has_value() || !nearly_equal(clipped->minimum.x, 2.0F) ||
+        !nearly_equal(clipped->maximum.x, 3.0F)) {
         return 14;
     }
     const elf3d::tools::clipping::ClippingOverlay overlay =

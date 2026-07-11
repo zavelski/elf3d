@@ -14,7 +14,7 @@ Result<void> VisibilityController::isolate_entity(const scene::Storage &scene, E
         return record.error();
     }
     if (isolated_scene_ == scene.id() && isolated_entity_.has_value() &&
-        isolated_entity_.value() == entity) {
+        *isolated_entity_ == entity) {
         return {};
     }
     isolated_scene_ = scene.id();
@@ -41,7 +41,7 @@ void VisibilityController::validate_against(const scene::Storage &scene) noexcep
         clear_isolation();
         return;
     }
-    const Result<const scene::EntityRecord *> record = scene.entity(isolated_entity_.value());
+    const Result<const scene::EntityRecord *> record = scene.entity(*isolated_entity_);
     if (!record) {
         clear_isolation();
     }

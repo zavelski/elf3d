@@ -17,7 +17,7 @@ namespace {
 
 } // namespace
 
-int main() {
+int elf3d_tool_visibility_test() {
     elf3d::scene::Storage scene{scene_id(1)};
     const elf3d::EntityId root = scene.create_entity().value();
     const elf3d::EntityId child = scene.create_entity().value();

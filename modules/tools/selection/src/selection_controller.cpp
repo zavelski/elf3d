@@ -68,14 +68,15 @@ SelectionController::select_at(picking::PickingService &picking, const scene::St
     if (!pick_result) {
         return pick_result.error();
     }
-    if (!pick_result.value().has_value()) {
+    const std::optional<PickHit>& picked = pick_result.value();
+    if (!picked.has_value()) {
         clear();
         return std::optional<PickHit>{};
     }
 
     selected_scene_ = scene.id();
-    entity_ = pick_result.value()->entity;
-    hit_ = pick_result.value();
+    entity_ = picked->entity;
+    hit_ = picked;
     return hit_;
 }
 
@@ -95,7 +96,7 @@ SelectionController::select_hit(const scene::Storage &scene, const std::optional
     }
     selected_scene_ = scene.id();
     entity_ = hit->entity;
-    hit_ = hit.value();
+    hit_ = *hit;
     return hit_;
 }
 
@@ -105,7 +106,7 @@ Result<void> SelectionController::set_selected_entity(const scene::Storage &scen
     if (!record) {
         return record.error();
     }
-    if (entity_.has_value() && entity_.value() == entity && selected_scene_ == scene.id() &&
+    if (entity_.has_value() && *entity_ == entity && selected_scene_ == scene.id() &&
         !hit_.has_value()) {
         return {};
     }
@@ -135,7 +136,7 @@ void SelectionController::validate_against(const scene::Storage &scene) noexcept
         clear();
         return;
     }
-    const Result<const scene::EntityRecord *> record = scene.entity(entity_.value());
+    const Result<const scene::EntityRecord *> record = scene.entity(*entity_);
     if (!record) {
         clear();
     }

@@ -20,7 +20,7 @@ class CapturingSink final : public elf3d::LogSink {
 
 } // namespace
 
-int main() {
+int elf3d_core_vocabulary_test() {
     static_assert(elf3d::core::vocabulary_revision == 1U);
 
     const elf3d::Error error{elf3d::ErrorCode::invalid_argument, "invalid value"};

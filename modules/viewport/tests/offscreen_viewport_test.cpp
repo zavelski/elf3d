@@ -39,7 +39,7 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
         return extent_;
     }
 
-    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) override {
+    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) noexcept override {
         if (extent == extent_) {
             return {};
         }
@@ -49,7 +49,7 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> clear(elf3d::Color4 color) override {
+    [[nodiscard]] elf3d::Result<void> clear(elf3d::Color4 color) noexcept override {
         last_clear_color = color;
         ++clear_count;
         return {};
@@ -90,7 +90,7 @@ class FakePickingTarget final : public elf3d::graphics::PickingTarget {
         return extent_;
     }
 
-    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) override {
+    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) noexcept override {
         if (extent == extent_) {
             return {};
         }
@@ -99,7 +99,7 @@ class FakePickingTarget final : public elf3d::graphics::PickingTarget {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> clear() override {
+    [[nodiscard]] elf3d::Result<void> clear() noexcept override {
         ++clear_count;
         return {};
     }
@@ -126,20 +126,20 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::RenderTarget>>
-    create_render_target(elf3d::Extent2D initial_extent) override {
+    create_render_target(elf3d::Extent2D initial_extent) noexcept override {
         latest_render_target_extent = initial_extent;
         auto target = std::make_unique<FakeRenderTarget>(initial_extent);
         return std::unique_ptr<elf3d::graphics::RenderTarget>{std::move(target)};
     }
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::PickingTarget>>
-    create_picking_target(elf3d::Extent2D initial_extent) override {
+    create_picking_target(elf3d::Extent2D initial_extent) noexcept override {
         auto target = std::make_unique<FakePickingTarget>(initial_extent);
         return std::unique_ptr<elf3d::graphics::PickingTarget>{std::move(target)};
     }
 
     [[nodiscard]] elf3d::Result<elf3d::NativeTextureView>
-    native_texture_view(elf3d::TextureHandle texture) const override {
+    native_texture_view(elf3d::TextureHandle texture) const noexcept override {
         if (!texture.is_valid()) {
             return elf3d::Error{elf3d::ErrorCode::texture_unavailable,
                                 "Fake texture is unavailable"};
@@ -178,46 +178,46 @@ class FakeDevice final : public elf3d::graphics::Device {
     };
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::StaticMesh>>
-    create_static_mesh(const elf3d::graphics::StaticMeshDescription&) override {
+    create_static_mesh(const elf3d::graphics::StaticMeshDescription&) noexcept override {
         return std::unique_ptr<elf3d::graphics::StaticMesh>{std::make_unique<FakeMesh>()};
     }
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::Texture2D>>
-    create_texture_2d(const elf3d::graphics::Texture2DDescription&) override {
+    create_texture_2d(const elf3d::graphics::Texture2DDescription&) noexcept override {
         return std::unique_ptr<elf3d::graphics::Texture2D>{std::make_unique<FakeTexture>()};
     }
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::GraphicsPipeline>>
-    create_graphics_pipeline(const elf3d::graphics::GraphicsPipelineDescription&) override {
+    create_graphics_pipeline(const elf3d::graphics::GraphicsPipelineDescription&) noexcept override {
         return std::unique_ptr<elf3d::graphics::GraphicsPipeline>{std::make_unique<FakePipeline>()};
     }
 
     [[nodiscard]] elf3d::Result<void>
     draw_indexed(elf3d::graphics::RenderTarget&, elf3d::graphics::GraphicsPipeline&,
                  elf3d::graphics::StaticMesh&,
-                 const elf3d::graphics::DrawIndexedDescription&) override {
+                 const elf3d::graphics::DrawIndexedDescription&) noexcept override {
         return {};
     }
     [[nodiscard]] elf3d::Result<void>
     draw_overlay(elf3d::graphics::RenderTarget&,
-                 const elf3d::graphics::DrawOverlayDescription& description) override {
+                 const elf3d::graphics::DrawOverlayDescription& description) noexcept override {
         latest_overlay_lines = static_cast<int>(description.lines.size());
         latest_overlay_markers = static_cast<int>(description.markers.size());
         return {};
     }
     [[nodiscard]] elf3d::Result<void>
     draw_picking_indexed(elf3d::graphics::PickingTarget&, elf3d::graphics::StaticMesh&,
-                         const elf3d::graphics::PickingDrawDescription&) override {
+                         const elf3d::graphics::PickingDrawDescription&) noexcept override {
         return {};
     }
     [[nodiscard]] elf3d::Result<std::optional<elf3d::graphics::PickingPixel>>
-    read_picking_pixel(elf3d::graphics::PickingTarget&, elf3d::Float2 position_pixels) override {
+    read_picking_pixel(elf3d::graphics::PickingTarget&, elf3d::Float2 position_pixels) noexcept override {
         last_picking_read_position = position_pixels;
         ++picking_pixel_read_count;
         return picking_pixel;
     }
     [[nodiscard]] elf3d::Result<std::vector<float>>
-    read_picking_depths(elf3d::graphics::PickingTarget& target) override {
+    read_picking_depths(elf3d::graphics::PickingTarget& target) noexcept override {
         ++picking_depths_read_count;
         last_picking_read_extent = target.extent();
         if (!picking_depths.empty()) {
@@ -246,7 +246,7 @@ class FakeDevice final : public elf3d::graphics::Device {
 
 } // namespace
 
-int main() {
+int elf3d_viewport_lifetime_test() {
     auto owned_device = std::make_unique<FakeDevice>();
     FakeDevice* device = owned_device.get();
     elf3d::Result<std::unique_ptr<elf3d::renderer::Renderer>> renderer_result =

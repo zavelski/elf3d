@@ -12,11 +12,12 @@ class TextureHandleAccess;
 }
 
 enum class GraphicsBackend {
+    none,
     opengl,
 };
 
 using GraphicsProcedure = void (*)();
-using GraphicsProcedureLoader = GraphicsProcedure (*)(const char *name);
+using GraphicsProcedureLoader = GraphicsProcedure (*)(const char *name) noexcept;
 
 struct OpenGLConfiguration {
     // The host must make its OpenGL context current before Engine::create.

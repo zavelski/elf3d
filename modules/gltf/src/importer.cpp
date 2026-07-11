@@ -1,10 +1,10 @@
 module;
 
-#include <elf3d/assets.h>
+#include <elf3d/core/assert.h>
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
-#include <elf3d/scene.h>
-#include <elf3d/scene_load.h>
+#include <elf3d/model.h>
+#include <elf3d/model/detail/imported_metadata.h>
 
 #include <cgltf.h>
 
@@ -20,6 +20,7 @@ module;
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <new>
 #include <optional>
 #include <span>
 #include <string>
@@ -29,10 +30,10 @@ module;
 
 module elf.gltf;
 
-import elf.assets;
+import elf.core;
 import elf.image;
 import elf.math;
-import elf.scene;
+import elf.model;
 
 namespace elf3d::gltf {
 namespace {
@@ -43,17 +44,27 @@ constexpr std::uint64_t maximum_total_buffer_bytes = 2ULL * 1024ULL * 1024ULL * 
 constexpr std::size_t maximum_cgltf_allocation_bytes =
     static_cast<std::size_t>(2ULL * 1024ULL * 1024ULL * 1024ULL);
 constexpr cgltf_size maximum_node_count = 65536;
+constexpr std::size_t maximum_node_hierarchy_depth = 1024;
 constexpr cgltf_size maximum_mesh_count = 65536;
 constexpr cgltf_size maximum_primitive_count = 262144;
 constexpr cgltf_size maximum_accessor_count = 262144;
 constexpr std::uint64_t maximum_total_vertices = 50000000;
 constexpr std::uint64_t maximum_total_indices = 150000000;
+constexpr std::uint64_t maximum_total_encoded_image_bytes = 512ULL * 1024ULL * 1024ULL;
 constexpr std::uint64_t maximum_total_decoded_image_bytes = 512ULL * 1024ULL * 1024ULL;
 
-void add_diagnostic(std::vector<SceneLoadDiagnostic>& diagnostics,
-                    SceneLoadDiagnosticCategory category, SceneLoadDiagnosticCode code,
+[[noreturn]] void fatal_gltf_allocation_failure() noexcept {
+    fatal_error("Elf3D glTF importer memory allocation failed");
+}
+
+[[noreturn]] void fatal_unexpected_gltf_boundary_exception() noexcept {
+    fatal_error("Elf3D glTF importer encountered an unexpected exception");
+}
+
+void add_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
+                    ModelLoadDiagnosticCategory category, ModelLoadDiagnosticCode code,
                     std::string message, std::optional<std::string> source_context = std::nullopt) {
-    diagnostics.push_back(SceneLoadDiagnostic{SceneLoadDiagnosticSeverity::warning, category, code,
+    diagnostics.push_back(ModelLoadDiagnostic{ModelLoadDiagnosticSeverity::warning, category, code,
                                               std::move(message), std::move(source_context)});
 }
 
@@ -67,41 +78,142 @@ void add_diagnostic(std::vector<SceneLoadDiagnostic>& diagnostics,
     return supported_required_extension(extension) || extension == "KHR_materials_specular";
 }
 
-void add_optional_extension_diagnostic(std::vector<SceneLoadDiagnostic>& diagnostics,
+void add_optional_extension_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
                                        std::string_view extension) {
-    SceneLoadDiagnosticCategory category = SceneLoadDiagnosticCategory::extension;
-    SceneLoadDiagnosticCode code = SceneLoadDiagnosticCode::unsupported_optional_extension;
+    ModelLoadDiagnosticCategory category = ModelLoadDiagnosticCategory::extension;
+    ModelLoadDiagnosticCode code = ModelLoadDiagnosticCode::unsupported_optional_extension;
     std::string behavior = "is unsupported and was ignored";
     if (extension == "KHR_lights_punctual") {
-        category = SceneLoadDiagnosticCategory::light;
-        code = SceneLoadDiagnosticCode::ignored_lights;
+        category = ModelLoadDiagnosticCategory::light;
+        code = ModelLoadDiagnosticCode::ignored_lights;
         behavior = "was parsed by cgltf, but Elf3D has no scene-light model; lights were ignored";
     } else if (extension == "EXT_mesh_gpu_instancing") {
-        category = SceneLoadDiagnosticCategory::geometry;
-        code = SceneLoadDiagnosticCode::ignored_instancing;
+        category = ModelLoadDiagnosticCategory::geometry;
+        code = ModelLoadDiagnosticCode::ignored_instancing;
         behavior = "is unsupported; ordinary node/mesh data was loaded without GPU instances";
     } else if (extension == "KHR_materials_specular") {
-        category = SceneLoadDiagnosticCategory::material;
-        code = SceneLoadDiagnosticCode::material_fallback;
+        category = ModelLoadDiagnosticCategory::material;
+        code = ModelLoadDiagnosticCode::material_fallback;
         behavior = "factors are rendered, but extension textures use the documented fallback";
     } else if (extension == "KHR_materials_variants") {
-        category = SceneLoadDiagnosticCategory::material;
+        category = ModelLoadDiagnosticCategory::material;
         behavior = "is unsupported; each primitive's default material was used";
     } else if (extension.starts_with("KHR_materials_")) {
-        category = SceneLoadDiagnosticCategory::material;
-        code = SceneLoadDiagnosticCode::material_fallback;
+        category = ModelLoadDiagnosticCategory::material;
+        code = ModelLoadDiagnosticCode::material_fallback;
         behavior = "is unsupported; the core metallic-roughness material fallback was used";
     } else if (extension == "KHR_draco_mesh_compression" ||
                extension == "EXT_meshopt_compression") {
-        category = SceneLoadDiagnosticCategory::geometry;
+        category = ModelLoadDiagnosticCategory::geometry;
         behavior = "is unsupported; import succeeds only where ordinary fallback geometry exists";
     } else if (extension == "KHR_texture_basisu" || extension == "EXT_texture_webp") {
-        category = SceneLoadDiagnosticCategory::texture;
+        category = ModelLoadDiagnosticCategory::texture;
         behavior = "is unsupported; ordinary PNG/JPEG fallback images are used when present";
     }
     add_diagnostic(diagnostics, category, code,
                    "Optional extension " + std::string{extension} + " " + behavior,
                    std::string{extension});
+}
+
+constexpr std::size_t maximum_preserved_json_block_bytes = 1024ULL * 1024ULL;
+constexpr std::size_t maximum_preserved_json_bytes = 64ULL * 1024ULL * 1024ULL;
+constexpr std::size_t maximum_preserved_extension_name_bytes = 256ULL;
+
+struct MetadataBudget {
+    std::size_t bytes = 0;
+};
+
+[[nodiscard]] bool source_has_metadata(const cgltf_extras& extras,
+                                       cgltf_size extensions_count) noexcept {
+    return extras.data != nullptr || extras.end_offset > extras.start_offset ||
+           extensions_count != 0;
+}
+
+void add_metadata_not_preserved(std::vector<ModelLoadDiagnostic>& diagnostics,
+                                std::string_view context, std::string_view reason) {
+    add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::metadata,
+                   ModelLoadDiagnosticCode::metadata_not_preserved,
+                   std::string{context} + " metadata was not preserved: " + std::string{reason},
+                   std::string{context});
+}
+
+[[nodiscard]] bool reserve_metadata_bytes(MetadataBudget& budget, std::size_t bytes) noexcept {
+    if (bytes > maximum_preserved_json_bytes - budget.bytes) {
+        return false;
+    }
+    budget.bytes += bytes;
+    return true;
+}
+
+[[nodiscard]] ModelJsonMetadata copy_metadata(const cgltf_extras& extras,
+                                              const cgltf_extension* extensions,
+                                              cgltf_size extensions_count, MetadataBudget& budget,
+                                              std::vector<ModelLoadDiagnostic>& diagnostics,
+                                              std::string_view context) {
+    ModelJsonMetadata result;
+    if (extras.data != nullptr) {
+        const std::string_view data{extras.data};
+        if (data.empty() || data.size() > maximum_preserved_json_block_bytes ||
+            !reserve_metadata_bytes(budget, data.size())) {
+            add_metadata_not_preserved(diagnostics, context,
+                                       "extras exceed the bounded raw-JSON budget");
+        } else {
+            result.extras_json = std::string{data};
+        }
+    }
+    result.extensions.reserve(extensions_count);
+    for (cgltf_size index = 0; index < extensions_count; ++index) {
+        const cgltf_extension& extension = extensions[index];
+        if (extension.name == nullptr || extension.data == nullptr) {
+            add_metadata_not_preserved(diagnostics, context,
+                                       "an unknown extension has missing raw data");
+            continue;
+        }
+        const std::string_view name{extension.name};
+        const std::string_view data{extension.data};
+        const bool duplicate = std::any_of(result.extensions.begin(), result.extensions.end(),
+                                           [name](const ModelJsonExtension& preserved) noexcept {
+                                               return preserved.name == name;
+                                           });
+        if (duplicate || name.empty() || name.size() > maximum_preserved_extension_name_bytes ||
+            data.empty() || data.size() > maximum_preserved_json_block_bytes ||
+            !reserve_metadata_bytes(budget, name.size() + data.size())) {
+            add_metadata_not_preserved(
+                diagnostics, context,
+                duplicate ? "an unknown extension name is duplicated"
+                          : "an unknown extension exceeds the bounded raw-JSON budget");
+            continue;
+        }
+        result.extensions.push_back(ModelJsonExtension{std::string{name}, std::string{data}});
+    }
+    return result;
+}
+
+[[nodiscard]] ModelJsonMetadata copy_metadata(const cgltf_data& source, const cgltf_extras& extras,
+                                              const cgltf_extension* extensions,
+                                              cgltf_size extensions_count, MetadataBudget& budget,
+                                              std::vector<ModelLoadDiagnostic>& diagnostics,
+                                              std::string_view context) {
+    ModelJsonMetadata result =
+        copy_metadata(extras, extensions, extensions_count, budget, diagnostics, context);
+    if (extras.data != nullptr || extras.end_offset <= extras.start_offset) {
+        return result;
+    }
+    if (source.json == nullptr || extras.end_offset > source.json_size) {
+        add_metadata_not_preserved(diagnostics, context,
+                                   "legacy raw extras offsets are outside the source JSON");
+        return result;
+    }
+    const std::string_view data{source.json + extras.start_offset,
+                                extras.end_offset - extras.start_offset};
+    if (data.empty() || data.size() > maximum_preserved_json_block_bytes ||
+        !reserve_metadata_bytes(budget, data.size())) {
+        add_metadata_not_preserved(diagnostics, context,
+                                   "extras exceed the bounded raw-JSON budget");
+        return result;
+    }
+    result.extras_json = std::string{data};
+    return result;
 }
 
 [[nodiscard]] bool supported_primitive_type(cgltf_primitive_type type) noexcept {
@@ -123,11 +235,6 @@ void add_optional_extension_diagnostic(std::vector<SceneLoadDiagnostic>& diagnos
         return false;
     }
 }
-
-enum class ImageMime {
-    png,
-    jpeg,
-};
 
 struct CgltfDeleter {
     void operator()(cgltf_data* data) const noexcept {
@@ -277,10 +384,10 @@ cgltf_result read_external_file(const cgltf_memory_options* memory,
         *size = static_cast<cgltf_size>(requested_size);
         *data = file_data;
         return cgltf_result_success;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        context->error_code = ErrorCode::source_file_read_failed;
-        context->diagnostic = "External glTF buffer loading threw an exception";
-        return cgltf_result_io_error;
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
@@ -325,9 +432,10 @@ void release_external_file(const cgltf_memory_options* memory, const cgltf_file_
                          "The glTF source file could not be read completely"};
         }
         return bytes;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "The glTF source file could not be buffered in memory"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
@@ -386,6 +494,53 @@ expanded_triangle_index_count(const cgltf_primitive& primitive,
     return source_index_count;
 }
 
+[[nodiscard]] Result<void> validate_node_hierarchy(const cgltf_data& data) {
+    std::vector<std::uint8_t> states(data.nodes_count, 0U);
+    std::vector<std::size_t> depths(data.nodes_count, 0U);
+    std::vector<std::size_t> path;
+    path.reserve(data.nodes_count);
+    for (std::size_t start = 0; start < data.nodes_count; ++start) {
+        if (states[start] == 2U) {
+            continue;
+        }
+        path.clear();
+        std::size_t current = start;
+        std::size_t parent_depth = 0U;
+        while (states[current] == 0U) {
+            states[current] = 1U;
+            path.push_back(current);
+            const cgltf_node* parent = data.nodes[current].parent;
+            if (parent == nullptr) {
+                break;
+            }
+            if (parent < data.nodes || parent >= data.nodes + data.nodes_count) {
+                return Error{ErrorCode::invalid_node_hierarchy,
+                             "A glTF node parent is outside the node table"};
+            }
+            current = static_cast<std::size_t>(parent - data.nodes);
+            if (states[current] == 1U) {
+                return Error{ErrorCode::invalid_node_hierarchy,
+                             "The glTF node hierarchy contains a cycle"};
+            }
+            if (states[current] == 2U) {
+                parent_depth = depths[current];
+                break;
+            }
+        }
+        while (!path.empty()) {
+            const std::size_t index = path.back();
+            path.pop_back();
+            if (++parent_depth > maximum_node_hierarchy_depth) {
+                return Error{ErrorCode::resource_limit_exceeded,
+                             "The glTF node hierarchy exceeds the depth limit of 1024"};
+            }
+            depths[index] = parent_depth;
+            states[index] = 2U;
+        }
+    }
+    return {};
+}
+
 [[nodiscard]] Result<void> validate_resource_limits(const cgltf_data& data) {
     if (data.nodes_count > maximum_node_count || data.meshes_count > maximum_mesh_count ||
         data.accessors_count > maximum_accessor_count) {
@@ -434,7 +589,7 @@ expanded_triangle_index_count(const cgltf_primitive& primitive,
                 return Error{ErrorCode::resource_limit_exceeded,
                              "The glTF expanded triangle index count exceeds the importer limit"};
             }
-            if (!checked_add(total_indices, index_count.value(), maximum_total_indices)) {
+            if (!checked_add(total_indices, *index_count, maximum_total_indices)) {
                 return Error{ErrorCode::resource_limit_exceeded,
                              "The glTF expanded triangle index count exceeds the importer limit"};
             }
@@ -541,18 +696,19 @@ expanded_triangle_index_count(const cgltf_primitive& primitive,
                          "Decoded image data URI exceeds the 64 MiB encoded-byte limit"};
         }
         return result;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Image base64 decoding failed while allocating storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
-[[nodiscard]] Result<ImageMime> mime_from_text(std::string_view mime) {
+[[nodiscard]] Result<ModelImageMimeType> mime_from_text(std::string_view mime) {
     if (mime == "image/png") {
-        return ImageMime::png;
+        return ModelImageMimeType::png;
     }
     if (mime == "image/jpeg" || mime == "image/jpg") {
-        return ImageMime::jpeg;
+        return ModelImageMimeType::jpeg;
     }
     return Error{ErrorCode::unsupported_image_mime_type,
                  "Supported glTF image MIME types are image/png and image/jpeg"};
@@ -570,20 +726,21 @@ void decode_image_json_strings(cgltf_data& data) noexcept {
     }
 }
 
-[[nodiscard]] Result<ImageMime> mime_from_extension(const std::filesystem::path& path) {
+[[nodiscard]] Result<ModelImageMimeType> mime_from_extension(const std::filesystem::path& path) {
     const std::string extension = lower_extension(path);
     if (extension == ".png") {
-        return ImageMime::png;
+        return ModelImageMimeType::png;
     }
     if (extension == ".jpg" || extension == ".jpeg") {
-        return ImageMime::jpeg;
+        return ModelImageMimeType::jpeg;
     }
     return Error{ErrorCode::unsupported_image_extension,
                  "Supported external image extensions are .png, .jpg, and .jpeg"};
 }
 
-[[nodiscard]] bool encoded_matches(ImageMime mime, std::span<const std::byte> bytes) noexcept {
-    if (mime == ImageMime::png) {
+[[nodiscard]] bool encoded_matches(ModelImageMimeType mime,
+                                   std::span<const std::byte> bytes) noexcept {
+    if (mime == ModelImageMimeType::png) {
         constexpr std::uint8_t signature[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
         if (bytes.size() < std::size(signature)) {
             return false;
@@ -632,9 +789,10 @@ void decode_image_json_strings(cgltf_data& data) noexcept {
             index += 2;
         }
         return result;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "External image URI decoding failed while allocating storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
@@ -664,15 +822,21 @@ void decode_image_json_strings(cgltf_data& data) noexcept {
                          "A referenced external image could not be read completely"};
         }
         return bytes;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "External image reading failed while allocating storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
 struct EncodedImage {
-    ImageMime mime = ImageMime::png;
+    ModelImageMimeType mime = ModelImageMimeType::png;
     std::vector<std::byte> bytes;
+};
+
+struct ImageImportBudget {
+    std::uint64_t encoded_bytes = 0;
+    std::uint64_t decoded_bytes = 0;
 };
 
 [[nodiscard]] Result<EncodedImage> encoded_image(const cgltf_image& source,
@@ -691,7 +855,7 @@ struct EncodedImage {
                 return Error{ErrorCode::malformed_data_uri,
                              "glTF image data URIs must use base64 encoding"};
             }
-            Result<ImageMime> mime =
+            Result<ModelImageMimeType> mime =
                 mime_from_text(metadata.substr(0, metadata.size() - base64_suffix.size()));
             if (!mime) {
                 return mime.error();
@@ -716,8 +880,9 @@ struct EncodedImage {
         }
         const std::filesystem::path image_path =
             gltf_path.parent_path() / path_from_utf8(decoded_uri.value());
-        Result<ImageMime> mime = source.mime_type != nullptr ? mime_from_text(source.mime_type)
-                                                             : mime_from_extension(image_path);
+        Result<ModelImageMimeType> mime = source.mime_type != nullptr
+                                              ? mime_from_text(source.mime_type)
+                                              : mime_from_extension(image_path);
         if (!mime) {
             return mime.error();
         }
@@ -741,7 +906,7 @@ struct EncodedImage {
         return Error{ErrorCode::unsupported_image_mime_type,
                      "A buffer-view glTF image requires image/png or image/jpeg MIME type"};
     }
-    Result<ImageMime> mime = mime_from_text(source.mime_type);
+    Result<ModelImageMimeType> mime = mime_from_text(source.mime_type);
     if (!mime) {
         return mime.error();
     }
@@ -762,17 +927,18 @@ struct EncodedImage {
                          "GLB image bytes do not match the declared MIME type"};
         }
         return EncodedImage{mime.value(), std::move(bytes)};
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "GLB image extraction failed while allocating storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
-[[nodiscard]] Result<ImageHandle> image_for(const cgltf_data& data, const cgltf_image* source,
-                                            const std::filesystem::path& gltf_path,
-                                            scene::Storage& builder,
-                                            std::vector<std::optional<ImageHandle>>& images,
-                                            std::uint64_t& total_decoded_image_bytes) {
+[[nodiscard]] Result<ImageId> image_for(const cgltf_data& data, const cgltf_image* source,
+                                        const std::filesystem::path& gltf_path,
+                                        DocumentBuilder& builder,
+                                        std::vector<std::optional<ImageId>>& images,
+                                        ImageImportBudget& budget) {
     if (source == nullptr || source < data.images || source >= data.images + data.images_count) {
         return Error{ErrorCode::invalid_image_handle,
                      "A glTF texture references an image outside the image table"};
@@ -785,82 +951,90 @@ struct EncodedImage {
     if (!encoded) {
         return encoded.error();
     }
+    std::uint64_t encoded_total = budget.encoded_bytes;
+    if (!checked_add(encoded_total, static_cast<std::uint64_t>(encoded.value().bytes.size()),
+                     maximum_total_encoded_image_bytes)) {
+        return Error{ErrorCode::image_resource_limit_exceeded,
+                     "Imported scene images exceed the 512 MiB encoded-image limit"};
+    }
     Result<image::DecodedImage> decoded = image::decode_png_or_jpeg(encoded.value().bytes);
     if (!decoded) {
         return decoded.error();
     }
-    if (!checked_add(total_decoded_image_bytes,
-                     static_cast<std::uint64_t>(decoded.value().pixels.size()),
+    std::uint64_t decoded_total = budget.decoded_bytes;
+    if (!checked_add(decoded_total, static_cast<std::uint64_t>(decoded.value().pixels.size()),
                      maximum_total_decoded_image_bytes)) {
         return Error{ErrorCode::image_resource_limit_exceeded,
                      "Imported scene images exceed the 512 MiB decoded-image limit"};
     }
-    const Result<ImageHandle> created =
-        builder.create_image(ImageDescription{decoded.value().width, decoded.value().height,
-                                              PixelFormat::rgba8_unorm, decoded.value().pixels});
+    const Result<ImageId> created = builder.create_image(ModelImageDescription{
+        decoded.value().width, decoded.value().height, ModelPixelFormat::rgba8_unorm,
+        decoded.value().pixels, encoded.value().mime, encoded.value().bytes});
     if (!created) {
         return created.error();
     }
+    budget.encoded_bytes = encoded_total;
+    budget.decoded_bytes = decoded_total;
     images[index] = created.value();
     return created.value();
 }
 
-[[nodiscard]] Result<TextureWrap> texture_wrap(cgltf_wrap_mode wrap) {
+[[nodiscard]] Result<ModelTextureWrap> texture_wrap(cgltf_wrap_mode wrap) {
     switch (wrap) {
     case cgltf_wrap_mode_repeat:
-        return TextureWrap::repeat;
+        return ModelTextureWrap::repeat;
     case cgltf_wrap_mode_mirrored_repeat:
-        return TextureWrap::mirrored_repeat;
+        return ModelTextureWrap::mirrored_repeat;
     case cgltf_wrap_mode_clamp_to_edge:
-        return TextureWrap::clamp_to_edge;
+        return ModelTextureWrap::clamp_to_edge;
     default:
         return Error{ErrorCode::invalid_sampler_wrap,
                      "A glTF sampler contains an invalid wrap mode"};
     }
 }
 
-[[nodiscard]] Result<TextureFilter> min_filter(cgltf_filter_type filter) {
+[[nodiscard]] Result<ModelTextureFilter> min_filter(cgltf_filter_type filter) {
     switch (filter) {
     case cgltf_filter_type_undefined:
     case cgltf_filter_type_linear:
-        return TextureFilter::linear;
+        return ModelTextureFilter::linear;
     case cgltf_filter_type_nearest:
-        return TextureFilter::nearest;
+        return ModelTextureFilter::nearest;
     case cgltf_filter_type_nearest_mipmap_nearest:
-        return TextureFilter::nearest_mipmap_nearest;
+        return ModelTextureFilter::nearest_mipmap_nearest;
     case cgltf_filter_type_linear_mipmap_nearest:
-        return TextureFilter::linear_mipmap_nearest;
+        return ModelTextureFilter::linear_mipmap_nearest;
     case cgltf_filter_type_nearest_mipmap_linear:
-        return TextureFilter::nearest_mipmap_linear;
+        return ModelTextureFilter::nearest_mipmap_linear;
     case cgltf_filter_type_linear_mipmap_linear:
-        return TextureFilter::linear_mipmap_linear;
+        return ModelTextureFilter::linear_mipmap_linear;
     default:
         return Error{ErrorCode::invalid_sampler_filter,
                      "A glTF sampler contains an invalid minification filter"};
     }
 }
 
-[[nodiscard]] Result<TextureFilter> mag_filter(cgltf_filter_type filter) {
+[[nodiscard]] Result<ModelTextureFilter> mag_filter(cgltf_filter_type filter) {
     switch (filter) {
     case cgltf_filter_type_undefined:
     case cgltf_filter_type_linear:
-        return TextureFilter::linear;
+        return ModelTextureFilter::linear;
     case cgltf_filter_type_nearest:
-        return TextureFilter::nearest;
+        return ModelTextureFilter::nearest;
     default:
         return Error{ErrorCode::invalid_sampler_filter,
                      "A glTF sampler magnification filter must be NEAREST or LINEAR"};
     }
 }
 
-[[nodiscard]] Result<SamplerDescription> sampler_description(const cgltf_sampler* sampler) {
+[[nodiscard]] Result<ModelSamplerDescription> sampler_description(const cgltf_sampler* sampler) {
     if (sampler == nullptr) {
-        return SamplerDescription{};
+        return ModelSamplerDescription{};
     }
-    Result<TextureWrap> wrap_u = texture_wrap(sampler->wrap_s);
-    Result<TextureWrap> wrap_v = texture_wrap(sampler->wrap_t);
-    Result<TextureFilter> minimum = min_filter(sampler->min_filter);
-    Result<TextureFilter> magnification = mag_filter(sampler->mag_filter);
+    Result<ModelTextureWrap> wrap_u = texture_wrap(sampler->wrap_s);
+    Result<ModelTextureWrap> wrap_v = texture_wrap(sampler->wrap_t);
+    Result<ModelTextureFilter> minimum = min_filter(sampler->min_filter);
+    Result<ModelTextureFilter> magnification = mag_filter(sampler->mag_filter);
     if (!wrap_u) {
         return wrap_u.error();
     }
@@ -873,8 +1047,42 @@ struct EncodedImage {
     if (!magnification) {
         return magnification.error();
     }
-    return SamplerDescription{wrap_u.value(), wrap_v.value(), minimum.value(),
-                              magnification.value()};
+    return ModelSamplerDescription{wrap_u.value(), wrap_v.value(), minimum.value(),
+                                   magnification.value()};
+}
+
+[[nodiscard]] Result<SamplerId> sampler_for(const cgltf_data& data, const cgltf_sampler* source,
+                                            DocumentBuilder& builder,
+                                            std::vector<std::optional<SamplerId>>& samplers,
+                                            std::optional<SamplerId>& default_sampler) {
+    if (source == nullptr) {
+        if (!default_sampler.has_value()) {
+            const Result<SamplerId> created = builder.create_sampler(ModelSamplerDescription{});
+            if (!created) {
+                return created.error();
+            }
+            default_sampler = created.value();
+        }
+        return *default_sampler;
+    }
+    if (source < data.samplers || source >= data.samplers + data.samplers_count) {
+        return Error{ErrorCode::invalid_sampler_description,
+                     "A glTF texture references a sampler outside the sampler table"};
+    }
+    const std::size_t index = static_cast<std::size_t>(source - data.samplers);
+    if (samplers[index].has_value()) {
+        return samplers[index].value();
+    }
+    Result<ModelSamplerDescription> description = sampler_description(source);
+    if (!description) {
+        return description.error();
+    }
+    const Result<SamplerId> created = builder.create_sampler(description.value());
+    if (!created) {
+        return created.error();
+    }
+    samplers[index] = created.value();
+    return created.value();
 }
 
 [[nodiscard]] std::string mesh_context(const cgltf_mesh& mesh, cgltf_size mesh_index,
@@ -882,7 +1090,7 @@ struct EncodedImage {
 
 [[nodiscard]] Result<void> validate_texture_inputs(const cgltf_data& data) {
     for (cgltf_size sampler_index = 0; sampler_index < data.samplers_count; ++sampler_index) {
-        const Result<SamplerDescription> sampler =
+        const Result<ModelSamplerDescription> sampler =
             sampler_description(&data.samplers[sampler_index]);
         if (!sampler) {
             return sampler.error();
@@ -898,8 +1106,8 @@ struct EncodedImage {
             }
             const cgltf_accessor* positions =
                 cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0);
-            for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets);
-                 ++set) {
+            for (cgltf_int set = 0;
+                 set < static_cast<cgltf_int>(model_maximum_texture_coordinate_sets); ++set) {
                 const cgltf_accessor* texcoords =
                     cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, set);
                 if (texcoords == nullptr) {
@@ -922,12 +1130,14 @@ struct EncodedImage {
     return {};
 }
 
-[[nodiscard]] Result<TextureAssetHandle>
-texture_for(const cgltf_data& data, const cgltf_texture* source,
-            const std::filesystem::path& gltf_path, scene::Storage& builder,
-            std::vector<std::optional<ImageHandle>>& images,
-            std::vector<std::optional<TextureAssetHandle>>& textures,
-            std::uint64_t& total_decoded_image_bytes) {
+[[nodiscard]] Result<TextureId> texture_for(const cgltf_data& data, const cgltf_texture* source,
+                                            const std::filesystem::path& gltf_path,
+                                            DocumentBuilder& builder,
+                                            std::vector<std::optional<ImageId>>& images,
+                                            std::vector<std::optional<TextureId>>& textures,
+                                            std::vector<std::optional<SamplerId>>& samplers,
+                                            std::optional<SamplerId>& default_sampler,
+                                            ImageImportBudget& image_budget) {
     if (source == nullptr || source < data.textures ||
         source >= data.textures + data.textures_count) {
         return Error{ErrorCode::invalid_texture_asset_handle,
@@ -941,17 +1151,18 @@ texture_for(const cgltf_data& data, const cgltf_texture* source,
         return Error{ErrorCode::unsupported_image_mime_type,
                      "The glTF texture has no ordinary PNG/JPEG fallback image"};
     }
-    Result<ImageHandle> image =
-        image_for(data, source->image, gltf_path, builder, images, total_decoded_image_bytes);
+    Result<ImageId> image =
+        image_for(data, source->image, gltf_path, builder, images, image_budget);
     if (!image) {
         return image.error();
     }
-    Result<SamplerDescription> sampler = sampler_description(source->sampler);
+    Result<SamplerId> sampler =
+        sampler_for(data, source->sampler, builder, samplers, default_sampler);
     if (!sampler) {
         return sampler.error();
     }
-    const Result<TextureAssetHandle> created =
-        builder.create_texture(TextureDescription{image.value(), sampler.value()});
+    const Result<TextureId> created =
+        builder.create_texture(ModelTextureDescription{image.value(), sampler.value()});
     if (!created) {
         return created.error();
     }
@@ -981,26 +1192,25 @@ texture_for(const cgltf_data& data, const cgltf_texture* source,
         const auto append_root = [&](const cgltf_node* node) -> Result<void> {
             if (node == nullptr || node < data.nodes || node >= data.nodes + data.nodes_count) {
                 return Error{ErrorCode::invalid_node_hierarchy,
-                             "The selected glTF scene contains an invalid root node"};
+                             "A glTF scene contains an invalid root node"};
             }
             const std::size_t index = static_cast<std::size_t>(node - data.nodes);
             if (reachable[index]) {
-                return Error{ErrorCode::invalid_node_hierarchy,
-                             "The selected glTF scene contains a duplicate root node"};
+                return {};
             }
             reachable[index] = true;
             queue.push_back(node);
             return {};
         };
 
-        const cgltf_scene* selected_scene = data.scene != nullptr    ? data.scene
-                                            : data.scenes_count != 0 ? &data.scenes[0]
-                                                                     : nullptr;
-        if (selected_scene != nullptr) {
-            for (cgltf_size index = 0; index < selected_scene->nodes_count; ++index) {
-                const Result<void> result = append_root(selected_scene->nodes[index]);
-                if (!result) {
-                    return result.error();
+        if (data.scenes_count != 0) {
+            for (cgltf_size scene_index = 0; scene_index < data.scenes_count; ++scene_index) {
+                const cgltf_scene& scene = data.scenes[scene_index];
+                for (cgltf_size root_index = 0; root_index < scene.nodes_count; ++root_index) {
+                    const Result<void> result = append_root(scene.nodes[root_index]);
+                    if (!result) {
+                        return result.error();
+                    }
                 }
             }
         } else {
@@ -1021,22 +1231,21 @@ texture_for(const cgltf_data& data, const cgltf_texture* source,
                 if (child == nullptr || child < data.nodes ||
                     child >= data.nodes + data.nodes_count || child->parent != node) {
                     return Error{ErrorCode::invalid_node_hierarchy,
-                                 "The selected glTF scene contains an invalid child link"};
+                                 "A glTF scene contains an invalid child link"};
                 }
                 const std::size_t index = static_cast<std::size_t>(child - data.nodes);
                 if (reachable[index]) {
-                    return Error{
-                        ErrorCode::invalid_node_hierarchy,
-                        "The selected glTF scene hierarchy contains a cycle or shared child"};
+                    continue;
                 }
                 reachable[index] = true;
                 queue.push_back(child);
             }
         }
         return reachable;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "glTF node selection failed while allocating traversal storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
@@ -1057,9 +1266,10 @@ unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_
                          std::string{context} + " could not be decoded from its accessor"};
         }
         return values;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     std::string{context} + " could not allocate decoded accessor storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
@@ -1081,9 +1291,10 @@ unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_
                          std::string{context} + " could not be decoded from its accessor"};
         }
         return values;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     std::string{context} + " could not allocate decoded accessor storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
@@ -1105,24 +1316,25 @@ unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_
                          std::string{context} + " could not be decoded from its accessor"};
         }
         return values;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     std::string{context} + " could not allocate decoded accessor storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
-[[nodiscard]] Result<TextureMapping> texture_mapping(const cgltf_texture_view& view,
-                                                     std::string_view context) {
+[[nodiscard]] Result<ModelTextureMapping> texture_mapping(const cgltf_texture_view& view,
+                                                          std::string_view context) {
     const cgltf_int selected_set =
         view.has_transform && view.transform.has_texcoord ? view.transform.texcoord : view.texcoord;
     if (selected_set < 0 ||
-        selected_set >= static_cast<cgltf_int>(maximum_texture_coordinate_sets)) {
+        selected_set >= static_cast<cgltf_int>(model_maximum_texture_coordinate_sets)) {
         return Error{ErrorCode::invalid_texcoord,
                      std::string{context} + " references unsupported TEXCOORD_" +
                          std::to_string(selected_set) + "; Elf3D supports UV sets 0 and 1"};
     }
 
-    TextureMapping mapping;
+    ModelTextureMapping mapping;
     mapping.texcoord_set = static_cast<std::uint32_t>(selected_set);
     if (view.has_transform) {
         mapping.transform.offset = {view.transform.offset[0], view.transform.offset[1]};
@@ -1139,16 +1351,40 @@ unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_
 }
 
 struct ImportedTextureView {
-    TextureAssetHandle texture;
-    TextureMapping mapping;
+    TextureId texture;
+    ModelTextureMapping mapping;
 };
 
-using TexcoordAvailability = std::array<bool, maximum_texture_coordinate_sets>;
+struct ImportedMesh {
+    std::optional<MeshId> mesh;
+    std::vector<std::optional<PrimitiveId>> primitives;
+    std::uint64_t primitive_count = 0;
+};
+
+struct ConstructedDocument {
+    Document document;
+    DocumentSceneId default_scene;
+};
+
+struct ImportedDocumentIds {
+    std::vector<DocumentSceneId> scenes;
+    std::vector<std::optional<NodeId>> nodes;
+    std::vector<std::optional<MeshId>> meshes;
+    std::vector<std::vector<std::optional<PrimitiveId>>> primitives;
+    std::vector<std::optional<MaterialId>> material_cache;
+    std::vector<std::vector<MaterialId>> materials;
+    std::vector<std::optional<ImageId>> images;
+    std::vector<std::optional<TextureId>> textures;
+    std::vector<std::optional<SamplerId>> samplers;
+};
+
+using TexcoordAvailability = std::array<bool, model_maximum_texture_coordinate_sets>;
 
 [[nodiscard]] TexcoordAvailability
 primitive_texcoord_availability(const cgltf_primitive& primitive) {
     TexcoordAvailability availability{};
-    for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets); ++set) {
+    for (cgltf_int set = 0; set < static_cast<cgltf_int>(model_maximum_texture_coordinate_sets);
+         ++set) {
         availability[static_cast<std::size_t>(set)] =
             cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, set) != nullptr;
     }
@@ -1162,7 +1398,7 @@ texture_view_uses_unavailable_texcoord(const cgltf_texture_view& view,
     if (view.texture == nullptr) {
         return false;
     }
-    Result<TextureMapping> mapping = texture_mapping(view, context);
+    Result<ModelTextureMapping> mapping = texture_mapping(view, context);
     if (!mapping) {
         return mapping.error();
     }
@@ -1233,16 +1469,15 @@ material_uses_unavailable_texcoord(const cgltf_material& material,
     return false;
 }
 
-[[nodiscard]] Result<ImportedTextureView>
-import_texture_view(const cgltf_data& data, const cgltf_texture_view& view,
-                    std::string_view slot_name, const std::filesystem::path& gltf_path,
-                    scene::Storage& builder, std::vector<std::optional<ImageHandle>>& images,
-                    std::vector<std::optional<TextureAssetHandle>>& textures,
-                    const TexcoordAvailability& available_texcoords,
-                    bool& primitive_specific_fallback,
-                    std::vector<SceneLoadDiagnostic>& diagnostics,
-                    std::uint64_t& total_decoded_image_bytes, std::string_view context) {
-    Result<TextureMapping> mapping = texture_mapping(view, context);
+[[nodiscard]] Result<ImportedTextureView> import_texture_view(
+    const cgltf_data& data, const cgltf_texture_view& view, std::string_view slot_name,
+    const std::filesystem::path& gltf_path, DocumentBuilder& builder,
+    std::vector<std::optional<ImageId>>& images, std::vector<std::optional<TextureId>>& textures,
+    std::vector<std::optional<SamplerId>>& samplers, std::optional<SamplerId>& default_sampler,
+    const TexcoordAvailability& available_texcoords, bool& primitive_specific_fallback,
+    std::vector<ModelLoadDiagnostic>& diagnostics, ImageImportBudget& image_budget,
+    std::string_view context) {
+    Result<ModelTextureMapping> mapping = texture_mapping(view, context);
     if (!mapping) {
         return mapping.error();
     }
@@ -1251,8 +1486,8 @@ import_texture_view(const cgltf_data& data, const cgltf_texture_view& view,
     }
     if (!available_texcoords[mapping.value().texcoord_set]) {
         primitive_specific_fallback = true;
-        add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::texture,
-                       SceneLoadDiagnosticCode::texture_fallback,
+        add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::texture,
+                       ModelLoadDiagnosticCode::texture_fallback,
                        std::string{slot_name} + " texture references TEXCOORD_" +
                            std::to_string(mapping.value().texcoord_set) +
                            " that this primitive does not provide; the slot was disabled",
@@ -1260,20 +1495,20 @@ import_texture_view(const cgltf_data& data, const cgltf_texture_view& view,
         return ImportedTextureView{{}, mapping.value()};
     }
     if (view.texture->image == nullptr && (view.texture->has_basisu || view.texture->has_webp)) {
-        add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::texture,
-                       SceneLoadDiagnosticCode::texture_fallback,
+        add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::texture,
+                       ModelLoadDiagnosticCode::texture_fallback,
                        std::string{slot_name} +
                            " texture uses an unsupported compressed/WebP source and has no "
                            "ordinary PNG/JPEG fallback; the slot was disabled",
                        std::string{context});
         return ImportedTextureView{{}, mapping.value()};
     }
-    Result<TextureAssetHandle> texture = texture_for(data, view.texture, gltf_path, builder, images,
-                                                     textures, total_decoded_image_bytes);
+    Result<TextureId> texture = texture_for(data, view.texture, gltf_path, builder, images,
+                                            textures, samplers, default_sampler, image_budget);
     if (!texture) {
         if (texture_failure_can_fallback(texture.error().code())) {
-            add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::texture,
-                           SceneLoadDiagnosticCode::texture_fallback,
+            add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::texture,
+                           ModelLoadDiagnosticCode::texture_fallback,
                            std::string{slot_name} +
                                " texture could not be imported and was "
                                "disabled: " +
@@ -1373,20 +1608,21 @@ import_texture_view(const cgltf_data& data, const cgltf_texture_view& view,
             }
         }
         return triangles;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     std::string{context} + " could not allocate index storage"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
-void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
+void generate_normals(std::span<const Float3> positions, std::vector<Float3>& normals,
                       std::span<const std::uint32_t> indices, std::uint64_t& degenerate_count,
                       std::uint64_t& fallback_count) {
-    std::vector<Float3> accumulated(vertices.size());
+    std::vector<Float3> accumulated(positions.size());
     for (std::size_t index = 0; index < indices.size(); index += 3) {
-        const Float3 a = vertices[indices[index]].position;
-        const Float3 b = vertices[indices[index + 1]].position;
-        const Float3 c = vertices[indices[index + 2]].position;
+        const Float3 a = positions[indices[index]];
+        const Float3 b = positions[indices[index + 1]];
+        const Float3 c = positions[indices[index + 2]];
         const Float3 ab{b.x - a.x, b.y - a.y, b.z - a.z};
         const Float3 ac{c.x - a.x, c.y - a.y, c.z - a.z};
         const Float3 face{ab.y * ac.z - ab.z * ac.y, ab.z * ac.x - ab.x * ac.z,
@@ -1404,38 +1640,39 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
         }
     }
 
-    for (std::size_t index = 0; index < vertices.size(); ++index) {
+    normals.resize(positions.size());
+    for (std::size_t index = 0; index < positions.size(); ++index) {
         const Float3 normal = accumulated[index];
         const float length_squared =
             normal.x * normal.x + normal.y * normal.y + normal.z * normal.z;
         if (!std::isfinite(length_squared) || length_squared <= 0.000000000001F) {
-            vertices[index].normal = Float3{0.0F, 1.0F, 0.0F};
+            normals[index] = Float3{0.0F, 1.0F, 0.0F};
             ++fallback_count;
             continue;
         }
         const float inverse_length = 1.0F / std::sqrt(length_squared);
-        vertices[index].normal =
+        normals[index] =
             Float3{normal.x * inverse_length, normal.y * inverse_length, normal.z * inverse_length};
     }
 }
 
-[[nodiscard]] Result<MaterialHandle> material_for(
+[[nodiscard]] Result<MaterialId> material_for(
     const cgltf_data& data, const cgltf_material* material, const std::filesystem::path& gltf_path,
-    scene::Storage& builder, std::vector<std::optional<MaterialHandle>>& materials,
-    std::vector<std::optional<ImageHandle>>& images,
-    std::vector<std::optional<TextureAssetHandle>>& textures,
-    const TexcoordAvailability& available_texcoords,
-    std::optional<MaterialHandle>& default_material, std::vector<SceneLoadDiagnostic>& diagnostics,
-    std::uint64_t& total_decoded_image_bytes) {
+    DocumentBuilder& builder, std::vector<std::optional<MaterialId>>& materials,
+    std::vector<std::vector<MaterialId>>& material_ids, std::vector<std::optional<ImageId>>& images,
+    std::vector<std::optional<TextureId>>& textures,
+    std::vector<std::optional<SamplerId>>& samplers, std::optional<SamplerId>& default_sampler,
+    const TexcoordAvailability& available_texcoords, std::optional<MaterialId>& default_material,
+    std::vector<ModelLoadDiagnostic>& diagnostics, ImageImportBudget& image_budget) {
     if (material == nullptr) {
         if (!default_material.has_value()) {
-            const Result<MaterialHandle> created = builder.create_material(MaterialDescription{});
+            const Result<MaterialId> created = builder.create_material(ModelMaterialDescription{});
             if (!created) {
                 return created.error();
             }
             default_material = created.value();
         }
-        return default_material.value();
+        return *default_material;
     }
 
     const std::size_t index = static_cast<std::size_t>(material - data.materials);
@@ -1456,7 +1693,7 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
         return materials[index].value();
     }
 
-    MaterialDescription description;
+    ModelMaterialDescription description;
     if (material->has_pbr_metallic_roughness) {
         const cgltf_pbr_metallic_roughness& pbr = material->pbr_metallic_roughness;
         description.base_color = Color4{pbr.base_color_factor[0], pbr.base_color_factor[1],
@@ -1466,8 +1703,8 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
         if (pbr.base_color_texture.texture != nullptr) {
             Result<ImportedTextureView> texture = import_texture_view(
                 data, pbr.base_color_texture, "Base-color", gltf_path, builder, images, textures,
-                available_texcoords, primitive_specific_fallback, diagnostics,
-                total_decoded_image_bytes, context + " base-color texture");
+                samplers, default_sampler, available_texcoords, primitive_specific_fallback,
+                diagnostics, image_budget, context + " base-color texture");
             if (!texture) {
                 return texture.error();
             }
@@ -1475,10 +1712,11 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
             description.base_color_texture_mapping = texture.value().mapping;
         }
         if (pbr.metallic_roughness_texture.texture != nullptr) {
-            Result<ImportedTextureView> texture = import_texture_view(
-                data, pbr.metallic_roughness_texture, "Metallic-roughness", gltf_path, builder,
-                images, textures, available_texcoords, primitive_specific_fallback, diagnostics,
-                total_decoded_image_bytes, context + " metallic-roughness texture");
+            Result<ImportedTextureView> texture =
+                import_texture_view(data, pbr.metallic_roughness_texture, "Metallic-roughness",
+                                    gltf_path, builder, images, textures, samplers, default_sampler,
+                                    available_texcoords, primitive_specific_fallback, diagnostics,
+                                    image_budget, context + " metallic-roughness texture");
             if (!texture) {
                 return texture.error();
             }
@@ -1492,10 +1730,11 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
         description.metallic_factor = 0.0F;
         description.roughness_factor = 1.0F - pbr.glossiness_factor;
         if (pbr.diffuse_texture.texture != nullptr) {
-            Result<ImportedTextureView> texture = import_texture_view(
-                data, pbr.diffuse_texture, "Specular-glossiness diffuse", gltf_path, builder,
-                images, textures, available_texcoords, primitive_specific_fallback, diagnostics,
-                total_decoded_image_bytes, context + " specular-glossiness diffuse texture");
+            Result<ImportedTextureView> texture =
+                import_texture_view(data, pbr.diffuse_texture, "Specular-glossiness diffuse",
+                                    gltf_path, builder, images, textures, samplers, default_sampler,
+                                    available_texcoords, primitive_specific_fallback, diagnostics,
+                                    image_budget, context + " specular-glossiness diffuse texture");
             if (!texture) {
                 return texture.error();
             }
@@ -1503,8 +1742,8 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
             description.base_color_texture_mapping = texture.value().mapping;
         }
         if (pbr.specular_glossiness_texture.texture != nullptr) {
-            add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::material,
-                           SceneLoadDiagnosticCode::material_fallback,
+            add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::material,
+                           ModelLoadDiagnosticCode::material_fallback,
                            "KHR_materials_pbrSpecularGlossiness diffuse data was approximated, "
                            "but its specular-glossiness texture is ignored",
                            context);
@@ -1513,9 +1752,7 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
     description.emissive_factor = {material->emissive_factor[0], material->emissive_factor[1],
                                    material->emissive_factor[2]};
     if (material->has_emissive_strength) {
-        description.emissive_factor.x *= material->emissive_strength.emissive_strength;
-        description.emissive_factor.y *= material->emissive_strength.emissive_strength;
-        description.emissive_factor.z *= material->emissive_strength.emissive_strength;
+        description.emissive_strength = material->emissive_strength.emissive_strength;
     }
     description.unlit = material->unlit != 0;
     description.ior = material->has_ior ? material->ior.ior : 1.5F;
@@ -1526,8 +1763,8 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
                                              material->specular.specular_color_factor[2]};
         if (material->specular.specular_texture.texture != nullptr ||
             material->specular.specular_color_texture.texture != nullptr) {
-            add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::material,
-                           SceneLoadDiagnosticCode::material_fallback,
+            add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::material,
+                           ModelLoadDiagnosticCode::material_fallback,
                            "KHR_materials_specular factors are rendered, but its optional "
                            "textures are ignored",
                            context);
@@ -1536,8 +1773,8 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
     if (material->normal_texture.texture != nullptr) {
         Result<ImportedTextureView> texture = import_texture_view(
             data, material->normal_texture, "Normal", gltf_path, builder, images, textures,
-            available_texcoords, primitive_specific_fallback, diagnostics,
-            total_decoded_image_bytes, context + " normal texture");
+            samplers, default_sampler, available_texcoords, primitive_specific_fallback,
+            diagnostics, image_budget, context + " normal texture");
         if (!texture) {
             return texture.error();
         }
@@ -1545,8 +1782,8 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
         description.normal_texture_mapping = texture.value().mapping;
         description.normal_scale = material->normal_texture.scale;
         if (description.normal_texture.is_valid()) {
-            add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::material,
-                           SceneLoadDiagnosticCode::normal_map_fallback,
+            add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::material,
+                           ModelLoadDiagnosticCode::normal_map_fallback,
                            "Normal texture was imported and preserved but is not rendered because "
                            "Elf3D does not yet have a complete tangent-space path",
                            context);
@@ -1555,8 +1792,8 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
     if (material->occlusion_texture.texture != nullptr) {
         Result<ImportedTextureView> texture = import_texture_view(
             data, material->occlusion_texture, "Occlusion", gltf_path, builder, images, textures,
-            available_texcoords, primitive_specific_fallback, diagnostics,
-            total_decoded_image_bytes, context + " occlusion texture");
+            samplers, default_sampler, available_texcoords, primitive_specific_fallback,
+            diagnostics, image_budget, context + " occlusion texture");
         if (!texture) {
             return texture.error();
         }
@@ -1567,8 +1804,8 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
     if (material->emissive_texture.texture != nullptr) {
         Result<ImportedTextureView> texture = import_texture_view(
             data, material->emissive_texture, "Emissive", gltf_path, builder, images, textures,
-            available_texcoords, primitive_specific_fallback, diagnostics,
-            total_decoded_image_bytes, context + " emissive texture");
+            samplers, default_sampler, available_texcoords, primitive_specific_fallback,
+            diagnostics, image_budget, context + " emissive texture");
         if (!texture) {
             return texture.error();
         }
@@ -1577,13 +1814,13 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
     }
     switch (material->alpha_mode) {
     case cgltf_alpha_mode_opaque:
-        description.alpha_mode = AlphaMode::opaque;
+        description.alpha_mode = ModelAlphaMode::opaque;
         break;
     case cgltf_alpha_mode_mask:
-        description.alpha_mode = AlphaMode::mask;
+        description.alpha_mode = ModelAlphaMode::mask;
         break;
     case cgltf_alpha_mode_blend:
-        description.alpha_mode = AlphaMode::blend;
+        description.alpha_mode = ModelAlphaMode::blend;
         break;
     default:
         return Error{ErrorCode::scene_import_failed, context + " contains an invalid alpha mode"};
@@ -1605,35 +1842,37 @@ void generate_normals(std::vector<VertexPositionNormalTexCoord>& vertices,
     }
 
     description.double_sided = material->double_sided != 0;
-    const Result<MaterialHandle> created = builder.create_material(description);
+    const Result<MaterialId> created = builder.create_material(description);
     if (!created) {
         return created.error();
     }
     if (!primitive_specific_fallback) {
         materials[index] = created.value();
     }
+    material_ids[index].push_back(created.value());
     return created.value();
 }
 
-[[nodiscard]] Result<std::vector<ModelPrimitiveBinding>>
+[[nodiscard]] Result<ImportedMesh>
 import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_index,
-            const std::filesystem::path& gltf_path, const SceneLoadOptions& options,
-            scene::Storage& builder, std::vector<std::optional<MaterialHandle>>& materials,
-            std::vector<std::optional<ImageHandle>>& images,
-            std::vector<std::optional<TextureAssetHandle>>& textures,
-            std::optional<MaterialHandle>& default_material,
-            std::vector<SceneLoadDiagnostic>& diagnostics,
-            std::uint64_t& total_decoded_image_bytes) {
+            const std::filesystem::path& gltf_path, const ModelLoadOptions& options,
+            DocumentBuilder& builder, std::vector<std::optional<MaterialId>>& materials,
+            std::vector<std::vector<MaterialId>>& material_ids,
+            std::vector<std::optional<ImageId>>& images,
+            std::vector<std::optional<TextureId>>& textures,
+            std::vector<std::optional<SamplerId>>& samplers,
+            std::optional<SamplerId>& default_sampler, std::optional<MaterialId>& default_material,
+            std::vector<ModelLoadDiagnostic>& diagnostics, ImageImportBudget& image_budget) {
     try {
-        std::vector<ModelPrimitiveBinding> bindings;
-        bindings.reserve(mesh.primitives_count);
+        ImportedMesh result;
+        result.primitives.resize(mesh.primitives_count);
         for (cgltf_size primitive_index = 0; primitive_index < mesh.primitives_count;
              ++primitive_index) {
             const cgltf_primitive& primitive = mesh.primitives[primitive_index];
             const std::string context = mesh_context(mesh, mesh_index, primitive_index);
             if (!supported_primitive_type(primitive.type)) {
-                add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::geometry,
-                               SceneLoadDiagnosticCode::skipped_unsupported_primitive,
+                add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::geometry,
+                               ModelLoadDiagnosticCode::skipped_unsupported_primitive,
                                context +
                                    " uses unsupported points or lines geometry and was skipped",
                                context);
@@ -1661,7 +1900,8 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
             const TexcoordAvailability available_texcoords =
                 primitive_texcoord_availability(primitive);
 
-            std::vector<VertexPositionNormalTexCoord> vertices(vertex_count);
+            PrimitiveData primitive_data;
+            primitive_data.positions.resize(vertex_count);
             for (std::size_t index = 0; index < vertex_count; ++index) {
                 const Float3 position{positions.value()[index * 3],
                                       positions.value()[index * 3 + 1],
@@ -1670,11 +1910,11 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                     return Error{ErrorCode::non_finite_position,
                                  context + " contains a non-finite POSITION value"};
                 }
-                vertices[index].position = position;
+                primitive_data.positions[index] = position;
             }
 
-            for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets);
-                 ++set) {
+            for (cgltf_int set = 0;
+                 set < static_cast<cgltf_int>(model_maximum_texture_coordinate_sets); ++set) {
                 const cgltf_accessor* texcoord_accessor =
                     cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, set);
                 if (texcoord_accessor == nullptr) {
@@ -1690,6 +1930,9 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                 if (!texcoords) {
                     return texcoords.error();
                 }
+                std::vector<Float2>& target =
+                    set == 0 ? primitive_data.texcoord0 : primitive_data.texcoord1;
+                target.resize(vertex_count);
                 for (std::size_t index = 0; index < vertex_count; ++index) {
                     const Float2 texcoord{texcoords.value()[index * 2],
                                           texcoords.value()[index * 2 + 1]};
@@ -1697,11 +1940,7 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                         return Error{ErrorCode::invalid_texcoord,
                                      context + " contains a non-finite " + semantic + " value"};
                     }
-                    if (set == 0) {
-                        vertices[index].texcoord0 = texcoord;
-                    } else {
-                        vertices[index].texcoord1 = texcoord;
-                    }
+                    target[index] = texcoord;
                 }
             }
 
@@ -1709,9 +1948,10 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                  ++attribute_index) {
                 const cgltf_attribute& attribute = primitive.attributes[attribute_index];
                 if (attribute.type == cgltf_attribute_type_texcoord &&
-                    attribute.index >= static_cast<cgltf_int>(maximum_texture_coordinate_sets)) {
-                    add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::geometry,
-                                   SceneLoadDiagnosticCode::material_fallback,
+                    attribute.index >=
+                        static_cast<cgltf_int>(model_maximum_texture_coordinate_sets)) {
+                    add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::geometry,
+                                   ModelLoadDiagnosticCode::material_fallback,
                                    "Additional UV sets beyond TEXCOORD_1 are not preserved unless "
                                    "referenced, and referenced sets beyond 1 are rejected",
                                    context);
@@ -1732,6 +1972,7 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                     return colors.error();
                 }
                 const std::size_t components = color_accessor->type == cgltf_type_vec3 ? 3U : 4U;
+                primitive_data.colors.resize(vertex_count);
                 for (std::size_t index = 0; index < vertex_count; ++index) {
                     Color4 color{colors.value()[index * components],
                                  colors.value()[index * components + 1],
@@ -1742,7 +1983,7 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                         return Error{ErrorCode::invalid_accessor,
                                      context + " contains a non-finite COLOR_0 value"};
                     }
-                    vertices[index].color = color;
+                    primitive_data.colors[index] = color;
                 }
             }
 
@@ -1760,6 +2001,7 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                 if (!normals) {
                     return normals.error();
                 }
+                primitive_data.normals.resize(vertex_count);
                 for (std::size_t index = 0; index < vertex_count; ++index) {
                     Float3 normal{normals.value()[index * 3], normals.value()[index * 3 + 1],
                                   normals.value()[index * 3 + 2]};
@@ -1776,7 +2018,7 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                         break;
                     }
                     const float inverse_length = 1.0F / std::sqrt(length_squared);
-                    vertices[index].normal =
+                    primitive_data.normals[index] =
                         Float3{normal.x * inverse_length, normal.y * inverse_length,
                                normal.z * inverse_length};
                 }
@@ -1788,51 +2030,295 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                 }
                 std::uint64_t degenerate_count = 0;
                 std::uint64_t fallback_count = 0;
-                generate_normals(vertices, indices.value(), degenerate_count, fallback_count);
+                generate_normals(primitive_data.positions, primitive_data.normals, indices.value(),
+                                 degenerate_count, fallback_count);
                 const std::string prefix = ignored_authored_normals
                                                ? "Ignored unusable authored normals and generated "
                                                  "replacements"
                                                : "Generated missing vertex normals";
                 if (degenerate_count != 0 || fallback_count != 0) {
-                    add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::geometry,
-                                   SceneLoadDiagnosticCode::degenerate_geometry,
+                    add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::geometry,
+                                   ModelLoadDiagnosticCode::degenerate_geometry,
                                    prefix + "; ignored " + std::to_string(degenerate_count) +
                                        " degenerate triangles and used +Y fallback normals for " +
                                        std::to_string(fallback_count) + " vertices",
                                    context);
                 } else {
-                    add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::geometry,
-                                   SceneLoadDiagnosticCode::generated_normals, prefix, context);
+                    add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::geometry,
+                                   ModelLoadDiagnosticCode::generated_normals, prefix, context);
                 }
             }
+            primitive_data.indices = std::move(indices).value();
 
-            const Result<MeshHandle> mesh_result = builder.create_mesh(
-                TexturedMeshDataView{std::span<const VertexPositionNormalTexCoord>{vertices},
-                                     std::span<const std::uint32_t>{indices.value()}});
-            if (!mesh_result) {
-                return mesh_result.error();
+            if (!result.mesh.has_value()) {
+                const Result<MeshId> created_mesh = builder.create_mesh(
+                    mesh.name != nullptr ? std::string_view{mesh.name} : std::string_view{});
+                if (!created_mesh) {
+                    return created_mesh.error();
+                }
+                result.mesh = created_mesh.value();
             }
-            const Result<MaterialHandle> material_result = material_for(
-                data, primitive.material, gltf_path, builder, materials, images, textures,
-                available_texcoords, default_material, diagnostics, total_decoded_image_bytes);
+            const Result<MaterialId> material_result =
+                material_for(data, primitive.material, gltf_path, builder, materials, material_ids,
+                             images, textures, samplers, default_sampler, available_texcoords,
+                             default_material, diagnostics, image_budget);
             if (!material_result) {
                 return material_result.error();
             }
-            bindings.push_back(ModelPrimitiveBinding{mesh_result.value(), material_result.value()});
+            const Result<PrimitiveId> primitive_result = builder.create_primitive(
+                *result.mesh, material_result.value(), std::move(primitive_data));
+            if (!primitive_result) {
+                return primitive_result.error();
+            }
+            result.primitives[primitive_index] = primitive_result.value();
+            ++result.primitive_count;
         }
-        return bindings;
+        return result;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "glTF mesh conversion failed while allocating imported data"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
-[[nodiscard]] Result<void> construct_scene(const cgltf_data& data,
-                                           const std::vector<bool>& reachable,
-                                           const std::filesystem::path& gltf_path,
-                                           const SceneLoadOptions& options, scene::Storage& builder,
-                                           std::vector<SceneLoadDiagnostic>& diagnostics) {
+[[nodiscard]] bool has_preserved_values(const ModelJsonMetadata& metadata) noexcept {
+    return metadata.extras_json.has_value() || !metadata.extensions.empty();
+}
+
+void diagnose_unsupported_scope_metadata(const cgltf_data& data,
+                                         std::vector<ModelLoadDiagnostic>& diagnostics) {
+    bool found = false;
+    for (cgltf_size index = 0; index < data.buffers_count; ++index) {
+        found = found || source_has_metadata(data.buffers[index].extras,
+                                             data.buffers[index].extensions_count);
+    }
+    for (cgltf_size index = 0; index < data.buffer_views_count; ++index) {
+        found = found || source_has_metadata(data.buffer_views[index].extras,
+                                             data.buffer_views[index].extensions_count);
+    }
+    for (cgltf_size index = 0; index < data.accessors_count; ++index) {
+        found = found || source_has_metadata(data.accessors[index].extras,
+                                             data.accessors[index].extensions_count);
+    }
+    for (cgltf_size index = 0; index < data.cameras_count; ++index) {
+        const cgltf_camera& camera = data.cameras[index];
+        found = found || source_has_metadata(camera.extras, camera.extensions_count);
+        found = found || (camera.type == cgltf_camera_type_perspective
+                              ? source_has_metadata(camera.data.perspective.extras, 0)
+                              : source_has_metadata(camera.data.orthographic.extras, 0));
+    }
+    for (cgltf_size index = 0; index < data.skins_count; ++index) {
+        found = found ||
+                source_has_metadata(data.skins[index].extras, data.skins[index].extensions_count);
+    }
+    for (cgltf_size index = 0; index < data.animations_count; ++index) {
+        const cgltf_animation& animation = data.animations[index];
+        found = found || source_has_metadata(animation.extras, animation.extensions_count);
+        for (cgltf_size sampler = 0; sampler < animation.samplers_count; ++sampler) {
+            found = found || source_has_metadata(animation.samplers[sampler].extras,
+                                                 animation.samplers[sampler].extensions_count);
+        }
+        for (cgltf_size channel = 0; channel < animation.channels_count; ++channel) {
+            found = found || source_has_metadata(animation.channels[channel].extras,
+                                                 animation.channels[channel].extensions_count);
+        }
+    }
+    for (cgltf_size index = 0; index < data.lights_count; ++index) {
+        found = found || source_has_metadata(data.lights[index].extras, 0);
+    }
+    for (cgltf_size index = 0; index < data.variants_count; ++index) {
+        found = found || source_has_metadata(data.variants[index].extras, 0);
+    }
+    for (cgltf_size mesh_index = 0; mesh_index < data.meshes_count; ++mesh_index) {
+        const cgltf_mesh& mesh = data.meshes[mesh_index];
+        for (cgltf_size primitive_index = 0; primitive_index < mesh.primitives_count;
+             ++primitive_index) {
+            const cgltf_primitive& primitive = mesh.primitives[primitive_index];
+            for (cgltf_size mapping = 0; mapping < primitive.mappings_count; ++mapping) {
+                found = found || source_has_metadata(primitive.mappings[mapping].extras, 0);
+            }
+        }
+    }
+    if (found) {
+        add_metadata_not_preserved(
+            diagnostics, "glTF auxiliary scopes",
+            "buffers, buffer views, accessors, cameras, skins, and animations have no stable "
+            "one-to-one Document metadata identity");
+    }
+}
+
+[[nodiscard]] Result<void> attach_imported_metadata(const cgltf_data& data,
+                                                    const ImportedDocumentIds& ids,
+                                                    Document& document,
+                                                    std::vector<ModelLoadDiagnostic>& diagnostics) {
+    MetadataBudget budget;
+    model::detail::ImportedDocumentMetadata imported;
+    imported.root = copy_metadata(data.extras, data.data_extensions, data.data_extensions_count,
+                                  budget, diagnostics, "document root");
+    imported.asset = copy_metadata(data.asset.extras, data.asset.extensions,
+                                   data.asset.extensions_count, budget, diagnostics, "asset");
+
+    for (cgltf_size index = 0; index < data.scenes_count; ++index) {
+        const cgltf_scene& source = data.scenes[index];
+        ModelJsonMetadata metadata =
+            copy_metadata(source.extras, source.extensions, source.extensions_count, budget,
+                          diagnostics, "scene " + std::to_string(index));
+        if (has_preserved_values(metadata)) {
+            imported.scenes.emplace_back(ids.scenes[index], std::move(metadata));
+        }
+    }
+    for (cgltf_size index = 0; index < data.nodes_count; ++index) {
+        const cgltf_node& source = data.nodes[index];
+        if (!source_has_metadata(source.extras, source.extensions_count)) {
+            continue;
+        }
+        if (!ids.nodes[index].has_value()) {
+            add_metadata_not_preserved(diagnostics, "node " + std::to_string(index),
+                                       "the node was not imported");
+            continue;
+        }
+        ModelJsonMetadata metadata =
+            copy_metadata(source.extras, source.extensions, source.extensions_count, budget,
+                          diagnostics, "node " + std::to_string(index));
+        if (has_preserved_values(metadata)) {
+            imported.nodes.emplace_back(*ids.nodes[index], std::move(metadata));
+        }
+    }
+    for (cgltf_size mesh_index = 0; mesh_index < data.meshes_count; ++mesh_index) {
+        const cgltf_mesh& source_mesh = data.meshes[mesh_index];
+        if (source_has_metadata(source_mesh.extras, source_mesh.extensions_count)) {
+            if (!ids.meshes[mesh_index].has_value()) {
+                add_metadata_not_preserved(diagnostics, "mesh " + std::to_string(mesh_index),
+                                           "the mesh was not imported");
+            } else {
+                ModelJsonMetadata metadata = copy_metadata(
+                    data, source_mesh.extras, source_mesh.extensions, source_mesh.extensions_count,
+                    budget, diagnostics, "mesh " + std::to_string(mesh_index));
+                if (has_preserved_values(metadata)) {
+                    imported.meshes.emplace_back(*ids.meshes[mesh_index], std::move(metadata));
+                }
+            }
+        }
+        for (cgltf_size primitive_index = 0; primitive_index < source_mesh.primitives_count;
+             ++primitive_index) {
+            const cgltf_primitive& source = source_mesh.primitives[primitive_index];
+            if (!source_has_metadata(source.extras, source.extensions_count)) {
+                continue;
+            }
+            std::optional<PrimitiveId> id;
+            if (mesh_index < ids.primitives.size() &&
+                primitive_index < ids.primitives[mesh_index].size()) {
+                id = ids.primitives[mesh_index][primitive_index];
+            }
+            const std::string context = "mesh " + std::to_string(mesh_index) + ", primitive " +
+                                        std::to_string(primitive_index);
+            if (!id.has_value()) {
+                add_metadata_not_preserved(diagnostics, context, "the primitive was not imported");
+                continue;
+            }
+            ModelJsonMetadata metadata =
+                copy_metadata(source.extras, source.extensions, source.extensions_count, budget,
+                              diagnostics, context);
+            if (has_preserved_values(metadata)) {
+                imported.primitives.emplace_back(*id, std::move(metadata));
+            }
+        }
+    }
+    for (cgltf_size index = 0; index < data.materials_count; ++index) {
+        const cgltf_material& source = data.materials[index];
+        if (!source_has_metadata(source.extras, source.extensions_count)) {
+            continue;
+        }
+        if (ids.materials[index].empty()) {
+            add_metadata_not_preserved(diagnostics, "material " + std::to_string(index),
+                                       "the material was not imported");
+            continue;
+        }
+        for (const MaterialId id : ids.materials[index]) {
+            ModelJsonMetadata metadata =
+                copy_metadata(source.extras, source.extensions, source.extensions_count, budget,
+                              diagnostics, "material " + std::to_string(index));
+            if (has_preserved_values(metadata)) {
+                imported.materials.emplace_back(id, std::move(metadata));
+            }
+        }
+    }
+    const auto copy_indexed = [&](const auto& sources, cgltf_size source_count,
+                                  const auto& ids_by_index, auto& destination,
+                                  std::string_view label) {
+        for (cgltf_size index = 0; index < source_count; ++index) {
+            const auto& source = sources[index];
+            if (!source_has_metadata(source.extras, source.extensions_count)) {
+                continue;
+            }
+            const std::string context = std::string{label} + " " + std::to_string(index);
+            if (!ids_by_index[index].has_value()) {
+                add_metadata_not_preserved(diagnostics, context, "the object was not imported");
+                continue;
+            }
+            ModelJsonMetadata metadata =
+                copy_metadata(source.extras, source.extensions, source.extensions_count, budget,
+                              diagnostics, context);
+            if (has_preserved_values(metadata)) {
+                destination.emplace_back(*ids_by_index[index], std::move(metadata));
+            }
+        }
+    };
+    copy_indexed(data.images, data.images_count, ids.images, imported.images, "image");
+    copy_indexed(data.textures, data.textures_count, ids.textures, imported.textures, "texture");
+    copy_indexed(data.samplers, data.samplers_count, ids.samplers, imported.samplers, "sampler");
+    diagnose_unsupported_scope_metadata(data, diagnostics);
+    return model::detail::DocumentMetadataAccess::attach_import_metadata(document,
+                                                                         std::move(imported));
+}
+
+[[nodiscard]] Result<ConstructedDocument>
+construct_document(const cgltf_data& data, const std::vector<bool>& reachable,
+                   const std::filesystem::path& gltf_path, const ModelLoadOptions& options,
+                   std::vector<ModelLoadDiagnostic>& diagnostics) {
     try {
+        DocumentBuilder builder;
+        ImportedDocumentIds imported_ids;
+        imported_ids.scenes.reserve(data.scenes_count != 0 ? data.scenes_count : 1U);
+        if (data.scenes_count != 0) {
+            for (cgltf_size scene_index = 0; scene_index < data.scenes_count; ++scene_index) {
+                const cgltf_scene& source_scene = data.scenes[scene_index];
+                const Result<DocumentSceneId> scene_result = builder.create_scene(
+                    source_scene.name != nullptr ? std::string_view{source_scene.name}
+                                                 : std::string_view{});
+                if (!scene_result) {
+                    return scene_result.error();
+                }
+                imported_ids.scenes.push_back(scene_result.value());
+            }
+        } else {
+            const Result<DocumentSceneId> scene_result = builder.create_scene();
+            if (!scene_result) {
+                return scene_result.error();
+            }
+            imported_ids.scenes.push_back(scene_result.value());
+        }
+        std::size_t default_scene_index = 0;
+        if (data.scene != nullptr) {
+            if (data.scenes_count == 0 || data.scene < data.scenes ||
+                data.scene >= data.scenes + data.scenes_count) {
+                return Error{ErrorCode::invalid_node_hierarchy,
+                             "The glTF default scene is outside the scene table"};
+            }
+            default_scene_index = static_cast<std::size_t>(data.scene - data.scenes);
+            const Result<void> default_result =
+                builder.set_default_scene(imported_ids.scenes[default_scene_index]);
+            if (!default_result) {
+                return default_result.error();
+            }
+        } else {
+            const Result<void> clear_result = builder.clear_default_scene();
+            if (!clear_result) {
+                return clear_result.error();
+            }
+        }
+        const DocumentSceneId effective_default_scene = imported_ids.scenes[default_scene_index];
+
         std::vector<bool> skipped_nodes(data.nodes_count, false);
         std::vector<Float4x4> local_matrices(data.nodes_count);
         for (cgltf_size node_index = 0; node_index < data.nodes_count; ++node_index) {
@@ -1847,8 +2333,8 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
             if (!math::is_valid_affine_matrix(local_matrices[node_index])) {
                 skipped_nodes[node_index] = true;
                 const std::string context = node_context(node, node_index);
-                add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::scene,
-                               SceneLoadDiagnosticCode::skipped_invalid_transform,
+                add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::scene,
+                               ModelLoadDiagnosticCode::skipped_invalid_transform,
                                context +
                                    " has a non-finite, non-affine, or non-invertible transform; "
                                    "the node and descendants were skipped",
@@ -1882,8 +2368,8 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                 skipped_nodes[child_index] = true;
                 skip_stack.push_back(child_index);
                 const std::string context = node_context(*child, child_index);
-                add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::scene,
-                               SceneLoadDiagnosticCode::skipped_invalid_transform,
+                add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::scene,
+                               ModelLoadDiagnosticCode::skipped_invalid_transform,
                                context + " was skipped because an ancestor transform was skipped",
                                context);
             }
@@ -1903,52 +2389,54 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
             }
         }
 
-        std::vector<std::optional<MaterialHandle>> materials(data.materials_count);
-        std::vector<std::optional<ImageHandle>> images(data.images_count);
-        std::vector<std::optional<TextureAssetHandle>> textures(data.textures_count);
-        std::optional<MaterialHandle> default_material;
-        std::uint64_t total_decoded_image_bytes = 0;
-        std::vector<std::vector<ModelPrimitiveBinding>> mesh_bindings(data.meshes_count);
+        imported_ids.material_cache.resize(data.materials_count);
+        imported_ids.materials.resize(data.materials_count);
+        imported_ids.images.resize(data.images_count);
+        imported_ids.textures.resize(data.textures_count);
+        imported_ids.samplers.resize(data.samplers_count);
+        std::optional<SamplerId> default_sampler;
+        std::optional<MaterialId> default_material;
+        ImageImportBudget image_budget;
+        imported_ids.meshes.resize(data.meshes_count);
+        imported_ids.primitives.resize(data.meshes_count);
         std::uint64_t imported_primitives = 0;
         for (cgltf_size mesh_index = 0; mesh_index < data.meshes_count; ++mesh_index) {
             if (!used_meshes[mesh_index]) {
                 continue;
             }
-            Result<std::vector<ModelPrimitiveBinding>> imported = import_mesh(
-                data, data.meshes[mesh_index], mesh_index, gltf_path, options, builder, materials,
-                images, textures, default_material, diagnostics, total_decoded_image_bytes);
+            Result<ImportedMesh> imported =
+                import_mesh(data, data.meshes[mesh_index], mesh_index, gltf_path, options, builder,
+                            imported_ids.material_cache, imported_ids.materials,
+                            imported_ids.images, imported_ids.textures, imported_ids.samplers,
+                            default_sampler, default_material, diagnostics, image_budget);
             if (!imported) {
                 return imported.error();
             }
-            imported_primitives += static_cast<std::uint64_t>(imported.value().size());
-            mesh_bindings[mesh_index] = std::move(imported).value();
+            imported_primitives += imported.value().primitive_count;
+            imported_ids.meshes[mesh_index] = imported.value().mesh;
+            imported_ids.primitives[mesh_index] = std::move(imported).value().primitives;
         }
         if (imported_primitives == 0) {
             return Error{ErrorCode::empty_scene_geometry,
-                         "The selected glTF scene contains no supported triangle geometry"};
+                         "The glTF document contains no supported triangle geometry"};
         }
 
-        std::vector<std::optional<EntityId>> entities(data.nodes_count);
+        imported_ids.nodes.resize(data.nodes_count);
         for (cgltf_size node_index = 0; node_index < data.nodes_count; ++node_index) {
             if (!reachable[node_index] || skipped_nodes[node_index]) {
                 continue;
             }
-            const Result<EntityId> entity = builder.create_entity();
-            if (!entity) {
-                return entity.error();
-            }
-            entities[node_index] = entity.value();
-
             const cgltf_node& node = data.nodes[node_index];
-            if (options.import_node_names && node.name != nullptr) {
-                const Result<void> name_result = builder.set_entity_name(entity.value(), node.name);
-                if (!name_result) {
-                    return name_result.error();
-                }
+            const Result<NodeId> created_node = builder.create_node(
+                options.import_node_names && node.name != nullptr ? std::string_view{node.name}
+                                                                  : std::string_view{});
+            if (!created_node) {
+                return created_node.error();
             }
+            imported_ids.nodes[node_index] = created_node.value();
 
             const Result<void> matrix_result =
-                builder.set_local_matrix(entity.value(), local_matrices[node_index]);
+                builder.set_node_matrix(created_node.value(), local_matrices[node_index]);
             if (!matrix_result) {
                 const std::string node_name =
                     node.name != nullptr ? node.name : std::to_string(node_index);
@@ -1961,35 +2449,35 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
                     node.name != nullptr ? std::string{node.name} : std::to_string(node_index);
                 const std::string node_context = "node " + node_label;
                 if (node.camera->type == cgltf_camera_type_perspective) {
-                    PerspectiveCameraDescription camera;
+                    ModelPerspectiveCameraDescription camera;
                     camera.vertical_field_of_view_radians = node.camera->data.perspective.yfov;
                     camera.near_plane = node.camera->data.perspective.znear;
                     camera.far_plane = node.camera->data.perspective.has_zfar
                                            ? node.camera->data.perspective.zfar
                                            : 1.0e9F;
                     const Result<void> camera_result =
-                        builder.attach_perspective_camera(entity.value(), camera);
+                        builder.set_node_perspective_camera(created_node.value(), camera);
                     if (!camera_result) {
                         return Error{camera_result.error().code(),
                                      node_context + ": " + camera_result.error().message()};
                     }
                     if (!node.camera->data.perspective.has_zfar) {
-                        add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::camera,
-                                       SceneLoadDiagnosticCode::camera_fallback,
+                        add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::camera,
+                                       ModelLoadDiagnosticCode::camera_fallback,
                                        "Infinite-far perspective camera was bounded to 1e9 world "
                                        "units",
                                        node_context);
                     }
                     if (node.camera->data.perspective.has_aspect_ratio) {
-                        add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::camera,
-                                       SceneLoadDiagnosticCode::camera_fallback,
+                        add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::camera,
+                                       ModelLoadDiagnosticCode::camera_fallback,
                                        "Authored camera aspect ratio is not stored; the active "
                                        "viewport aspect ratio is used",
                                        node_context);
                     }
                 } else if (node.camera->type == cgltf_camera_type_orthographic) {
-                    add_diagnostic(diagnostics, SceneLoadDiagnosticCategory::camera,
-                                   SceneLoadDiagnosticCode::camera_fallback,
+                    add_diagnostic(diagnostics, ModelLoadDiagnosticCategory::camera,
+                                   ModelLoadDiagnosticCode::camera_fallback,
                                    "Orthographic camera is not representable and was left as a "
                                    "transform-only entity",
                                    node_context);
@@ -2005,12 +2493,13 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
             if (node.parent != nullptr) {
                 const std::size_t parent_index = static_cast<std::size_t>(node.parent - data.nodes);
                 if (parent_index >= reachable.size() || !reachable[parent_index] ||
-                    !entities[parent_index].has_value()) {
+                    !imported_ids.nodes[parent_index].has_value()) {
                     return Error{ErrorCode::invalid_node_hierarchy,
-                                 "A selected glTF node has a parent outside the selected scene"};
+                                 "A glTF node has a parent outside the imported scenes"};
                 }
-                const Result<void> parent_result = builder.set_parent(
-                    entities[node_index].value(), entities[parent_index].value());
+                const Result<void> parent_result =
+                    builder.set_parent(imported_ids.nodes[node_index].value(),
+                                       imported_ids.nodes[parent_index].value());
                 if (!parent_result) {
                     return parent_result.error();
                 }
@@ -2018,28 +2507,82 @@ import_mesh(const cgltf_data& data, const cgltf_mesh& mesh, cgltf_size mesh_inde
 
             if (node.mesh != nullptr) {
                 const std::size_t mesh_index = static_cast<std::size_t>(node.mesh - data.meshes);
-                const std::vector<ModelPrimitiveBinding>& bindings = mesh_bindings[mesh_index];
-                if (!bindings.empty()) {
-                    const Result<void> model_result =
-                        builder.set_model_primitives(entities[node_index].value(), bindings);
+                if (mesh_index >= imported_ids.meshes.size()) {
+                    return Error{ErrorCode::scene_import_failed,
+                                 "A glTF node references a mesh outside the mesh table"};
+                }
+                if (imported_ids.meshes[mesh_index].has_value()) {
+                    const Result<void> model_result = builder.set_node_mesh(
+                        imported_ids.nodes[node_index].value(), *imported_ids.meshes[mesh_index]);
                     if (!model_result) {
                         return model_result.error();
                     }
                 }
             }
         }
-        return {};
+
+        const auto add_root = [&](DocumentSceneId scene_id,
+                                  const cgltf_node* root) -> Result<void> {
+            if (root == nullptr || root < data.nodes || root >= data.nodes + data.nodes_count) {
+                return Error{ErrorCode::invalid_node_hierarchy,
+                             "A glTF scene contains an invalid root node"};
+            }
+            const std::size_t root_index = static_cast<std::size_t>(root - data.nodes);
+            if (!reachable[root_index] || skipped_nodes[root_index] ||
+                !imported_ids.nodes[root_index].has_value()) {
+                return {};
+            }
+            return builder.add_scene_root(scene_id, *imported_ids.nodes[root_index]);
+        };
+
+        if (data.scenes_count != 0) {
+            for (cgltf_size scene_index = 0; scene_index < data.scenes_count; ++scene_index) {
+                const cgltf_scene& source_scene = data.scenes[scene_index];
+                for (cgltf_size root_index = 0; root_index < source_scene.nodes_count;
+                     ++root_index) {
+                    const Result<void> root_result =
+                        add_root(imported_ids.scenes[scene_index], source_scene.nodes[root_index]);
+                    if (!root_result) {
+                        return root_result.error();
+                    }
+                }
+            }
+        } else {
+            for (cgltf_size node_index = 0; node_index < data.nodes_count; ++node_index) {
+                if (reachable[node_index] && !skipped_nodes[node_index] &&
+                    data.nodes[node_index].parent == nullptr &&
+                    imported_ids.nodes[node_index].has_value()) {
+                    const Result<void> root_result = builder.add_scene_root(
+                        imported_ids.scenes[0], *imported_ids.nodes[node_index]);
+                    if (!root_result) {
+                        return root_result.error();
+                    }
+                }
+            }
+        }
+
+        Result<Document> document = builder.finish();
+        if (!document) {
+            return document.error();
+        }
+        Document value = std::move(document).value();
+        const Result<void> metadata_result =
+            attach_imported_metadata(data, imported_ids, value, diagnostics);
+        if (!metadata_result) {
+            return metadata_result.error();
+        }
+        return ConstructedDocument{std::move(value), effective_default_scene};
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "glTF scene construction failed while allocating mappings"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
 } // namespace
 
-Result<ImportReport> import_scene(const std::filesystem::path& path,
-                                  const SceneLoadOptions& options,
-                                  scene::Storage& builder) noexcept {
+Result<LoadedDocument> load_document(const std::filesystem::path& path,
+                                     const ModelLoadOptions& options) noexcept {
     try {
         const std::string extension = lower_extension(path);
         if (extension != ".gltf" && extension != ".glb") {
@@ -2101,6 +2644,10 @@ Result<ImportReport> import_scene(const std::filesystem::path& path,
         if (!limit_result) {
             return limit_result.error();
         }
+        const Result<void> hierarchy_result = validate_node_hierarchy(*data);
+        if (!hierarchy_result) {
+            return hierarchy_result.error();
+        }
         const Result<void> uri_result = validate_buffer_uris(*data);
         if (!uri_result) {
             return uri_result.error();
@@ -2123,7 +2670,7 @@ Result<ImportReport> import_scene(const std::filesystem::path& path,
             return reachable.error();
         }
 
-        ImportReport report;
+        ModelLoadReport report;
         for (cgltf_size index = 0; index < data->extensions_used_count; ++index) {
             const char* extension_name = data->extensions_used[index];
             if (extension_name != nullptr && !extension_has_full_support(extension_name)) {
@@ -2131,8 +2678,8 @@ Result<ImportReport> import_scene(const std::filesystem::path& path,
             }
         }
         if (data->animations_count != 0) {
-            add_diagnostic(report.diagnostics, SceneLoadDiagnosticCategory::animation,
-                           SceneLoadDiagnosticCode::ignored_animation,
+            add_diagnostic(report.diagnostics, ModelLoadDiagnosticCategory::animation,
+                           ModelLoadDiagnosticCode::ignored_animation,
                            "Animation clips and channels are not imported; static node transforms "
                            "were used");
         }
@@ -2157,34 +2704,54 @@ Result<ImportReport> import_scene(const std::filesystem::path& path,
             }
         }
         if (has_reachable_skin) {
-            add_diagnostic(report.diagnostics, SceneLoadDiagnosticCategory::animation,
-                           SceneLoadDiagnosticCode::ignored_skin,
+            add_diagnostic(report.diagnostics, ModelLoadDiagnosticCategory::animation,
+                           ModelLoadDiagnosticCode::ignored_skin,
                            "Skinning is not imported; meshes use their undeformed bind geometry");
         }
         if (has_reachable_morph_targets) {
             add_diagnostic(
-                report.diagnostics, SceneLoadDiagnosticCategory::animation,
-                SceneLoadDiagnosticCode::ignored_morph_targets,
+                report.diagnostics, ModelLoadDiagnosticCategory::animation,
+                ModelLoadDiagnosticCode::ignored_morph_targets,
                 "Morph targets and weights are not imported; base mesh geometry is used");
         }
         if (has_reachable_instancing) {
-            add_diagnostic(report.diagnostics, SceneLoadDiagnosticCategory::geometry,
-                           SceneLoadDiagnosticCode::ignored_instancing,
+            add_diagnostic(report.diagnostics, ModelLoadDiagnosticCategory::geometry,
+                           ModelLoadDiagnosticCode::ignored_instancing,
                            "EXT_mesh_gpu_instancing attributes are not expanded; the base node is "
                            "loaded once");
         }
-        scene::Storage staging{builder.id()};
-        const Result<void> construction_result =
-            construct_scene(*data, reachable.value(), path, options, staging, report.diagnostics);
-        if (!construction_result) {
-            return construction_result.error();
+        Result<ConstructedDocument> constructed =
+            construct_document(*data, reachable.value(), path, options, report.diagnostics);
+        if (!constructed) {
+            return constructed.error();
         }
-        builder = std::move(staging);
-        return report;
+        ConstructedDocument value = std::move(constructed).value();
+        return LoadedDocument{std::move(value.document), value.default_scene, std::move(report)};
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
     } catch (...) {
-        return Error{ErrorCode::unexpected_exception,
-                     "Scene loading caught an unexpected importer exception"};
+        fatal_unexpected_gltf_boundary_exception();
     }
 }
 
 } // namespace elf3d::gltf
+
+namespace elf3d {
+
+Result<LoadedDocument> load_document(std::string_view path_utf8,
+                                     const ModelLoadOptions& options) noexcept {
+    try {
+        std::u8string utf8;
+        utf8.reserve(path_utf8.size());
+        for (const char character : path_utf8) {
+            utf8.push_back(static_cast<char8_t>(static_cast<unsigned char>(character)));
+        }
+        return gltf::load_document(std::filesystem::path{utf8}, options);
+    } catch (const std::bad_alloc&) {
+        fatal_error("Elf3D glTF importer memory allocation failed");
+    } catch (...) {
+        fatal_error("Elf3D glTF importer encountered an unexpected exception");
+    }
+}
+
+} // namespace elf3d

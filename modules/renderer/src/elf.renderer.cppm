@@ -4,15 +4,14 @@ module;
 #include <elf3d/math/value_types.h>
 #include <elf3d/viewport.h>
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
 export module elf.renderer;
 
-import elf.assets;
 import elf.clipping;
 import elf.core;
 import elf.graphics;
@@ -24,7 +23,6 @@ export namespace elf3d::renderer {
 struct RenderItem {
     EntityId entity;
     MeshHandle mesh;
-    MaterialHandle material;
     std::uint32_t primitive_index = 0;
     Float4x4 model_matrix{};
     math::Matrix3x3 normal_matrix{};
@@ -57,16 +55,12 @@ struct GpuPickResult {
     std::optional<GpuPickHit> hit;
     std::uint64_t draw_calls = 0;
     std::uint64_t pixels_read = 0;
-    std::uint64_t picking_pass_time_microseconds = 0;
-    std::uint64_t readback_time_microseconds = 0;
 };
 
 struct GpuFocusDepthAnchorResult {
     std::optional<Float3> world_position;
     std::uint64_t draw_calls = 0;
     std::uint64_t pixels_read = 0;
-    std::uint64_t picking_pass_time_microseconds = 0;
-    std::uint64_t readback_time_microseconds = 0;
 };
 
 [[nodiscard]] Result<RenderList> build_render_list(const scene::Storage& scene, EntityId camera,
@@ -127,12 +121,14 @@ class Renderer final {
     struct MeshCacheKey {
         std::uint64_t scene = 0;
         std::uint64_t mesh = 0;
+        bool document_primitive = false;
 
         bool operator==(const MeshCacheKey&) const = default;
     };
 
-    struct MeshCacheHash {
-        [[nodiscard]] std::size_t operator()(const MeshCacheKey& key) const noexcept;
+    struct MeshCacheEntry {
+        MeshCacheKey key;
+        std::unique_ptr<graphics::StaticMesh> mesh;
     };
 
     enum class TextureColorSpace : std::uint8_t {
@@ -143,29 +139,46 @@ class Renderer final {
     struct TextureCacheKey {
         std::uint64_t scene = 0;
         std::uint64_t image = 0;
+        bool document_image = false;
         TextureColorSpace color_space = TextureColorSpace::linear;
-        SamplerDescription sampler;
+        scene::RuntimeSamplerDescription sampler;
 
         bool operator==(const TextureCacheKey&) const = default;
     };
 
-    struct TextureCacheHash {
-        [[nodiscard]] std::size_t operator()(const TextureCacheKey& key) const noexcept;
+    struct TextureCacheEntry {
+        TextureCacheKey key;
+        std::unique_ptr<graphics::Texture2D> texture;
     };
 
-    [[nodiscard]] Result<graphics::StaticMesh*> cached_mesh(SceneId scene_id, MeshHandle handle,
-                                                            const assets::MeshAsset& mesh);
+    [[nodiscard]] Result<void> prepare_draw_textures(
+        const scene::Storage& scene, const scene::RuntimePrimitiveView& primitive,
+        std::array<graphics::Texture2D*, graphics::material_texture_count>& textures,
+        std::uint64_t& upload_count, std::uint64_t& texture_bindings);
+    [[nodiscard]] Result<graphics::StaticMesh*>
+    cached_mesh(SceneId scene_id, const scene::RuntimePrimitiveView& primitive);
     [[nodiscard]] Result<graphics::Texture2D*>
-    cached_texture(SceneId scene_id, TextureAssetHandle handle, TextureColorSpace color_space,
-                   const assets::Storage& assets, std::uint64_t& upload_count);
+    cached_texture(SceneId scene_id, const scene::RuntimeTextureView& texture,
+                   TextureColorSpace color_space, std::uint64_t& upload_count);
 
     std::unique_ptr<graphics::Device> device_;
     std::uintptr_t engine_token_ = 0;
     std::unique_ptr<graphics::GraphicsPipeline> pipeline_;
-    std::unordered_map<MeshCacheKey, std::unique_ptr<graphics::StaticMesh>, MeshCacheHash>
-        mesh_cache_;
-    std::unordered_map<TextureCacheKey, std::unique_ptr<graphics::Texture2D>, TextureCacheHash>
-        texture_cache_;
+    std::vector<MeshCacheEntry> mesh_cache_;
+    std::vector<TextureCacheEntry> texture_cache_;
 };
+
+} // namespace elf3d::renderer
+
+namespace elf3d::renderer {
+
+[[nodiscard]] graphics::TextureAddressMode
+runtime_address_mode(scene::RuntimeTextureWrap wrap) noexcept;
+[[nodiscard]] graphics::TextureFilterMode
+runtime_filter_mode(scene::RuntimeTextureFilter filter) noexcept;
+[[nodiscard]] MaterialDescription
+runtime_material_description(const scene::RuntimeMaterialView& source) noexcept;
+[[nodiscard]] std::vector<VertexPositionNormalTexCoord>
+vertices_from_runtime_primitive(const scene::RuntimePrimitiveView& primitive);
 
 } // namespace elf3d::renderer

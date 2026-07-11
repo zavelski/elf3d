@@ -142,7 +142,7 @@ struct DrawOverlayDescription {
 
 class Texture2D {
   public:
-    virtual ~Texture2D();
+    virtual ~Texture2D() noexcept;
 
     Texture2D(const Texture2D&) = delete;
     Texture2D& operator=(const Texture2D&) = delete;
@@ -158,7 +158,7 @@ class Texture2D {
 
 class StaticMesh {
   public:
-    virtual ~StaticMesh();
+    virtual ~StaticMesh() noexcept;
 
     StaticMesh(const StaticMesh&) = delete;
     StaticMesh& operator=(const StaticMesh&) = delete;
@@ -175,7 +175,7 @@ class StaticMesh {
 
 class GraphicsPipeline {
   public:
-    virtual ~GraphicsPipeline();
+    virtual ~GraphicsPipeline() noexcept;
 
     GraphicsPipeline(const GraphicsPipeline&) = delete;
     GraphicsPipeline& operator=(const GraphicsPipeline&) = delete;
@@ -189,7 +189,7 @@ class GraphicsPipeline {
 
 class RenderTarget {
   public:
-    virtual ~RenderTarget();
+    virtual ~RenderTarget() noexcept;
 
     RenderTarget(const RenderTarget&) = delete;
     RenderTarget& operator=(const RenderTarget&) = delete;
@@ -197,8 +197,8 @@ class RenderTarget {
     RenderTarget& operator=(RenderTarget&&) = delete;
 
     [[nodiscard]] virtual Extent2D extent() const noexcept = 0;
-    [[nodiscard]] virtual Result<void> resize(Extent2D extent) = 0;
-    [[nodiscard]] virtual Result<void> clear(Color4 color) = 0;
+    [[nodiscard]] virtual Result<void> resize(Extent2D extent) noexcept = 0;
+    [[nodiscard]] virtual Result<void> clear(Color4 color) noexcept = 0;
     [[nodiscard]] virtual TextureHandle color_texture() const noexcept = 0;
     [[nodiscard]] virtual bool is_valid() const noexcept = 0;
     [[nodiscard]] virtual std::uintptr_t backend_resource_token() const noexcept = 0;
@@ -209,7 +209,7 @@ class RenderTarget {
 
 class PickingTarget {
   public:
-    virtual ~PickingTarget();
+    virtual ~PickingTarget() noexcept;
 
     PickingTarget(const PickingTarget&) = delete;
     PickingTarget& operator=(const PickingTarget&) = delete;
@@ -217,8 +217,8 @@ class PickingTarget {
     PickingTarget& operator=(PickingTarget&&) = delete;
 
     [[nodiscard]] virtual Extent2D extent() const noexcept = 0;
-    [[nodiscard]] virtual Result<void> resize(Extent2D extent) = 0;
-    [[nodiscard]] virtual Result<void> clear() = 0;
+    [[nodiscard]] virtual Result<void> resize(Extent2D extent) noexcept = 0;
+    [[nodiscard]] virtual Result<void> clear() noexcept = 0;
     [[nodiscard]] virtual bool is_valid() const noexcept = 0;
     [[nodiscard]] virtual std::uintptr_t backend_resource_token() const noexcept = 0;
 
@@ -228,7 +228,7 @@ class PickingTarget {
 
 class Device {
   public:
-    virtual ~Device();
+    virtual ~Device() noexcept;
 
     Device(const Device&) = delete;
     Device& operator=(const Device&) = delete;
@@ -237,28 +237,31 @@ class Device {
 
     [[nodiscard]] virtual GraphicsBackend backend() const noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<RenderTarget>>
-    create_render_target(Extent2D initial_extent) = 0;
+    create_render_target(Extent2D initial_extent) noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<PickingTarget>>
-    create_picking_target(Extent2D initial_extent) = 0;
+    create_picking_target(Extent2D initial_extent) noexcept = 0;
     [[nodiscard]] virtual Result<NativeTextureView>
-    native_texture_view(TextureHandle texture) const = 0;
+    native_texture_view(TextureHandle texture) const noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<StaticMesh>>
-    create_static_mesh(const StaticMeshDescription& description) = 0;
+    create_static_mesh(const StaticMeshDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<Texture2D>>
-    create_texture_2d(const Texture2DDescription& description) = 0;
+    create_texture_2d(const Texture2DDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<GraphicsPipeline>>
-    create_graphics_pipeline(const GraphicsPipelineDescription& description) = 0;
+    create_graphics_pipeline(const GraphicsPipelineDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void> draw_indexed(RenderTarget& target,
                                                     GraphicsPipeline& pipeline, StaticMesh& mesh,
-                                                    const DrawIndexedDescription& description) = 0;
+                                                    const DrawIndexedDescription& description)
+        noexcept = 0;
     [[nodiscard]] virtual Result<void> draw_overlay(RenderTarget& target,
-                                                    const DrawOverlayDescription& description) = 0;
+                                                    const DrawOverlayDescription& description)
+        noexcept = 0;
     [[nodiscard]] virtual Result<void>
     draw_picking_indexed(PickingTarget& target, StaticMesh& mesh,
-                         const PickingDrawDescription& description) = 0;
+                         const PickingDrawDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<std::optional<PickingPixel>>
-    read_picking_pixel(PickingTarget& target, Float2 position_pixels) = 0;
-    [[nodiscard]] virtual Result<std::vector<float>> read_picking_depths(PickingTarget& target) = 0;
+    read_picking_pixel(PickingTarget& target, Float2 position_pixels) noexcept = 0;
+    [[nodiscard]] virtual Result<std::vector<float>> read_picking_depths(PickingTarget& target)
+        noexcept = 0;
 
   protected:
     Device() = default;

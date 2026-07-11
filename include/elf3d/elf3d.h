@@ -13,8 +13,8 @@
 #include <elf3d/selection.h>
 #include <elf3d/viewport.h>
 
-#include <filesystem>
 #include <memory>
+#include <string_view>
 
 namespace elf3d {
 
@@ -34,8 +34,7 @@ class ELF3D_API Engine {
     struct ConstructionKey final {};
 
   public:
-    Engine();
-    ~Engine();
+    ~Engine() noexcept;
 
     Engine(const Engine &) = delete;
     Engine &operator=(const Engine &) = delete;
@@ -49,18 +48,21 @@ class ELF3D_API Engine {
     [[nodiscard]] GraphicsBackend graphics_backend() const noexcept;
     [[nodiscard]] bool graphics_initialized() const noexcept;
 
-    [[nodiscard]] Result<std::unique_ptr<Viewport>> create_viewport(Extent2D initial_extent);
+    [[nodiscard]] Result<std::unique_ptr<Viewport>>
+    create_viewport(Extent2D initial_extent) noexcept;
     // The Engine must outlive every Scene and Viewport created from it.
-    [[nodiscard]] Result<std::unique_ptr<Scene>> create_scene();
+    [[nodiscard]] Result<std::unique_ptr<Scene>> create_scene() noexcept;
     // Loading is synchronous. The existing scene, if any, is not modified.
-    [[nodiscard]] Result<std::unique_ptr<Scene>> load_scene(const std::filesystem::path &path,
-                                                            const SceneLoadOptions &options = {});
-    [[nodiscard]] Result<LoadedScene> load_scene_with_report(const std::filesystem::path &path,
-                                                             const SceneLoadOptions &options = {});
+    [[nodiscard]] Result<std::unique_ptr<Scene>>
+    load_scene(std::string_view path_utf8, const SceneLoadOptions &options = {}) noexcept;
+    [[nodiscard]] Result<LoadedScene>
+    load_scene_with_report(std::string_view path_utf8,
+                           const SceneLoadOptions &options = {}) noexcept;
 
     // Native texture access is non-owning and requires the owning graphics
     // thread with a compatible host OpenGL context current.
-    [[nodiscard]] Result<NativeTextureView> native_texture_view(TextureHandle texture) const;
+    [[nodiscard]] Result<NativeTextureView> native_texture_view(TextureHandle texture) const
+        noexcept;
 
     explicit Engine(ConstructionKey, std::unique_ptr<Impl> impl) noexcept;
 

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     Elf3D
-    VERSION 0.7.7
+    VERSION 0.8.0
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
@@ -20,7 +20,12 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+option(ELF3D_BUILD_ENGINE "Build the full Elf3D engine and rendering stack" ON)
 option(ELF3D_BUILD_VIEWER "Build the Elf3D reference viewer" ON)
+if(ELF3D_BUILD_VIEWER AND NOT ELF3D_BUILD_ENGINE)
+    message(FATAL_ERROR "ELF3D_BUILD_VIEWER requires ELF3D_BUILD_ENGINE")
+endif()
+
 set(
     elf3d_local_validation
     "${CMAKE_SOURCE_DIR}/.internal/cmake/local-validation.cmake"
@@ -33,31 +38,17 @@ include(cmake/compiler_options.cmake)
 include(cmake/dependencies.cmake)
 include(CTest)
 
-add_subdirectory(modules/core)
-add_subdirectory(modules/math)
-add_subdirectory(modules/interaction)
-add_subdirectory(modules/assets)
-add_subdirectory(modules/image)
-add_subdirectory(modules/scene)
-add_subdirectory(modules/clipping)
-add_subdirectory(modules/navigation)
-add_subdirectory(modules/picking)
-add_subdirectory(modules/tools/selection)
-add_subdirectory(modules/tools/visibility)
-add_subdirectory(modules/tools/measurement)
-add_subdirectory(modules/tools/clipping)
-add_subdirectory(modules/gltf)
-add_subdirectory(modules/graphics)
-add_subdirectory(modules/backend_opengl)
-add_subdirectory(modules/renderer)
-add_subdirectory(modules/viewport)
-add_subdirectory(facade/elf3d)
+add_subdirectory(modules)
+
+if(ELF3D_BUILD_ENGINE)
+    add_subdirectory(facade/elf3d)
+endif()
 
 if(ELF3D_BUILD_VIEWER)
     add_subdirectory(integrations/imgui)
     add_subdirectory(apps/viewer)
 endif()
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND ELF3D_BUILD_ENGINE)
     add_subdirectory(tests)
 endif()
