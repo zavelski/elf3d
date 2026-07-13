@@ -23,6 +23,9 @@ The viewer accepts `.gltf` and `.glb` files. You can also:
 - click the Open toolbar button;
 - drag and drop a model onto the window.
 
+Elf3D remembers the folder of the last successfully opened or saved model and
+uses it the next time the Open or Save As browser appears.
+
 Without a model, Elf3D shows its procedural demo cube. Loading is synchronous,
 so a large model can temporarily freeze the interface. If loading fails, the
 current scene remains open.
@@ -274,7 +277,8 @@ resource-limit diagnostics.
 
 ## Menu Reference
 
-- **File**: Open, Reload, Close Scene, and Exit.
+- **File**: Open, Save As, Reload, Close Scene, and Exit. Save As exports the
+  loaded model as `.gltf` or `.glb` and asks before replacing an existing file.
 - **View**: show or hide panels and the status bar, open the ImGui demo, and
   reset the layout.
 - **Tools**: Select, Measure Distance, and open Clipping.

@@ -1,5 +1,6 @@
-#include <elf3d/scene.h>
 #include <elf3d/core/assert.h>
+#include <elf3d/model.h>
+#include <elf3d/scene.h>
 
 #include <algorithm>
 #include <limits>
@@ -391,6 +392,18 @@ std::optional<Bounds3> Scene::visible_bounds() const noexcept {
 
 SceneStatistics Scene::statistics() const noexcept {
     return impl_ != nullptr ? impl_->storage.statistics() : SceneStatistics{};
+}
+
+Result<void> Scene::save_model(std::string_view path_utf8) const noexcept {
+    if (impl_ == nullptr || !impl_->storage.has_document()) {
+        return Error{ErrorCode::invalid_argument,
+                     "Only a scene loaded from a model document can be saved"};
+    }
+    const Result<ModelWriteReport> saved = save_document(path_utf8, impl_->storage.document());
+    if (!saved) {
+        return saved.error();
+    }
+    return {};
 }
 
 const scene::Storage *scene::Access::storage(const Scene &scene) noexcept {

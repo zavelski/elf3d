@@ -103,7 +103,7 @@ enabled box is retained, then combined with the section-plane result. Use
 
 ## Menus
 
-- **File**: Open, Reload, Close Scene, Exit.
+- **File**: Open, Save As, Reload, Close Scene, Exit.
 - **View**: panels, status bar, demo window, reset layout.
 - **Tools**: Select, Measure Distance, Clipping.
 - **Clipping**: section plane, flip, add box, helpers, fit, clear.
@@ -114,3 +114,10 @@ enabled box is retained, then combined with the section-plane result. Use
 
 Keyboard shortcuts are suspended while a modal dialog or text editor has input
 focus.
+
+**Open** presents the local glTF asset browser with favorites, locations,
+storage, recent folders, path and search controls, and an explicit selected-file
+area. **About Elf3D** shows the viewer version, supported model and graphics
+formats, platform, license, and expandable build details.
+The last folder of a successfully opened or saved model is remembered in the
+current user's application settings and restored on the next launch.

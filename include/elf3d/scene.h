@@ -6,11 +6,11 @@
 #include <elf3d/core/result.h>
 
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <memory>
-#include <optional>
 
 namespace elf3d {
 
@@ -205,6 +205,9 @@ class ELF3D_API Scene final {
     [[nodiscard]] std::optional<Bounds3> world_bounds() const noexcept;
     [[nodiscard]] std::optional<Bounds3> visible_bounds() const noexcept;
     [[nodiscard]] SceneStatistics statistics() const noexcept;
+    // Saves the canonical document retained by a loaded scene. Scene-created
+    // compatibility assets and runtime-only visibility/tool state are not exported.
+    [[nodiscard]] Result<void> save_model(std::string_view path_utf8) const noexcept;
 
     explicit Scene(ConstructionKey, std::unique_ptr<Impl> impl) noexcept;
 

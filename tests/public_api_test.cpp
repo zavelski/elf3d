@@ -36,6 +36,7 @@ int main() {
     static_assert(noexcept(std::declval<elf3d::SceneLoadReport &>().has_warnings()));
     static_assert(noexcept(std::declval<elf3d::Result<elf3d::SceneStatistics> &>().value()));
     static_assert(noexcept(std::declval<elf3d::Result<elf3d::SceneStatistics> &>().error()));
+    static_assert(noexcept(std::declval<const elf3d::Scene&>().save_model(std::string_view{})));
 
     static_assert(std::is_standard_layout_v<elf3d::Float2>);
     static_assert(std::is_standard_layout_v<elf3d::Color4>);
@@ -259,6 +260,15 @@ int main() {
             elf3d::ErrorCode::source_file_not_found ||
         loaded->statistics().model_entities != 1) {
         return 13;
+    }
+    const std::filesystem::path exported_path = directory / "saved.glb";
+    if (!loaded->save_model(path_to_utf8(exported_path))) {
+        return 131;
+    }
+    const elf3d::Result<std::unique_ptr<elf3d::Scene>> saved_load =
+        engine.load_scene(path_to_utf8(exported_path));
+    if (!saved_load || saved_load.value()->statistics() != loaded->statistics()) {
+        return 132;
     }
     loaded.reset();
     std::filesystem::remove_all(directory, filesystem_error);

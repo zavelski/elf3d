@@ -72,6 +72,21 @@ for (std::size_t index = 0; index < loaded.report.diagnostic_count(); ++index) {
 Loading paths are UTF-8 strings. Use `load_scene()` when the compatibility
 report is not required.
 
+## Saving a Loaded Scene
+
+```cpp
+auto saved = loaded.scene->save_model("copy.glb");
+if (!saved) {
+    report_error(saved.error());
+}
+```
+
+`Scene::save_model()` exports the canonical `Document` retained by a scene
+loaded from glTF/GLB. The target extension selects `.glb` or `.gltf`; glTF may
+create buffer and image sidecars. Runtime visibility, viewport tools, and
+Scene-created compatibility assets are intentionally not export data. A
+procedural Scene therefore cannot be saved through this operation.
+
 ## Creating and Rendering a Viewport
 
 ```cpp

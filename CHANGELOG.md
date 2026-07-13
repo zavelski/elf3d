@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.1
+
+- Added a professional glTF Open browser and matching Save As workflow with
+  `.glb`/`.gltf` output, replacement confirmation, save diagnostics, and a
+  `Ctrl+Shift+S` shortcut.
+- Added `Scene::save_model()` to the public engine facade so loaded scenes can
+  export their retained canonical Document through the existing transactional
+  glTF/GLB writer.
+- Remembered the last successfully opened or saved model directory between
+  viewer launches and improved modal input isolation, draggable About details,
+  and scrollbar visibility.
+
 ## 0.8.0
 
 - Added the source-integrated `elf3d_model` static library and canonical

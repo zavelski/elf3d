@@ -10,6 +10,7 @@ target_compile_definitions(
     PRIVATE
         ELF3D_IMGUI_BRANCH="${ELF3D_IMGUI_BRANCH}"
         ELF3D_IMGUI_COMMIT_SHA="${ELF3D_IMGUI_COMMIT_SHA}"
+        ELF3D_VERSION="${PROJECT_VERSION}"
 )
 target_link_libraries(
     elf3d_viewer

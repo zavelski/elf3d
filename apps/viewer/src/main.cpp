@@ -1,5 +1,5 @@
-#include <elf3d/elf3d.h>
 #include <elf3d/core/assert.h>
+#include <elf3d/elf3d.h>
 #include <elf3d/imgui/context.h>
 #include <elf3d/imgui/texture.h>
 
@@ -32,6 +32,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
@@ -160,18 +161,23 @@ struct ViewerState {
     ImGuiID dock_right_id = 0;
     ImGuiID dock_right_bottom_id = 0;
     bool request_open_modal = false;
+    bool request_save_modal = false;
     bool request_error_modal = false;
+    bool request_save_error_modal = false;
     std::array<char, 2048> open_folder_path{};
     std::array<char, 2048> open_file_path{};
     std::array<char, 256> open_search{};
     std::filesystem::path open_browser_directory;
     std::filesystem::path open_browser_selected_path;
+    std::filesystem::path preferences_path;
+    std::filesystem::path last_model_directory;
     std::vector<OpenBrowserEntry> open_browser_entries;
     std::vector<std::filesystem::path> open_browser_bookmarks;
     std::vector<std::filesystem::path> open_browser_recents;
     std::vector<std::filesystem::path> open_browser_history;
     std::size_t open_browser_history_index = 0;
     std::string open_browser_error;
+    std::optional<std::filesystem::path> pending_save_path;
     bool open_browser_initialized = false;
     bool open_browser_needs_refresh = false;
     std::optional<std::string> dropped_path;
@@ -187,6 +193,7 @@ struct ViewerState {
     elf3d::RenderStatistics statistics;
     std::string viewport_error;
     std::optional<LoadFailure> load_failure;
+    std::optional<LoadFailure> save_failure;
     bool application_focused = true;
     bool cursor_captured = false;
     bool raw_mouse_motion_enabled = false;
@@ -398,26 +405,77 @@ void push_unique_directory(std::vector<std::filesystem::path> &directories,
     return path;
 }
 
-void initialize_open_browser_bookmarks(ViewerState &state) {
+[[nodiscard]] std::optional<std::filesystem::path> viewer_preferences_path() {
+#if defined(_WIN32)
+    const std::optional<std::string> base = environment_value("LOCALAPPDATA");
+    if (base.has_value()) {
+        return path_from_utf8(*base) / "Elf3D" / "viewer-state.ini";
+    }
+#elif defined(__APPLE__)
+    const std::optional<std::string> home = environment_value("HOME");
+    if (home.has_value()) {
+        return path_from_utf8(*home) / "Library" / "Application Support" / "Elf3D" /
+               "viewer-state.ini";
+    }
+#else
+    const std::optional<std::string> config_home = environment_value("XDG_CONFIG_HOME");
+    if (config_home.has_value()) {
+        return path_from_utf8(*config_home) / "Elf3D" / "viewer-state.ini";
+    }
+    const std::optional<std::string> home = environment_value("HOME");
+    if (home.has_value()) {
+        return path_from_utf8(*home) / ".config" / "Elf3D" / "viewer-state.ini";
+    }
+#endif
+    return std::nullopt;
+}
+
+void load_viewer_preferences(ViewerState& state) {
+    const std::optional<std::filesystem::path> path = viewer_preferences_path();
+    if (!path.has_value()) {
+        return;
+    }
+    state.preferences_path = *path;
+    std::ifstream input{*path, std::ios::binary};
+    std::string line;
+    constexpr std::string_view prefix = "last_model_directory=";
+    if (!std::getline(input, line) || !line.starts_with(prefix)) {
+        return;
+    }
+    const std::filesystem::path directory = path_from_utf8(line.substr(prefix.size()));
+    std::error_code error;
+    if (std::filesystem::is_directory(directory, error) && !error) {
+        state.last_model_directory = absolute_path_no_throw(directory);
+    }
+}
+
+void remember_model_directory(ViewerState& state, const std::filesystem::path& model_path) {
+    if (!model_path.has_parent_path()) {
+        return;
+    }
+    state.last_model_directory = absolute_path_no_throw(model_path.parent_path());
+    if (state.preferences_path.empty()) {
+        return;
+    }
+    std::error_code error;
+    std::filesystem::create_directories(state.preferences_path.parent_path(), error);
+    if (error) {
+        return;
+    }
+    std::ofstream output{state.preferences_path, std::ios::binary | std::ios::trunc};
+    output << "last_model_directory=" << path_to_utf8(state.last_model_directory) << '\n';
+}
+
+void initialize_open_browser_bookmarks(ViewerState& state) {
     if (!state.open_browser_bookmarks.empty()) {
         return;
     }
 
     const std::optional<std::filesystem::path> user_profile = environment_directory("USERPROFILE");
-    const std::optional<std::filesystem::path> one_drive = environment_directory("OneDrive");
     std::vector<std::filesystem::path> defaults;
     if (user_profile.has_value()) {
         const std::filesystem::path& profile_path = *user_profile;
         defaults.push_back(profile_path);
-        defaults.push_back(profile_path / "Desktop");
-        defaults.push_back(profile_path / "Documents");
-        defaults.push_back(profile_path / "Downloads");
-        defaults.push_back(profile_path / "Pictures");
-        defaults.push_back(profile_path / "Videos");
-        defaults.push_back(profile_path / "Music");
-    }
-    if (one_drive.has_value()) {
-        defaults.push_back(*one_drive);
     }
     defaults.push_back(fallback_open_directory());
 
@@ -594,12 +652,22 @@ void initialize_open_browser(ViewerState &state, const ViewerScene &scene) {
     std::filesystem::path directory = fallback_open_directory();
     if (scene.is_imported() && scene.source_path.has_parent_path()) {
         directory = scene.source_path.parent_path();
+    } else if (!state.last_model_directory.empty()) {
+        directory = state.last_model_directory;
     }
 
     state.open_browser_initialized = true;
     set_open_browser_directory(state, directory);
     if (scene.is_imported()) {
         set_open_browser_selected_file(state, scene.source_path);
+    }
+}
+
+void initialize_save_browser(ViewerState& state, const ViewerScene& scene) {
+    initialize_open_browser(state, scene);
+    state.pending_save_path.reset();
+    if (scene.is_imported()) {
+        copy_text_to_buffer(path_to_utf8(scene.source_path.filename()), state.open_file_path);
     }
 }
 
@@ -1075,6 +1143,10 @@ void build_main_menu(GLFWwindow *window, ViewerState &state, const ViewerScene &
             state.request_open_modal = true;
         }
         ImGui::BeginDisabled(!scene.is_imported());
+        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) {
+            state.request_save_modal = true;
+        }
+        ImGui::Separator();
         commands.reload = ImGui::MenuItem("Reload");
         commands.close_scene = ImGui::MenuItem("Close Scene");
         ImGui::EndDisabled();
@@ -1687,7 +1759,7 @@ struct DisplayDistance {
 }
 
 [[nodiscard]] bool navigation_blocked_by_modal() noexcept {
-    return ImGui::IsPopupOpen("Open glTF Model") || ImGui::IsPopupOpen("Model Load Error");
+    return ImGui::GetTopMostPopupModal() != nullptr;
 }
 
 void disable_imgui_cursor_updates(ViewerState &state) noexcept {
@@ -3162,13 +3234,69 @@ void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerState &state, Viewe
     }
 }
 
-[[nodiscard]] bool open_browser_icon_button(const char *label, const char *tooltip_text,
-                                            bool enabled = true) {
+constexpr int professional_dialog_style_var_count = 7;
+constexpr int professional_dialog_style_color_count = 26;
+
+void push_professional_dialog_style() {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{16.0F, 14.0F});
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{9.0F, 6.0F});
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{8.0F, 8.0F});
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0F);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 6.0F);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0F);
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 14.0F);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4{0.105F, 0.118F, 0.128F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.105F, 0.118F, 0.128F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4{0.085F, 0.095F, 0.103F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4{0.105F, 0.118F, 0.128F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_TitleBgCollapsed, ImVec4{0.085F, 0.095F, 0.103F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4{0.130F, 0.145F, 0.155F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4{0.255F, 0.285F, 0.300F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.900F, 0.915F, 0.920F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4{0.545F, 0.580F, 0.595F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4{0.070F, 0.080F, 0.088F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4{0.120F, 0.145F, 0.160F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4{0.145F, 0.175F, 0.190F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.190F, 0.215F, 0.225F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.250F, 0.300F, 0.330F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.220F, 0.360F, 0.470F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.165F, 0.255F, 0.320F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.205F, 0.340F, 0.430F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.225F, 0.405F, 0.535F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, ImVec4{0.145F, 0.165F, 0.175F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_TableRowBg, ImVec4{0.115F, 0.128F, 0.138F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, ImVec4{0.130F, 0.145F, 0.155F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4{0.250F, 0.280F, 0.295F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, ImVec4{0.080F, 0.090F, 0.098F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ImVec4{0.270F, 0.315F, 0.335F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ImVec4{0.370F, 0.450F, 0.490F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, ImVec4{0.400F, 0.560F, 0.650F, 1.00F});
+}
+
+void pop_professional_dialog_style() {
+    ImGui::PopStyleColor(professional_dialog_style_color_count);
+    ImGui::PopStyleVar(professional_dialog_style_var_count);
+}
+
+void push_primary_action_style() {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.105F, 0.385F, 0.610F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.135F, 0.480F, 0.740F, 1.00F});
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.090F, 0.325F, 0.520F, 1.00F});
+}
+
+void pop_primary_action_style() {
+    ImGui::PopStyleColor(3);
+}
+
+[[nodiscard]] bool open_browser_toolbar_button(const char* label, const char* tooltip_text,
+                                               bool enabled = true) {
     if (!enabled) {
         ImGui::BeginDisabled();
     }
     const float size = ImGui::GetFrameHeight();
-    const bool pressed = ImGui::Button(label, ImVec2{size, size});
+    const float width =
+        std::max(size, ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0F);
+    const bool pressed = ImGui::Button(label, ImVec2{width, size});
     tooltip(tooltip_text);
     if (!enabled) {
         ImGui::EndDisabled();
@@ -3197,6 +3325,28 @@ open_browser_file_candidate(const ViewerState &state) {
     return candidate;
 }
 
+[[nodiscard]] std::optional<std::filesystem::path>
+save_browser_file_candidate(const ViewerState& state) {
+    const std::string text{state.open_file_path.data()};
+    if (text.empty()) {
+        return std::nullopt;
+    }
+    std::filesystem::path candidate = path_from_utf8(text);
+    if (candidate.extension().empty()) {
+        candidate += ".glb";
+    }
+    if (candidate.is_relative()) {
+        candidate = state.open_browser_directory / candidate;
+    }
+    candidate = absolute_path_no_throw(candidate);
+    std::error_code error;
+    if (!supported_model_path(candidate) || !candidate.has_parent_path() ||
+        !std::filesystem::is_directory(candidate.parent_path(), error) || error) {
+        return std::nullopt;
+    }
+    return candidate;
+}
+
 [[nodiscard]] bool open_browser_entry_matches_search(const OpenBrowserEntry &entry,
                                                      std::string_view search_text) {
     if (search_text.empty()) {
@@ -3205,64 +3355,62 @@ open_browser_file_candidate(const ViewerState &state) {
     return lowercase_ascii(entry.label).find(search_text) != std::string::npos;
 }
 
-void build_open_browser_sidebar_item(ViewerState &state, std::string_view icon,
+void build_open_browser_sidebar_item(ViewerState& state, const char* section_id,
                                      std::string_view label,
-                                     const std::filesystem::path &directory) {
+                                     const std::filesystem::path& directory) {
     std::error_code error;
     if (!std::filesystem::is_directory(directory, error) || error) {
         return;
     }
 
-    std::string display;
-    display.reserve(icon.size() + label.size() + 2U);
-    display.append(icon);
-    display.push_back(' ');
-    display.append(label);
+    const std::string display{label};
+    const std::string item_id = path_to_utf8(directory);
+    ImGui::PushID(section_id);
+    ImGui::PushID(item_id.c_str());
 
     const bool selected = same_path_key(directory, state.open_browser_directory);
     if (ImGui::Selectable(display.c_str(), selected)) {
         set_open_browser_directory(state, directory);
     }
-    tooltip(path_to_utf8(directory).c_str());
+    tooltip(item_id.c_str());
+    ImGui::PopID();
+    ImGui::PopID();
 }
 
 void build_open_browser_sidebar_section(const char *title) {
     ImGui::Spacing();
-    ImGui::TextDisabled("%s", title);
-    ImGui::Separator();
+    ImGui::TextColored(ImVec4{0.470F, 0.680F, 0.810F, 1.00F}, "%s", title);
+    ImGui::Spacing();
 }
 
 void build_open_browser_bookmarks(ViewerState &state) {
-    build_open_browser_sidebar_section("Bookmarks");
-    if (ImGui::Button("+ Add Bookmark", ImVec2{-1.0F, 0.0F})) {
-        push_unique_directory(state.open_browser_bookmarks, state.open_browser_directory, 12);
-    }
+    build_open_browser_sidebar_section("FAVORITES");
     for (const std::filesystem::path &bookmark : state.open_browser_bookmarks) {
-        build_open_browser_sidebar_item(state, "[*]", file_name_label(bookmark), bookmark);
+        build_open_browser_sidebar_item(state, "favorites", file_name_label(bookmark), bookmark);
     }
 }
 
 void build_open_browser_system_locations(ViewerState &state) {
-    build_open_browser_sidebar_section("System");
+    build_open_browser_sidebar_section("LOCATIONS");
     const std::optional<std::filesystem::path> user_profile = environment_directory("USERPROFILE");
     if (user_profile.has_value()) {
         const std::filesystem::path& profile_path = *user_profile;
-        build_open_browser_sidebar_item(state, "[H]", "Home", profile_path);
-        build_open_browser_sidebar_item(state, "[D]", "Desktop", profile_path / "Desktop");
-        build_open_browser_sidebar_item(state, "[D]", "Documents", profile_path / "Documents");
-        build_open_browser_sidebar_item(state, "[D]", "Downloads", profile_path / "Downloads");
-        build_open_browser_sidebar_item(state, "[M]", "Music", profile_path / "Music");
-        build_open_browser_sidebar_item(state, "[P]", "Pictures", profile_path / "Pictures");
-        build_open_browser_sidebar_item(state, "[V]", "Videos", profile_path / "Videos");
+        build_open_browser_sidebar_item(state, "locations", "Home", profile_path);
+        build_open_browser_sidebar_item(state, "locations", "Desktop", profile_path / "Desktop");
+        build_open_browser_sidebar_item(state, "locations", "Documents", profile_path / "Documents");
+        build_open_browser_sidebar_item(state, "locations", "Downloads", profile_path / "Downloads");
+        build_open_browser_sidebar_item(state, "locations", "Music", profile_path / "Music");
+        build_open_browser_sidebar_item(state, "locations", "Pictures", profile_path / "Pictures");
+        build_open_browser_sidebar_item(state, "locations", "Videos", profile_path / "Videos");
     }
     const std::optional<std::filesystem::path> one_drive = environment_directory("OneDrive");
     if (one_drive.has_value()) {
-        build_open_browser_sidebar_item(state, "[O]", "OneDrive", *one_drive);
+        build_open_browser_sidebar_item(state, "locations", "OneDrive", *one_drive);
     }
 }
 
 void build_open_browser_volumes(ViewerState &state) {
-    build_open_browser_sidebar_section("Volumes");
+    build_open_browser_sidebar_section("STORAGE");
 #if defined(_WIN32)
     bool has_drive = false;
     for (char letter = 'A'; letter <= 'Z'; ++letter) {
@@ -3277,7 +3425,7 @@ void build_open_browser_volumes(ViewerState &state) {
         }
 
         has_drive = true;
-        build_open_browser_sidebar_item(state, "[V]", root, root_path);
+        build_open_browser_sidebar_item(state, "storage", root, root_path);
     }
     if (!has_drive) {
         ImGui::TextDisabled("none");
@@ -3288,13 +3436,13 @@ void build_open_browser_volumes(ViewerState &state) {
 }
 
 void build_open_browser_recents(ViewerState &state) {
-    build_open_browser_sidebar_section("Recent");
+    build_open_browser_sidebar_section("RECENT");
     if (state.open_browser_recents.empty()) {
         ImGui::TextDisabled("none");
         return;
     }
     for (const std::filesystem::path &recent : state.open_browser_recents) {
-        build_open_browser_sidebar_item(state, "[R]", file_name_label(recent), recent);
+        build_open_browser_sidebar_item(state, "recent", file_name_label(recent), recent);
     }
 }
 
@@ -3305,74 +3453,76 @@ void build_open_browser_sidebar(ViewerState &state) {
     build_open_browser_recents(state);
 }
 
-void build_open_browser_top_bar(ViewerState &state) {
-    if (open_browser_icon_button("<", "Back", state.open_browser_history_index > 0U)) {
+void build_open_browser_top_bar(ViewerState& state) {
+    if (open_browser_toolbar_button("<", "Back", state.open_browser_history_index > 0U)) {
         navigate_open_browser_history(state, -1);
     }
     ImGui::SameLine();
-    if (open_browser_icon_button(">", "Forward",
-                                 !state.open_browser_history.empty() &&
-                                     state.open_browser_history_index + 1U <
-                                         state.open_browser_history.size())) {
+    if (open_browser_toolbar_button(">", "Forward",
+                                    !state.open_browser_history.empty() &&
+                                        state.open_browser_history_index + 1U <
+                                            state.open_browser_history.size())) {
         navigate_open_browser_history(state, 1);
     }
     ImGui::SameLine();
-    if (open_browser_icon_button("^", "Parent folder")) {
+    if (open_browser_toolbar_button("Up", "Parent folder")) {
         const std::filesystem::path parent = state.open_browser_directory.parent_path();
         if (!parent.empty() && parent != state.open_browser_directory) {
             set_open_browser_directory(state, parent);
         }
     }
     ImGui::SameLine();
-    if (open_browser_icon_button("R", "Refresh")) {
+    if (open_browser_toolbar_button("R", "Refresh folder")) {
         state.open_browser_needs_refresh = true;
     }
     ImGui::SameLine();
-    if (open_browser_icon_button("+", "Add bookmark")) {
+    if (open_browser_toolbar_button("+", "Pin current folder to Favorites")) {
         push_unique_directory(state.open_browser_bookmarks, state.open_browser_directory, 12);
     }
 
     ImGui::SameLine();
-    const float search_width = 190.0F;
+    const float search_width = 230.0F;
     ImGui::SetNextItemWidth(-(search_width + ImGui::GetStyle().ItemSpacing.x));
-    if (ImGui::InputText("##OpenFolderPath", state.open_folder_path.data(),
-                         state.open_folder_path.size(), ImGuiInputTextFlags_EnterReturnsTrue)) {
+    if (ImGui::InputTextWithHint("##OpenFolderPath", "Folder path", state.open_folder_path.data(),
+                                 state.open_folder_path.size(),
+                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
         set_open_browser_directory(state,
                                    path_from_utf8(std::string{state.open_folder_path.data()}));
     }
     tooltip("Current folder");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(search_width);
-    ImGui::InputText("##OpenSearch", state.open_search.data(), state.open_search.size());
+    ImGui::InputTextWithHint("##OpenSearch", "Search models", state.open_search.data(),
+                             state.open_search.size());
     tooltip("Search visible folders and glTF files");
 }
 
-void build_open_browser_file_table(ViewerState &state,
-                                   std::optional<std::filesystem::path> &file_request) {
+void build_open_browser_file_table(ViewerState& state,
+                                   std::optional<std::filesystem::path>& file_request) {
     const std::string search_text = lowercase_ascii(std::string{state.open_search.data()});
     constexpr ImGuiTableFlags table_flags =
-        ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersInnerH |
-        ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY;
+        ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable |
+        ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY;
     if (!ImGui::BeginTable("##OpenBrowserTable", 3, table_flags)) {
         return;
     }
 
     ImGui::TableSetupScrollFreeze(0, 1);
     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.58F);
-    ImGui::TableSetupColumn("Date Modified", ImGuiTableColumnFlags_WidthStretch, 0.28F);
+    ImGui::TableSetupColumn("Modified", ImGuiTableColumnFlags_WidthStretch, 0.28F);
     ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthStretch, 0.14F);
     ImGui::TableHeadersRow();
 
     bool has_visible_entry = false;
     std::optional<std::filesystem::path> navigation_request;
-    for (const OpenBrowserEntry &entry : state.open_browser_entries) {
+    for (const OpenBrowserEntry& entry : state.open_browser_entries) {
         if (!open_browser_entry_matches_search(entry, search_text)) {
             continue;
         }
         has_visible_entry = true;
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        const std::string display_label = (entry.directory ? "[DIR]  " : "[GLB]  ") + entry.label;
+        const std::string display_label = entry.directory ? entry.label + "/" : entry.label;
         const bool selected = !entry.directory && !state.open_browser_selected_path.empty() &&
                               same_path_key(entry.path, state.open_browser_selected_path);
         if (ImGui::Selectable(display_label.c_str(), selected,
@@ -3409,80 +3559,88 @@ void build_open_browser_file_table(ViewerState &state,
     }
 }
 
-[[nodiscard]] std::optional<std::string> build_open_modal(ViewerState &state,
-                                                          const ViewerScene &scene) {
+void build_open_browser_error(const ViewerState& state) {
+    if (state.open_browser_error.empty()) {
+        return;
+    }
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4{0.265F, 0.100F, 0.095F, 1.00F});
+    if (ImGui::BeginChild("##OpenBrowserError", ImVec2{0.0F, 38.0F}, true,
+                          ImGuiWindowFlags_NoScrollbar)) {
+        ImGui::TextColored(ImVec4{1.00F, 0.630F, 0.560F, 1.0F}, "%s",
+                           state.open_browser_error.c_str());
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+}
+
+[[nodiscard]] std::optional<std::string> build_open_browser_footer(ViewerState& state) {
+    std::optional<std::string> requested_path;
+    const std::optional<std::filesystem::path> candidate = open_browser_file_candidate(state);
+    const bool can_open = candidate.has_value();
+    const float button_width = 118.0F;
+    const float button_area_width = button_width * 2.0F + ImGui::GetStyle().ItemSpacing.x;
+    constexpr float field_label_width = 130.0F;
+    ImGui::Separator();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("File name");
+    ImGui::SameLine(field_label_width);
+    ImGui::SetNextItemWidth(-button_area_width - ImGui::GetStyle().ItemSpacing.x);
+    const bool open_from_enter = ImGui::InputTextWithHint(
+        "##OpenFilePath", "Select a .gltf or .glb model", state.open_file_path.data(),
+        state.open_file_path.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+    tooltip("Selected model file");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!can_open);
+    push_primary_action_style();
+    if (ImGui::Button("Open", ImVec2{button_width, 0.0F}) || (open_from_enter && can_open)) {
+        requested_path = path_to_utf8(*candidate);
+        ImGui::CloseCurrentPopup();
+    }
+    pop_primary_action_style();
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2{button_width, 0.0F})) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("File type");
+    ImGui::SameLine(field_label_width);
+    ImGui::TextUnformatted("glTF 2.0 Model (*.gltf, *.glb)");
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        ImGui::CloseCurrentPopup();
+    }
+    return requested_path;
+}
+
+[[nodiscard]] std::optional<std::string> build_open_modal(ViewerState& state,
+                                                          const ViewerScene& scene) {
     if (state.request_open_modal) {
         initialize_open_browser(state, scene);
-        ImGui::OpenPopup("Open glTF Model");
+        ImGui::OpenPopup("Open Model");
         state.request_open_modal = false;
     }
     std::optional<std::string> requested_path;
 
-    int style_color_count = 0;
-    int style_var_count = 0;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{10.0F, 10.0F});
-    ++style_var_count;
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0F);
-    ++style_var_count;
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0F);
-    ++style_var_count;
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 6.0F);
-    ++style_var_count;
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.13F, 0.15F, 0.16F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4{0.13F, 0.15F, 0.16F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4{0.17F, 0.19F, 0.20F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.88F, 0.90F, 0.89F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4{0.58F, 0.62F, 0.62F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4{0.31F, 0.35F, 0.36F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4{0.13F, 0.15F, 0.16F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4{0.16F, 0.19F, 0.20F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_TitleBgCollapsed, ImVec4{0.13F, 0.15F, 0.16F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4{0.08F, 0.09F, 0.10F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4{0.15F, 0.18F, 0.19F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.24F, 0.28F, 0.30F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.30F, 0.42F, 0.54F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.26F, 0.50F, 0.72F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.22F, 0.29F, 0.34F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.28F, 0.40F, 0.50F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.31F, 0.48F, 0.66F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, ImVec4{0.19F, 0.22F, 0.23F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_TableRowBg, ImVec4{0.14F, 0.16F, 0.17F, 1.00F});
-    ++style_color_count;
-    ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, ImVec4{0.16F, 0.18F, 0.19F, 1.00F});
-    ++style_color_count;
+    push_professional_dialog_style();
 
-    ImGui::SetNextWindowSize(ImVec2{1020.0F, 650.0F}, ImGuiCond_Appearing);
-    if (ImGui::BeginPopupModal("Open glTF Model", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
+    ImGui::SetNextWindowSize(ImVec2{1120.0F, 720.0F}, ImGuiCond_Appearing);
+    constexpr float maximum_dialog_size = std::numeric_limits<float>::max();
+    ImGui::SetNextWindowSizeConstraints(ImVec2{820.0F, 540.0F},
+                                        ImVec2{maximum_dialog_size, maximum_dialog_size});
+    if (ImGui::BeginPopupModal("Open Model", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
         refresh_open_browser_entries(state);
 
+        ImGui::TextColored(ImVec4{0.455F, 0.725F, 0.900F, 1.00F}, "GLTF 2.0 ASSET BROWSER");
+        ImGui::SameLine();
+        ImGui::TextDisabled("Folders and .gltf/.glb files");
+        ImGui::Separator();
         build_open_browser_top_bar(state);
-        if (!state.open_browser_error.empty()) {
-            ImGui::TextColored(ImVec4{1.00F, 0.38F, 0.28F, 1.0F}, "%s",
-                               state.open_browser_error.c_str());
-        }
+        build_open_browser_error(state);
         ImGui::Separator();
 
         std::optional<std::filesystem::path> file_request;
-        const float footer_height = ImGui::GetFrameHeightWithSpacing() + 6.0F;
-        const float sidebar_width = 275.0F;
+        const float footer_height = ImGui::GetFrameHeightWithSpacing() * 2.0F + 18.0F;
+        const float sidebar_width = 250.0F;
         if (ImGui::BeginChild("##OpenBrowserSidebar", ImVec2{sidebar_width, -footer_height},
                               true)) {
             build_open_browser_sidebar(state);
@@ -3501,52 +3659,195 @@ void build_open_browser_file_table(ViewerState &state,
             requested_path = path_to_utf8(*file_request);
             ImGui::CloseCurrentPopup();
         }
+        std::optional<std::string> footer_request = build_open_browser_footer(state);
+        if (footer_request.has_value()) {
+            requested_path = std::move(footer_request);
+        }
+        ImGui::EndPopup();
+    }
+    pop_professional_dialog_style();
+    return requested_path;
+}
 
-        const std::optional<std::filesystem::path> candidate = open_browser_file_candidate(state);
-        const bool can_open = candidate.has_value();
-        const float button_width = 118.0F;
-        const float button_area_width = button_width * 2.0F + ImGui::GetStyle().ItemSpacing.x;
-        ImGui::SetNextItemWidth(-button_area_width - ImGui::GetStyle().ItemSpacing.x);
-        const bool open_from_enter =
-            ImGui::InputText("##OpenFilePath", state.open_file_path.data(),
-                             state.open_file_path.size(), ImGuiInputTextFlags_EnterReturnsTrue);
-        tooltip("Selected model file");
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!can_open);
-        if (ImGui::Button("Open", ImVec2{button_width, 0.0F}) || (open_from_enter && can_open)) {
-            requested_path = path_to_utf8(*candidate);
+[[nodiscard]] std::optional<std::filesystem::path> build_save_browser_footer(ViewerState& state) {
+    std::optional<std::filesystem::path> requested_path;
+    const std::optional<std::filesystem::path> candidate = save_browser_file_candidate(state);
+    const bool can_save = candidate.has_value();
+    const float button_width = 118.0F;
+    const float button_area_width = button_width * 2.0F + ImGui::GetStyle().ItemSpacing.x;
+    constexpr float field_label_width = 130.0F;
+    ImGui::Separator();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("File name");
+    ImGui::SameLine(field_label_width);
+    ImGui::SetNextItemWidth(-button_area_width - ImGui::GetStyle().ItemSpacing.x);
+    const bool save_from_enter = ImGui::InputTextWithHint(
+        "##SaveFilePath", "Model name (.glb is the default)", state.open_file_path.data(),
+        state.open_file_path.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!can_save);
+    push_primary_action_style();
+    if (ImGui::Button("Save", ImVec2{button_width, 0.0F}) || (save_from_enter && can_save)) {
+        std::error_code error;
+        if (std::filesystem::exists(*candidate, error) && !error) {
+            state.pending_save_path = *candidate;
+            ImGui::OpenPopup("Confirm Replace");
+        } else {
+            requested_path = *candidate;
             ImGui::CloseCurrentPopup();
         }
-        ImGui::EndDisabled();
+    }
+    pop_primary_action_style();
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2{button_width, 0.0F})) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("File type");
+    ImGui::SameLine(field_label_width);
+    ImGui::TextUnformatted("glTF 2.0 Model (*.glb, *.gltf)");
+    return requested_path;
+}
+
+[[nodiscard]] std::optional<std::filesystem::path> build_replace_confirmation(ViewerState& state) {
+    std::optional<std::filesystem::path> confirmed;
+    ImGui::SetNextWindowSize(ImVec2{520.0F, 0.0F}, ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Confirm Replace", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize |
+                                   ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::TextUnformatted("A model with this name already exists.");
+        if (state.pending_save_path.has_value()) {
+            ImGui::TextWrapped("%s", path_to_utf8(*state.pending_save_path).c_str());
+        }
+        ImGui::TextUnformatted("Replace it?");
+        ImGui::Separator();
+        const float button_width = 118.0F;
+        push_primary_action_style();
+        if (ImGui::Button("Replace", ImVec2{button_width, 0.0F})) {
+            confirmed = state.pending_save_path;
+            ImGui::CloseCurrentPopup();
+        }
+        pop_primary_action_style();
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2{button_width, 0.0F})) {
+            state.pending_save_path.reset();
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
-    ImGui::PopStyleColor(style_color_count);
-    ImGui::PopStyleVar(style_var_count);
+    return confirmed;
+}
+
+[[nodiscard]] std::optional<std::string> build_save_modal(ViewerState& state,
+                                                          const ViewerScene& scene) {
+    if (state.request_save_modal) {
+        initialize_save_browser(state, scene);
+        ImGui::OpenPopup("Save Model As");
+        state.request_save_modal = false;
+    }
+    std::optional<std::string> requested_path;
+    push_professional_dialog_style();
+    ImGui::SetNextWindowSize(ImVec2{1120.0F, 720.0F}, ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Save Model As", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
+        refresh_open_browser_entries(state);
+        ImGui::TextColored(ImVec4{0.455F, 0.725F, 0.900F, 1.00F}, "GLTF 2.0 EXPORT");
+        ImGui::SameLine();
+        ImGui::TextDisabled("Save the retained model document as GLB or glTF");
+        ImGui::Separator();
+        build_open_browser_top_bar(state);
+        build_open_browser_error(state);
+        ImGui::Separator();
+        std::optional<std::filesystem::path> ignored_activation;
+        const float footer_height = ImGui::GetFrameHeightWithSpacing() * 2.0F + 18.0F;
+        if (ImGui::BeginChild("##SaveBrowserSidebar", ImVec2{250.0F, -footer_height}, true)) {
+            build_open_browser_sidebar(state);
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        if (ImGui::BeginChild("##SaveBrowserFiles", ImVec2{0.0F, -footer_height}, true)) {
+            build_open_browser_file_table(state, ignored_activation);
+        }
+        ImGui::EndChild();
+        const std::optional<std::filesystem::path> footer_request =
+            build_save_browser_footer(state);
+        const std::optional<std::filesystem::path> replacement = build_replace_confirmation(state);
+        const std::optional<std::filesystem::path> selected =
+            replacement.has_value() ? replacement : footer_request;
+        if (selected.has_value()) {
+            requested_path = path_to_utf8(*selected);
+            state.pending_save_path.reset();
+            ImGui::CloseCurrentPopup();
+        } else if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !state.pending_save_path.has_value()) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    pop_professional_dialog_style();
     return requested_path;
 }
 
-void build_error_modal(ViewerState &state) {
+void build_error_modal(ViewerState& state) {
     if (state.request_error_modal) {
         ImGui::OpenPopup("Model Load Error");
         state.request_error_modal = false;
     }
-    if (ImGui::BeginPopupModal("Model Load Error", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    push_professional_dialog_style();
+    ImGui::SetNextWindowSize(ImVec2{600.0F, 0.0F}, ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Model Load Error", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize |
+                                   ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::TextColored(ImVec4{1.00F, 0.470F, 0.390F, 1.00F}, "MODEL COULD NOT BE OPENED");
+        ImGui::Separator();
         if (state.load_failure.has_value()) {
-            ImGui::TextWrapped("Source: %s", state.load_failure->source_path.c_str());
-            ImGui::Text("Category: %s", error_category(state.load_failure->error.code()));
+            ImGui::TextDisabled("SOURCE");
+            ImGui::TextWrapped("%s", state.load_failure->source_path.c_str());
+            ImGui::Spacing();
+            ImGui::TextDisabled("CATEGORY");
+            ImGui::TextUnformatted(error_category(state.load_failure->error.code()));
             ImGui::Separator();
             ImGui::TextWrapped("%s", state.load_failure->error.message());
         }
-        if (ImGui::Button("Close")) {
+        ImGui::Spacing();
+        const float close_width = 118.0F;
+        ImGui::SetCursorPosX(
+            std::max(ImGui::GetCursorPosX(),
+                     ImGui::GetWindowWidth() - close_width - ImGui::GetStyle().WindowPadding.x));
+        if (ImGui::Button("Close", ImVec2{close_width, 0.0F}) ||
+            ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             state.load_failure.reset();
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
+    pop_professional_dialog_style();
+}
+
+void build_save_error_modal(ViewerState& state) {
+    if (state.request_save_error_modal) {
+        ImGui::OpenPopup("Model Save Error");
+        state.request_save_error_modal = false;
+    }
+    push_professional_dialog_style();
+    ImGui::SetNextWindowSize(ImVec2{600.0F, 0.0F}, ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Model Save Error", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize |
+                                   ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::TextColored(ImVec4{1.00F, 0.470F, 0.390F, 1.00F}, "MODEL COULD NOT BE SAVED");
+        ImGui::Separator();
+        if (state.save_failure.has_value()) {
+            ImGui::TextDisabled("TARGET");
+            ImGui::TextWrapped("%s", state.save_failure->source_path.c_str());
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", state.save_failure->error.message());
+        }
+        if (ImGui::Button("Close", ImVec2{118.0F, 0.0F}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            state.save_failure.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    pop_professional_dialog_style();
 }
 
 const char *graphics_backend_name(elf3d::GraphicsBackend backend) noexcept {
@@ -3616,30 +3917,90 @@ void build_status_bar(const ViewerState &state, const elf3d::Engine &engine,
     ImGui::PopStyleVar();
 }
 
-void build_about_window(ViewerState &state) {
-    if (!state.show_about) {
-        return;
+void build_about_property_row(const char* label, const char* value) {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TextDisabled("%s", label);
+    ImGui::TableNextColumn();
+    ImGui::TextUnformatted(value);
+}
+
+void build_about_window(ViewerState& state) {
+    if (state.show_about) {
+        ImGui::OpenPopup("About Elf3D");
+        state.show_about = false;
     }
-    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const ImVec2 center{viewport->WorkPos.x + viewport->WorkSize.x * 0.5F,
                         viewport->WorkPos.y + viewport->WorkSize.y * 0.5F};
-    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2{0.5F, 0.5F});
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2{0.5F, 0.5F});
     ImGui::SetNextWindowViewport(viewport->ID);
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize |
-                                       ImGuiWindowFlags_NoDocking |
-                                       ImGuiWindowFlags_NoSavedSettings;
-    if (ImGui::Begin("About Elf3D", &state.show_about, flags)) {
-        ImGui::TextUnformatted("Elf3D");
-        ImGui::Separator();
-        ImGui::Text("Dear ImGui version: %s", ImGui::GetVersion());
-        ImGui::Text("Dear ImGui branch: %s", ELF3D_IMGUI_BRANCH);
-        ImGui::Text("Dear ImGui commit: %s", ELF3D_IMGUI_COMMIT_SHA);
-        ImGui::TextUnformatted("Graphics backend: OpenGL 4.1 core / Dear ImGui OpenGL3");
+    ImGui::SetNextWindowSize(ImVec2{640.0F, 540.0F}, ImGuiCond_Appearing);
+    push_professional_dialog_style();
+    constexpr ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize;
+    if (ImGui::BeginPopupModal("About Elf3D", nullptr, flags)) {
+        if (ImGui::BeginChild("##AboutHero", ImVec2{0.0F, 118.0F}, true,
+                              ImGuiWindowFlags_NoScrollbar)) {
+            const ImVec2 origin = ImGui::GetWindowPos();
+            const ImVec2 badge_min{origin.x + 18.0F, origin.y + 18.0F};
+            const ImVec2 badge_max{badge_min.x + 72.0F, badge_min.y + 72.0F};
+            ImDrawList* draw_list = ImGui::GetWindowDrawList();
+            draw_list->AddRectFilled(badge_min, badge_max, IM_COL32(27, 105, 164, 255), 8.0F);
+            draw_list->AddRect(badge_min, badge_max, IM_COL32(91, 183, 238, 255), 8.0F, 0, 2.0F);
+            const ImVec2 badge_text_size = ImGui::CalcTextSize("E3");
+            draw_list->AddText(ImVec2{badge_min.x + (72.0F - badge_text_size.x) * 0.5F,
+                                      badge_min.y + (72.0F - badge_text_size.y) * 0.5F},
+                               IM_COL32(244, 249, 252, 255), "E3");
+            ImGui::SetCursorPos(ImVec2{110.0F, 20.0F});
+            ImGui::TextColored(ImVec4{0.455F, 0.725F, 0.900F, 1.00F}, "ELF3D");
+            ImGui::SetCursorPosX(110.0F);
+            ImGui::Text("Version %s", ELF3D_VERSION);
+            ImGui::SetCursorPosX(110.0F);
+            ImGui::TextDisabled("Professional glTF visualization and inspection");
+        }
+        ImGui::EndChild();
         ImGui::Spacing();
         ImGui::TextWrapped(
-            "elf3d_viewer is the reference and demonstration application for the Elf3D engine.");
+            "Elf3D Viewer is the reference desktop host and graphical testbed for the Elf3D "
+            "embeddable C++20 visualization engine.");
+        ImGui::Separator();
+
+        constexpr ImGuiTableFlags table_flags =
+            ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV;
+        if (ImGui::BeginTable("##AboutProperties", 2, table_flags)) {
+            ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 170.0F);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+            build_about_property_row("PRODUCT", "Elf3D Viewer");
+            build_about_property_row("MODEL FORMAT", "glTF 2.0 / GLB");
+            build_about_property_row("GRAPHICS", "OpenGL 4.1 core");
+#if defined(_WIN32)
+            build_about_property_row("PLATFORM", "Windows");
+#elif defined(__APPLE__)
+            build_about_property_row("PLATFORM", "macOS");
+#else
+            build_about_property_row("PLATFORM", "Linux / Unix");
+#endif
+            build_about_property_row("LICENSE", "MIT");
+            ImGui::EndTable();
+        }
+        ImGui::Spacing();
+        if (ImGui::CollapsingHeader("Build details")) {
+            ImGui::Text("Dear ImGui %s (%s)", ImGui::GetVersion(), ELF3D_IMGUI_BRANCH);
+            ImGui::TextWrapped("Dear ImGui revision: %s", ELF3D_IMGUI_COMMIT_SHA);
+        }
+        ImGui::Separator();
+        const float close_width = 118.0F;
+        ImGui::SetCursorPosX(
+            std::max(ImGui::GetCursorPosX(),
+                     ImGui::GetWindowWidth() - close_width - ImGui::GetStyle().WindowPadding.x));
+        if (ImGui::Button("Close", ImVec2{close_width, 0.0F}) ||
+            ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
-    ImGui::End();
+    pop_professional_dialog_style();
 }
 
 void report_load_failure(ViewerState &state, const std::string &path, const elf3d::Error &error) {
@@ -3647,6 +4008,17 @@ void report_load_failure(ViewerState &state, const std::string &path, const elf3
     state.request_error_modal = true;
     std::cerr << "Failed to load '" << path << "' [" << error_category(error.code())
               << "]: " << error.message() << '\n';
+}
+
+void attempt_model_save(ViewerState& state, ViewerScene& scene, const std::string& target_path) {
+    const elf3d::Result<void> saved = scene.scene->save_model(target_path);
+    if (!saved) {
+        state.save_failure = LoadFailure{target_path, saved.error()};
+        state.request_save_error_modal = true;
+        return;
+    }
+    scene.source_path = path_from_utf8(target_path);
+    remember_model_directory(state, scene.source_path);
 }
 
 void attempt_model_load(elf3d::Engine &engine, elf3d::Viewport &engine_viewport, ViewerState &state,
@@ -3664,6 +4036,7 @@ void attempt_model_load(elf3d::Engine &engine, elf3d::Viewport &engine_viewport,
         engine_viewport.clear_distance_measurement();
         engine_viewport.clear_clipping();
         active_scene = std::move(result).value();
+        remember_model_directory(state, active_scene.source_path);
         state.rotation_angle = 0.0F;
         state.statistics = {};
         state.last_revealed_hierarchy_selection.reset();
@@ -3744,6 +4117,7 @@ int run_viewer(int argument_count, char **arguments) {
     ViewerScene active_scene = std::move(demo_result).value();
 
     ViewerState state;
+    load_viewer_preferences(state);
     glfwSetWindowUserPointer(window.get(), &state);
     glfwSetScrollCallback(window.get(), glfw_navigation_scroll_callback);
 
@@ -3786,6 +4160,11 @@ int run_viewer(int argument_count, char **arguments) {
         build_toolbar(state, toolbar_icons, active_scene, *engine_viewport, commands);
         const ImGuiID dockspace_id = build_main_dockspace(state);
 
+        if (active_scene.is_imported() && !navigation_blocked_by_modal() &&
+            ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
+            state.request_save_modal = true;
+        }
+
         if (camera_shortcuts_available(state, active_scene, *engine_viewport)) {
             if (ImGui::IsKeyPressed(ImGuiKey_F)) {
                 commands.fit_to_scene = true;
@@ -3800,6 +4179,7 @@ int run_viewer(int argument_count, char **arguments) {
         if (viewport_shortcuts_available) {
             if (!glfw_mouse_button_down(window.get(), GLFW_MOUSE_BUTTON_LEFT) &&
                 !glfw_mouse_button_down(window.get(), GLFW_MOUSE_BUTTON_RIGHT) &&
+                !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift &&
                 ImGui::IsKeyPressed(ImGuiKey_S)) {
                 commands.select_tool = true;
             }
@@ -3972,6 +4352,10 @@ int run_viewer(int argument_count, char **arguments) {
         if (modal_path.has_value()) {
             attempt_model_load(*engine, *engine_viewport, state, active_scene, *modal_path);
         }
+        const std::optional<std::string> save_path = build_save_modal(state, active_scene);
+        if (save_path.has_value()) {
+            attempt_model_save(state, active_scene, *save_path);
+        }
 
         build_rendering_panel(dockspace_id, state, active_scene);
         update_demo_cube_animation(state, active_scene);
@@ -3985,6 +4369,7 @@ int run_viewer(int argument_count, char **arguments) {
         build_status_bar(state, *engine, active_scene, *engine_viewport);
         build_about_window(state);
         build_error_modal(state);
+        build_save_error_modal(state);
         if (state.show_imgui_demo) {
             ImGui::ShowDemoWindow(&state.show_imgui_demo);
         }

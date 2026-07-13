@@ -8,7 +8,7 @@ rendering, and inspecting static glTF 2.0 scenes.
 ## Download
 
 Download the current Windows x64 package from the
-[Elf3D 0.8.0 release](https://github.com/zavelski/elf3d/releases/tag/v0.8.0).
+[Elf3D 0.8.1 release](https://github.com/zavelski/elf3d/releases/tag/v0.8.1).
 Extract the ZIP and run `elf3d_viewer.exe`.
 
 Requirements:
@@ -56,7 +56,8 @@ Run the viewer:
 ```
 
 Open a model from **File > Open...**, pass its path as the first command-line
-argument, or drop it onto the viewer.
+argument, or drop it onto the viewer. Use **File > Save As...** to export the
+loaded model as `.gltf` or `.glb`.
 
 Release commands, output paths, and troubleshooting are in
 [`docs/BUILDING.md`](docs/BUILDING.md).
