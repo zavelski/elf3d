@@ -274,16 +274,27 @@ struct SampleAssets {
     return 0;
 }
 
+[[nodiscard]] bool has_initial_default_scene(const elf3d::Document &document,
+                                             const elf3d::Result<elf3d::DocumentSceneId> &first,
+                                             const elf3d::Result<elf3d::DocumentSceneId> &second) {
+    return first && second &&
+           document.default_scene() == std::optional<elf3d::DocumentSceneId>{first.value()};
+}
+
+[[nodiscard]] bool has_selected_default_scene(elf3d::Document &document,
+                                              elf3d::DocumentSceneId scene) {
+    return document.set_default_scene(scene) &&
+           document.view().default_scene() == std::optional<elf3d::DocumentSceneId>{scene};
+}
+
 [[nodiscard]] int test_default_scene_selection() {
     elf3d::Document document;
     const auto first = document.create_scene("First");
     const auto second = document.create_scene("Second");
-    if (!first || !second ||
-        document.default_scene() != std::optional<elf3d::DocumentSceneId>{first.value()}) {
+    if (!has_initial_default_scene(document, first, second)) {
         return 1;
     }
-    if (!document.set_default_scene(second.value()) ||
-        document.view().default_scene() != std::optional<elf3d::DocumentSceneId>{second.value()}) {
+    if (!has_selected_default_scene(document, second.value())) {
         return 2;
     }
     elf3d::Document foreign;

@@ -104,57 +104,82 @@ struct DepthScene {
     return DepthScene{std::move(scene), near_model, far_model, camera};
 }
 
-} // namespace
+[[nodiscard]] bool has_selected_model(const elf3d::Result<std::optional<elf3d::PickHit>>& selected,
+                                      const elf3d::tools::selection::SelectionController& selection,
+                                      elf3d::EntityId model) {
+    return selected && selected.value().has_value() && selection.has_selection() &&
+           selection.selected_entity() == model && selection.selection_hit()->entity == model;
+}
 
-int elf3d_selection_test() {
-    SelectionScene fixture = make_scene();
-    elf3d::picking::PickingService picking;
-    elf3d::tools::selection::SelectionController selection;
+[[nodiscard]] bool has_explicit_camera_selection(
+    const elf3d::tools::selection::SelectionController& selection, elf3d::EntityId camera) {
+    return selection.has_selection() && selection.selected_entity() == camera &&
+           !selection.selection_hit().has_value() && selection.snapshot().entity.has_value() &&
+           !selection.snapshot().pick_hit.has_value();
+}
 
+[[nodiscard]] bool has_reselected_model(const elf3d::Result<std::optional<elf3d::PickHit>>& selected,
+                                        const elf3d::tools::selection::SelectionController& selection,
+                                        elf3d::EntityId model) {
+    return selected && selected.value().has_value() && selection.selected_entity() == model &&
+           selection.selection_hit().has_value() && selection.snapshot().pick_hit.has_value();
+}
+
+[[nodiscard]] int verify_initial_selection(
+    elf3d::picking::PickingService& picking, SelectionScene& fixture,
+    elf3d::tools::selection::SelectionController& selection) {
     const elf3d::Result<std::optional<elf3d::PickHit>> selected =
-        selection.select_at(picking, fixture.scene, fixture.camera, {800, 600}, {399.5F, 299.5F});
-    if (!selected || !selected.value().has_value() || !selection.has_selection() ||
-        selection.selected_entity() != fixture.model ||
-        selection.selection_hit()->entity != fixture.model) {
+        selection.select_at(picking, fixture.scene, {fixture.camera, {800, 600}, {399.5F, 299.5F}});
+    if (!has_selected_model(selected, selection, fixture.model)) {
         return 1;
     }
     if (!selection.set_selected_entity(fixture.scene, fixture.camera) ||
-        !selection.has_selection() || selection.selected_entity() != fixture.camera ||
-        selection.selection_hit().has_value() || !selection.snapshot().entity.has_value() ||
-        selection.snapshot().pick_hit.has_value()) {
+        !has_explicit_camera_selection(selection, fixture.camera)) {
         return 11;
     }
     const elf3d::Result<std::optional<elf3d::PickHit>> picked_again =
-        selection.select_at(picking, fixture.scene, fixture.camera, {800, 600}, {399.5F, 299.5F});
-    if (!picked_again || !picked_again.value().has_value() ||
-        selection.selected_entity() != fixture.model || !selection.selection_hit().has_value() ||
-        !selection.snapshot().pick_hit.has_value()) {
+        selection.select_at(picking, fixture.scene, {fixture.camera, {800, 600}, {399.5F, 299.5F}});
+    if (!has_reselected_model(picked_again, selection, fixture.model)) {
         return 12;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_cleared_and_disabled_selection(
+    elf3d::picking::PickingService& picking, SelectionScene& fixture,
+    elf3d::tools::selection::SelectionController& selection) {
     const elf3d::Result<std::optional<elf3d::PickHit>> cleared =
-        selection.select_at(picking, fixture.scene, fixture.camera, {800, 600}, {0.0F, 0.0F});
+        selection.select_at(picking, fixture.scene, {fixture.camera, {800, 600}, {0.0F, 0.0F}});
     if (!cleared || cleared.value().has_value() || selection.has_selection()) {
         return 2;
     }
 
     selection.set_enabled(false);
     const elf3d::Result<std::optional<elf3d::PickHit>> disabled =
-        selection.select_at(picking, fixture.scene, fixture.camera, {800, 600}, {399.5F, 299.5F});
+        selection.select_at(picking, fixture.scene, {fixture.camera, {800, 600}, {399.5F, 299.5F}});
     if (!disabled || disabled.value().has_value() || selection.has_selection()) {
         return 3;
     }
-
     selection.set_enabled(true);
+    return 0;
+}
+
+[[nodiscard]] int verify_invalid_selection_settings(
+    elf3d::tools::selection::SelectionController& selection) {
     elf3d::SelectionSettings invalid = selection.settings();
     invalid.click_drag_threshold_pixels = -1.0F;
     if (selection.set_settings(invalid).error().code() !=
         elf3d::ErrorCode::invalid_selection_settings) {
         return 4;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_selection_validation(
+    elf3d::picking::PickingService& picking, SelectionScene& fixture,
+    elf3d::tools::selection::SelectionController& selection) {
     static_cast<void>(
-        selection.select_at(picking, fixture.scene, fixture.camera, {800, 600}, {399.5F, 299.5F}));
+        selection.select_at(picking, fixture.scene, {fixture.camera, {800, 600}, {399.5F, 299.5F}}));
     if (!selection.has_selection() || !fixture.scene.set_entity_visible(fixture.model, false)) {
         return 5;
     }
@@ -169,64 +194,107 @@ int elf3d_selection_test() {
     if (selection.has_selection()) {
         return 6;
     }
+    return 0;
+}
 
-    SelectionScene second_fixture = make_scene();
+[[nodiscard]] int verify_primary_selection(elf3d::picking::PickingService& picking) {
+    SelectionScene fixture = make_scene();
+    elf3d::tools::selection::SelectionController selection;
+    const int initial = verify_initial_selection(picking, fixture, selection);
+    if (initial != 0) {
+        return initial;
+    }
+    const int cleared = verify_cleared_and_disabled_selection(picking, fixture, selection);
+    if (cleared != 0) {
+        return cleared;
+    }
+    const int settings = verify_invalid_selection_settings(selection);
+    if (settings != 0) {
+        return settings;
+    }
+    return verify_selection_validation(picking, fixture, selection);
+}
+
+[[nodiscard]] int verify_viewport_independence(elf3d::picking::PickingService& picking) {
+    SelectionScene fixture = make_scene();
     elf3d::tools::selection::SelectionController first_viewport;
     elf3d::tools::selection::SelectionController second_viewport;
-    static_cast<void>(first_viewport.select_at(picking, second_fixture.scene, second_fixture.camera,
-                                               {800, 600}, {399.5F, 299.5F}));
-    static_cast<void>(second_viewport.select_at(picking, second_fixture.scene,
-                                                second_fixture.camera, {800, 600}, {0.0F, 0.0F}));
+    static_cast<void>(first_viewport.select_at(
+        picking, fixture.scene, {fixture.camera, {800, 600}, {399.5F, 299.5F}}));
+    static_cast<void>(second_viewport.select_at(
+        picking, fixture.scene, {fixture.camera, {800, 600}, {0.0F, 0.0F}}));
     if (!first_viewport.has_selection() || second_viewport.has_selection()) {
         return 7;
     }
+    return 0;
+}
 
-    TwoModelScene two_models = make_two_model_scene();
+[[nodiscard]] int verify_multiple_model_selection(elf3d::picking::PickingService& picking) {
+    TwoModelScene fixture = make_two_model_scene();
     elf3d::tools::selection::SelectionController left_viewport;
     elf3d::tools::selection::SelectionController right_viewport;
-    static_cast<void>(left_viewport.select_at(picking, two_models.scene, two_models.camera,
-                                              {800, 600}, {217.5F, 299.5F}));
-    static_cast<void>(right_viewport.select_at(picking, two_models.scene, two_models.camera,
-                                               {800, 600}, {581.5F, 299.5F}));
+    static_cast<void>(left_viewport.select_at(
+        picking, fixture.scene, {fixture.camera, {800, 600}, {217.5F, 299.5F}}));
+    static_cast<void>(right_viewport.select_at(
+        picking, fixture.scene, {fixture.camera, {800, 600}, {581.5F, 299.5F}}));
     if (!left_viewport.has_selection() || !right_viewport.has_selection() ||
-        left_viewport.selected_entity() != two_models.left_model ||
-        right_viewport.selected_entity() != two_models.right_model) {
+        left_viewport.selected_entity() != fixture.left_model ||
+        right_viewport.selected_entity() != fixture.right_model) {
         return 8;
     }
-
-    left_viewport.clear_scene(two_models.scene.id());
+    left_viewport.clear_scene(fixture.scene.id());
     if (left_viewport.has_selection() || !right_viewport.has_selection()) {
         return 9;
     }
+    return 0;
+}
 
-    DepthScene depth = make_depth_scene();
+[[nodiscard]] int verify_clipped_selection(elf3d::picking::PickingService& picking) {
+    DepthScene fixture = make_depth_scene();
     elf3d::tools::selection::SelectionController clipped_viewport;
-    const elf3d::scene::VisibilityFilter depth_visibility =
-        elf3d::scene::make_visibility_filter(depth.scene, std::nullopt).value();
-    elf3d::SectionPlane depth_plane;
-    depth_plane.enabled = true;
-    depth_plane.point = {0.0F, 0.0F, -2.25F};
-    depth_plane.normal = {0.0F, 0.0F, -1.0F};
-    const elf3d::clipping::ClippingFilter depth_filter =
-        elf3d::clipping::make_filter(depth_plane, {}, 1).value();
-    const elf3d::Result<std::optional<elf3d::PickHit>> clipped_pick =
-        clipped_viewport.select_at(picking, depth.scene, depth.camera, {800, 600},
-                                   {399.5F, 299.5F}, depth_visibility, depth_filter);
-    if (!clipped_pick || !clipped_pick.value().has_value() ||
-        clipped_pick.value()->entity != depth.far_model || !clipped_viewport.has_selection() ||
-        clipped_viewport.selected_entity() != depth.far_model) {
+    const elf3d::scene::VisibilityFilter visibility =
+        elf3d::scene::make_visibility_filter(fixture.scene, std::nullopt).value();
+    elf3d::SectionPlane plane;
+    plane.enabled = true;
+    plane.point = {0.0F, 0.0F, -2.25F};
+    plane.normal = {0.0F, 0.0F, -1.0F};
+    const elf3d::clipping::ClippingFilter filter =
+        elf3d::clipping::make_filter(plane, {}, 1).value();
+    const elf3d::Result<std::optional<elf3d::PickHit>> picked =
+        clipped_viewport.select_at(picking, fixture.scene,
+                                   {fixture.camera, {800, 600}, {399.5F, 299.5F}}, visibility, filter);
+    if (!picked || !picked.value().has_value() || picked.value()->entity != fixture.far_model ||
+        !clipped_viewport.has_selection() || clipped_viewport.selected_entity() != fixture.far_model) {
         return 10;
     }
-    depth_plane.point = {0.0F, 0.0F, 1.0F};
-    depth_plane.normal = {0.0F, 0.0F, 1.0F};
-    const elf3d::clipping::ClippingFilter reject_all_filter =
-        elf3d::clipping::make_filter(depth_plane, {}, 2).value();
-    const elf3d::Result<std::optional<elf3d::PickHit>> clipped_empty =
-        clipped_viewport.select_at(picking, depth.scene, depth.camera, {800, 600},
-                                   {399.5F, 299.5F}, depth_visibility, reject_all_filter);
-    if (!clipped_empty || clipped_empty.value().has_value() || clipped_viewport.has_selection()) {
+    plane.point = {0.0F, 0.0F, 1.0F};
+    plane.normal = {0.0F, 0.0F, 1.0F};
+    const elf3d::clipping::ClippingFilter reject_all =
+        elf3d::clipping::make_filter(plane, {}, 2).value();
+    const elf3d::Result<std::optional<elf3d::PickHit>> empty =
+        clipped_viewport.select_at(picking, fixture.scene,
+                                   {fixture.camera, {800, 600}, {399.5F, 299.5F}}, visibility, reject_all);
+    if (!empty || empty.value().has_value() || clipped_viewport.has_selection()) {
         return 11;
     }
-
     return 0;
+}
+
+} // namespace
+
+int elf3d_selection_test() {
+    elf3d::picking::PickingService picking;
+    const int primary = verify_primary_selection(picking);
+    if (primary != 0) {
+        return primary;
+    }
+    const int independent = verify_viewport_independence(picking);
+    if (independent != 0) {
+        return independent;
+    }
+    const int multiple = verify_multiple_model_selection(picking);
+    if (multiple != 0) {
+        return multiple;
+    }
+    return verify_clipped_selection(picking);
 }

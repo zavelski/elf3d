@@ -54,7 +54,7 @@ constexpr std::array<std::array<int, 2>, 12> box_edges{{
     return Float3{value.x * multiplier, value.y * multiplier, value.z * multiplier};
 }
 
-void expand(std::optional<Bounds3> &bounds, Float3 point) noexcept {
+void expand(std::optional<Bounds3>& bounds, Float3 point) noexcept {
     ELF3D_ASSERT(finite_float3(point));
     if (!bounds.has_value()) {
         bounds = Bounds3{point, point};
@@ -68,7 +68,7 @@ void expand(std::optional<Bounds3> &bounds, Float3 point) noexcept {
     bounds->maximum.z = std::max(bounds->maximum.z, point.z);
 }
 
-void expand(std::optional<Bounds3> &bounds, const std::optional<Bounds3> &other) noexcept {
+void expand(std::optional<Bounds3>& bounds, const std::optional<Bounds3>& other) noexcept {
     if (!other.has_value()) {
         return;
     }
@@ -89,13 +89,13 @@ void expand(std::optional<Bounds3> &bounds, const std::optional<Bounds3> &other)
     }};
 }
 
-[[nodiscard]] float plane_signed_distance(const ClippingFilter &filter, Float3 point) noexcept {
-    const float signed_distance = dot(filter.section_plane_normal, point) +
-                                  filter.section_plane_offset;
+[[nodiscard]] float plane_signed_distance(const ClippingFilter& filter, Float3 point) noexcept {
+    const float signed_distance =
+        dot(filter.section_plane_normal, point) + filter.section_plane_offset;
     return filter.retain_positive_half_space ? signed_distance : -signed_distance;
 }
 
-[[nodiscard]] bool plane_contains_point(const ClippingFilter &filter, Float3 point) noexcept {
+[[nodiscard]] bool plane_contains_point(const ClippingFilter& filter, Float3 point) noexcept {
     if (!filter.section_plane_enabled) {
         return true;
     }
@@ -111,7 +111,7 @@ void expand(std::optional<Bounds3> &bounds, const std::optional<Bounds3> &other)
            point.z <= box.maximum.z + clipping_boundary_epsilon;
 }
 
-[[nodiscard]] bool boxes_contain_point(const ClippingFilter &filter, Float3 point) noexcept {
+[[nodiscard]] bool boxes_contain_point(const ClippingFilter& filter, Float3 point) noexcept {
     ELF3D_ASSERT(filter.enabled_box_count <= filter.boxes.size());
     if (filter.enabled_box_count == 0) {
         return true;
@@ -153,7 +153,7 @@ void expand(std::optional<Bounds3> &bounds, const std::optional<Bounds3> &other)
                std::min(left.maximum.z, right.maximum.z)}};
 }
 
-[[nodiscard]] bool plane_may_leave_bounds(const ClippingFilter &filter, Bounds3 bounds) noexcept {
+[[nodiscard]] bool plane_may_leave_bounds(const ClippingFilter& filter, Bounds3 bounds) noexcept {
     if (!filter.section_plane_enabled) {
         return true;
     }
@@ -165,7 +165,7 @@ void expand(std::optional<Bounds3> &bounds, const std::optional<Bounds3> &other)
     return false;
 }
 
-[[nodiscard]] bool plane_contains_bounds(const ClippingFilter &filter, Bounds3 bounds) noexcept {
+[[nodiscard]] bool plane_contains_bounds(const ClippingFilter& filter, Bounds3 bounds) noexcept {
     if (!filter.section_plane_enabled) {
         return true;
     }
@@ -177,8 +177,47 @@ void expand(std::optional<Bounds3> &bounds, const std::optional<Bounds3> &other)
     return true;
 }
 
-[[nodiscard]] std::optional<Bounds3>
-clip_bounds_against_plane(const ClippingFilter &filter, Bounds3 bounds) noexcept {
+void collect_retained_corners(const ClippingFilter& filter,
+                              const std::array<Float3, 8>& box_corners,
+                              std::array<float, 8>& distances,
+                              std::optional<Bounds3>& result) noexcept {
+    for (std::size_t index = 0; index < box_corners.size(); ++index) {
+        distances[index] = plane_signed_distance(filter, box_corners[index]);
+        if (distances[index] >= -clipping_boundary_epsilon) {
+            expand(result, box_corners[index]);
+        }
+    }
+}
+
+[[nodiscard]] bool edge_lies_on_one_side(float first_distance, float second_distance) noexcept {
+    const bool both_outside =
+        first_distance < -clipping_boundary_epsilon && second_distance < -clipping_boundary_epsilon;
+    const bool both_inside =
+        first_distance > clipping_boundary_epsilon && second_distance > clipping_boundary_epsilon;
+    return both_outside || both_inside;
+}
+
+[[nodiscard]] std::optional<Float3>
+plane_edge_intersection(const std::array<Float3, 8>& box_corners,
+                        const std::array<float, 8>& distances,
+                        const std::array<int, 2>& edge) noexcept {
+    const std::size_t first = static_cast<std::size_t>(edge[0]);
+    const std::size_t second = static_cast<std::size_t>(edge[1]);
+    const float first_distance = distances[first];
+    const float second_distance = distances[second];
+    if (edge_lies_on_one_side(first_distance, second_distance)) {
+        return std::nullopt;
+    }
+    const float denominator = first_distance - second_distance;
+    if (!finite_float(denominator) || std::abs(denominator) <= clipping_boundary_epsilon) {
+        return std::nullopt;
+    }
+    const float t = std::clamp(first_distance / denominator, 0.0F, 1.0F);
+    return add(box_corners[first], scale(subtract(box_corners[second], box_corners[first]), t));
+}
+
+[[nodiscard]] std::optional<Bounds3> clip_bounds_against_plane(const ClippingFilter& filter,
+                                                               Bounds3 bounds) noexcept {
     if (!is_valid_bounds(bounds)) {
         return std::nullopt;
     }
@@ -189,42 +228,43 @@ clip_bounds_against_plane(const ClippingFilter &filter, Bounds3 bounds) noexcept
     const std::array<Float3, 8> box_corners = corners(bounds);
     std::array<float, 8> distances{};
     std::optional<Bounds3> result;
-    for (std::size_t index = 0; index < box_corners.size(); ++index) {
-        distances[index] = plane_signed_distance(filter, box_corners[index]);
-        if (distances[index] >= -clipping_boundary_epsilon) {
-            expand(result, box_corners[index]);
-        }
-    }
+    collect_retained_corners(filter, box_corners, distances, result);
 
-    for (const std::array<int, 2> &edge : box_edges) {
-        const int first = edge[0];
-        const int second = edge[1];
-        const float first_distance = distances[static_cast<std::size_t>(first)];
-        const float second_distance = distances[static_cast<std::size_t>(second)];
-        if ((first_distance < -clipping_boundary_epsilon &&
-             second_distance < -clipping_boundary_epsilon) ||
-            (first_distance > clipping_boundary_epsilon &&
-             second_distance > clipping_boundary_epsilon)) {
-            continue;
+    for (const std::array<int, 2>& edge : box_edges) {
+        const std::optional<Float3> intersection =
+            plane_edge_intersection(box_corners, distances, edge);
+        if (intersection.has_value()) {
+            expand(result, *intersection);
         }
-        const float denominator = first_distance - second_distance;
-        if (!finite_float(denominator) || std::abs(denominator) <= clipping_boundary_epsilon) {
-            continue;
-        }
-        const float t = std::clamp(first_distance / denominator, 0.0F, 1.0F);
-        const Float3 point =
-            add(box_corners[static_cast<std::size_t>(first)],
-                scale(subtract(box_corners[static_cast<std::size_t>(second)],
-                               box_corners[static_cast<std::size_t>(first)]),
-                      t));
-        expand(result, point);
     }
     return result;
 }
 
+struct BoxOverlapSummary final {
+    bool any_overlap = false;
+    bool any_region_survives_plane = false;
+    bool bounds_inside_box = false;
+};
+
+[[nodiscard]] BoxOverlapSummary summarize_box_overlaps(const ClippingFilter& filter,
+                                                       Bounds3 world_bounds) noexcept {
+    BoxOverlapSummary summary;
+    for (std::uint32_t index = 0; index < filter.enabled_box_count; ++index) {
+        const Bounds3 box = filter.boxes[index];
+        const std::optional<Bounds3> overlap = intersect_bounds(world_bounds, box);
+        if (!overlap.has_value()) {
+            continue;
+        }
+        summary.any_overlap = true;
+        summary.any_region_survives_plane |= plane_may_leave_bounds(filter, *overlap);
+        summary.bounds_inside_box |= bounds_inside_box(world_bounds, box);
+    }
+    return summary;
+}
+
 } // namespace
 
-Result<SectionPlane> normalized_section_plane(const SectionPlane &plane) noexcept {
+Result<SectionPlane> normalized_section_plane(const SectionPlane& plane) noexcept {
     const bool valid_side = plane.retained_half_space == PlaneHalfSpace::positive ||
                             plane.retained_half_space == PlaneHalfSpace::negative;
     if (!valid_side) {
@@ -251,7 +291,7 @@ Result<SectionPlane> normalized_section_plane(const SectionPlane &plane) noexcep
     return normalized;
 }
 
-Result<ClippingBox> validated_clipping_box(const ClippingBox &box) noexcept {
+Result<ClippingBox> validated_clipping_box(const ClippingBox& box) noexcept {
     if (!finite_float3(box.minimum) || !finite_float3(box.maximum)) {
         return Error{ErrorCode::invalid_clipping_box,
                      "Clipping box bounds must contain only finite values"};
@@ -270,9 +310,8 @@ Result<ClippingBox> validated_clipping_box(const ClippingBox &box) noexcept {
     return box;
 }
 
-Result<ClippingFilter> make_filter(const SectionPlane &section_plane,
-                                   std::span<const ClippingBox> boxes,
-                                   std::uint64_t revision) {
+Result<ClippingFilter> make_filter(const SectionPlane& section_plane,
+                                   std::span<const ClippingBox> boxes, std::uint64_t revision) {
     if (boxes.size() > maximum_clipping_boxes) {
         return Error{ErrorCode::clipping_box_limit_exceeded,
                      "A viewport supports at most three clipping boxes"};
@@ -289,7 +328,7 @@ Result<ClippingFilter> make_filter(const SectionPlane &section_plane,
     filter.retain_positive_half_space =
         normalized.value().retained_half_space == PlaneHalfSpace::positive;
 
-    for (const ClippingBox &box : boxes) {
+    for (const ClippingBox& box : boxes) {
         const Result<ClippingBox> validated = validated_clipping_box(box);
         if (!validated) {
             return validated.error();
@@ -313,7 +352,7 @@ bool is_valid_bounds(Bounds3 bounds) noexcept {
            bounds.minimum.z <= bounds.maximum.z;
 }
 
-Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4 &world) noexcept {
+Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4& world) noexcept {
     ELF3D_ASSERT(is_valid_bounds(local_bounds));
     for (const float value : world.elements) {
         ELF3D_ASSERT(std::isfinite(value));
@@ -327,7 +366,7 @@ Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4 &world) noexcept {
     return *result;
 }
 
-bool contains_point(const ClippingFilter &filter, Float3 world_position) noexcept {
+bool contains_point(const ClippingFilter& filter, Float3 world_position) noexcept {
     if (!finite_float3(world_position)) {
         return false;
     }
@@ -335,8 +374,7 @@ bool contains_point(const ClippingFilter &filter, Float3 world_position) noexcep
            boxes_contain_point(filter, world_position);
 }
 
-BoundsClassification classify_bounds(const ClippingFilter &filter,
-                                     Bounds3 world_bounds) noexcept {
+BoundsClassification classify_bounds(const ClippingFilter& filter, Bounds3 world_bounds) noexcept {
     if (!is_valid_bounds(world_bounds)) {
         return BoundsClassification::outside;
     }
@@ -353,35 +391,17 @@ BoundsClassification classify_bounds(const ClippingFilter &filter,
     }
 
     ELF3D_ASSERT(filter.enabled_box_count <= filter.boxes.size());
-    bool any_box_overlap = false;
-    bool any_region_survives_plane = false;
-    bool inside_one_box = false;
-    for (std::uint32_t index = 0; index < filter.enabled_box_count; ++index) {
-        const Bounds3 box = filter.boxes[index];
-        if (!bounds_overlap(world_bounds, box)) {
-            continue;
-        }
-        any_box_overlap = true;
-        const std::optional<Bounds3> overlap = intersect_bounds(world_bounds, box);
-        ELF3D_ASSERT(overlap.has_value());
-        if (plane_may_leave_bounds(filter, *overlap)) {
-            any_region_survives_plane = true;
-        }
-        if (bounds_inside_box(world_bounds, box)) {
-            inside_one_box = true;
-        }
-    }
-    if (!any_box_overlap || !any_region_survives_plane) {
+    const BoxOverlapSummary summary = summarize_box_overlaps(filter, world_bounds);
+    if (!summary.any_overlap || !summary.any_region_survives_plane) {
         return BoundsClassification::outside;
     }
-    if (inside_one_box && plane_contains_bounds(filter, world_bounds)) {
+    if (summary.bounds_inside_box && plane_contains_bounds(filter, world_bounds)) {
         return BoundsClassification::inside;
     }
     return BoundsClassification::intersecting;
 }
 
-std::optional<Bounds3> clipped_bounds(const ClippingFilter &filter,
-                                      Bounds3 world_bounds) noexcept {
+std::optional<Bounds3> clipped_bounds(const ClippingFilter& filter, Bounds3 world_bounds) noexcept {
     if (!is_valid_bounds(world_bounds)) {
         return std::nullopt;
     }
@@ -404,8 +424,7 @@ std::optional<Bounds3> clipped_bounds(const ClippingFilter &filter,
         if (!overlapped.has_value()) {
             continue;
         }
-        const std::optional<Bounds3> clipped =
-            clip_bounds_against_plane(filter, *overlapped);
+        const std::optional<Bounds3> clipped = clip_bounds_against_plane(filter, *overlapped);
         expand(result, clipped);
     }
     return result;

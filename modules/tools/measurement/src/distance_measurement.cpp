@@ -49,20 +49,25 @@ constexpr float minimum_normal_length = 0.000001F;
            barycentric.z <= 1.0F + barycentric_tolerance;
 }
 
+[[nodiscard]] bool valid_depth_mode(OverlayDepthMode mode) noexcept {
+    return mode == OverlayDepthMode::depth_tested || mode == OverlayDepthMode::always_visible;
+}
+
+[[nodiscard]] bool valid_display_unit(LengthDisplayUnit unit) noexcept {
+    return unit == LengthDisplayUnit::automatic_metric || unit == LengthDisplayUnit::meters ||
+           unit == LengthDisplayUnit::centimeters || unit == LengthDisplayUnit::millimeters ||
+           unit == LengthDisplayUnit::feet || unit == LengthDisplayUnit::inches;
+}
+
+[[nodiscard]] bool valid_overlay_sizes(const DistanceMeasurementSettings& settings) noexcept {
+    return std::isfinite(settings.line_thickness_pixels) && settings.line_thickness_pixels > 0.0F &&
+           std::isfinite(settings.marker_radius_pixels) && settings.marker_radius_pixels > 0.0F;
+}
+
 [[nodiscard]] bool valid_settings(const DistanceMeasurementSettings& settings) noexcept {
-    const bool valid_depth_mode = settings.depth_mode == OverlayDepthMode::depth_tested ||
-                                  settings.depth_mode == OverlayDepthMode::always_visible;
-    const bool valid_unit = settings.display_unit == LengthDisplayUnit::automatic_metric ||
-                            settings.display_unit == LengthDisplayUnit::meters ||
-                            settings.display_unit == LengthDisplayUnit::centimeters ||
-                            settings.display_unit == LengthDisplayUnit::millimeters ||
-                            settings.display_unit == LengthDisplayUnit::feet ||
-                            settings.display_unit == LengthDisplayUnit::inches;
     return finite_color(settings.line_color) && finite_color(settings.first_point_color) &&
-           finite_color(settings.second_point_color) &&
-           std::isfinite(settings.line_thickness_pixels) && settings.line_thickness_pixels > 0.0F &&
-           std::isfinite(settings.marker_radius_pixels) && settings.marker_radius_pixels > 0.0F &&
-           valid_depth_mode && valid_unit;
+           finite_color(settings.second_point_color) && valid_overlay_sizes(settings) &&
+           valid_depth_mode(settings.depth_mode) && valid_display_unit(settings.display_unit);
 }
 
 [[nodiscard]] Color4 sanitized_color(Color4 color) noexcept {
@@ -134,6 +139,16 @@ state_from_anchors(bool active_measurement_tool, bool has_first, bool has_second
     }
     return active_measurement_tool ? DistanceMeasurementState::awaiting_first_point
                                    : DistanceMeasurementState::empty;
+}
+
+[[nodiscard]] bool valid_hit_identity(const PickHit& hit) noexcept {
+    return hit.entity.is_valid() && hit.mesh.is_valid();
+}
+
+[[nodiscard]] bool valid_hit_values(const PickHit& hit) noexcept {
+    return math::is_finite(hit.world_position) && math::is_finite(hit.world_normal) &&
+           valid_barycentric(hit.barycentric_coordinates) && std::isfinite(hit.world_distance) &&
+           hit.world_distance >= 0.0F;
 }
 
 } // namespace
@@ -392,12 +407,7 @@ MeasurementStatistics DistanceMeasurementController::statistics() const noexcept
 Result<DistanceMeasurementController::MeasurementAnchor>
 DistanceMeasurementController::anchor_from_hit(const scene::Storage& scene,
                                                const PickHit& hit) const noexcept {
-    if (!hit.entity.is_valid() || !hit.mesh.is_valid() ||
-        detail::SceneHandleAccess::scene(hit.entity) != scene.id() ||
-        detail::SceneHandleAccess::scene(hit.mesh) != scene.id() ||
-        !math::is_finite(hit.world_position) || !math::is_finite(hit.world_normal) ||
-        !valid_barycentric(hit.barycentric_coordinates) || !std::isfinite(hit.world_distance) ||
-        hit.world_distance < 0.0F) {
+    if (!valid_hit_identity(hit) || !valid_hit_values(hit)) {
         return Error{ErrorCode::invalid_measurement_hit,
                      "A measurement point requires a valid finite triangle PickHit"};
     }
@@ -439,11 +449,9 @@ DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
     return resolve_anchor(scene, visibility, clipping::disabled_filter(), anchor);
 }
 
-Result<DistanceMeasurementController::ResolvedAnchor>
-DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
-                                              const scene::VisibilityFilter& visibility,
-                                              const clipping::ClippingFilter& clipping_filter,
-                                              const MeasurementAnchor& anchor) const noexcept {
+Result<scene::RuntimePrimitiveView>
+DistanceMeasurementController::anchor_primitive(const scene::Storage& scene,
+                                                const MeasurementAnchor& anchor) const noexcept {
     if (anchor.scene != scene.id()) {
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor belongs to a different scene"};
@@ -452,7 +460,6 @@ DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor contains invalid barycentric coordinates"};
     }
-
     const Result<const scene::EntityRecord*> record = scene.entity(anchor.entity);
     if (!record) {
         return record.error();
@@ -466,7 +473,7 @@ DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor primitive index is no longer valid"};
     }
-    const Result<scene::RuntimePrimitiveView> primitive =
+    Result<scene::RuntimePrimitiveView> primitive =
         scene.runtime_primitive(anchor.entity, anchor.primitive_index);
     if (!primitive) {
         return primitive.error();
@@ -475,9 +482,14 @@ DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor mesh no longer matches its model primitive"};
     }
+    return primitive;
+}
 
+Result<DistanceMeasurementController::LocalAnchorGeometry>
+DistanceMeasurementController::local_anchor_geometry(
+    const scene::RuntimePrimitiveView& primitive, const MeasurementAnchor& anchor) const noexcept {
     const std::size_t base = static_cast<std::size_t>(anchor.triangle_index) * 3U;
-    const std::span<const std::uint32_t> indices = primitive.value().indices();
+    const std::span<const std::uint32_t> indices = primitive.indices();
     if (base + 2U >= indices.size()) {
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor triangle index is no longer valid"};
@@ -485,22 +497,37 @@ DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
     const std::uint32_t i0 = indices[base];
     const std::uint32_t i1 = indices[base + 1U];
     const std::uint32_t i2 = indices[base + 2U];
-    if (static_cast<std::size_t>(i0) >= primitive.value().vertex_count() ||
-        static_cast<std::size_t>(i1) >= primitive.value().vertex_count() ||
-        static_cast<std::size_t>(i2) >= primitive.value().vertex_count()) {
+    if (static_cast<std::size_t>(i0) >= primitive.vertex_count() ||
+        static_cast<std::size_t>(i1) >= primitive.vertex_count() ||
+        static_cast<std::size_t>(i2) >= primitive.vertex_count()) {
         return Error{ErrorCode::mesh_index_out_of_range,
                      "A measurement anchor triangle references a stale mesh index"};
     }
-
-    const Float3 a = primitive.value().position(i0);
-    const Float3 b = primitive.value().position(i1);
-    const Float3 c = primitive.value().position(i2);
-    const Float3 local_position = barycentric_point(a, b, c, anchor.barycentric_coordinates);
+    const Float3 a = primitive.position(i0);
+    const Float3 b = primitive.position(i1);
+    const Float3 c = primitive.position(i2);
     const Float3 local_normal = cross(subtract(b, a), subtract(c, a));
-    const float local_normal_length = length(local_normal);
-    if (!std::isfinite(local_normal_length) || local_normal_length <= minimum_normal_length) {
+    const float normal_length = length(local_normal);
+    if (!std::isfinite(normal_length) || normal_length <= minimum_normal_length) {
         return Error{ErrorCode::invalid_measurement_anchor,
                      "A measurement anchor triangle has degenerate geometry"};
+    }
+    return LocalAnchorGeometry{barycentric_point(a, b, c, anchor.barycentric_coordinates),
+                               scale(local_normal, 1.0F / normal_length)};
+}
+
+Result<DistanceMeasurementController::ResolvedAnchor>
+DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
+                                              const scene::VisibilityFilter& visibility,
+                                              const clipping::ClippingFilter& clipping_filter,
+                                              const MeasurementAnchor& anchor) const noexcept {
+    const Result<scene::RuntimePrimitiveView> primitive = anchor_primitive(scene, anchor);
+    if (!primitive) {
+        return primitive.error();
+    }
+    const Result<LocalAnchorGeometry> local = local_anchor_geometry(primitive.value(), anchor);
+    if (!local) {
+        return local.error();
     }
 
     const Result<Float4x4> world = scene.world_matrix(anchor.entity);
@@ -516,9 +543,8 @@ DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
         return normal_transform.error();
     }
 
-    const Float3 world_position = math::transform_point(world.value(), local_position);
-    Float3 world_normal = multiply_normal_matrix(normal_transform.value(),
-                                                 scale(local_normal, 1.0F / local_normal_length));
+    const Float3 world_position = math::transform_point(world.value(), local.value().position);
+    Float3 world_normal = multiply_normal_matrix(normal_transform.value(), local.value().normal);
     const float world_normal_length = length(world_normal);
     if (!math::is_finite(world_position) || !std::isfinite(world_normal_length) ||
         world_normal_length <= minimum_normal_length) {
@@ -540,6 +566,97 @@ DistanceMeasurementController::resolve_anchor(const scene::Storage& scene,
     return ResolvedAnchor{point, visible};
 }
 
+Result<std::optional<DistanceMeasurementController::ResolvedAnchor>>
+DistanceMeasurementController::resolve_required_anchor(
+    const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+    const clipping::ClippingFilter& clipping_filter,
+    const std::optional<MeasurementAnchor>& anchor) const noexcept {
+    if (!anchor.has_value()) {
+        return std::optional<ResolvedAnchor>{};
+    }
+    Result<ResolvedAnchor> resolved = resolve_anchor(scene, visibility, clipping_filter, *anchor);
+    if (!resolved) {
+        return resolved.error();
+    }
+    return std::optional<ResolvedAnchor>{resolved.value()};
+}
+
+std::optional<DistanceMeasurementController::ResolvedAnchor>
+DistanceMeasurementController::resolve_preview_anchor(
+    const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+    const clipping::ClippingFilter& clipping_filter,
+    const std::optional<MeasurementAnchor>& anchor) const noexcept {
+    if (!anchor.has_value()) {
+        return std::nullopt;
+    }
+    Result<ResolvedAnchor> resolved = resolve_anchor(scene, visibility, clipping_filter, *anchor);
+    return resolved ? std::optional<ResolvedAnchor>{resolved.value()} : std::nullopt;
+}
+
+Result<void>
+DistanceMeasurementController::apply_completed_measurement(DistanceMeasurementSnapshot& snapshot,
+                                                           const ResolvedAnchor& first,
+                                                           const ResolvedAnchor& second) noexcept {
+    snapshot.distance_meters =
+        distance_between(first.point.world_position, second.point.world_position);
+    if (!std::isfinite(snapshot.distance_meters) || snapshot.distance_meters < 0.0) {
+        return Error{ErrorCode::invalid_measurement_anchor,
+                     "A measurement resolved to a non-finite distance"};
+    }
+    snapshot.midpoint_world_position =
+        midpoint(first.point.world_position, second.point.world_position);
+    snapshot.anchors_currently_visible = first.visible && second.visible;
+    snapshot.overlay_visible = snapshot.anchors_currently_visible;
+    return {};
+}
+
+Result<void>
+DistanceMeasurementController::apply_preview_measurement(DistanceMeasurementSnapshot& snapshot,
+                                                         const ResolvedAnchor& first,
+                                                         const ResolvedAnchor& preview) noexcept {
+    snapshot.preview_distance_meters =
+        distance_between(first.point.world_position, preview.point.world_position);
+    if (!std::isfinite(snapshot.preview_distance_meters) ||
+        snapshot.preview_distance_meters < 0.0) {
+        return Error{ErrorCode::invalid_measurement_anchor,
+                     "A measurement preview resolved to a non-finite distance"};
+    }
+    snapshot.midpoint_world_position =
+        midpoint(first.point.world_position, preview.point.world_position);
+    snapshot.overlay_visible = first.visible && preview.visible;
+    snapshot.anchors_currently_visible = snapshot.overlay_visible;
+    return {};
+}
+
+void DistanceMeasurementController::set_resolved_points(
+    DistanceMeasurementSnapshot& snapshot, const std::optional<ResolvedAnchor>& first,
+    const std::optional<ResolvedAnchor>& second,
+    const std::optional<ResolvedAnchor>& preview) noexcept {
+    if (first.has_value()) {
+        snapshot.first_point = first->point;
+    }
+    if (second.has_value()) {
+        snapshot.second_point = second->point;
+    }
+    if (preview.has_value()) {
+        snapshot.preview_point = preview->point;
+    }
+}
+
+Result<void> DistanceMeasurementController::apply_incomplete_measurement(
+    DistanceMeasurementSnapshot& snapshot, const std::optional<ResolvedAnchor>& first,
+    const std::optional<ResolvedAnchor>& preview) noexcept {
+    if (!first.has_value()) {
+        return {};
+    }
+    snapshot.anchors_currently_visible = first->visible;
+    snapshot.overlay_visible = first->visible;
+    if (preview.has_value()) {
+        return apply_preview_measurement(snapshot, *first, *preview);
+    }
+    return {};
+}
+
 Result<DistanceMeasurementSnapshot>
 DistanceMeasurementController::resolved_snapshot(const scene::Storage& scene,
                                                  const scene::VisibilityFilter& visibility,
@@ -555,63 +672,32 @@ Result<DistanceMeasurementSnapshot> DistanceMeasurementController::resolved_snap
                                       first_.has_value(), second_.has_value());
     result.diagnostic = diagnostic_;
 
-    std::optional<ResolvedAnchor> first;
-    std::optional<ResolvedAnchor> second;
-    std::optional<ResolvedAnchor> preview;
-    if (first_.has_value()) {
-        Result<ResolvedAnchor> resolved =
-            resolve_anchor(scene, visibility, clipping_filter, first_.value());
-        if (!resolved) {
-            return resolved.error();
-        }
-        first = resolved.value();
-        result.first_point = first->point;
+    Result<std::optional<ResolvedAnchor>> first_result =
+        resolve_required_anchor(scene, visibility, clipping_filter, first_);
+    if (!first_result) {
+        return first_result.error();
     }
-    if (second_.has_value()) {
-        Result<ResolvedAnchor> resolved =
-            resolve_anchor(scene, visibility, clipping_filter, second_.value());
-        if (!resolved) {
-            return resolved.error();
-        }
-        second = resolved.value();
-        result.second_point = second->point;
+    Result<std::optional<ResolvedAnchor>> second_result =
+        resolve_required_anchor(scene, visibility, clipping_filter, second_);
+    if (!second_result) {
+        return second_result.error();
     }
-    if (preview_.has_value() && !second_.has_value()) {
-        Result<ResolvedAnchor> resolved =
-            resolve_anchor(scene, visibility, clipping_filter, preview_.value());
-        if (resolved) {
-            preview = resolved.value();
-            result.preview_point = preview->point;
-        }
-    }
-
+    const std::optional<ResolvedAnchor> first = first_result.value();
+    const std::optional<ResolvedAnchor> second = second_result.value();
+    const std::optional<ResolvedAnchor> preview =
+        second.has_value() ? std::nullopt
+                           : resolve_preview_anchor(scene, visibility, clipping_filter, preview_);
+    set_resolved_points(result, first, second, preview);
     if (first.has_value() && second.has_value()) {
-        result.distance_meters =
-            distance_between(first->point.world_position, second->point.world_position);
-        if (!std::isfinite(result.distance_meters) || result.distance_meters < 0.0) {
-            return Error{ErrorCode::invalid_measurement_anchor,
-                         "A measurement resolved to a non-finite distance"};
+        Result<void> applied = apply_completed_measurement(result, *first, *second);
+        if (!applied) {
+            return applied.error();
         }
-        result.midpoint_world_position =
-            midpoint(first->point.world_position, second->point.world_position);
-        result.anchors_currently_visible = first->visible && second->visible;
-        result.overlay_visible = result.anchors_currently_visible;
-    } else if (first.has_value()) {
-        result.anchors_currently_visible = first->visible;
-        result.overlay_visible = first->visible;
-        if (preview.has_value()) {
-            result.preview_distance_meters =
-                distance_between(first->point.world_position, preview->point.world_position);
-            if (!std::isfinite(result.preview_distance_meters) ||
-                result.preview_distance_meters < 0.0) {
-                return Error{ErrorCode::invalid_measurement_anchor,
-                             "A measurement preview resolved to a non-finite distance"};
-            }
-            result.midpoint_world_position =
-                midpoint(first->point.world_position, preview->point.world_position);
-            result.overlay_visible = first->visible && preview->visible;
-            result.anchors_currently_visible = result.overlay_visible;
-        }
+        return result;
+    }
+    Result<void> applied = apply_incomplete_measurement(result, first, preview);
+    if (!applied) {
+        return applied.error();
     }
     return result;
 }

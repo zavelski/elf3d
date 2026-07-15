@@ -20,445 +20,545 @@ import elf.scene;
 
 using namespace elf3d::navigation::test_support;
 
-int elf3d_navigation_anchor_depth_test() {
-    constexpr float click_threshold = 4.0F;
-    SceneFixture fixture = make_scene(9, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F});
-    elf3d::navigation::OrbitNavigationController navigation;
-    if (!navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
+namespace {
+
+constexpr elf3d::Extent2D viewport_extent{800, 600};
+
+struct AnchorDepthContext : NavigationTestContext {
+    AnchorDepthContext() : NavigationTestContext(9) {}
+
+    elf3d::NavigationSnapshot initial_reset;
+    elf3d::navigation::OrbitNavigationController first_viewport;
+    elf3d::navigation::OrbitNavigationController second_viewport;
+};
+
+struct OffAxisAnchor {
+    elf3d::Float3 forward;
+    elf3d::Float3 position;
+    elf3d::Float3 pivot;
+    elf3d::Float2 projected;
+};
+
+[[nodiscard]] OffAxisAnchor make_off_axis_anchor(const AnchorDepthContext& context) {
+    const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
+    const elf3d::Float3 right = camera_right(context.fixture.scene, context.fixture.camera);
+    const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
+    const float distance = context.navigation.snapshot().distance;
+    const elf3d::Float3 pivot{
+        position.x + forward.x * distance + right.x * 2.0F,
+        position.y + forward.y * distance + right.y * 2.0F,
+        position.z + forward.z * distance + right.z * 2.0F,
+    };
+    return OffAxisAnchor{
+        forward,
+        position,
+        pivot,
+        project_to_ndc(context.fixture.scene, context.fixture.camera, viewport_extent, pivot),
+    };
+}
+
+[[nodiscard]] bool is_inside_view(const elf3d::Float2 projected) {
+    return std::isfinite(projected.x) && std::isfinite(projected.y) &&
+           std::abs(projected.x) < 1.0F && std::abs(projected.y) < 1.0F;
+}
+
+[[nodiscard]] bool
+released_pointer(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
+                 const AnchorDepthContext& context) {
+    return update && !context.navigation.snapshot().is_pointer_captured;
+}
+
+[[nodiscard]] int prepare_anchor_context(AnchorDepthContext& context) {
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera,
+                                       viewport_extent)) {
         return 149;
     }
-    const elf3d::NavigationSnapshot reset = navigation.snapshot();
-    elf3d::ViewportInput input = hovered_input();
-    if (!navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
+    context.initial_reset = context.navigation.snapshot();
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera,
+                                       viewport_extent)) {
         return 34;
     }
-    constexpr elf3d::Extent2D viewport_extent{800, 600};
-    const elf3d::Float3 forward_before_click_pivot = camera_forward(fixture.scene, fixture.camera);
-    const elf3d::Float3 right_before_click_pivot = camera_right(fixture.scene, fixture.camera);
-    const elf3d::Float3 position_before_click_pivot =
-        camera_position(fixture.scene, fixture.camera);
-    const float click_pivot_distance = navigation.snapshot().distance;
-    const elf3d::Float3 off_axis_click_pivot{
-        position_before_click_pivot.x + forward_before_click_pivot.x * click_pivot_distance +
-            right_before_click_pivot.x * 2.0F,
-        position_before_click_pivot.y + forward_before_click_pivot.y * click_pivot_distance +
-            right_before_click_pivot.y * 2.0F,
-        position_before_click_pivot.z + forward_before_click_pivot.z * click_pivot_distance +
-            right_before_click_pivot.z * 2.0F,
-    };
-    const elf3d::Float2 projected_click_pivot_before =
-        project_to_ndc(fixture.scene, fixture.camera, viewport_extent, off_axis_click_pivot);
-    if (!std::isfinite(projected_click_pivot_before.x) ||
-        !std::isfinite(projected_click_pivot_before.y) ||
-        std::abs(projected_click_pivot_before.x) >= 1.0F ||
-        std::abs(projected_click_pivot_before.y) >= 1.0F) {
+    return 0;
+}
+
+[[nodiscard]] int establish_click_anchor(AnchorDepthContext& context, const OffAxisAnchor& anchor) {
+    if (!is_inside_view(anchor.projected)) {
         return 35;
     }
-
-    input = hovered_input();
+    elf3d::ViewportInput input = hovered_input();
     input.left_button_down = true;
     input.pointer_position_pixels = {
-        (projected_click_pivot_before.x + 1.0F) * 0.5F * static_cast<float>(viewport_extent.width),
-        (1.0F - projected_click_pivot_before.y) * 0.5F * static_cast<float>(viewport_extent.height),
+        (anchor.projected.x + 1.0F) * 0.5F * static_cast<float>(viewport_extent.width),
+        (1.0F - anchor.projected.y) * 0.5F * static_cast<float>(viewport_extent.height),
     };
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold)) {
+    if (!update_navigation(context, input)) {
         return 36;
     }
     input.left_button_down = false;
     input.pointer_delta_pixels = {};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        navigation.snapshot().is_pointer_captured) {
+    if (!released_pointer(update_navigation(context, input), context)) {
         return 37;
     }
-    if (!navigation.set_screen_anchor(fixture.scene, fixture.camera, off_axis_click_pivot)) {
+    if (!context.navigation.set_screen_anchor(context.fixture.scene, context.fixture.camera,
+                                              anchor.pivot)) {
         return 38;
     }
-    const float distance_before_click_pivot_wheel =
-        length(subtract(off_axis_click_pivot, position_before_click_pivot));
-    const std::uint64_t scene_revision_before_model_update = fixture.scene.revision();
-    if (!fixture.scene.set_local_transform(fixture.model, elf3d::Transform{}) ||
-        fixture.scene.revision() == scene_revision_before_model_update) {
+    const std::uint64_t revision = context.fixture.scene.revision();
+    if (!context.fixture.scene.set_local_transform(context.fixture.model, elf3d::Transform{}) ||
+        context.fixture.scene.revision() == revision) {
         return 39;
     }
+    return 0;
+}
 
-    input = hovered_input();
+[[nodiscard]] bool
+has_idle_anchor_update(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
+                       const AnchorDepthContext& context, const OffAxisAnchor& anchor) {
+    return update && !context.navigation.snapshot().is_pointer_captured &&
+           nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                        anchor.position);
+}
+
+[[nodiscard]] bool has_expected_anchor_dolly(const AnchorDepthContext& context,
+                                             const OffAxisAnchor& anchor, float distance_before) {
+    const elf3d::Float2 projected = project_to_ndc(context.fixture.scene, context.fixture.camera,
+                                                   viewport_extent, anchor.pivot);
+    return nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera),
+                        anchor.forward) &&
+           context.navigation.snapshot().distance < distance_before &&
+           nearly_equal(projected.x, anchor.projected.x, 0.002F) &&
+           nearly_equal(projected.y, anchor.projected.y, 0.002F);
+}
+
+[[nodiscard]] bool
+started_static_pan(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
+                   const AnchorDepthContext& context, elf3d::Float3 position,
+                   elf3d::Float3 forward) {
+    return update &&
+           nearly_equal(camera_position(context.fixture.scene, context.fixture.camera), position) &&
+           nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera), forward);
+}
+
+[[nodiscard]] bool has_bounded_pan_step(const AnchorDepthContext& context,
+                                        elf3d::Float3 position_before, elf3d::Float3 forward) {
+    const float step = length(
+        subtract(camera_position(context.fixture.scene, context.fixture.camera), position_before));
+    return step > 0.0F && step <= 0.25F &&
+           nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera), forward);
+}
+
+[[nodiscard]] int verify_click_anchor_dolly(AnchorDepthContext& context) {
+    const OffAxisAnchor anchor = make_off_axis_anchor(context);
+    const int established = establish_click_anchor(context, anchor);
+    if (established != 0) {
+        return established;
+    }
+    const float distance_before = length(subtract(anchor.pivot, anchor.position));
+    elf3d::ViewportInput input = hovered_input();
     input.pointer_position_pixels = {400.0F, 300.0F};
     input.pointer_delta_pixels = {400.0F, 300.0F};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        navigation.snapshot().is_pointer_captured ||
-        !nearly_equal(camera_position(fixture.scene, fixture.camera),
-                      position_before_click_pivot)) {
+    if (!has_idle_anchor_update(update_navigation(context, input), context, anchor)) {
         return 40;
     }
     input.pointer_delta_pixels = {};
     input.wheel_delta = 1.0F;
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold)) {
+    if (!update_navigation(context, input)) {
         return 41;
     }
-    const elf3d::Float3 forward_after_click_pivot_wheel =
-        camera_forward(fixture.scene, fixture.camera);
-    const elf3d::Float2 projected_click_pivot_after =
-        project_to_ndc(fixture.scene, fixture.camera, viewport_extent, off_axis_click_pivot);
-    if (!nearly_equal(forward_after_click_pivot_wheel, forward_before_click_pivot) ||
-        !(navigation.snapshot().distance < distance_before_click_pivot_wheel) ||
-        !nearly_equal(projected_click_pivot_after.x, projected_click_pivot_before.x, 0.002F) ||
-        !nearly_equal(projected_click_pivot_after.y, projected_click_pivot_before.y, 0.002F)) {
+    if (!has_expected_anchor_dolly(context, anchor, distance_before)) {
         return 42;
     }
+    const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
     input = hovered_input();
     input.middle_button_down = true;
-    const elf3d::Float3 before_post_dolly_pan_start =
-        camera_position(fixture.scene, fixture.camera);
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        !nearly_equal(camera_position(fixture.scene, fixture.camera),
-                      before_post_dolly_pan_start) ||
-        !nearly_equal(camera_forward(fixture.scene, fixture.camera),
-                      forward_after_click_pivot_wheel)) {
+    const elf3d::Float3 pan_start = camera_position(context.fixture.scene, context.fixture.camera);
+    if (!started_static_pan(update_navigation(context, input), context, pan_start, forward)) {
         return 65;
     }
-    const elf3d::Float3 before_post_dolly_pan = camera_position(fixture.scene, fixture.camera);
+    const elf3d::Float3 before_pan = camera_position(context.fixture.scene, context.fixture.camera);
     input.pointer_delta_pixels = {1.0F, 0.0F};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold)) {
+    if (!update_navigation(context, input)) {
         return 66;
     }
-    const float post_dolly_pan_step =
-        length(subtract(camera_position(fixture.scene, fixture.camera), before_post_dolly_pan));
-    if (post_dolly_pan_step <= 0.0F || post_dolly_pan_step > 0.25F ||
-        !nearly_equal(camera_forward(fixture.scene, fixture.camera),
-                      forward_after_click_pivot_wheel)) {
+    if (!has_bounded_pan_step(context, before_pan, forward)) {
         return 67;
     }
     input.middle_button_down = false;
     input.pointer_delta_pixels = {};
-    static_cast<void>(
-        navigation.update(fixture.scene, fixture.camera, viewport_extent, input, click_threshold));
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
 
-    if (!navigation.reset_view(fixture.scene, fixture.camera, viewport_extent)) {
+[[nodiscard]] bool captured_static_camera(const AnchorDepthContext& context,
+                                          const OffAxisAnchor& anchor) {
+    return context.navigation.snapshot().is_pointer_captured &&
+           nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                        anchor.position) &&
+           nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera),
+                        anchor.forward);
+}
+
+[[nodiscard]] bool captured_pan_moved(const AnchorDepthContext& context,
+                                      const OffAxisAnchor& anchor) {
+    return context.navigation.snapshot().is_pointer_captured &&
+           nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera),
+                        anchor.forward) &&
+           !nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                         anchor.position);
+}
+
+[[nodiscard]] int verify_click_anchor_pan(AnchorDepthContext& context) {
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera,
+                                       viewport_extent)) {
         return 43;
     }
-    const elf3d::Float3 forward_before_click_pivot_pan =
-        camera_forward(fixture.scene, fixture.camera);
-    const elf3d::Float3 right_before_click_pivot_pan = camera_right(fixture.scene, fixture.camera);
-    const elf3d::Float3 position_before_click_pivot_pan =
-        camera_position(fixture.scene, fixture.camera);
-    const float click_pivot_pan_distance = navigation.snapshot().distance;
-    const elf3d::Float3 off_axis_click_pivot_pan{
-        position_before_click_pivot_pan.x +
-            forward_before_click_pivot_pan.x * click_pivot_pan_distance +
-            right_before_click_pivot_pan.x * 2.0F,
-        position_before_click_pivot_pan.y +
-            forward_before_click_pivot_pan.y * click_pivot_pan_distance +
-            right_before_click_pivot_pan.y * 2.0F,
-        position_before_click_pivot_pan.z +
-            forward_before_click_pivot_pan.z * click_pivot_pan_distance +
-            right_before_click_pivot_pan.z * 2.0F,
-    };
-    if (!navigation.set_screen_anchor(fixture.scene, fixture.camera, off_axis_click_pivot_pan)) {
+    const OffAxisAnchor anchor = make_off_axis_anchor(context);
+    if (!context.navigation.set_screen_anchor(context.fixture.scene, context.fixture.camera,
+                                              anchor.pivot)) {
         return 44;
     }
-    input = hovered_input();
+    elf3d::ViewportInput input = hovered_input();
     input.pointer_position_pixels = {400.0F, 300.0F};
     input.pointer_delta_pixels = {400.0F, 300.0F};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        navigation.snapshot().is_pointer_captured ||
-        !nearly_equal(camera_position(fixture.scene, fixture.camera),
-                      position_before_click_pivot_pan) ||
-        !nearly_equal(camera_forward(fixture.scene, fixture.camera),
-                      forward_before_click_pivot_pan)) {
+    if (!has_idle_anchor_update(update_navigation(context, input), context, anchor) ||
+        !nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera),
+                      anchor.forward)) {
         return 45;
     }
     input.middle_button_down = true;
     input.pointer_delta_pixels = {};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        !navigation.snapshot().is_pointer_captured ||
-        !nearly_equal(camera_position(fixture.scene, fixture.camera),
-                      position_before_click_pivot_pan) ||
-        !nearly_equal(camera_forward(fixture.scene, fixture.camera),
-                      forward_before_click_pivot_pan)) {
+    if (!update_navigation(context, input) || !captured_static_camera(context, anchor)) {
         return 46;
     }
     input.pointer_position_pixels = {480.0F, 340.0F};
     input.pointer_delta_pixels = {80.0F, 40.0F};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        !navigation.snapshot().is_pointer_captured ||
-        !nearly_equal(camera_forward(fixture.scene, fixture.camera),
-                      forward_before_click_pivot_pan) ||
-        nearly_equal(camera_position(fixture.scene, fixture.camera),
-                     position_before_click_pivot_pan)) {
+    if (!update_navigation(context, input) || !captured_pan_moved(context, anchor)) {
         return 47;
     }
     input.middle_button_down = false;
     input.pointer_delta_pixels = {};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        navigation.snapshot().is_pointer_captured) {
+    if (!released_pointer(update_navigation(context, input), context)) {
         return 48;
     }
+    return 0;
+}
 
-    if (!navigation.reset_view(fixture.scene, fixture.camera, viewport_extent)) {
+[[nodiscard]] bool
+has_static_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
+                       const AnchorDepthContext& context, const OffAxisAnchor& anchor) {
+    return update && update.value().orbit_start_position_pixels.has_value() &&
+           nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                        anchor.position) &&
+           nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera),
+                        anchor.forward);
+}
+
+[[nodiscard]] bool has_expected_anchor_orbit(const AnchorDepthContext& context,
+                                             const OffAxisAnchor& anchor) {
+    const elf3d::Float2 projected = project_to_ndc(context.fixture.scene, context.fixture.camera,
+                                                   viewport_extent, anchor.pivot);
+    return context.navigation.snapshot().is_pointer_captured &&
+           !nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                         anchor.position) &&
+           !nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera),
+                         anchor.forward) &&
+           !camera_looks_at(context.fixture.scene, context.fixture.camera, anchor.pivot) &&
+           nearly_equal(projected.x, anchor.projected.x, 0.002F) &&
+           nearly_equal(projected.y, anchor.projected.y, 0.002F);
+}
+
+[[nodiscard]] int verify_click_anchor_orbit(AnchorDepthContext& context) {
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera,
+                                       viewport_extent)) {
         return 49;
     }
-    const elf3d::Float3 forward_before_click_pivot_orbit =
-        camera_forward(fixture.scene, fixture.camera);
-    const elf3d::Float3 right_before_click_pivot_orbit =
-        camera_right(fixture.scene, fixture.camera);
-    const elf3d::Float3 position_before_click_pivot_orbit =
-        camera_position(fixture.scene, fixture.camera);
-    const float click_pivot_orbit_distance = navigation.snapshot().distance;
-    const elf3d::Float3 off_axis_click_pivot_orbit{
-        position_before_click_pivot_orbit.x +
-            forward_before_click_pivot_orbit.x * click_pivot_orbit_distance +
-            right_before_click_pivot_orbit.x * 2.0F,
-        position_before_click_pivot_orbit.y +
-            forward_before_click_pivot_orbit.y * click_pivot_orbit_distance +
-            right_before_click_pivot_orbit.y * 2.0F,
-        position_before_click_pivot_orbit.z +
-            forward_before_click_pivot_orbit.z * click_pivot_orbit_distance +
-            right_before_click_pivot_orbit.z * 2.0F,
-    };
-    const elf3d::Float2 projected_click_pivot_orbit_before =
-        project_to_ndc(fixture.scene, fixture.camera, viewport_extent, off_axis_click_pivot_orbit);
-    if (!std::isfinite(projected_click_pivot_orbit_before.x) ||
-        !std::isfinite(projected_click_pivot_orbit_before.y) ||
-        std::abs(projected_click_pivot_orbit_before.x) >= 1.0F ||
-        std::abs(projected_click_pivot_orbit_before.y) >= 1.0F) {
+    const OffAxisAnchor anchor = make_off_axis_anchor(context);
+    if (!is_inside_view(anchor.projected)) {
         return 50;
     }
-    if (!navigation.set_screen_anchor(fixture.scene, fixture.camera, off_axis_click_pivot_orbit)) {
+    if (!context.navigation.set_screen_anchor(context.fixture.scene, context.fixture.camera,
+                                              anchor.pivot)) {
         return 51;
     }
-    input = hovered_input();
+    elf3d::ViewportInput input = hovered_input();
     input.left_button_down = true;
     input.pointer_position_pixels = {400.0F, 300.0F};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold)) {
+    if (!update_navigation(context, input)) {
         return 52;
     }
     input.pointer_position_pixels = {460.0F, 330.0F};
     input.pointer_delta_pixels = {60.0F, 30.0F};
-    const elf3d::Result<elf3d::navigation::NavigationUpdate> click_pivot_orbit_start =
-        navigation.update(fixture.scene, fixture.camera, viewport_extent, input, click_threshold);
-    if (!click_pivot_orbit_start ||
-        !click_pivot_orbit_start.value().orbit_start_position_pixels.has_value() ||
-        !nearly_equal(camera_position(fixture.scene, fixture.camera),
-                      position_before_click_pivot_orbit) ||
-        !nearly_equal(camera_forward(fixture.scene, fixture.camera),
-                      forward_before_click_pivot_orbit) ||
-        !navigation.set_screen_anchor(fixture.scene, fixture.camera, off_axis_click_pivot_orbit)) {
+    if (!has_static_orbit_start(update_navigation(context, input), context, anchor) ||
+        !context.navigation.set_screen_anchor(context.fixture.scene, context.fixture.camera,
+                                              anchor.pivot)) {
         return 53;
     }
     input.pointer_position_pixels = {520.0F, 360.0F};
     input.pointer_delta_pixels = {60.0F, 30.0F};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold)) {
+    if (!update_navigation(context, input)) {
         return 54;
     }
-    const elf3d::Float2 projected_click_pivot_orbit_after =
-        project_to_ndc(fixture.scene, fixture.camera, viewport_extent, off_axis_click_pivot_orbit);
-    if (!navigation.snapshot().is_pointer_captured ||
-        nearly_equal(camera_position(fixture.scene, fixture.camera),
-                     position_before_click_pivot_orbit) ||
-        nearly_equal(camera_forward(fixture.scene, fixture.camera),
-                     forward_before_click_pivot_orbit) ||
-        camera_looks_at(fixture.scene, fixture.camera, off_axis_click_pivot_orbit) ||
-        !nearly_equal(projected_click_pivot_orbit_after.x, projected_click_pivot_orbit_before.x,
-                      0.002F) ||
-        !nearly_equal(projected_click_pivot_orbit_after.y, projected_click_pivot_orbit_before.y,
-                      0.002F)) {
+    if (!has_expected_anchor_orbit(context, anchor)) {
         return 55;
     }
     input.left_button_down = false;
     input.pointer_delta_pixels = {};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        navigation.snapshot().is_pointer_captured) {
+    if (!released_pointer(update_navigation(context, input), context)) {
         return 56;
     }
+    return 0;
+}
 
-    if (!navigation.reset_view(fixture.scene, fixture.camera, viewport_extent)) {
+struct CrossingContext {
+    elf3d::NavigationSnapshot start;
+    float expected_step = 0.0F;
+    float minimum_motion = 0.0F;
+};
+
+[[nodiscard]] int prepare_crossing(AnchorDepthContext& context, CrossingContext& crossing) {
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera,
+                                       viewport_extent)) {
         return 57;
     }
-    const elf3d::NavigationSnapshot crossing_start = navigation.snapshot();
-    const elf3d::Float3 crossing_forward = camera_forward(fixture.scene, fixture.camera);
-    const float scaled_wheel_step_ratio =
-        (1.0F - std::exp(-navigation.settings().zoom_sensitivity)) * 0.5F;
-    const std::optional<elf3d::Bounds3> crossing_bounds = fixture.scene.world_bounds();
-    if (!crossing_bounds.has_value()) {
+    crossing.start = context.navigation.snapshot();
+    const std::optional<elf3d::Bounds3> bounds = context.fixture.scene.world_bounds();
+    if (!bounds.has_value()) {
         return 141;
     }
-    const elf3d::Float3 crossing_bounds_center =
-        multiply(add(crossing_bounds->minimum, crossing_bounds->maximum), 0.5F);
-    const float crossing_reference =
-        length(subtract(crossing_bounds->maximum, crossing_bounds_center));
-    const float minimum_motion = crossing_reference * navigation.settings().minimum_motion_scale;
-    const float expected_crossing_step = minimum_motion * scaled_wheel_step_ratio;
-    const float starting_signed_distance = expected_crossing_step * 1.5F;
+    const elf3d::Float3 center = multiply(add(bounds->minimum, bounds->maximum), 0.5F);
+    const float reference = length(subtract(bounds->maximum, center));
+    crossing.minimum_motion = reference * context.navigation.settings().minimum_motion_scale;
+    const float wheel_ratio =
+        (1.0F - std::exp(-context.navigation.settings().zoom_sensitivity)) * 0.5F;
+    crossing.expected_step = crossing.minimum_motion * wheel_ratio;
+    const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
     set_camera_position(
-        fixture.scene, fixture.camera,
-        add(crossing_start.pivot, multiply(crossing_forward, -starting_signed_distance)));
-    if (!navigation.synchronize(fixture.scene, fixture.camera) ||
-        signed_camera_distance_to(fixture.scene, fixture.camera, crossing_start.pivot) <=
-            expected_crossing_step) {
+        context.fixture.scene, context.fixture.camera,
+        add(crossing.start.pivot, multiply(forward, -crossing.expected_step * 1.5F)));
+    if (!context.navigation.synchronize(context.fixture.scene, context.fixture.camera) ||
+        signed_camera_distance_to(context.fixture.scene, context.fixture.camera,
+                                  crossing.start.pivot) <= crossing.expected_step) {
         return 58;
     }
-    input = hovered_input();
+    return 0;
+}
+
+[[nodiscard]] bool has_expected_crossing(const AnchorDepthContext& context,
+                                         const CrossingContext& crossing, float initial_step,
+                                         float crossing_step) {
+    const float step_ratio = crossing_step / initial_step;
+    const float reference_ratio = crossing_step / crossing.expected_step;
+    return signed_camera_distance_to(context.fixture.scene, context.fixture.camera,
+                                     crossing.start.pivot) < 0.0F &&
+           step_ratio >= 0.45F && step_ratio <= 1.05F && reference_ratio >= 0.45F &&
+           reference_ratio <= 1.05F &&
+           depth_ratio_within_limit(context.fixture.scene, context.fixture.camera);
+}
+
+[[nodiscard]] int cross_anchor_depth(AnchorDepthContext& context, const CrossingContext& crossing) {
+    elf3d::ViewportInput input = hovered_input();
     input.wheel_delta = 1.0F;
-    const elf3d::Float3 before_crossing_step = camera_position(fixture.scene, fixture.camera);
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold)) {
+    const elf3d::Float3 before_step =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    if (!update_navigation(context, input)) {
         return 59;
     }
-    const elf3d::Float3 before_crossing = camera_position(fixture.scene, fixture.camera);
-    const float initial_crossing_step = length(subtract(before_crossing, before_crossing_step));
-    if (signed_camera_distance_to(fixture.scene, fixture.camera, crossing_start.pivot) <= 0.0F) {
+    const elf3d::Float3 before_crossing =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    const float initial_step = length(subtract(before_crossing, before_step));
+    if (signed_camera_distance_to(context.fixture.scene, context.fixture.camera,
+                                  crossing.start.pivot) <= 0.0F) {
         return 60;
     }
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold)) {
+    if (!update_navigation(context, input)) {
         return 61;
     }
-    const elf3d::Float3 after_crossing = camera_position(fixture.scene, fixture.camera);
-    const float crossing_step = length(subtract(after_crossing, before_crossing));
-    const float step_ratio = crossing_step / initial_crossing_step;
-    const float local_reference_step_ratio = crossing_step / expected_crossing_step;
-    if (signed_camera_distance_to(fixture.scene, fixture.camera, crossing_start.pivot) >= 0.0F ||
-        step_ratio < 0.45F || step_ratio > 1.05F || local_reference_step_ratio < 0.45F ||
-        local_reference_step_ratio > 1.05F ||
-        !depth_ratio_within_limit(fixture.scene, fixture.camera)) {
+    const float crossing_step = length(
+        subtract(camera_position(context.fixture.scene, context.fixture.camera), before_crossing));
+    if (!has_expected_crossing(context, crossing, initial_step, crossing_step)) {
         return 62;
     }
+    return 0;
+}
+
+[[nodiscard]] int recover_after_crossing(AnchorDepthContext& context,
+                                         const CrossingContext& crossing) {
+    elf3d::ViewportInput input = hovered_input();
     input.wheel_delta = -1.0F;
-    const float signed_after_crossing =
-        signed_camera_distance_to(fixture.scene, fixture.camera, crossing_start.pivot);
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        signed_camera_distance_to(fixture.scene, fixture.camera, crossing_start.pivot) <=
-            signed_after_crossing) {
+    const float signed_before = signed_camera_distance_to(
+        context.fixture.scene, context.fixture.camera, crossing.start.pivot);
+    if (!update_navigation(context, input) ||
+        signed_camera_distance_to(context.fixture.scene, context.fixture.camera,
+                                  crossing.start.pivot) <= signed_before) {
         return 63;
     }
     input = hovered_input();
     input.middle_button_down = true;
-    static_cast<void>(
-        navigation.update(fixture.scene, fixture.camera, viewport_extent, input, click_threshold));
-    const elf3d::Float3 before_post_crossing_pan = camera_position(fixture.scene, fixture.camera);
+    static_cast<void>(update_navigation(context, input));
+    const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
     input.pointer_delta_pixels = {40.0F, 0.0F};
-    if (!navigation.update(fixture.scene, fixture.camera, viewport_extent, input,
-                           click_threshold) ||
-        length(subtract(camera_position(fixture.scene, fixture.camera),
-                        before_post_crossing_pan)) <= minimum_motion * 0.01F) {
+    if (!update_navigation(context, input) ||
+        length(subtract(camera_position(context.fixture.scene, context.fixture.camera),
+                        position)) <= crossing.minimum_motion * 0.01F) {
         return 64;
     }
     input.middle_button_down = false;
     input.pointer_delta_pixels = {};
-    static_cast<void>(
-        navigation.update(fixture.scene, fixture.camera, viewport_extent, input, click_threshold));
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
 
-    elf3d::OrbitNavigationSettings invalid_settings = navigation.settings();
-    invalid_settings.maximum_distance = invalid_settings.minimum_distance;
-    if (navigation.set_settings(invalid_settings).error().code() !=
+[[nodiscard]] int verify_anchor_crossing(AnchorDepthContext& context) {
+    CrossingContext crossing;
+    const int prepared = prepare_crossing(context, crossing);
+    if (prepared != 0) {
+        return prepared;
+    }
+    const int crossed = cross_anchor_depth(context, crossing);
+    if (crossed != 0) {
+        return crossed;
+    }
+    return recover_after_crossing(context, crossing);
+}
+
+[[nodiscard]] int verify_settings_contract(AnchorDepthContext& context) {
+    elf3d::OrbitNavigationSettings invalid = context.navigation.settings();
+    invalid.maximum_distance = invalid.minimum_distance;
+    if (context.navigation.set_settings(invalid).error().code() !=
         elf3d::ErrorCode::invalid_navigation_settings) {
         return 16;
     }
-    elf3d::OrbitNavigationSettings inverted = navigation.settings();
+    elf3d::OrbitNavigationSettings inverted = context.navigation.settings();
     inverted.invert_vertical_orbit = true;
-    if (!navigation.set_settings(inverted) ||
-        !navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
+    if (!context.navigation.set_settings(inverted) ||
+        !context.navigation.reset_view(context.fixture.scene, context.fixture.camera,
+                                       viewport_extent)) {
         return 17;
     }
-    input = hovered_input();
+    elf3d::ViewportInput input = hovered_input();
     input.left_button_down = true;
     input.pointer_position_pixels = {10.0F, 10.0F};
-    static_cast<void>(
-        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
+    static_cast<void>(update_navigation(context, input));
     input.pointer_position_pixels = {10.0F, 60.0F};
     input.pointer_delta_pixels = {0.0F, 50.0F};
-    static_cast<void>(
-        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
+    static_cast<void>(update_navigation(context, input));
     input.pointer_position_pixels = {10.0F, 110.0F};
-    input.pointer_delta_pixels = {0.0F, 50.0F};
-    static_cast<void>(
-        navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
-    if (!(navigation.snapshot().pitch_radians > reset.pitch_radians)) {
+    static_cast<void>(update_navigation(context, input));
+    if (context.navigation.snapshot().pitch_radians <= context.initial_reset.pitch_radians) {
         return 18;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_extreme_bounds(AnchorDepthContext& context) {
     SceneFixture tiny = make_scene(2, {0.0F, 0.0F, 0.0F}, {0.000001F, 0.000001F, 0.000001F});
-    if (!navigation.reset_view(tiny.scene, tiny.camera, {800, 600}) ||
-        !std::isfinite(navigation.snapshot().distance)) {
+    if (!context.navigation.reset_view(tiny.scene, tiny.camera, viewport_extent) ||
+        !std::isfinite(context.navigation.snapshot().distance)) {
         return 19;
     }
     SceneFixture large = make_scene(3, {-1.0e6F, -1.0e6F, -1.0e6F}, {1.0e6F, 1.0e6F, 1.0e6F});
-    if (!navigation.reset_view(large.scene, large.camera, {800, 600}) ||
-        !std::isfinite(navigation.snapshot().distance)) {
+    if (!context.navigation.reset_view(large.scene, large.camera, viewport_extent) ||
+        !std::isfinite(context.navigation.snapshot().distance)) {
         return 20;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_empty_fit(AnchorDepthContext& context) {
     elf3d::scene::Storage empty{scene_id(4)};
-    const elf3d::EntityId empty_camera =
+    const elf3d::EntityId camera =
         empty.create_perspective_camera(elf3d::PerspectiveCameraDescription{}).value();
-    const elf3d::Float4x4 empty_camera_matrix = empty.local_matrix(empty_camera).value();
-    const elf3d::Result<void> empty_fit = navigation.fit_to_scene(empty, empty_camera, {800, 600});
-    if (empty_fit || empty_fit.error().code() != elf3d::ErrorCode::scene_has_no_bounds ||
-        empty.local_matrix(empty_camera).value() != empty_camera_matrix) {
+    const elf3d::Float4x4 matrix = empty.local_matrix(camera).value();
+    const elf3d::Result<void> fit = context.navigation.fit_to_scene(empty, camera, viewport_extent);
+    if (fit || fit.error().code() != elf3d::ErrorCode::scene_has_no_bounds ||
+        empty.local_matrix(camera).value() != matrix) {
         return 21;
     }
+    return 0;
+}
 
-    elf3d::navigation::OrbitNavigationController first_viewport;
-    elf3d::navigation::OrbitNavigationController second_viewport;
-    if (!first_viewport.reset_view(fixture.scene, fixture.camera, {800, 600}) ||
-        !second_viewport.reset_view(fixture.scene, fixture.second_camera, {800, 600})) {
+[[nodiscard]] int verify_independent_controllers(AnchorDepthContext& context) {
+    if (!context.first_viewport.reset_view(context.fixture.scene, context.fixture.camera,
+                                           viewport_extent) ||
+        !context.second_viewport.reset_view(context.fixture.scene, context.fixture.second_camera,
+                                            viewport_extent)) {
         return 22;
     }
-    const float second_distance = second_viewport.snapshot().distance;
-    input = hovered_input();
+    const float second_distance = context.second_viewport.snapshot().distance;
+    elf3d::ViewportInput input = hovered_input();
     input.wheel_delta = 1.0F;
-    static_cast<void>(
-        first_viewport.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
-    if (nearly_equal(first_viewport.snapshot().distance, second_distance) ||
-        !nearly_equal(second_viewport.snapshot().distance, second_distance)) {
+    static_cast<void>(context.first_viewport.update(context.fixture.scene, context.fixture.camera,
+                                                    viewport_extent, input,
+                                                    navigation_test_click_threshold));
+    if (nearly_equal(context.first_viewport.snapshot().distance, second_distance) ||
+        !nearly_equal(context.second_viewport.snapshot().distance, second_distance)) {
         return 23;
     }
     input = hovered_input();
     input.left_button_down = true;
-    static_cast<void>(
-        first_viewport.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
-    if (!first_viewport.snapshot().is_pointer_captured ||
-        second_viewport.snapshot().is_pointer_captured) {
+    static_cast<void>(context.first_viewport.update(context.fixture.scene, context.fixture.camera,
+                                                    viewport_extent, input,
+                                                    navigation_test_click_threshold));
+    if (!context.first_viewport.snapshot().is_pointer_captured ||
+        context.second_viewport.snapshot().is_pointer_captured) {
         return 24;
     }
-    first_viewport.cancel_interaction();
-    if (first_viewport.snapshot().is_pointer_captured ||
-        second_viewport.snapshot().is_pointer_captured) {
+    context.first_viewport.cancel_interaction();
+    if (context.first_viewport.snapshot().is_pointer_captured ||
+        context.second_viewport.snapshot().is_pointer_captured) {
         return 25;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_external_synchronization(AnchorDepthContext& context) {
     elf3d::Transform external;
     external.translation = {10.0F, 2.0F, 3.0F};
-    if (!fixture.scene.set_local_transform(fixture.camera, external) ||
-        !first_viewport.synchronize(fixture.scene, fixture.camera)) {
+    if (!context.fixture.scene.set_local_transform(context.fixture.camera, external) ||
+        !context.first_viewport.synchronize(context.fixture.scene, context.fixture.camera)) {
         return 26;
     }
-    input = hovered_input();
+    elf3d::ViewportInput input = hovered_input();
     input.left_button_down = true;
     input.pointer_delta_pixels = {500.0F, 500.0F};
-    const elf3d::NavigationSnapshot before_external_drag = first_viewport.snapshot();
-    static_cast<void>(
-        first_viewport.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold));
-    if (!nearly_equal(first_viewport.snapshot().yaw_radians, before_external_drag.yaw_radians) ||
-        !nearly_equal(first_viewport.snapshot().pitch_radians,
-                      before_external_drag.pitch_radians)) {
+    const elf3d::NavigationSnapshot before = context.first_viewport.snapshot();
+    static_cast<void>(context.first_viewport.update(context.fixture.scene, context.fixture.camera,
+                                                    viewport_extent, input,
+                                                    navigation_test_click_threshold));
+    if (!nearly_equal(context.first_viewport.snapshot().yaw_radians, before.yaw_radians) ||
+        !nearly_equal(context.first_viewport.snapshot().pitch_radians, before.pitch_radians)) {
         return 27;
     }
-
-
     return 0;
+}
+
+using AnchorStep = int (*)(AnchorDepthContext&);
+
+[[nodiscard]] int run_anchor_steps(AnchorDepthContext& context) {
+    constexpr std::array<AnchorStep, 10> steps{{
+        prepare_anchor_context,
+        verify_click_anchor_dolly,
+        verify_click_anchor_pan,
+        verify_click_anchor_orbit,
+        verify_anchor_crossing,
+        verify_settings_contract,
+        verify_extreme_bounds,
+        verify_empty_fit,
+        verify_independent_controllers,
+        verify_external_synchronization,
+    }};
+    for (const AnchorStep step : steps) {
+        const int result = step(context);
+        if (result != 0) {
+            return result;
+        }
+    }
+    return 0;
+}
+
+} // namespace
+
+int elf3d_navigation_anchor_depth_test() {
+    AnchorDepthContext context;
+    return run_anchor_steps(context);
 }

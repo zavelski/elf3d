@@ -46,14 +46,15 @@ namespace {
     return std::abs(left - right) <= tolerance;
 }
 
-} // namespace
-
-int elf3d_tool_clipping_test() {
-    elf3d::tools::clipping::ClippingController controller;
+[[nodiscard]] int
+verify_initial_state(const elf3d::tools::clipping::ClippingController& controller) {
     if (controller.snapshot().revision != 0 || controller.snapshot().box_count != 0) {
         return 1;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_section_plane(elf3d::tools::clipping::ClippingController& controller) {
     elf3d::SectionPlane plane;
     plane.enabled = true;
     plane.normal = {1.0F, 0.0F, 0.0F};
@@ -73,7 +74,10 @@ int elf3d_tool_clipping_test() {
     if (controller.snapshot().section_plane.enabled || controller.snapshot().revision != 3) {
         return 5;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_box_addition(elf3d::tools::clipping::ClippingController& controller) {
     const elf3d::ClippingBox first{{-1.0F, -1.0F, -1.0F}, {0.0F, 1.0F, 1.0F}, true};
     const elf3d::ClippingBox second{{1.0F, -1.0F, -1.0F}, {2.0F, 1.0F, 1.0F}, false};
     const elf3d::ClippingBox third{{3.0F, -1.0F, -1.0F}, {4.0F, 1.0F, 1.0F}, true};
@@ -83,6 +87,11 @@ int elf3d_tool_clipping_test() {
         controller.snapshot().box_count != 3 || controller.snapshot().boxes[1].enabled) {
         return 6;
     }
+    return 0;
+}
+
+[[nodiscard]] int verify_box_removal(elf3d::tools::clipping::ClippingController& controller) {
+    const elf3d::ClippingBox third{{3.0F, -1.0F, -1.0F}, {4.0F, 1.0F, 1.0F}, true};
     if (!controller.remove_box(1) || controller.snapshot().box_count != 2 ||
         controller.snapshot().boxes[1] != third) {
         return 7;
@@ -90,10 +99,12 @@ int elf3d_tool_clipping_test() {
     if (controller.remove_box(2).error().code() != elf3d::ErrorCode::invalid_clipping_box_index) {
         return 8;
     }
+    return 0;
+}
 
-    elf3d::scene::Storage scene = make_scene();
-    const elf3d::scene::VisibilityFilter visibility =
-        elf3d::scene::make_visibility_filter(scene, std::nullopt).value();
+[[nodiscard]] int verify_visible_bounds(elf3d::tools::clipping::ClippingController& controller,
+                                        elf3d::scene::Storage& scene,
+                                        const elf3d::scene::VisibilityFilter& visibility) {
     if (!controller.reset_box_to_visible_bounds(scene, visibility, 0)) {
         return 9;
     }
@@ -108,8 +119,15 @@ int elf3d_tool_clipping_test() {
     if (controller.add_box_from_visible_bounds(scene, visibility).value() != 0) {
         return 12;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_filter_and_overlay(elf3d::tools::clipping::ClippingController& controller,
+                                            elf3d::scene::Storage& scene,
+                                            const elf3d::scene::VisibilityFilter& visibility) {
+    elf3d::SectionPlane plane;
     plane.enabled = true;
+    plane.normal = {1.0F, 0.0F, 0.0F};
     plane.retained_half_space = elf3d::PlaneHalfSpace::positive;
     if (!controller.set_section_plane(plane)) {
         return 13;
@@ -135,4 +153,34 @@ int elf3d_tool_clipping_test() {
         return 17;
     }
     return 0;
+}
+
+} // namespace
+
+int elf3d_tool_clipping_test() {
+    elf3d::tools::clipping::ClippingController controller;
+    const int initial = verify_initial_state(controller);
+    if (initial != 0) {
+        return initial;
+    }
+    const int section = verify_section_plane(controller);
+    if (section != 0) {
+        return section;
+    }
+    const int addition = verify_box_addition(controller);
+    if (addition != 0) {
+        return addition;
+    }
+    const int removal = verify_box_removal(controller);
+    if (removal != 0) {
+        return removal;
+    }
+    elf3d::scene::Storage scene = make_scene();
+    const elf3d::scene::VisibilityFilter visibility =
+        elf3d::scene::make_visibility_filter(scene, std::nullopt).value();
+    const int bounds = verify_visible_bounds(controller, scene, visibility);
+    if (bounds != 0) {
+        return bounds;
+    }
+    return verify_filter_and_overlay(controller, scene, visibility);
 }

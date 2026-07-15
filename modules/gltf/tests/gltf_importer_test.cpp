@@ -137,25 +137,27 @@ void append_float(std::vector<std::byte>& output, float value) {
     return output;
 }
 
+[[nodiscard]] std::uint32_t decode_base64_value(char character) noexcept {
+    if (character >= 'A' && character <= 'Z') {
+        return static_cast<std::uint32_t>(character - 'A');
+    }
+    if (character >= 'a' && character <= 'z') {
+        return static_cast<std::uint32_t>(character - 'a' + 26);
+    }
+    if (character >= '0' && character <= '9') {
+        return static_cast<std::uint32_t>(character - '0' + 52);
+    }
+    return character == '+' ? 62U : 63U;
+}
+
 [[nodiscard]] std::vector<std::byte> decode_base64(std::string_view source) {
-    const auto value = [](char character) noexcept -> std::uint32_t {
-        if (character >= 'A' && character <= 'Z') {
-            return static_cast<std::uint32_t>(character - 'A');
-        }
-        if (character >= 'a' && character <= 'z') {
-            return static_cast<std::uint32_t>(character - 'a' + 26);
-        }
-        if (character >= '0' && character <= '9') {
-            return static_cast<std::uint32_t>(character - '0' + 52);
-        }
-        return character == '+' ? 62U : 63U;
-    };
     std::vector<std::byte> output;
     for (std::size_t index = 0; index < source.size(); index += 4U) {
         const std::uint32_t combined =
-            (value(source[index]) << 18U) | (value(source[index + 1U]) << 12U) |
-            ((source[index + 2U] == '=' ? 0U : value(source[index + 2U])) << 6U) |
-            (source[index + 3U] == '=' ? 0U : value(source[index + 3U]));
+            (decode_base64_value(source[index]) << 18U) |
+            (decode_base64_value(source[index + 1U]) << 12U) |
+            ((source[index + 2U] == '=' ? 0U : decode_base64_value(source[index + 2U])) << 6U) |
+            (source[index + 3U] == '=' ? 0U : decode_base64_value(source[index + 3U]));
         append_byte(output, static_cast<std::uint8_t>((combined >> 16U) & 0xffU));
         if (source[index + 2U] != '=') {
             append_byte(output, static_cast<std::uint8_t>((combined >> 8U) & 0xffU));
@@ -206,6 +208,72 @@ void append_float(std::vector<std::byte>& output, float value) {
     return left.size() == right.size() && std::equal(left.begin(), left.end(), right.begin());
 }
 
+[[nodiscard]] bool
+supported_structure_statistics_match(const elf3d::DocumentStatistics& statistics) {
+    return statistics.scenes == 2U && statistics.nodes == 2U && statistics.meshes == 1U &&
+           statistics.primitives == 1U && statistics.vertices == 3U && statistics.indices == 3U;
+}
+
+[[nodiscard]] bool
+supported_resource_statistics_match(const elf3d::DocumentStatistics& statistics) {
+    return statistics.materials == 1U && statistics.images == 1U && statistics.textures == 1U &&
+           statistics.samplers == 1U && statistics.perspective_cameras == 1U;
+}
+
+[[nodiscard]] bool supported_scene_and_geometry_match(const elf3d::LoadedDocument& loaded) {
+    const elf3d::Document& document = loaded.document;
+    const auto scene = document.scene_at(1U);
+    const auto primitive = document.primitive_at(0U);
+    return scene && primitive && loaded.default_scene == scene.value().id &&
+           document.default_scene() == scene.value().id &&
+           primitive.value().data.indices.size() == 3U && primitive.value().data.indices[0] == 0U &&
+           primitive.value().data.indices[1] == 1U && primitive.value().data.indices[2] == 2U;
+}
+
+[[nodiscard]] bool supported_material_matches(const elf3d::Document& document) {
+    const auto material = document.material_at(0U);
+    return material && material.value().description.alpha_mode == elf3d::ModelAlphaMode::mask &&
+           material.value().description.unlit &&
+           nearly_equal(material.value().description.ior, 1.33F) &&
+           nearly_equal(material.value().description.emissive_strength, 2.0F) &&
+           material.value().description.base_color_texture_mapping.transform.offset ==
+               elf3d::Float2{0.25F, 0.5F};
+}
+
+[[nodiscard]] bool supported_image_sampler_camera_match(const elf3d::Document& document) {
+    const auto image = document.image_at(0U);
+    const auto sampler = document.sampler_at(0U);
+    const auto camera_node = document.node_at(0U);
+    return image && sampler && camera_node &&
+           image.value().source_mime_type == elf3d::ModelImageMimeType::png &&
+           same_bytes(image.value().source_bytes, std::as_bytes(std::span{asymmetric_png})) &&
+           sampler.value().description.wrap_u == elf3d::ModelTextureWrap::clamp_to_edge &&
+           sampler.value().description.wrap_v == elf3d::ModelTextureWrap::mirrored_repeat &&
+           camera_node.value().perspective_camera.has_value();
+}
+
+[[nodiscard]] bool write_supported_files(const TemporaryDirectory& temporary,
+                                         const std::filesystem::path& gltf,
+                                         std::span<const std::byte> geometry,
+                                         std::string_view json) {
+    return write_bytes(temporary.path() / "supported.bin", geometry) &&
+           write_bytes(temporary.path() / "asymmetric.png",
+                       std::as_bytes(std::span{asymmetric_png})) &&
+           write_text(gltf, json);
+}
+
+[[nodiscard]] bool supported_statistics_match(const elf3d::LoadedDocument& loaded) {
+    const elf3d::DocumentStatistics statistics = loaded.document.statistics();
+    return supported_structure_statistics_match(statistics) &&
+           supported_resource_statistics_match(statistics);
+}
+
+[[nodiscard]] bool supported_content_matches(const elf3d::LoadedDocument& loaded) {
+    return supported_scene_and_geometry_match(loaded) &&
+           supported_material_matches(loaded.document) &&
+           supported_image_sampler_camera_match(loaded.document);
+}
+
 [[nodiscard]] int test_supported_document(const TemporaryDirectory& temporary) {
     const std::vector<std::byte> geometry = textured_geometry();
     const std::filesystem::path path = temporary.path() / "supported.gltf";
@@ -225,47 +293,17 @@ void append_float(std::vector<std::byte>& output, float value) {
       "nodes":[{"name":"FirstRoot","mesh":0,"camera":0},{"name":"SecondRoot","mesh":0}],
       "scenes":[{"name":"First","nodes":[0]},{"name":"Second","nodes":[1]}],"scene":1
     })json";
-    if (!write_bytes(temporary.path() / "supported.bin", geometry) ||
-        !write_bytes(temporary.path() / "asymmetric.png",
-                     std::as_bytes(std::span{asymmetric_png})) ||
-        !write_text(path, json)) {
+    if (!write_supported_files(temporary, path, geometry, json)) {
         return 1;
     }
     const auto loaded = elf3d::load_document(path.string());
     if (!loaded) {
         return 2;
     }
-    const elf3d::Document& document = loaded.value().document;
-    const elf3d::DocumentStatistics statistics = document.statistics();
-    if (statistics.scenes != 2U || statistics.nodes != 2U || statistics.meshes != 1U ||
-        statistics.primitives != 1U || statistics.vertices != 3U || statistics.indices != 3U ||
-        statistics.materials != 1U || statistics.images != 1U || statistics.textures != 1U ||
-        statistics.samplers != 1U || statistics.perspective_cameras != 1U) {
+    if (!supported_statistics_match(loaded.value())) {
         return 3;
     }
-    const auto second_scene = document.scene_at(1U);
-    const auto primitive = document.primitive_at(0U);
-    const auto material = document.material_at(0U);
-    const auto image = document.image_at(0U);
-    const auto sampler = document.sampler_at(0U);
-    const auto camera_node = document.node_at(0U);
-    if (!second_scene || !primitive || !material || !image || !sampler || !camera_node ||
-        loaded.value().default_scene != second_scene.value().id ||
-        document.default_scene() !=
-            std::optional<elf3d::DocumentSceneId>{second_scene.value().id} ||
-        primitive.value().data.indices.size() != 3U || primitive.value().data.indices[0] != 0U ||
-        primitive.value().data.indices[1] != 1U || primitive.value().data.indices[2] != 2U ||
-        material.value().description.alpha_mode != elf3d::ModelAlphaMode::mask ||
-        !material.value().description.unlit ||
-        !nearly_equal(material.value().description.ior, 1.33F) ||
-        !nearly_equal(material.value().description.emissive_strength, 2.0F) ||
-        material.value().description.base_color_texture_mapping.transform.offset !=
-            elf3d::Float2{0.25F, 0.5F} ||
-        image.value().source_mime_type != elf3d::ModelImageMimeType::png ||
-        !same_bytes(image.value().source_bytes, std::as_bytes(std::span{asymmetric_png})) ||
-        sampler.value().description.wrap_u != elf3d::ModelTextureWrap::clamp_to_edge ||
-        sampler.value().description.wrap_v != elf3d::ModelTextureWrap::mirrored_repeat ||
-        !camera_node.value().perspective_camera.has_value()) {
+    if (!supported_content_matches(loaded.value())) {
         return 4;
     }
     return has_diagnostic(loaded.value().report,
@@ -280,84 +318,113 @@ void append_float(std::vector<std::byte>& output, float value) {
            R"json(}],"bufferViews":[{"buffer":0,"byteLength":36}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]})json";
 }
 
-[[nodiscard]] int test_containers_and_images(const TemporaryDirectory& temporary) {
+[[nodiscard]] int test_data_uri_buffer(const TemporaryDirectory& temporary) {
     const std::vector<std::byte> positions = triangle_positions();
-    const std::filesystem::path data_path = temporary.path() / "data_buffer.gltf";
-    const std::string data_member = "\"uri\":\"data:application/octet-stream;base64," +
-                                    base64(positions) + "\",\"byteLength\":36";
-    if (!write_text(data_path, simple_triangle_json(data_member))) {
+    const std::filesystem::path path = temporary.path() / "data_buffer.gltf";
+    const std::string member = "\"uri\":\"data:application/octet-stream;base64," +
+                               base64(positions) + "\",\"byteLength\":36";
+    if (!write_text(path, simple_triangle_json(member))) {
         return 1;
     }
-    const auto data_loaded = elf3d::load_document(data_path.string());
-    if (!data_loaded ||
-        !has_diagnostic(data_loaded.value().report,
-                        elf3d::ModelLoadDiagnosticCode::generated_normals) ||
-        data_loaded.value().document.default_scene().has_value()) {
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded ||
+        !has_diagnostic(loaded.value().report, elf3d::ModelLoadDiagnosticCode::generated_normals) ||
+        loaded.value().document.default_scene().has_value()) {
         return 2;
     }
+    return 0;
+}
 
-    const std::filesystem::path glb_path = temporary.path() / "triangle.glb";
-    const std::string glb_json = simple_triangle_json("\"byteLength\":36");
-    if (!write_bytes(glb_path, make_glb(glb_json, positions)) ||
-        !elf3d::load_document(glb_path.string())) {
+[[nodiscard]] int test_glb_container(const TemporaryDirectory& temporary) {
+    const std::filesystem::path path = temporary.path() / "triangle.glb";
+    const std::vector<std::byte> positions = triangle_positions();
+    const std::string json = simple_triangle_json("\"byteLength\":36");
+    if (!write_bytes(path, make_glb(json, positions)) || !elf3d::load_document(path.string())) {
         return 3;
     }
+    return 0;
+}
 
-    const std::filesystem::path implicit_path = temporary.path() / "implicit_scene.gltf";
-    const std::string implicit_json =
+[[nodiscard]] int test_implicit_scene(const TemporaryDirectory& temporary) {
+    const std::filesystem::path path = temporary.path() / "implicit_scene.gltf";
+    const std::string json =
         R"json({"asset":{"version":"2.0"},"buffers":[{"uri":"plain.bin","byteLength":36}],"bufferViews":[{"buffer":0,"byteLength":36}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"nodes":[{"mesh":0}]})json";
-    if (!write_bytes(temporary.path() / "plain.bin", positions) ||
-        !write_text(implicit_path, implicit_json)) {
+    if (!write_bytes(temporary.path() / "plain.bin", triangle_positions()) ||
+        !write_text(path, json)) {
         return 4;
     }
-    const auto implicit = elf3d::load_document(implicit_path.string());
-    const auto implicit_scene =
-        implicit ? implicit.value().document.scene_at(0U)
-                 : elf3d::Result<elf3d::DocumentSceneView>{
-                       elf3d::Error{elf3d::ErrorCode::invalid_argument, "implicit scene failed"}};
-    if (!implicit_scene || implicit.value().document.scene_count() != 1U ||
-        implicit.value().document.default_scene().has_value() ||
-        implicit.value().default_scene != implicit_scene.value().id ||
-        implicit_scene.value().roots.size() != 1U) {
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded) {
         return 5;
     }
+    const auto scene = loaded.value().document.scene_at(0U);
+    if (!scene || loaded.value().document.scene_count() != 1U ||
+        loaded.value().document.default_scene().has_value() ||
+        loaded.value().default_scene != scene.value().id || scene.value().roots.size() != 1U) {
+        return 5;
+    }
+    return 0;
+}
 
+[[nodiscard]] int test_embedded_image(const TemporaryDirectory& temporary) {
     std::vector<std::byte> embedded = textured_geometry();
     embedded.insert(embedded.end(), std::as_bytes(std::span{asymmetric_png}).begin(),
                     std::as_bytes(std::span{asymmetric_png}).end());
-    const std::string image_json =
+    const std::string json =
         R"json({"asset":{"version":"2.0"},"buffers":[{"byteLength":173}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":36},{"buffer":0,"byteOffset":72,"byteLength":24},{"buffer":0,"byteOffset":96,"byteLength":77}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"}],"images":[{"bufferView":3,"mimeType":"image/png"}],"textures":[{"source":0}],"materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}],"meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2},"material":0}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]})json";
-    const std::filesystem::path image_glb_path = temporary.path() / "image.glb";
-    if (!write_bytes(image_glb_path, make_glb(image_json, embedded))) {
+    const std::filesystem::path path = temporary.path() / "image.glb";
+    if (!write_bytes(path, make_glb(json, embedded))) {
         return 6;
     }
-    const auto image_loaded = elf3d::load_document(image_glb_path.string());
-    const auto embedded_image =
-        image_loaded ? image_loaded.value().document.image_at(0U)
-                     : elf3d::Result<elf3d::ImageView>{
-                           elf3d::Error{elf3d::ErrorCode::invalid_argument, "image GLB failed"}};
-    if (!embedded_image || !same_bytes(embedded_image.value().source_bytes,
-                                       std::as_bytes(std::span{asymmetric_png}))) {
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded) {
         return 7;
     }
+    const auto image = loaded.value().document.image_at(0U);
+    if (!image ||
+        !same_bytes(image.value().source_bytes, std::as_bytes(std::span{asymmetric_png}))) {
+        return 7;
+    }
+    return 0;
+}
 
+[[nodiscard]] int test_jpeg_image(const TemporaryDirectory& temporary) {
     const std::vector<std::byte> jpeg = decode_base64(jpeg_base64);
-    const std::filesystem::path jpeg_path = temporary.path() / "pixel.jpg";
-    const std::filesystem::path jpeg_gltf = temporary.path() / "jpeg.gltf";
-    const std::string jpeg_json =
+    const std::filesystem::path image_path = temporary.path() / "pixel.jpg";
+    const std::filesystem::path gltf_path = temporary.path() / "jpeg.gltf";
+    const std::string json =
         R"json({"asset":{"version":"2.0"},"buffers":[{"uri":"supported.bin","byteLength":96}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":36},{"buffer":0,"byteOffset":72,"byteLength":24}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"}],"images":[{"uri":"pixel.jpg"}],"textures":[{"source":0}],"materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}],"meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2},"material":0}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]})json";
-    if (!write_bytes(jpeg_path, jpeg) || !write_text(jpeg_gltf, jpeg_json)) {
+    if (!write_bytes(image_path, jpeg) || !write_text(gltf_path, json)) {
         return 8;
     }
-    const auto jpeg_loaded = elf3d::load_document(jpeg_gltf.string());
-    const auto jpeg_image =
-        jpeg_loaded ? jpeg_loaded.value().document.image_at(0U)
-                    : elf3d::Result<elf3d::ImageView>{
-                          elf3d::Error{elf3d::ErrorCode::invalid_argument, "JPEG load failed"}};
-    return jpeg_image && jpeg_image.value().source_mime_type == elf3d::ModelImageMimeType::jpeg &&
-                   same_bytes(jpeg_image.value().source_bytes, jpeg)
+    const auto loaded = elf3d::load_document(gltf_path.string());
+    if (!loaded) {
+        return 9;
+    }
+    const auto image = loaded.value().document.image_at(0U);
+    return image && image.value().source_mime_type == elf3d::ModelImageMimeType::jpeg &&
+                   same_bytes(image.value().source_bytes, jpeg)
                ? 0
                : 9;
+}
+
+using ContainerTest = int (*)(const TemporaryDirectory&);
+
+[[nodiscard]] int test_containers_and_images(const TemporaryDirectory& temporary) {
+    constexpr std::array<ContainerTest, 5> tests{{
+        test_data_uri_buffer,
+        test_glb_container,
+        test_implicit_scene,
+        test_embedded_image,
+        test_jpeg_image,
+    }};
+    for (const ContainerTest test : tests) {
+        const int result = test(temporary);
+        if (result != 0) {
+            return result;
+        }
+    }
+    return 0;
 }
 
 [[nodiscard]] int test_hierarchy_depth_limit(const TemporaryDirectory& temporary) {
@@ -395,7 +462,7 @@ void append_float(std::vector<std::byte>& output, float value) {
     return output;
 }
 
-[[nodiscard]] int test_geometry_paths(const TemporaryDirectory& temporary) {
+[[nodiscard]] int test_strip_and_fan(const TemporaryDirectory& temporary) {
     const std::vector<std::byte> quad = quad_geometry();
     for (const std::uint32_t mode : {5U, 6U}) {
         const std::filesystem::path path =
@@ -407,10 +474,10 @@ void append_float(std::vector<std::byte>& output, float value) {
             return 1;
         }
         const auto loaded = elf3d::load_document(path.string());
-        const auto primitive =
-            loaded ? loaded.value().document.primitive_at(0U)
-                   : elf3d::Result<elf3d::PrimitiveView>{
-                         elf3d::Error{elf3d::ErrorCode::invalid_argument, "strip/fan failed"}};
+        if (!loaded) {
+            return 2;
+        }
+        const auto primitive = loaded.value().document.primitive_at(0U);
         const std::array<std::uint32_t, 6> strip{0U, 1U, 2U, 2U, 1U, 3U};
         const std::array<std::uint32_t, 6> fan{0U, 1U, 2U, 0U, 2U, 3U};
         const std::span<const std::uint32_t> expected =
@@ -421,112 +488,157 @@ void append_float(std::vector<std::byte>& output, float value) {
             return 2;
         }
     }
+    return 0;
+}
 
+[[nodiscard]] int test_sparse_geometry(const TemporaryDirectory& temporary) {
     std::vector<std::byte> sparse(40U, std::byte{0});
     sparse[36] = std::byte{1};
     sparse[37] = std::byte{2};
     for (const float value : {1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F}) {
         append_float(sparse, value);
     }
-    const std::filesystem::path sparse_path = temporary.path() / "sparse.gltf";
-    const std::string sparse_json =
+    const std::filesystem::path path = temporary.path() / "sparse.gltf";
+    const std::string json =
         R"json({"asset":{"version":"2.0"},"buffers":[{"uri":"sparse.bin","byteLength":64}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":2},{"buffer":0,"byteOffset":40,"byteLength":24}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","sparse":{"count":2,"indices":{"bufferView":1,"componentType":5121},"values":{"bufferView":2}}}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]})json";
-    if (!write_bytes(temporary.path() / "sparse.bin", sparse) ||
-        !write_text(sparse_path, sparse_json)) {
+    if (!write_bytes(temporary.path() / "sparse.bin", sparse) || !write_text(path, json)) {
         return 3;
     }
-    const auto sparse_loaded = elf3d::load_document(sparse_path.string());
-    const auto sparse_primitive =
-        sparse_loaded ? sparse_loaded.value().document.primitive_at(0U)
-                      : elf3d::Result<elf3d::PrimitiveView>{
-                            elf3d::Error{elf3d::ErrorCode::invalid_argument, "sparse load failed"}};
-    if (!sparse_primitive || sparse_primitive.value().data.positions[1].x != 1.0F ||
-        sparse_primitive.value().data.positions[2].y != 1.0F) {
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded) {
         return 4;
     }
+    const auto primitive = loaded.value().document.primitive_at(0U);
+    if (!primitive || primitive.value().data.positions[1].x != 1.0F ||
+        primitive.value().data.positions[2].y != 1.0F) {
+        return 4;
+    }
+    return 0;
+}
 
+[[nodiscard]] int test_quantized_geometry(const TemporaryDirectory& temporary) {
     std::vector<std::byte> quantized;
     constexpr std::array<std::uint16_t, 9> positions{0U, 0U, 0U, 65535U, 0U, 0U, 0U, 65535U, 0U};
     for (const std::uint16_t value : positions) {
         append_u16(quantized, value);
     }
-    const std::filesystem::path quantized_path = temporary.path() / "quantized.gltf";
-    const std::string quantized_json =
+    const std::filesystem::path path = temporary.path() / "quantized.gltf";
+    const std::string json =
         R"json({"asset":{"version":"2.0"},"extensionsUsed":["KHR_mesh_quantization"],"extensionsRequired":["KHR_mesh_quantization"],"buffers":[{"uri":"quantized.bin","byteLength":18}],"bufferViews":[{"buffer":0,"byteLength":18}],"accessors":[{"bufferView":0,"componentType":5123,"normalized":true,"count":3,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]})json";
-    if (!write_bytes(temporary.path() / "quantized.bin", quantized) ||
-        !write_text(quantized_path, quantized_json)) {
+    if (!write_bytes(temporary.path() / "quantized.bin", quantized) || !write_text(path, json)) {
         return 5;
     }
-    const auto quantized_loaded = elf3d::load_document(quantized_path.string());
-    const auto quantized_primitive =
-        quantized_loaded ? quantized_loaded.value().document.primitive_at(0U)
-                         : elf3d::Result<elf3d::PrimitiveView>{elf3d::Error{
-                               elf3d::ErrorCode::invalid_argument, "quantized load failed"}};
-    return quantized_primitive &&
-                   nearly_equal(quantized_primitive.value().data.positions[1].x, 1.0F) &&
-                   nearly_equal(quantized_primitive.value().data.positions[2].y, 1.0F)
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded) {
+        return 6;
+    }
+    const auto primitive = loaded.value().document.primitive_at(0U);
+    return primitive && nearly_equal(primitive.value().data.positions[1].x, 1.0F) &&
+                   nearly_equal(primitive.value().data.positions[2].y, 1.0F)
                ? 0
                : 6;
 }
 
-[[nodiscard]] int test_diagnostics_and_errors(const TemporaryDirectory& temporary) {
-    const std::vector<std::byte> positions = triangle_positions();
-    if (!write_bytes(temporary.path() / "plain.bin", positions)) {
-        return 1;
+using GeometryTest = int (*)(const TemporaryDirectory&);
+
+[[nodiscard]] int test_geometry_paths(const TemporaryDirectory& temporary) {
+    constexpr std::array<GeometryTest, 3> tests{{
+        test_strip_and_fan,
+        test_sparse_geometry,
+        test_quantized_geometry,
+    }};
+    for (const GeometryTest test : tests) {
+        const int result = test(temporary);
+        if (result != 0) {
+            return result;
+        }
     }
-    const std::filesystem::path optional_path = temporary.path() / "optional.gltf";
-    const std::string optional_json =
+    return 0;
+}
+
+[[nodiscard]] int test_optional_diagnostics(const TemporaryDirectory& temporary) {
+    const std::filesystem::path path = temporary.path() / "optional.gltf";
+    const std::string json =
         R"json({"asset":{"version":"2.0"},"extensionsUsed":["EXT_optional"],"extensions":{"EXT_optional":{"value":1}},"buffers":[{"uri":"plain.bin","byteLength":36}],"bufferViews":[{"buffer":0,"byteLength":36}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"mode":0},{"attributes":{"POSITION":0}}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]})json";
-    if (!write_text(optional_path, optional_json)) {
+    if (!write_text(path, json)) {
         return 2;
     }
-    const auto optional = elf3d::load_document(optional_path.string());
-    if (!optional ||
-        !has_diagnostic(optional.value().report,
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded ||
+        !has_diagnostic(loaded.value().report,
                         elf3d::ModelLoadDiagnosticCode::unsupported_optional_extension) ||
-        !has_diagnostic(optional.value().report,
+        !has_diagnostic(loaded.value().report,
                         elf3d::ModelLoadDiagnosticCode::skipped_unsupported_primitive) ||
-        optional.value().document.statistics().primitives != 1U) {
+        loaded.value().document.statistics().primitives != 1U) {
         return 3;
     }
+    return 0;
+}
 
-    const std::filesystem::path required_path = temporary.path() / "required.gltf";
-    std::string required_json = simple_triangle_json("\"uri\":\"plain.bin\",\"byteLength\":36");
-    required_json.insert(required_json.find("\"buffers\""),
-                         "\"extensionsRequired\":[\"EXT_required\"],");
-    if (!write_text(required_path, required_json)) {
+[[nodiscard]] int test_required_extension_error(const TemporaryDirectory& temporary) {
+    const std::filesystem::path path = temporary.path() / "required.gltf";
+    std::string json = simple_triangle_json("\"uri\":\"plain.bin\",\"byteLength\":36");
+    json.insert(json.find("\"buffers\""), "\"extensionsRequired\":[\"EXT_required\"],");
+    if (!write_text(path, json)) {
         return 4;
     }
-    const auto required = elf3d::load_document(required_path.string());
-    if (required || required.error().code() != elf3d::ErrorCode::unsupported_required_extension) {
+    const auto loaded = elf3d::load_document(path.string());
+    if (loaded || loaded.error().code() != elf3d::ErrorCode::unsupported_required_extension) {
         return 5;
     }
+    return 0;
+}
 
+[[nodiscard]] int test_malformed_and_missing_normals(const TemporaryDirectory& temporary) {
     const std::filesystem::path malformed_path = temporary.path() / "malformed.gltf";
     if (!write_text(malformed_path, "{not-json") || elf3d::load_document(malformed_path.string())) {
         return 6;
     }
-
+    const std::filesystem::path optional_path = temporary.path() / "optional.gltf";
     const auto missing_normals =
         elf3d::load_document(optional_path.string(), elf3d::ModelLoadOptions{false, true});
     if (missing_normals || missing_normals.error().code() != elf3d::ErrorCode::missing_normals) {
         return 7;
     }
+    return 0;
+}
 
-    std::string nodes_limit = R"json({"asset":{"version":"2.0"},"nodes":[)json";
-    for (std::size_t index = 0; index <= 65536U; ++index) {
+[[nodiscard]] int test_node_limit(const TemporaryDirectory& temporary) {
+    std::string json = R"json({"asset":{"version":"2.0"},"nodes":[)json";
+    for (std::size_t index = 0; index <= 131072U; ++index) {
         if (index != 0U) {
-            nodes_limit.push_back(',');
+            json.push_back(',');
         }
-        nodes_limit.append("{}");
+        json.append("{}");
     }
-    nodes_limit.append("]}");
-    const std::filesystem::path limit_path = temporary.path() / "limit.gltf";
-    if (!write_text(limit_path, nodes_limit)) {
+    json.append("]}");
+    const std::filesystem::path path = temporary.path() / "limit.gltf";
+    if (!write_text(path, json)) {
         return 8;
     }
-    const auto limit = elf3d::load_document(limit_path.string());
-    return !limit && limit.error().code() == elf3d::ErrorCode::resource_limit_exceeded ? 0 : 9;
+    const auto loaded = elf3d::load_document(path.string());
+    return !loaded && loaded.error().code() == elf3d::ErrorCode::resource_limit_exceeded ? 0 : 9;
+}
+
+using DiagnosticTest = int (*)(const TemporaryDirectory&);
+
+[[nodiscard]] int test_diagnostics_and_errors(const TemporaryDirectory& temporary) {
+    if (!write_bytes(temporary.path() / "plain.bin", triangle_positions())) {
+        return 1;
+    }
+    constexpr std::array<DiagnosticTest, 4> tests{{
+        test_optional_diagnostics,
+        test_required_extension_error,
+        test_malformed_and_missing_normals,
+        test_node_limit,
+    }};
+    for (const DiagnosticTest test : tests) {
+        const int result = test(temporary);
+        if (result != 0) {
+            return result;
+        }
+    }
+    return 0;
 }
 
 } // namespace

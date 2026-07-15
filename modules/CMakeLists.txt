@@ -44,6 +44,10 @@ add_library(
     elf3d_model_modules
     OBJECT
         model/src/document.cpp
+        model/src/document_metadata.cpp
+        model/src/document_mutation.cpp
+        model/src/document_validation.cpp
+        model/src/document_views.cpp
 )
 add_library(elf3d::model_modules ALIAS elf3d_model_modules)
 elf3d_configure_module_group(elf3d_model_modules)
@@ -74,6 +78,20 @@ if(ELF3D_BUILD_ENGINE)
     )
     add_library(elf3d::domain_modules ALIAS elf3d_domain_modules)
     elf3d_configure_module_group(elf3d_domain_modules)
+    # MSVC derives module-dependency JSON names from the source basename. Keep
+    # the duplicate storage.cpp outputs separated like their object files.
+    set_source_files_properties(
+        assets/src/storage.cpp
+        PROPERTIES
+            VS_SETTINGS
+                "ModuleDependenciesFile=$(IntDir)assets/src/;SourceDependenciesFile=$(IntDir)assets/src/"
+    )
+    set_source_files_properties(
+        scene/src/storage.cpp
+        PROPERTIES
+            VS_SETTINGS
+                "ModuleDependenciesFile=$(IntDir)scene/src/;SourceDependenciesFile=$(IntDir)scene/src/"
+    )
     target_sources(
         elf3d_domain_modules
         PUBLIC
@@ -119,6 +137,21 @@ add_library(
     elf3d_gltf_modules
     OBJECT
         gltf/src/exporter.cpp
+        gltf/src/exporter_image.cpp
+        gltf/src/exporter_json.cpp
+        gltf/src/exporter_json_format.cpp
+        gltf/src/exporter_json_writer.cpp
+        gltf/src/exporter_output.cpp
+        gltf/src/importer_encoding.cpp
+        gltf/src/importer_assets.cpp
+        gltf/src/importer_document.cpp
+        gltf/src/importer_geometry.cpp
+        gltf/src/importer_geometry_build.cpp
+        gltf/src/importer_input.cpp
+        gltf/src/importer_material.cpp
+        gltf/src/importer_metadata.cpp
+        gltf/src/importer_texture.cpp
+        gltf/src/importer_validation.cpp
         gltf/src/importer.cpp
 )
 add_library(elf3d::gltf_modules ALIAS elf3d_gltf_modules)
@@ -206,6 +239,12 @@ add_library(
     elf3d_opengl_modules
     OBJECT
         backend_opengl/src/device.cpp
+        backend_opengl/src/device_indexed_draw.cpp
+        backend_opengl/src/device_overlay.cpp
+        backend_opengl/src/device_picking.cpp
+        backend_opengl/src/device_resources.cpp
+        backend_opengl/src/device_state.cpp
+        backend_opengl/src/device_targets.cpp
 )
 add_library(elf3d::opengl_modules ALIAS elf3d_opengl_modules)
 elf3d_configure_module_group(elf3d_opengl_modules)
@@ -230,6 +269,7 @@ add_library(
     OBJECT
         navigation/src/orbit_navigation_state.cpp
         navigation/src/orbit_navigation.cpp
+        navigation/src/orbit_navigation_update.cpp
         picking/src/service_geometry.cpp
         picking/src/service.cpp
         tools/selection/src/selection_controller.cpp
@@ -266,6 +306,7 @@ add_library(
         renderer/src/render_list.cpp
         renderer/src/renderer.cpp
         viewport/src/offscreen_viewport.cpp
+        viewport/src/offscreen_viewport_picking.cpp
 )
 add_library(elf3d::view_modules ALIAS elf3d_view_modules)
 elf3d_configure_module_group(elf3d_view_modules)

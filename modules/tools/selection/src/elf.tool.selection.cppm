@@ -16,19 +16,23 @@ import elf.scene;
 
 export namespace elf3d::tools::selection {
 
+struct SelectionTarget {
+    EntityId camera;
+    Extent2D extent;
+    Float2 position_pixels;
+};
+
 class SelectionController final {
   public:
     [[nodiscard]] Result<std::optional<PickHit>> select_at(picking::PickingService &picking,
                                                            const scene::Storage &scene,
-                                                           EntityId camera, Extent2D extent,
-                                                           Float2 position_pixels);
+                                                           SelectionTarget target);
     [[nodiscard]] Result<std::optional<PickHit>>
-    select_at(picking::PickingService &picking, const scene::Storage &scene, EntityId camera,
-              Extent2D extent, Float2 position_pixels,
+    select_at(picking::PickingService &picking, const scene::Storage &scene, SelectionTarget target,
               const scene::VisibilityFilter &visibility);
     [[nodiscard]] Result<std::optional<PickHit>>
-    select_at(picking::PickingService &picking, const scene::Storage &scene, EntityId camera,
-              Extent2D extent, Float2 position_pixels, const scene::VisibilityFilter &visibility,
+    select_at(picking::PickingService &picking, const scene::Storage &scene, SelectionTarget target,
+              const scene::VisibilityFilter &visibility,
               const clipping::ClippingFilter &clipping_filter);
     [[nodiscard]] Result<std::optional<PickHit>>
     select_hit(const scene::Storage &scene, const std::optional<PickHit> &hit);

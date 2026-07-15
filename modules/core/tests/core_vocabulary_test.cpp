@@ -20,15 +20,17 @@ class CapturingSink final : public elf3d::LogSink {
 
 } // namespace
 
-int elf3d_core_vocabulary_test() {
-    static_assert(elf3d::core::vocabulary_revision == 1U);
+namespace {
 
-    const elf3d::Error error{elf3d::ErrorCode::invalid_argument, "invalid value"};
+int verify_error_value(const elf3d::Error &error) {
     if (error.code() != elf3d::ErrorCode::invalid_argument ||
         std::string{error.message()} != "invalid value") {
         return 1;
     }
+    return 0;
+}
 
+int verify_results(const elf3d::Error &error) {
     elf3d::Result<int> value{7};
     if (!value || value.value() != 7) {
         return 2;
@@ -43,13 +45,34 @@ int elf3d_core_vocabulary_test() {
     if (!success) {
         return 4;
     }
+    return 0;
+}
 
+int verify_log_sink(const elf3d::Error &error) {
     CapturingSink sink;
     sink.write(elf3d::LogRecord{elf3d::LogLevel::warning, error.code(), "captured"});
     if (sink.count != 1 || sink.latest.level != elf3d::LogLevel::warning ||
         sink.latest.code != std::optional{elf3d::ErrorCode::invalid_argument} ||
         sink.latest.message != "captured") {
         return 5;
+    }
+    return 0;
+}
+
+} // namespace
+
+int elf3d_core_vocabulary_test() {
+    static_assert(elf3d::core::vocabulary_revision == 1U);
+
+    const elf3d::Error error{elf3d::ErrorCode::invalid_argument, "invalid value"};
+    if (const int error_result = verify_error_value(error); error_result != 0) {
+        return error_result;
+    }
+    if (const int result_check = verify_results(error); result_check != 0) {
+        return result_check;
+    }
+    if (const int log_check = verify_log_sink(error); log_check != 0) {
+        return log_check;
     }
 
     return 0;

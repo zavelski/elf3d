@@ -118,20 +118,26 @@ class TemporaryDirectory final {
     return bytes;
 }
 
-[[nodiscard]] elf3d::Result<elf3d::Document> create_document(std::span<const std::byte> jpeg) {
-    const auto decoded = elf3d::image::decode_png_or_jpeg(jpeg);
-    if (!decoded) {
-        return decoded.error();
-    }
+struct TextureResources {
+    elf3d::TextureId decoded;
+    elf3d::TextureId source;
+};
 
+struct SurfaceResources {
+    elf3d::MaterialId material;
+    elf3d::MeshId mesh;
+};
+
+[[nodiscard]] elf3d::Result<TextureResources>
+create_textures(elf3d::Document& document, const elf3d::image::DecodedImage& decoded,
+                std::span<const std::byte> jpeg) {
     constexpr std::array<std::byte, 4> rgba{std::byte{0xff}, std::byte{0x20}, std::byte{0x10},
                                             std::byte{0xff}};
-    elf3d::Document document;
     const auto decoded_image = document.create_image(
         elf3d::ModelImageDescription{1U, 1U, elf3d::ModelPixelFormat::rgba8_unorm, rgba});
     const auto source_image = document.create_image(elf3d::ModelImageDescription{
-        decoded.value().width, decoded.value().height, elf3d::ModelPixelFormat::rgba8_unorm,
-        decoded.value().pixels, elf3d::ModelImageMimeType::jpeg, jpeg});
+        decoded.width, decoded.height, elf3d::ModelPixelFormat::rgba8_unorm, decoded.pixels,
+        elf3d::ModelImageMimeType::jpeg, jpeg});
     const auto sampler = document.create_sampler();
     if (!decoded_image || !source_image || !sampler) {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument,
@@ -145,7 +151,11 @@ class TemporaryDirectory final {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                             "Could not create exporter test textures"};
     }
+    return TextureResources{decoded_texture.value(), source_texture.value()};
+}
 
+[[nodiscard]] elf3d::Result<SurfaceResources> create_surface(elf3d::Document& document,
+                                                             const TextureResources& textures) {
     elf3d::ModelMaterialDescription material_description;
     material_description.base_color = elf3d::Color4{0.25F, 0.5F, 0.75F, 1.0F};
     material_description.double_sided = true;
@@ -154,8 +164,8 @@ class TemporaryDirectory final {
     material_description.emissive_factor = elf3d::Float3{0.5F, 0.25F, 0.125F};
     material_description.emissive_strength = 2.0F;
     material_description.ior = 1.25F;
-    material_description.base_color_texture = decoded_texture.value();
-    material_description.emissive_texture = source_texture.value();
+    material_description.base_color_texture = textures.decoded;
+    material_description.emissive_texture = textures.source;
     const auto material = document.create_material(material_description);
     const auto mesh = document.create_mesh("shared mesh");
     if (!material || !mesh) {
@@ -172,19 +182,52 @@ class TemporaryDirectory final {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                             "Could not create exporter test primitive"};
     }
+    elf3d::PrimitiveData wide_indices;
+    wide_indices.positions.resize(257U);
+    wide_indices.positions[1U] = {1.0F, 0.0F, 0.0F};
+    wide_indices.positions[256U] = {0.0F, 1.0F, 0.0F};
+    wide_indices.indices = {0U, 1U, 256U};
+    if (!document.create_primitive(mesh.value(), material.value(), std::move(wide_indices))) {
+        return elf3d::Error{elf3d::ErrorCode::invalid_argument,
+                            "Could not create wide-index exporter test primitive"};
+    }
+    return SurfaceResources{material.value(), mesh.value()};
+}
 
+[[nodiscard]] elf3d::Result<void> create_scenes(elf3d::Document& document, elf3d::MeshId mesh) {
     const auto first_scene = document.create_scene("first scene");
     const auto second_scene = document.create_scene("selected scene");
     const auto first_node = document.create_node("first node");
     const auto second_node = document.create_node("selected node");
     if (!first_scene || !second_scene || !first_node || !second_node ||
-        !document.set_node_mesh(first_node.value(), mesh.value()) ||
-        !document.set_node_mesh(second_node.value(), mesh.value()) ||
+        !document.set_node_mesh(first_node.value(), mesh) ||
+        !document.set_node_mesh(second_node.value(), mesh) ||
         !document.add_scene_root(first_scene.value(), first_node.value()) ||
         !document.add_scene_root(second_scene.value(), second_node.value()) ||
         !document.set_default_scene(second_scene.value())) {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                             "Could not create exporter test scenes"};
+    }
+    return {};
+}
+
+[[nodiscard]] elf3d::Result<elf3d::Document> create_document(std::span<const std::byte> jpeg) {
+    const auto decoded = elf3d::image::decode_png_or_jpeg(jpeg);
+    if (!decoded) {
+        return decoded.error();
+    }
+    elf3d::Document document;
+    const auto textures = create_textures(document, decoded.value(), jpeg);
+    if (!textures) {
+        return textures.error();
+    }
+    const auto surface = create_surface(document, textures.value());
+    if (!surface) {
+        return surface.error();
+    }
+    const auto scenes = create_scenes(document, surface.value().mesh);
+    if (!scenes) {
+        return scenes.error();
     }
     return elf3d::Result<elf3d::Document>{std::move(document)};
 }
@@ -192,6 +235,29 @@ class TemporaryDirectory final {
 [[nodiscard]] bool has_expected_write_report(const elf3d::ModelWriteReport& report) noexcept {
     return report.diagnostics.size() == 1U &&
            report.diagnostics[0].code == elf3d::ModelWriteDiagnosticCode::image_reencoded_as_png;
+}
+
+[[nodiscard]] bool scene_selection_matches(const elf3d::Document& document,
+                                           const elf3d::DocumentSceneView& first,
+                                           const elf3d::DocumentSceneView& selected) {
+    return document.scene_count() == 2U && document.node_count() == 2U &&
+           first.name == "first scene" && selected.name == "selected scene" &&
+           document.default_scene() == std::optional<elf3d::DocumentSceneId>{selected.id};
+}
+
+[[nodiscard]] bool material_matches(const elf3d::ModelMaterialDescription& description) {
+    return description.base_color == elf3d::Color4{0.25F, 0.5F, 0.75F, 1.0F} &&
+           description.double_sided && description.metallic_factor == 0.25F &&
+           description.roughness_factor == 0.75F && description.emissive_strength == 2.0F &&
+           description.ior == 1.25F;
+}
+
+[[nodiscard]] bool image_sources_match(const elf3d::ImageView& png,
+                                       const elf3d::ImageView& jpeg_image,
+                                       std::span<const std::byte> jpeg) {
+    return png.source_mime_type == elf3d::ModelImageMimeType::png &&
+           jpeg_image.source_mime_type == elf3d::ModelImageMimeType::jpeg &&
+           same_bytes(jpeg_image.source_bytes, jpeg);
 }
 
 [[nodiscard]] bool document_matches(const elf3d::Document& document,
@@ -204,19 +270,9 @@ class TemporaryDirectory final {
     if (!first_scene || !selected_scene || !material || !png_image || !jpeg_image) {
         return false;
     }
-    const elf3d::ModelMaterialDescription& description = material.value().description;
-    return document.scene_count() == 2U && document.node_count() == 2U &&
-           first_scene.value().name == "first scene" &&
-           selected_scene.value().name == "selected scene" &&
-           document.default_scene() ==
-               std::optional<elf3d::DocumentSceneId>{selected_scene.value().id} &&
-           description.base_color == elf3d::Color4{0.25F, 0.5F, 0.75F, 1.0F} &&
-           description.double_sided && description.metallic_factor == 0.25F &&
-           description.roughness_factor == 0.75F && description.emissive_strength == 2.0F &&
-           description.ior == 1.25F &&
-           png_image.value().source_mime_type == elf3d::ModelImageMimeType::png &&
-           jpeg_image.value().source_mime_type == elf3d::ModelImageMimeType::jpeg &&
-           same_bytes(jpeg_image.value().source_bytes, jpeg);
+    return scene_selection_matches(document, first_scene.value(), selected_scene.value()) &&
+           material_matches(material.value().description) &&
+           image_sources_match(png_image.value(), jpeg_image.value(), jpeg);
 }
 
 [[nodiscard]] bool round_trip(const std::filesystem::path& path, const elf3d::Document& document,
@@ -239,9 +295,25 @@ class TemporaryDirectory final {
         return false;
     }
     const auto jpeg_sidecar = read_bytes(directory / "automatic.image_1.jpg");
-    return std::filesystem::is_regular_file(directory / "automatic.image_0.png") &&
+    const auto json = read_text(gltf);
+    return json && json->starts_with("{\n\t\"asset\": {\n") &&
+           json->find("\"componentType\": 5121") != std::string::npos &&
+           json->find("\"componentType\": 5123") != std::string::npos &&
+           std::filesystem::is_regular_file(directory / "automatic.image_0.png") &&
            jpeg_sidecar.has_value() && same_bytes(*jpeg_sidecar, jpeg) &&
            !std::filesystem::exists(directory / "automatic.image_0.jpg");
+}
+
+[[nodiscard]] bool absent_default_round_trip(const std::filesystem::path& path,
+                                             const elf3d::Document& document) {
+    const auto written = elf3d::save_document(path.string(), document.view());
+    const auto loaded = elf3d::load_document(path.string());
+    if (!written || !has_expected_write_report(written.value()) || !loaded) {
+        return false;
+    }
+    const auto first_scene = loaded.value().document.scene_at(0U);
+    return first_scene && !loaded.value().document.default_scene().has_value() &&
+           loaded.value().default_scene == first_scene.value().id;
 }
 
 [[nodiscard]] bool test_absent_default_round_trips(const std::filesystem::path& directory,
@@ -251,16 +323,7 @@ class TemporaryDirectory final {
         return false;
     }
     for (const std::string_view filename : {"no_default.gltf", "no_default.glb"}) {
-        const std::filesystem::path path = directory / filename;
-        const auto written = elf3d::save_document(path.string(), created.value().view());
-        const auto loaded = elf3d::load_document(path.string());
-        const auto first_scene =
-            loaded ? loaded.value().document.scene_at(0U)
-                   : elf3d::Result<elf3d::DocumentSceneView>{elf3d::Error{
-                         elf3d::ErrorCode::invalid_argument, "no-default round trip failed"}};
-        if (!written || !has_expected_write_report(written.value()) || !first_scene ||
-            loaded.value().document.default_scene().has_value() ||
-            loaded.value().default_scene != first_scene.value().id) {
+        if (!absent_default_round_trip(directory / filename, created.value())) {
             return false;
         }
     }
@@ -268,40 +331,34 @@ class TemporaryDirectory final {
     return json && json->find("\"scene\":") == std::string::npos;
 }
 
+[[nodiscard]] bool empty_scene_round_trip(const std::filesystem::path& path,
+                                          const elf3d::Document& document) {
+    const auto written = elf3d::save_document(path.string(), document.view());
+    const auto loaded = elf3d::load_document(path.string());
+    if (!written || !has_expected_write_report(written.value()) || !loaded) {
+        return false;
+    }
+    const auto selected_scene = loaded.value().document.scene_at(1U);
+    const auto empty_scene = loaded.value().document.scene_at(2U);
+    return selected_scene && empty_scene && loaded.value().document.scene_count() == 3U &&
+           loaded.value().document.default_scene() == selected_scene.value().id &&
+           empty_scene.value().name == "empty scene" && empty_scene.value().roots.empty();
+}
+
 [[nodiscard]] bool test_empty_scene_round_trips(const std::filesystem::path& directory,
                                                 std::span<const std::byte> jpeg) {
     auto created = create_document(jpeg);
-    const auto empty_scene =
-        created ? created.value().create_scene("empty scene")
-                : elf3d::Result<elf3d::DocumentSceneId>{
-                      elf3d::Error{elf3d::ErrorCode::invalid_argument, "empty-scene setup failed"}};
-    if (!empty_scene) {
+    if (!created || !created.value().create_scene("empty scene")) {
         return false;
     }
     for (const std::string_view filename : {"empty_scene.gltf", "empty_scene.glb"}) {
-        const std::filesystem::path path = directory / filename;
-        const auto written = elf3d::save_document(path.string(), created.value().view());
-        const auto loaded = elf3d::load_document(path.string());
-        const auto selected_scene =
-            loaded ? loaded.value().document.scene_at(1U)
-                   : elf3d::Result<elf3d::DocumentSceneView>{elf3d::Error{
-                         elf3d::ErrorCode::invalid_argument, "empty-scene round trip failed"}};
-        const auto loaded_empty_scene =
-            loaded ? loaded.value().document.scene_at(2U)
-                   : elf3d::Result<elf3d::DocumentSceneView>{elf3d::Error{
-                         elf3d::ErrorCode::invalid_argument, "empty scene was not loaded"}};
-        if (!written || !has_expected_write_report(written.value()) || !selected_scene ||
-            !loaded_empty_scene || loaded.value().document.scene_count() != 3U ||
-            loaded.value().document.default_scene() !=
-                std::optional<elf3d::DocumentSceneId>{selected_scene.value().id} ||
-            loaded_empty_scene.value().name != "empty scene" ||
-            !loaded_empty_scene.value().roots.empty()) {
+        if (!empty_scene_round_trip(directory / filename, created.value())) {
             return false;
         }
     }
     const auto json = read_text(directory / "empty_scene.gltf");
-    return json && json->find(R"json({"name":"empty scene"})json") != std::string::npos &&
-           json->find(R"json({"name":"empty scene","nodes":[])json") == std::string::npos;
+    return json && json->find(R"json("name": "empty scene")json") != std::string::npos &&
+           json->find(R"json("nodes": [])json") == std::string::npos;
 }
 
 [[nodiscard]] bool test_empty_mesh_is_rejected(const std::filesystem::path& directory,
@@ -342,18 +399,15 @@ class TemporaryDirectory final {
            !std::filesystem::exists(directory / "embedded.image_1.jpg");
 }
 
-[[nodiscard]] bool test_transactional_failure(const std::filesystem::path& directory,
-                                              const elf3d::Document& document) {
-    const std::filesystem::path primary = directory / "rollback.gltf";
-    const std::filesystem::path png_sidecar = directory / "rollback.image_0.png";
-    const std::filesystem::path jpeg_sidecar = directory / "rollback.image_1.jpg";
-    constexpr std::string_view original_primary = "original primary output";
-    constexpr std::string_view original_png = "original PNG sidecar";
-    constexpr std::string_view original_jpeg = "original JPEG sidecar";
-    if (!write_text(primary, original_primary) || !write_text(png_sidecar, original_png) ||
-        !write_text(jpeg_sidecar, original_jpeg)) {
-        return false;
-    }
+[[nodiscard]] bool write_original_outputs(const std::filesystem::path& primary,
+                                          const std::filesystem::path& png,
+                                          const std::filesystem::path& jpeg) {
+    return write_text(primary, "original primary output") &&
+           write_text(png, "original PNG sidecar") && write_text(jpeg, "original JPEG sidecar");
+}
+
+[[nodiscard]] bool occupy_jpeg_backups(const std::filesystem::path& directory,
+                                       const std::filesystem::path& jpeg_sidecar) {
     for (std::uint32_t index = 0U; index < 1024U; ++index) {
         const std::filesystem::path blocker =
             directory /
@@ -362,16 +416,41 @@ class TemporaryDirectory final {
             return false;
         }
     }
-    const auto written = elf3d::save_document(primary.string(), document.view());
+    return true;
+}
+
+[[nodiscard]] bool retained_outputs_match(const std::filesystem::path& primary,
+                                          const std::filesystem::path& png,
+                                          const std::filesystem::path& jpeg) {
     const auto retained_primary = read_text(primary);
-    const auto retained_png = read_text(png_sidecar);
-    const auto retained_jpeg = read_text(jpeg_sidecar);
-    return !written && written.error().code() == elf3d::ErrorCode::source_file_write_failed &&
-           retained_primary && *retained_primary == original_primary && retained_png &&
-           *retained_png == original_png && retained_jpeg && *retained_jpeg == original_jpeg &&
-           !std::filesystem::exists(directory / "rollback.bin") &&
+    const auto retained_png = read_text(png);
+    const auto retained_jpeg = read_text(jpeg);
+    return retained_primary && *retained_primary == "original primary output" && retained_png &&
+           *retained_png == "original PNG sidecar" && retained_jpeg &&
+           *retained_jpeg == "original JPEG sidecar";
+}
+
+[[nodiscard]] bool rollback_files_are_absent(const std::filesystem::path& directory) {
+    return !std::filesystem::exists(directory / "rollback.bin") &&
            !std::filesystem::exists(directory / "rollback.image_0.png.elf3d-backup-0") &&
            !std::filesystem::exists(directory / "rollback.image_0.png.elf3d-stage-0");
+}
+
+[[nodiscard]] bool test_transactional_failure(const std::filesystem::path& directory,
+                                              const elf3d::Document& document) {
+    const std::filesystem::path primary = directory / "rollback.gltf";
+    const std::filesystem::path png_sidecar = directory / "rollback.image_0.png";
+    const std::filesystem::path jpeg_sidecar = directory / "rollback.image_1.jpg";
+    if (!write_original_outputs(primary, png_sidecar, jpeg_sidecar)) {
+        return false;
+    }
+    if (!occupy_jpeg_backups(directory, jpeg_sidecar)) {
+        return false;
+    }
+    const auto written = elf3d::save_document(primary.string(), document.view());
+    return !written && written.error().code() == elf3d::ErrorCode::source_file_write_failed &&
+           retained_outputs_match(primary, png_sidecar, jpeg_sidecar) &&
+           rollback_files_are_absent(directory);
 }
 
 [[nodiscard]] bool test_unsupported_extension(const std::filesystem::path& directory,

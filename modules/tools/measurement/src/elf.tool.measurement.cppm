@@ -45,45 +45,45 @@ struct MeasurementOverlay {
 
 class DistanceMeasurementController final {
   public:
-    [[nodiscard]] Result<void> set_settings(const DistanceMeasurementSettings &settings) noexcept;
+    [[nodiscard]] Result<void> set_settings(const DistanceMeasurementSettings& settings) noexcept;
     [[nodiscard]] DistanceMeasurementSettings settings() const noexcept;
 
     void cancel_incomplete() noexcept;
     void clear() noexcept;
     void clear_scene(SceneId scene) noexcept;
 
-    [[nodiscard]] Result<void> place_hit(const scene::Storage &scene, const PickHit &hit);
-    [[nodiscard]] Result<void> update_preview(const scene::Storage &scene, const PickHit &hit);
+    [[nodiscard]] Result<void> place_hit(const scene::Storage& scene, const PickHit& hit);
+    [[nodiscard]] Result<void> update_preview(const scene::Storage& scene, const PickHit& hit);
     void clear_preview() noexcept;
 
     [[nodiscard]] bool has_incomplete_measurement() const noexcept;
-    [[nodiscard]] bool wants_preview_pick(const scene::Storage &scene,
-                                          const scene::VisibilityFilter &visibility,
+    [[nodiscard]] bool wants_preview_pick(const scene::Storage& scene,
+                                          const scene::VisibilityFilter& visibility,
                                           Float2 position_pixels,
                                           bool input_allows_preview) const noexcept;
-    [[nodiscard]] bool wants_preview_pick(const scene::Storage &scene,
-                                          const scene::VisibilityFilter &visibility,
-                                          const clipping::ClippingFilter &clipping_filter,
+    [[nodiscard]] bool wants_preview_pick(const scene::Storage& scene,
+                                          const scene::VisibilityFilter& visibility,
+                                          const clipping::ClippingFilter& clipping_filter,
                                           Float2 position_pixels,
                                           bool input_allows_preview) const noexcept;
-    void record_preview_pick(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
+    void record_preview_pick(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
                              Float2 position_pixels) noexcept;
-    void record_preview_pick(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
-                             const clipping::ClippingFilter &clipping_filter,
+    void record_preview_pick(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+                             const clipping::ClippingFilter& clipping_filter,
                              Float2 position_pixels) noexcept;
 
-    [[nodiscard]] DistanceMeasurementSnapshot snapshot(const scene::Storage &scene,
-                                                       const scene::VisibilityFilter &visibility,
+    [[nodiscard]] DistanceMeasurementSnapshot snapshot(const scene::Storage& scene,
+                                                       const scene::VisibilityFilter& visibility,
                                                        ViewportTool active_tool) const noexcept;
     [[nodiscard]] DistanceMeasurementSnapshot
-    snapshot(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
-             const clipping::ClippingFilter &clipping_filter,
+    snapshot(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+             const clipping::ClippingFilter& clipping_filter,
              ViewportTool active_tool) const noexcept;
-    [[nodiscard]] Result<MeasurementOverlay> overlay(const scene::Storage &scene,
-                                                     const scene::VisibilityFilter &visibility);
+    [[nodiscard]] Result<MeasurementOverlay> overlay(const scene::Storage& scene,
+                                                     const scene::VisibilityFilter& visibility);
     [[nodiscard]] Result<MeasurementOverlay>
-    overlay(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
-            const clipping::ClippingFilter &clipping_filter);
+    overlay(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+            const clipping::ClippingFilter& clipping_filter);
     [[nodiscard]] MeasurementStatistics statistics() const noexcept;
 
   private:
@@ -101,21 +101,53 @@ class DistanceMeasurementController final {
         bool visible = false;
     };
 
-    [[nodiscard]] Result<MeasurementAnchor> anchor_from_hit(const scene::Storage &scene,
-                                                            const PickHit &hit) const noexcept;
+    struct LocalAnchorGeometry {
+        Float3 position;
+        Float3 normal;
+    };
+
+    [[nodiscard]] Result<MeasurementAnchor> anchor_from_hit(const scene::Storage& scene,
+                                                            const PickHit& hit) const noexcept;
     [[nodiscard]] Result<ResolvedAnchor>
-    resolve_anchor(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
-                   const MeasurementAnchor &anchor) const noexcept;
+    resolve_anchor(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+                   const MeasurementAnchor& anchor) const noexcept;
     [[nodiscard]] Result<ResolvedAnchor>
-    resolve_anchor(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
-                   const clipping::ClippingFilter &clipping_filter,
-                   const MeasurementAnchor &anchor) const noexcept;
+    resolve_anchor(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+                   const clipping::ClippingFilter& clipping_filter,
+                   const MeasurementAnchor& anchor) const noexcept;
+    [[nodiscard]] Result<scene::RuntimePrimitiveView>
+    anchor_primitive(const scene::Storage& scene, const MeasurementAnchor& anchor) const noexcept;
+    [[nodiscard]] Result<LocalAnchorGeometry>
+    local_anchor_geometry(const scene::RuntimePrimitiveView& primitive,
+                          const MeasurementAnchor& anchor) const noexcept;
+    [[nodiscard]] Result<std::optional<ResolvedAnchor>>
+    resolve_required_anchor(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+                            const clipping::ClippingFilter& clipping_filter,
+                            const std::optional<MeasurementAnchor>& anchor) const noexcept;
+    [[nodiscard]] std::optional<ResolvedAnchor>
+    resolve_preview_anchor(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+                           const clipping::ClippingFilter& clipping_filter,
+                           const std::optional<MeasurementAnchor>& anchor) const noexcept;
+    [[nodiscard]] static Result<void>
+    apply_completed_measurement(DistanceMeasurementSnapshot& snapshot, const ResolvedAnchor& first,
+                                const ResolvedAnchor& second) noexcept;
+    [[nodiscard]] static Result<void>
+    apply_preview_measurement(DistanceMeasurementSnapshot& snapshot, const ResolvedAnchor& first,
+                              const ResolvedAnchor& preview) noexcept;
+    static void set_resolved_points(DistanceMeasurementSnapshot& snapshot,
+                                    const std::optional<ResolvedAnchor>& first,
+                                    const std::optional<ResolvedAnchor>& second,
+                                    const std::optional<ResolvedAnchor>& preview) noexcept;
+    [[nodiscard]] static Result<void>
+    apply_incomplete_measurement(DistanceMeasurementSnapshot& snapshot,
+                                 const std::optional<ResolvedAnchor>& first,
+                                 const std::optional<ResolvedAnchor>& preview) noexcept;
     [[nodiscard]] Result<DistanceMeasurementSnapshot>
-    resolved_snapshot(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
+    resolved_snapshot(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
                       ViewportTool active_tool) const noexcept;
     [[nodiscard]] Result<DistanceMeasurementSnapshot>
-    resolved_snapshot(const scene::Storage &scene, const scene::VisibilityFilter &visibility,
-                      const clipping::ClippingFilter &clipping_filter,
+    resolved_snapshot(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+                      const clipping::ClippingFilter& clipping_filter,
                       ViewportTool active_tool) const noexcept;
 
     void store_diagnostic(Error error) noexcept;

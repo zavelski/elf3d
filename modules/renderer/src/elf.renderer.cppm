@@ -63,6 +63,25 @@ struct GpuFocusDepthAnchorResult {
     std::uint64_t pixels_read = 0;
 };
 
+struct GpuPickRequest {
+    EntityId camera;
+    Float2 target_position_pixels;
+    Extent2D viewport_extent;
+    Float2 viewport_position_pixels;
+};
+
+struct GpuFocusDepthRequest {
+    EntityId camera;
+    Extent2D viewport_extent;
+};
+
+struct RenderRequest {
+    EntityId camera;
+    Color4 clear_color;
+    BasicLighting lighting;
+    ViewportRenderOptions options;
+};
+
 [[nodiscard]] Result<RenderList> build_render_list(const scene::Storage& scene, EntityId camera,
                                                    Extent2D extent);
 [[nodiscard]] Result<RenderList> build_render_list(const scene::Storage& scene, EntityId camera,
@@ -76,43 +95,44 @@ struct GpuFocusDepthAnchorResult {
 class Renderer final {
   private:
     struct ConstructionKey final {};
+    struct Resources final {
+        std::unique_ptr<graphics::Device> device;
+        std::uintptr_t engine_token = 0;
+        std::unique_ptr<graphics::GraphicsPipeline> pipeline;
+    };
 
   public:
     [[nodiscard]] static Result<std::unique_ptr<Renderer>>
     create(std::unique_ptr<graphics::Device> device, std::uintptr_t engine_token);
 
-    Renderer(ConstructionKey, std::unique_ptr<graphics::Device> device, std::uintptr_t engine_token,
-             std::unique_ptr<graphics::GraphicsPipeline> pipeline) noexcept;
+    Renderer(ConstructionKey, Resources resources) noexcept;
 
     ~Renderer() = default;
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
-    [[nodiscard]] Result<RenderStatistics> render(const scene::Storage& scene, EntityId camera,
+    [[nodiscard]] Result<RenderStatistics> render(const scene::Storage& scene,
                                                   graphics::RenderTarget& target,
-                                                  Color4 clear_color, const BasicLighting& lighting,
-                                                  const ViewportRenderOptions& options = {});
-    [[nodiscard]] Result<RenderStatistics> render(const scene::Storage& scene, EntityId camera,
+                                                  const RenderRequest& request);
+    [[nodiscard]] Result<RenderStatistics> render(const scene::Storage& scene,
                                                   graphics::RenderTarget& target,
-                                                  Color4 clear_color, const BasicLighting& lighting,
-                                                  const ViewportRenderOptions& options,
+                                                  const RenderRequest& request,
                                                   const scene::VisibilityFilter& visibility);
-    [[nodiscard]] Result<RenderStatistics> render(const scene::Storage& scene, EntityId camera,
+    [[nodiscard]] Result<RenderStatistics> render(const scene::Storage& scene,
                                                   graphics::RenderTarget& target,
-                                                  Color4 clear_color, const BasicLighting& lighting,
-                                                  const ViewportRenderOptions& options,
+                                                  const RenderRequest& request,
                                                   const scene::VisibilityFilter& visibility,
                                                   const clipping::ClippingFilter& clipping_filter);
-    [[nodiscard]] Result<GpuPickResult>
-    gpu_pick(const scene::Storage& scene, EntityId camera, graphics::PickingTarget& target,
-             Float2 target_position_pixels, Extent2D viewport_extent,
-             Float2 viewport_position_pixels, const scene::VisibilityFilter& visibility,
-             const clipping::ClippingFilter& clipping_filter);
+    [[nodiscard]] Result<GpuPickResult> gpu_pick(const scene::Storage& scene,
+                                                 graphics::PickingTarget& target,
+                                                 const scene::VisibilityFilter& visibility,
+                                                 const clipping::ClippingFilter& clipping_filter,
+                                                 const GpuPickRequest& request);
     [[nodiscard]] Result<GpuFocusDepthAnchorResult>
-    gpu_focus_depth_anchor(const scene::Storage& scene, EntityId camera,
-                           graphics::PickingTarget& target, Extent2D viewport_extent,
+    gpu_focus_depth_anchor(const scene::Storage& scene, graphics::PickingTarget& target,
                            const scene::VisibilityFilter& visibility,
-                           const clipping::ClippingFilter& clipping_filter);
+                           const clipping::ClippingFilter& clipping_filter,
+                           const GpuFocusDepthRequest& request);
     [[nodiscard]] graphics::Device& device() noexcept;
     [[nodiscard]] const graphics::Device& device() const noexcept;
     void release_scene(SceneId scene) noexcept;
@@ -151,6 +171,20 @@ class Renderer final {
         std::unique_ptr<graphics::Texture2D> texture;
     };
 
+    struct RenderPass final {
+        RenderRequest request;
+        RenderList list;
+        clipping::ClippingFilter clipping_filter;
+        RenderStatistics statistics;
+    };
+
+    [[nodiscard]] Result<void> draw_render_items(const scene::Storage& scene,
+                                                 graphics::RenderTarget& target, RenderPass& pass);
+    [[nodiscard]] Result<void> draw_render_item(const scene::Storage& scene,
+                                                graphics::RenderTarget& target,
+                                                const RenderItem& item, RenderPass& pass);
+    [[nodiscard]] Result<void> draw_render_overlay(graphics::RenderTarget& target,
+                                                   RenderPass& pass);
     [[nodiscard]] Result<void> prepare_draw_textures(
         const scene::Storage& scene, const scene::RuntimePrimitiveView& primitive,
         std::array<graphics::Texture2D*, graphics::material_texture_count>& textures,
@@ -160,6 +194,11 @@ class Renderer final {
     [[nodiscard]] Result<graphics::Texture2D*>
     cached_texture(SceneId scene_id, const scene::RuntimeTextureView& texture,
                    TextureColorSpace color_space, std::uint64_t& upload_count);
+    [[nodiscard]] Result<void>
+    validate_gpu_picking_context(const scene::Storage& scene) const noexcept;
+    [[nodiscard]] Result<std::uint64_t>
+    draw_picking_items(const scene::Storage& scene, graphics::PickingTarget& target,
+                       const RenderList& list, const clipping::ClippingFilter& clipping_filter);
 
     std::unique_ptr<graphics::Device> device_;
     std::uintptr_t engine_token_ = 0;

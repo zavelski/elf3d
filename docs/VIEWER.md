@@ -14,6 +14,13 @@ The viewer accepts `.gltf` and `.glb` files through:
 
 **Reload** opens the current file again. **Close Scene** returns to the built-in
 demo scene. A failed load leaves the current scene open and displays an error.
+The toolbar file group contains Open followed by Save As; Reload remains in the
+File menu.
+
+Double-clicking a file in Save As chooses it as the save target and retains the
+replacement confirmation. Right-click a file in either model dialog to open it
+in Elf3D, copy its quoted full path, inspect its properties, or send it to an
+installed EmEditor, Notepad, or Notepad++. Missing editors are shown disabled.
 
 ## Workspace
 

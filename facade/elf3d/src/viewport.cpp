@@ -1,5 +1,5 @@
-#include <elf3d/elf3d.h>
 #include <elf3d/core/assert.h>
+#include <elf3d/elf3d.h>
 
 #include <memory>
 #include <new>
@@ -26,8 +26,7 @@ namespace {
 
 } // namespace
 
-Viewport::Viewport(ConstructionKey, std::unique_ptr<Impl> impl) noexcept
-    : impl_(std::move(impl)) {}
+Viewport::Viewport(ConstructionKey, std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
 
 Viewport::~Viewport() noexcept = default;
 
@@ -96,7 +95,8 @@ Result<void> Viewport::update_navigation(Scene& scene, EntityId camera,
     }
 }
 
-Result<void> Viewport::set_examine_pivot(Scene& scene, EntityId camera, Float3 world_position) noexcept {
+Result<void> Viewport::set_examine_pivot(Scene& scene, EntityId camera,
+                                         Float3 world_position) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -263,8 +263,8 @@ Result<std::optional<PickHit>> Viewport::pick(const Scene& scene, EntityId camer
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport picking requires a live scene"};
         }
-        return impl_->viewport->pick(*renderer, *picking, *storage, camera, position_pixels,
-                                     options);
+        const viewport::ViewportPickRequest request{camera, position_pixels, options};
+        return impl_->viewport->pick(*renderer, *picking, *storage, request);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -289,8 +289,7 @@ Result<std::optional<PickHit>> Viewport::select_at(const Scene& scene, EntityId 
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport selection requires a live scene"};
         }
-        return impl_->viewport->select_at(*renderer, *picking, *storage, camera,
-                                          position_pixels);
+        return impl_->viewport->select_at(*renderer, *picking, *storage, camera, position_pixels);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -408,7 +407,8 @@ void Viewport::clear_distance_measurement() noexcept {
     }
 }
 
-DistanceMeasurementSnapshot Viewport::distance_measurement_snapshot(const Scene& scene) const noexcept {
+DistanceMeasurementSnapshot
+Viewport::distance_measurement_snapshot(const Scene& scene) const noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         DistanceMeasurementSnapshot result;
         result.diagnostic =
@@ -432,7 +432,8 @@ DistanceMeasurementSnapshot Viewport::distance_measurement_snapshot(const Scene&
     }
 }
 
-Result<void> Viewport::set_measurement_settings(const DistanceMeasurementSettings& settings) noexcept {
+Result<void>
+Viewport::set_measurement_settings(const DistanceMeasurementSettings& settings) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -457,9 +458,9 @@ MeasurementStatistics Viewport::measurement_statistics() const noexcept {
                : MeasurementStatistics{};
 }
 
-Result<ProjectedViewportPoint> Viewport::project_world_to_viewport(const Scene& scene,
-                                                                   EntityId camera,
-                                                                   Float3 world_position) const noexcept {
+Result<ProjectedViewportPoint>
+Viewport::project_world_to_viewport(const Scene& scene, EntityId camera,
+                                    Float3 world_position) const noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -755,6 +756,5 @@ TextureHandle Viewport::color_texture() const noexcept {
 bool Viewport::framebuffer_valid() const noexcept {
     return impl_ != nullptr && impl_->viewport != nullptr && impl_->viewport->framebuffer_valid();
 }
-
 
 } // namespace elf3d

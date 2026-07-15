@@ -1,7 +1,31 @@
 import elf.interaction;
 
-int elf3d_interaction_test() {
-    constexpr float threshold = 4.0F;
+namespace {
+
+constexpr float threshold = 4.0F;
+
+[[nodiscard]] bool is_started_drag(const elf3d::interaction::ViewportInteractionFrame& frame,
+                                   elf3d::interaction::InteractionMode mode) noexcept {
+    return frame.drag_started && frame.drag_active && frame.mode == mode && frame.pointer_captured;
+}
+
+[[nodiscard]] bool is_active_drag(const elf3d::interaction::ViewportInteractionFrame& frame,
+                                  elf3d::interaction::InteractionMode mode) noexcept {
+    return frame.drag_active && frame.mode == mode && frame.pointer_captured;
+}
+
+[[nodiscard]] bool is_mode_handoff(const elf3d::interaction::ViewportInteractionFrame& frame,
+                                   elf3d::interaction::InteractionMode mode) noexcept {
+    return !frame.drag_ended && frame.drag_started && frame.drag_active && frame.mode == mode &&
+           frame.pointer_captured && frame.pointer_delta_pixels == elf3d::Float2{};
+}
+
+[[nodiscard]] bool is_released(const elf3d::interaction::ViewportInteractionFrame& frame,
+                               const elf3d::interaction::ViewportInteractionState& state) noexcept {
+    return frame.drag_ended && !frame.pointer_captured && !state.pointer_captured();
+}
+
+[[nodiscard]] int verify_inactive_state() {
     elf3d::interaction::ViewportInteractionState state;
     const elf3d::interaction::PointerInputSnapshot inactive;
     const elf3d::interaction::ViewportInteractionFrame inactive_frame =
@@ -16,7 +40,13 @@ int elf3d_interaction_test() {
     if (state.update(input, threshold).drag_active) {
         return 2;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_click() {
+    elf3d::interaction::ViewportInteractionState state;
+    elf3d::interaction::PointerInputSnapshot input;
+    input.focused = true;
     input.hovered = true;
     input.left_button_down = false;
     static_cast<void>(state.update(input, threshold));
@@ -39,27 +69,46 @@ int elf3d_interaction_test() {
     if (!frame.click_released || frame.pointer_captured || state.pointer_captured()) {
         return 5;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_orbit_start() {
+    elf3d::interaction::ViewportInteractionState state;
+    elf3d::interaction::PointerInputSnapshot input;
+    input.focused = true;
+    input.hovered = true;
     input.left_button_down = true;
     input.position_pixels = {20.0F, 20.0F};
     input.delta_pixels = {};
-    frame = state.update(input, threshold);
+    elf3d::interaction::ViewportInteractionFrame frame = state.update(input, threshold);
     if (!frame.pending_click) {
         return 6;
     }
     input.position_pixels = {30.0F, 20.0F};
     input.delta_pixels = {10.0F, 0.0F};
     frame = state.update(input, threshold);
-    if (!frame.drag_started || !frame.drag_active ||
-        frame.mode != elf3d::interaction::InteractionMode::orbit ||
+    if (!is_started_drag(frame, elf3d::interaction::InteractionMode::orbit) ||
         frame.pointer_delta_pixels != elf3d::Float2{}) {
         return 7;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_orbit_progress() {
+    elf3d::interaction::ViewportInteractionState state;
+    elf3d::interaction::PointerInputSnapshot input;
+    input.focused = true;
+    input.hovered = true;
+    input.left_button_down = true;
+    input.position_pixels = {20.0F, 20.0F};
+    static_cast<void>(state.update(input, threshold));
+    input.position_pixels = {30.0F, 20.0F};
+    input.delta_pixels = {10.0F, 0.0F};
+    static_cast<void>(state.update(input, threshold));
     input.delta_pixels = {12.0F, 5.0F};
     input.position_pixels = {42.0F, 25.0F};
-    frame = state.update(input, threshold);
-    if (!frame.drag_active || frame.mode != elf3d::interaction::InteractionMode::orbit ||
+    elf3d::interaction::ViewportInteractionFrame frame = state.update(input, threshold);
+    if (!is_active_drag(frame, elf3d::interaction::InteractionMode::orbit) ||
         frame.pointer_delta_pixels != elf3d::Float2{12.0F, 5.0F}) {
         return 8;
     }
@@ -75,11 +124,17 @@ int elf3d_interaction_test() {
     if (!frame.drag_ended || frame.drag_active || state.pointer_captured()) {
         return 10;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_modifier_pan() {
+    elf3d::interaction::ViewportInteractionState state;
+    elf3d::interaction::PointerInputSnapshot input;
+    input.focused = true;
     input.hovered = true;
     input.left_button_down = true;
     input.pan_modifier_down = true;
-    frame = state.update(input, threshold);
+    elf3d::interaction::ViewportInteractionFrame frame = state.update(input, threshold);
     if (!frame.drag_started || frame.mode != elf3d::interaction::InteractionMode::pan) {
         return 11;
     }
@@ -87,13 +142,20 @@ int elf3d_interaction_test() {
     if (state.pointer_captured()) {
         return 12;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_other_pan_and_zoom_modes() {
+    elf3d::interaction::ViewportInteractionState state;
+    elf3d::interaction::PointerInputSnapshot input;
+    input.focused = true;
+    input.hovered = true;
     input.left_button_down = false;
     input.middle_button_down = false;
     input.pan_modifier_down = false;
     static_cast<void>(state.update(input, threshold));
     input.middle_button_down = true;
-    frame = state.update(input, threshold);
+    elf3d::interaction::ViewportInteractionFrame frame = state.update(input, threshold);
     if (!frame.drag_started || frame.mode != elf3d::interaction::InteractionMode::pan) {
         return 13;
     }
@@ -125,7 +187,12 @@ int elf3d_interaction_test() {
         return 16;
     }
     state.cancel();
+    return 0;
+}
 
+[[nodiscard]] int verify_left_to_right_handoff() {
+    elf3d::interaction::ViewportInteractionState state;
+    elf3d::interaction::PointerInputSnapshot input;
     input = {};
     input.focused = true;
     input.hovered = true;
@@ -135,60 +202,73 @@ int elf3d_interaction_test() {
     static_cast<void>(state.update(input, threshold));
     input.position_pixels = {20.0F, 10.0F};
     input.delta_pixels = {10.0F, 0.0F};
-    frame = state.update(input, threshold);
-    if (!frame.drag_started || !frame.drag_active ||
-        frame.mode != elf3d::interaction::InteractionMode::orbit || !frame.pointer_captured) {
+    elf3d::interaction::ViewportInteractionFrame frame = state.update(input, threshold);
+    if (!is_started_drag(frame, elf3d::interaction::InteractionMode::orbit)) {
         return 17;
     }
     input.right_button_down = true;
     input.delta_pixels = {1.0F, 0.0F};
     frame = state.update(input, threshold);
-    if (!frame.drag_active || frame.mode != elf3d::interaction::InteractionMode::orbit ||
-        !frame.pointer_captured) {
+    if (!is_active_drag(frame, elf3d::interaction::InteractionMode::orbit)) {
         return 18;
     }
     input.left_button_down = false;
     frame = state.update(input, threshold);
-    if (frame.drag_ended || !frame.drag_started || !frame.drag_active ||
-        frame.mode != elf3d::interaction::InteractionMode::pan || !frame.pointer_captured ||
-        frame.pointer_delta_pixels != elf3d::Float2{}) {
+    if (!is_mode_handoff(frame, elf3d::interaction::InteractionMode::pan)) {
         return 19;
     }
     input.right_button_down = false;
     frame = state.update(input, threshold);
-    if (!frame.drag_ended || frame.pointer_captured || state.pointer_captured()) {
+    if (!is_released(frame, state)) {
         return 20;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_right_to_left_handoff() {
+    elf3d::interaction::ViewportInteractionState state;
+    elf3d::interaction::PointerInputSnapshot input;
     input = {};
     input.focused = true;
     input.hovered = true;
     input.right_button_down = true;
     input.position_pixels = {10.0F, 10.0F};
-    frame = state.update(input, threshold);
-    if (!frame.drag_started || !frame.drag_active ||
-        frame.mode != elf3d::interaction::InteractionMode::pan || !frame.pointer_captured) {
+    elf3d::interaction::ViewportInteractionFrame frame = state.update(input, threshold);
+    if (!is_started_drag(frame, elf3d::interaction::InteractionMode::pan)) {
         return 21;
     }
     input.left_button_down = true;
     input.delta_pixels = {0.0F, 1.0F};
     frame = state.update(input, threshold);
-    if (!frame.drag_active || frame.mode != elf3d::interaction::InteractionMode::pan ||
-        !frame.pointer_captured) {
+    if (!is_active_drag(frame, elf3d::interaction::InteractionMode::pan)) {
         return 22;
     }
     input.right_button_down = false;
     frame = state.update(input, threshold);
-    if (frame.drag_ended || !frame.drag_started || !frame.drag_active ||
-        frame.mode != elf3d::interaction::InteractionMode::orbit || !frame.pointer_captured ||
-        frame.pointer_delta_pixels != elf3d::Float2{}) {
+    if (!is_mode_handoff(frame, elf3d::interaction::InteractionMode::orbit)) {
         return 23;
     }
     input.left_button_down = false;
     frame = state.update(input, threshold);
-    if (!frame.drag_ended || frame.pointer_captured || state.pointer_captured()) {
+    if (!is_released(frame, state)) {
         return 24;
     }
+    return 0;
+}
 
+} // namespace
+
+int elf3d_interaction_test() {
+    const int results[]{
+        verify_inactive_state(),        verify_click(),
+        verify_orbit_start(),           verify_orbit_progress(),
+        verify_modifier_pan(),          verify_other_pan_and_zoom_modes(),
+        verify_left_to_right_handoff(), verify_right_to_left_handoff(),
+    };
+    for (const int result : results) {
+        if (result != 0) {
+            return result;
+        }
+    }
     return 0;
 }

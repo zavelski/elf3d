@@ -9,13 +9,28 @@ import elf.assets;
 import elf.model;
 import elf.scene;
 
+namespace {
+
+[[nodiscard]] bool has_document_root(elf3d::Document &document,
+                                     const elf3d::Result<elf3d::DocumentSceneId> &scene,
+                                     const elf3d::Result<elf3d::NodeId> &root) {
+    return scene && root && document.add_scene_root(scene.value(), root.value());
+}
+
+[[nodiscard]] bool has_expected_depth(const elf3d::SceneHierarchyStatistics &statistics,
+                                      std::size_t depth) noexcept {
+    return statistics.entities == depth && statistics.root_entities == 1U &&
+           statistics.maximum_depth == depth - 1U;
+}
+
+} // namespace
+
 int elf3d_scene_runtime_adapter_depth_test() {
     constexpr std::size_t hierarchy_depth = 1024U;
     elf3d::Document document;
     const auto document_scene = document.create_scene("Deep hierarchy");
     const auto root = document.create_node();
-    if (!document_scene || !root ||
-        !document.add_scene_root(document_scene.value(), root.value())) {
+    if (!has_document_root(document, document_scene, root)) {
         return 1;
     }
 
@@ -38,8 +53,5 @@ int elf3d_scene_runtime_adapter_depth_test() {
         return 4;
     }
     const elf3d::SceneHierarchyStatistics statistics = runtime_scene.hierarchy_statistics();
-    return statistics.entities == hierarchy_depth && statistics.root_entities == 1U &&
-                   statistics.maximum_depth == hierarchy_depth - 1U
-               ? 0
-               : 5;
+    return has_expected_depth(statistics, hierarchy_depth) ? 0 : 5;
 }

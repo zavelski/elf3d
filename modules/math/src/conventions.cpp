@@ -52,6 +52,44 @@ struct LinearInverse final {
     return LinearInverse{inverse, determinant};
 }
 
+constexpr float homogeneous_weight_epsilon = 0.000001F;
+
+[[nodiscard]] bool valid_projection_input(Extent2D extent, Float3 world_position) noexcept {
+    return extent.width != 0 && extent.height != 0 && is_finite(world_position);
+}
+
+[[nodiscard]] bool valid_unprojection_input(Extent2D extent, Float2 position_pixels,
+                                            float depth) noexcept {
+    return extent.width != 0 && extent.height != 0 && std::isfinite(position_pixels.x) &&
+           std::isfinite(position_pixels.y) && std::isfinite(depth) && depth >= 0.0F &&
+           depth <= 1.0F;
+}
+
+[[nodiscard]] bool valid_clip_point(const Vector4& point) noexcept {
+    return std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z) &&
+           std::isfinite(point.w) && std::abs(point.w) > homogeneous_weight_epsilon;
+}
+
+[[nodiscard]] bool valid_homogeneous_weight(const Vector4& point) noexcept {
+    return std::isfinite(point.w) && std::abs(point.w) > homogeneous_weight_epsilon;
+}
+
+[[nodiscard]] bool inside_clip_volume(float ndc_x, float ndc_y, float ndc_z,
+                                      bool in_front) noexcept {
+    return in_front && ndc_x >= -1.0F && ndc_x <= 1.0F && ndc_y >= -1.0F && ndc_y <= 1.0F &&
+           ndc_z >= -1.0F && ndc_z <= 1.0F;
+}
+
+[[nodiscard]] std::optional<Matrix4> inverse_view_projection(const Float4x4& view,
+                                                             const Float4x4& projection) noexcept {
+    const Matrix4 view_projection = to_matrix(projection) * to_matrix(view);
+    const float determinant = glm::determinant(view_projection);
+    if (!std::isfinite(determinant) || std::abs(determinant) <= homogeneous_weight_epsilon) {
+        return std::nullopt;
+    }
+    return glm::inverse(view_projection);
+}
+
 } // namespace
 
 Color4 clamp_color(Color4 value) noexcept {
@@ -68,7 +106,7 @@ bool is_finite(Quaternion value) noexcept {
            std::isfinite(value.w);
 }
 
-bool is_valid_transform(const Transform &transform) noexcept {
+bool is_valid_transform(const Transform& transform) noexcept {
     if (!is_finite(transform.translation) || !is_finite(transform.rotation) ||
         !is_finite(transform.scale)) {
         return false;
@@ -81,7 +119,7 @@ bool is_valid_transform(const Transform &transform) noexcept {
            std::abs(transform.scale.z) > minimum_length;
 }
 
-bool is_valid_affine_matrix(const Float4x4 &matrix) noexcept {
+bool is_valid_affine_matrix(const Float4x4& matrix) noexcept {
     for (const float value : matrix.elements) {
         if (!std::isfinite(value)) {
             return false;
@@ -98,31 +136,31 @@ bool is_valid_affine_matrix(const Float4x4 &matrix) noexcept {
     return invert_linear(Matrix3{native}).has_value();
 }
 
-Transform normalized_transform(const Transform &transform) noexcept {
+Transform normalized_transform(const Transform& transform) noexcept {
     Transform result = transform;
     result.rotation = to_quaternion(glm::normalize(to_rotation(transform.rotation)));
     return result;
 }
 
-Float4x4 compose_world(const Float4x4 &parent_world, const Float4x4 &local) noexcept {
+Float4x4 compose_world(const Float4x4& parent_world, const Float4x4& local) noexcept {
     return to_float4x4(to_matrix(parent_world) * to_matrix(local));
 }
 
-Float4x4 transform_matrix(const Transform &transform) noexcept {
+Float4x4 transform_matrix(const Transform& transform) noexcept {
     const Matrix4 translation = glm::translate(Matrix4{1.0F}, to_vector(transform.translation));
     const Matrix4 rotation = glm::mat4_cast(glm::normalize(to_rotation(transform.rotation)));
     const Matrix4 scale = glm::scale(Matrix4{1.0F}, to_vector(transform.scale));
     return to_float4x4(translation * rotation * scale);
 }
 
-Result<Float4x4> camera_view_matrix(const Float4x4 &camera_world) noexcept {
+Result<Float4x4> camera_view_matrix(const Float4x4& camera_world) noexcept {
     const Matrix4 native_camera_world = to_matrix(camera_world);
     const Vector3 position = Vector3{native_camera_world[3]};
     Vector3 right = Vector3{native_camera_world[0]};
     Vector3 up = Vector3{native_camera_world[1]};
 
     constexpr float minimum_length = 0.000001F;
-    const auto finite_vector = [](const Vector3 &value) noexcept {
+    const auto finite_vector = [](const Vector3& value) noexcept {
         return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
     };
     if (!finite_vector(position) || !finite_vector(right) || !finite_vector(up) ||
@@ -159,11 +197,11 @@ Result<Float4x4> perspective_matrix(float vertical_field_of_view_radians, float 
         return Error{ErrorCode::invalid_camera_configuration,
                      "Perspective projection requires finite field of view, aspect, and planes"};
     }
-    return to_float4x4(glm::perspectiveRH_NO(vertical_field_of_view_radians, aspect_ratio,
-                                             near_plane, far_plane));
+    return to_float4x4(
+        glm::perspectiveRH_NO(vertical_field_of_view_radians, aspect_ratio, near_plane, far_plane));
 }
 
-Result<Matrix3x3> normal_matrix(const Float4x4 &model) noexcept {
+Result<Matrix3x3> normal_matrix(const Float4x4& model) noexcept {
     const Matrix3 linear{to_matrix(model)};
     const std::optional<LinearInverse> inverse = invert_linear(linear);
     if (!inverse.has_value()) {
@@ -176,7 +214,7 @@ Result<Matrix3x3> normal_matrix(const Float4x4 &model) noexcept {
     return result;
 }
 
-Result<bool> orientation_reversed(const Float4x4 &model) noexcept {
+Result<bool> orientation_reversed(const Float4x4& model) noexcept {
     const Matrix3 linear{to_matrix(model)};
     const std::optional<LinearInverse> inverse = invert_linear(linear);
     if (!inverse.has_value()) {
@@ -186,24 +224,23 @@ Result<bool> orientation_reversed(const Float4x4 &model) noexcept {
     return inverse->determinant < 0.0F;
 }
 
-Float3 transform_point(const Float4x4 &matrix, Float3 point) noexcept {
+Float3 transform_point(const Float4x4& matrix, Float3 point) noexcept {
     const Vector4 transformed = to_matrix(matrix) * Vector4{point.x, point.y, point.z, 1.0F};
     return Float3{transformed.x, transformed.y, transformed.z};
 }
 
-Result<ViewportProjection> project_world_to_viewport_point(const Float4x4 &view,
-                                                           const Float4x4 &projection,
+Result<ViewportProjection> project_world_to_viewport_point(const Float4x4& view,
+                                                           const Float4x4& projection,
                                                            Extent2D extent,
                                                            Float3 world_position) noexcept {
-    if (extent.width == 0 || extent.height == 0 || !is_finite(world_position)) {
+    if (!valid_projection_input(extent, world_position)) {
         return Error{ErrorCode::projection_failed,
                      "Viewport projection requires finite coordinates and a nonzero extent"};
     }
 
     const Vector4 clip = to_matrix(projection) * to_matrix(view) *
                          Vector4{world_position.x, world_position.y, world_position.z, 1.0F};
-    if (!std::isfinite(clip.x) || !std::isfinite(clip.y) || !std::isfinite(clip.z) ||
-        !std::isfinite(clip.w) || std::abs(clip.w) <= 0.000001F) {
+    if (!valid_clip_point(clip)) {
         return Error{ErrorCode::projection_failed,
                      "The projected viewport point has invalid homogeneous weight"};
     }
@@ -218,50 +255,41 @@ Result<ViewportProjection> project_world_to_viewport_point(const Float4x4 &view,
     }
 
     ViewportProjection result;
-    result.position_pixels = {
-        (ndc_x * 0.5F + 0.5F) * static_cast<float>(extent.width) - 0.5F,
-        (1.0F - (ndc_y * 0.5F + 0.5F)) * static_cast<float>(extent.height) - 0.5F};
+    result.position_pixels = {(ndc_x * 0.5F + 0.5F) * static_cast<float>(extent.width) - 0.5F,
+                              (1.0F - (ndc_y * 0.5F + 0.5F)) * static_cast<float>(extent.height) -
+                                  0.5F};
     result.depth = ndc_z;
     result.is_in_front = clip.w > 0.0F;
-    result.is_inside_viewport = result.is_in_front && ndc_x >= -1.0F && ndc_x <= 1.0F &&
-                                ndc_y >= -1.0F && ndc_y <= 1.0F && ndc_z >= -1.0F &&
-                                ndc_z <= 1.0F;
+    result.is_inside_viewport = inside_clip_volume(ndc_x, ndc_y, ndc_z, result.is_in_front);
     return result;
 }
 
-Result<Float3> unproject_viewport_point(const Float4x4 &view, const Float4x4 &projection,
+Result<Float3> unproject_viewport_point(const Float4x4& view, const Float4x4& projection,
                                         Extent2D extent, Float2 position_pixels,
                                         float depth) noexcept {
-    if (extent.width == 0 || extent.height == 0 || !std::isfinite(position_pixels.x) ||
-        !std::isfinite(position_pixels.y) || !std::isfinite(depth) || depth < 0.0F ||
-        depth > 1.0F) {
+    if (!valid_unprojection_input(extent, position_pixels, depth)) {
         return Error{ErrorCode::invalid_viewport_position,
                      "Viewport unprojection requires finite coordinates inside a nonzero extent"};
     }
 
-    const Matrix4 view_projection = to_matrix(projection) * to_matrix(view);
-    const float determinant = glm::determinant(view_projection);
-    if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001F) {
-        return Error{ErrorCode::projection_failed,
-                     "The view-projection matrix is not invertible"};
+    const std::optional<Matrix4> inverse = inverse_view_projection(view, projection);
+    if (!inverse.has_value()) {
+        return Error{ErrorCode::projection_failed, "The view-projection matrix is not invertible"};
     }
 
-    const Matrix4 inverse_view_projection = glm::inverse(view_projection);
-    const float ndc_x =
-        2.0F * (position_pixels.x + 0.5F) / static_cast<float>(extent.width) - 1.0F;
+    const float ndc_x = 2.0F * (position_pixels.x + 0.5F) / static_cast<float>(extent.width) - 1.0F;
     const float ndc_y =
         1.0F - 2.0F * (position_pixels.y + 0.5F) / static_cast<float>(extent.height);
     const float ndc_z = depth * 2.0F - 1.0F;
-    const Vector4 world = inverse_view_projection * Vector4{ndc_x, ndc_y, ndc_z, 1.0F};
-    if (!std::isfinite(world.w) || std::abs(world.w) <= 0.000001F) {
+    const Vector4 world = *inverse * Vector4{ndc_x, ndc_y, ndc_z, 1.0F};
+    if (!valid_homogeneous_weight(world)) {
         return Error{ErrorCode::projection_failed,
                      "The unprojected viewport point has invalid homogeneous weight"};
     }
 
     const Float3 result{world.x / world.w, world.y / world.w, world.z / world.w};
     if (!is_finite(result)) {
-        return Error{ErrorCode::projection_failed,
-                     "The unprojected viewport point is not finite"};
+        return Error{ErrorCode::projection_failed, "The unprojected viewport point is not finite"};
     }
     return result;
 }

@@ -8,7 +8,7 @@ rendering, and inspecting static glTF 2.0 scenes.
 ## Download
 
 Download the current Windows x64 package from the
-[Elf3D 0.8.1 release](https://github.com/zavelski/elf3d/releases/tag/v0.8.1).
+[Elf3D 0.8.3 release](https://github.com/zavelski/elf3d/releases/tag/v0.8.3).
 Extract the ZIP and run `elf3d_viewer.exe`.
 
 Requirements:

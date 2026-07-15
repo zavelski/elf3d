@@ -23,8 +23,17 @@ The viewer accepts `.gltf` and `.glb` files. You can also:
 - click the Open toolbar button;
 - drag and drop a model onto the window.
 
+Save a loaded model with **File > Save As...**, `Ctrl+Shift+S`, or the Save As
+toolbar button immediately after Open.
+
 Elf3D remembers the folder of the last successfully opened or saved model and
 uses it the next time the Open or Save As browser appears.
+
+In Save As, double-click an existing file to select it as the save target; the
+viewer still asks before replacing it. Right-click a model file in either file
+dialog for **Open**, **Copy as path**, **Properties**, and optional editor
+commands. **Edit in EmEditor**, **Edit in Notepad**, and **Edit in Notepad++**
+are enabled only when the corresponding program is installed.
 
 Without a model, Elf3D shows its procedural demo cube. Loading is synchronous,
 so a large model can temporarily freeze the interface. If loading fails, the

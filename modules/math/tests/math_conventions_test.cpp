@@ -3,6 +3,7 @@ import elf.math;
 #include <elf3d/core/result.h>
 #include <elf3d/math/detail/glm_helpers.h>
 
+#include <array>
 #include <cmath>
 
 namespace {
@@ -11,9 +12,7 @@ bool nearly_equal(float left, float right) noexcept {
     return std::abs(left - right) <= 0.0001F;
 }
 
-} // namespace
-
-int elf3d_math_conventions_test() {
+[[nodiscard]] int verify_basic_conventions() {
     const elf3d::Float2 public_value{2.0F, -3.5F};
     const elf3d::math::Vector2 vector = elf3d::math::to_vector(public_value);
     if (vector.x != 2.0F || vector.y != -3.5F || elf3d::math::to_float2(vector) != public_value) {
@@ -34,11 +33,14 @@ int elf3d_math_conventions_test() {
     elf3d::math::Matrix4 column_major{1.0F};
     column_major[0][1] = 2.0F;
     column_major[1][0] = 3.0F;
-    const float *storage = glm::value_ptr(column_major);
+    const float* storage = glm::value_ptr(column_major);
     if (storage[1] != 2.0F || storage[4] != 3.0F) {
         return 4;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_world_composition() {
     const elf3d::math::Matrix4 parent =
         glm::translate(elf3d::math::Matrix4{1.0F}, elf3d::math::Vector3{10.0F, 0.0F, 0.0F});
     const elf3d::math::Matrix4 local =
@@ -50,7 +52,10 @@ int elf3d_math_conventions_test() {
         !nearly_equal(transformed.z, 0.0F) || !nearly_equal(transformed.w, 1.0F)) {
         return 5;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_rotation_transform() {
     elf3d::Transform rotated_transform;
     rotated_transform.rotation =
         elf3d::Quaternion{0.0F, std::sin(0.7853981634F), 0.0F, std::cos(0.7853981634F)};
@@ -61,7 +66,10 @@ int elf3d_math_conventions_test() {
         !nearly_equal(rotated.z, 0.0F)) {
         return 6;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_camera_view() {
     elf3d::Transform camera_transform;
     camera_transform.translation = {0.0F, 0.0F, 3.0F};
     camera_transform.scale = {2.0F, 3.0F, 4.0F};
@@ -77,7 +85,10 @@ int elf3d_math_conventions_test() {
         !nearly_equal(camera_space_origin.z, -3.0F)) {
         return 8;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_perspective_projection() {
     const elf3d::Result<elf3d::Float4x4> projection =
         elf3d::math::perspective_matrix(1.5707963268F, 1.0F, 1.0F, 10.0F);
     if (!projection) {
@@ -97,7 +108,10 @@ int elf3d_math_conventions_test() {
         !nearly_equal(far_clip.z / far_clip.w, 1.0F)) {
         return 10;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_normal_matrix_and_orientation() {
     elf3d::Transform scaled_transform;
     scaled_transform.scale = {2.0F, 4.0F, 5.0F};
     const elf3d::Result<elf3d::math::Matrix3x3> normals =
@@ -116,29 +130,61 @@ int elf3d_math_conventions_test() {
         !reversed_orientation.value()) {
         return 12;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_unprojection() {
+    elf3d::Transform camera_transform;
+    camera_transform.translation = {0.0F, 0.0F, 3.0F};
+    camera_transform.scale = {2.0F, 3.0F, 4.0F};
+    const elf3d::Result<elf3d::Float4x4> view =
+        elf3d::math::camera_view_matrix(elf3d::math::transform_matrix(camera_transform));
+    const elf3d::Result<elf3d::Float4x4> projection =
+        elf3d::math::perspective_matrix(1.5707963268F, 1.0F, 1.0F, 10.0F);
+    if (!view || !projection) {
+        return 13;
+    }
     const elf3d::Result<elf3d::Float3> near_center = elf3d::math::unproject_viewport_point(
         view.value(), projection.value(), {1, 1}, {0.0F, 0.0F}, 0.0F);
     const elf3d::Result<elf3d::Float3> far_center = elf3d::math::unproject_viewport_point(
         view.value(), projection.value(), {1, 1}, {0.0F, 0.0F}, 1.0F);
     if (!near_center || !far_center || !nearly_equal(near_center.value().x, 0.0F) ||
-        !nearly_equal(near_center.value().y, 0.0F) ||
-        !nearly_equal(near_center.value().z, 2.0F) ||
+        !nearly_equal(near_center.value().y, 0.0F) || !nearly_equal(near_center.value().z, 2.0F) ||
         !nearly_equal(far_center.value().z, -7.0F) ||
         !nearly_equal(elf3d::math::distance(near_center.value(), far_center.value()), 9.0F)) {
         return 13;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_viewport_projection() {
+    elf3d::Transform camera_transform;
+    camera_transform.translation = {0.0F, 0.0F, 3.0F};
+    camera_transform.scale = {2.0F, 3.0F, 4.0F};
+    const elf3d::Result<elf3d::Float4x4> view =
+        elf3d::math::camera_view_matrix(elf3d::math::transform_matrix(camera_transform));
+    const elf3d::Result<elf3d::Float4x4> projection =
+        elf3d::math::perspective_matrix(1.5707963268F, 1.0F, 1.0F, 10.0F);
+    if (!view || !projection) {
+        return 14;
+    }
+    const elf3d::Result<elf3d::Float3> near_center = elf3d::math::unproject_viewport_point(
+        view.value(), projection.value(), {1, 1}, {0.0F, 0.0F}, 0.0F);
+    if (!near_center) {
+        return 14;
+    }
     const elf3d::Result<elf3d::math::ViewportProjection> projected_center =
         elf3d::math::project_world_to_viewport_point(view.value(), projection.value(), {1, 1},
                                                      near_center.value());
     if (!projected_center || projected_center.value().position_pixels != elf3d::Float2{} ||
         !nearly_equal(projected_center.value().depth, -1.0F) ||
-        !projected_center.value().is_in_front ||
-        !projected_center.value().is_inside_viewport) {
+        !projected_center.value().is_in_front || !projected_center.value().is_inside_viewport) {
         return 14;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_small_affine_matrix() {
     elf3d::Transform small_parent;
     small_parent.scale = {0.011111111F, 0.011111111F, 0.011111111F};
     elf3d::Transform small_child;
@@ -156,13 +202,38 @@ int elf3d_math_conventions_test() {
         !nearly_equal(small_normals.value()[8] * combined_scale, 1.0F)) {
         return 15;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_singular_matrix() {
     elf3d::Float4x4 singular;
     singular.elements[0] = 0.0F;
     if (elf3d::math::is_valid_affine_matrix(singular) || elf3d::math::normal_matrix(singular) ||
         elf3d::math::orientation_reversed(singular)) {
         return 16;
     }
+    return 0;
+}
 
+} // namespace
+
+int elf3d_math_conventions_test() {
+    const std::array<int, 10> results{{
+        verify_basic_conventions(),
+        verify_world_composition(),
+        verify_rotation_transform(),
+        verify_camera_view(),
+        verify_perspective_projection(),
+        verify_normal_matrix_and_orientation(),
+        verify_unprojection(),
+        verify_viewport_projection(),
+        verify_small_affine_matrix(),
+        verify_singular_matrix(),
+    }};
+    for (const int result : results) {
+        if (result != 0) {
+            return result;
+        }
+    }
     return 0;
 }

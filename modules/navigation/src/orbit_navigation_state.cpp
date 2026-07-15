@@ -1,8 +1,8 @@
 module;
 
+#include "orbit_navigation_detail.h"
 #include <elf3d/core/assert.h>
 #include <elf3d/math/detail/glm_helpers.h>
-#include "orbit_navigation_detail.h"
 
 #include <algorithm>
 #include <cmath>
@@ -56,6 +56,126 @@ to_navigation_mode(interaction::InteractionMode mode) noexcept;
 } // namespace navigation_detail
 
 using namespace navigation_detail;
+
+namespace {
+
+[[nodiscard]] math::Vector3 screen_anchor_ray(const CameraBasis& basis,
+                                              const math::Vector3& camera_position,
+                                              const math::Vector3& anchor) noexcept {
+    math::Vector3 ray = anchor - camera_position;
+    const float distance = glm::length(ray);
+    if (!finite_vector(ray) || !std::isfinite(distance) || distance <= minimum_axis_length ||
+        glm::dot(ray, basis.forward) <= 0.0F) {
+        return basis.forward;
+    }
+    return glm::normalize(ray);
+}
+
+[[nodiscard]] std::optional<math::Rotation>
+screen_anchor_rotation(const CameraBasis& basis, Float2 delta,
+                       const OrbitNavigationSettings& settings) noexcept {
+    float current_yaw = 0.0F;
+    float current_pitch = 0.0F;
+    angles_from_direction(basis.forward, current_yaw, current_pitch);
+    const float yaw_delta = -delta.x * settings.orbit_sensitivity;
+    const float vertical_sign = settings.invert_vertical_orbit ? 1.0F : -1.0F;
+    const float requested_pitch_delta = delta.y * vertical_sign * settings.orbit_sensitivity;
+    const float clamped_pitch =
+        std::clamp(current_pitch + requested_pitch_delta, settings.minimum_pitch_radians,
+                   settings.maximum_pitch_radians);
+    const float pitch_delta = clamped_pitch - current_pitch;
+    if (yaw_delta == 0.0F && pitch_delta == 0.0F) {
+        return std::nullopt;
+    }
+    const math::Rotation yaw_rotation = glm::angleAxis(yaw_delta, math::Vector3{0.0F, 1.0F, 0.0F});
+    math::Vector3 right_after_yaw = yaw_rotation * basis.right;
+    if (!finite_vector(right_after_yaw) || glm::length(right_after_yaw) <= minimum_axis_length) {
+        right_after_yaw = basis.right;
+    }
+    const math::Rotation pitch_rotation =
+        glm::angleAxis(pitch_delta, glm::normalize(right_after_yaw));
+    return glm::normalize(pitch_rotation * yaw_rotation);
+}
+
+[[nodiscard]] Result<Float4x4>
+rotated_screen_anchor_camera(const Float4x4& current_world, const CameraBasis& basis,
+                             const math::Vector3& anchor, const math::Rotation& rotation) noexcept {
+    const math::Vector3 new_position = anchor + rotation * (basis.position - anchor);
+    const math::Vector3 new_right = glm::normalize(rotation * basis.right);
+    const math::Vector3 new_up = glm::normalize(rotation * basis.up);
+    const math::Vector3 new_backward = glm::normalize(rotation * -basis.forward);
+    if (!finite_vector(new_position) || !finite_vector(new_right) || !finite_vector(new_up) ||
+        !finite_vector(new_backward)) {
+        return Error{ErrorCode::invalid_camera_configuration,
+                     "Off-axis orbit produced an invalid camera transform"};
+    }
+    math::Matrix4 camera_world = math::to_matrix(current_world);
+    camera_world[0] = math::Vector4{new_right, 0.0F};
+    camera_world[1] = math::Vector4{new_up, 0.0F};
+    camera_world[2] = math::Vector4{new_backward, 0.0F};
+    camera_world[3] = math::Vector4{new_position, 1.0F};
+    return math::to_float4x4(camera_world);
+}
+
+struct SynchronizedView final {
+    math::Vector3 pivot;
+    math::Vector3 direction;
+    float distance = 1.0F;
+};
+
+[[nodiscard]] float fallback_synchronized_distance(const BoundsInfo& bounds,
+                                                   float minimum_distance) noexcept {
+    return bounds.has_bounds ? std::max(bounds.radius * 2.0F, minimum_distance)
+                             : std::max(1.0F, minimum_distance);
+}
+
+[[nodiscard]] SynchronizedView synchronized_view(const CameraBasis& basis, const BoundsInfo& bounds,
+                                                 const OrbitNavigationSettings& settings,
+                                                 Float3 existing_pivot,
+                                                 bool preserve_existing_pivot) noexcept {
+    math::Vector3 pivot = preserve_existing_pivot && math::is_finite(existing_pivot)
+                              ? math::to_vector(existing_pivot)
+                              : basis.position + basis.forward;
+    if (!preserve_existing_pivot && bounds.has_bounds) {
+        pivot = bounds.center;
+    }
+    float distance = glm::length(pivot - basis.position);
+    if (!std::isfinite(distance) || distance <= minimum_axis_length) {
+        distance = fallback_synchronized_distance(bounds, settings.minimum_distance);
+        pivot = basis.position + basis.forward * distance;
+    }
+    const DistanceLimits limits = effective_distance_limits(settings, bounds);
+    distance = std::clamp(distance, limits.minimum, limits.maximum);
+    math::Vector3 direction = pivot - basis.position;
+    if (!finite_vector(direction) || glm::length(direction) <= minimum_axis_length) {
+        direction = basis.forward;
+    }
+    return SynchronizedView{pivot, direction, distance};
+}
+
+struct FitProjection final {
+    float vertical_tangent = 0.0F;
+    float horizontal_tangent = 0.0F;
+};
+
+[[nodiscard]] Result<FitProjection> fit_projection(const PerspectiveCameraDescription& description,
+                                                   float aspect) noexcept {
+    const float vertical_half_angle = description.vertical_field_of_view_radians * 0.5F;
+    const float vertical_tangent = std::tan(vertical_half_angle);
+    const float horizontal_half_angle = std::atan(vertical_tangent * aspect);
+    const float horizontal_tangent = std::tan(horizontal_half_angle);
+    const float limiting_half_angle = std::min(vertical_half_angle, horizontal_half_angle);
+    const float sine = std::sin(limiting_half_angle);
+    if (!std::isfinite(sine) || sine <= 0.0F || !std::isfinite(vertical_tangent) ||
+        vertical_tangent <= 0.0F || !std::isfinite(horizontal_tangent) ||
+        horizontal_tangent <= 0.0F) {
+        return Error{ErrorCode::invalid_camera_configuration,
+                     "Camera fitting requires a valid field of view and aspect ratio"};
+    }
+    return FitProjection{vertical_tangent, horizontal_tangent};
+}
+
+} // namespace
 
 Result<void> OrbitNavigationController::set_screen_anchor(scene::Storage& scene, EntityId camera,
                                                           Float3 world_position) {
@@ -232,18 +352,9 @@ Result<void> OrbitNavigationController::apply_screen_anchor_dolly(
     }
     const math::Vector3 camera_position{camera_world[3]};
     const math::Vector3 anchor = math::to_vector(screen_anchor_.value());
-    math::Vector3 ray = anchor - camera_position;
-    const float anchor_distance = glm::length(ray);
-    if (!finite_vector(ray) || !std::isfinite(anchor_distance) ||
-        anchor_distance <= minimum_axis_length ||
-        glm::dot(ray, current_basis.value().forward) <= 0.0F) {
-        ray = current_basis.value().forward;
-    } else {
-        ray = glm::normalize(ray);
-    }
+    const math::Vector3 ray = screen_anchor_ray(current_basis.value(), camera_position, anchor);
 
     const BoundsInfo bounds = bounds_info(bounds_value);
-    const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     const float signed_anchor_distance =
         glm::dot(anchor - camera_position, current_basis.value().forward);
     const float motion_reference = local_motion_reference_distance(signed_anchor_distance, bounds);
@@ -257,6 +368,12 @@ Result<void> OrbitNavigationController::apply_screen_anchor_dolly(
         return transform_result.error();
     }
 
+    return finish_screen_anchor_dolly(scene, camera, bounds_value);
+}
+
+Result<void>
+OrbitNavigationController::finish_screen_anchor_dolly(scene::Storage& scene, EntityId camera,
+                                                      std::optional<Bounds3> bounds_value) {
     const Result<CameraBasis> basis = camera_basis(scene, camera);
     if (!basis) {
         return basis.error();
@@ -265,6 +382,8 @@ Result<void> OrbitNavigationController::apply_screen_anchor_dolly(
     if (!camera_world_result) {
         return camera_world_result.error();
     }
+    const BoundsInfo bounds = bounds_info(bounds_value);
+    const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     angles_from_direction(basis.value().forward, yaw_radians_, pitch_radians_);
     pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
                                 settings_.maximum_pitch_radians);
@@ -288,8 +407,9 @@ Result<void> OrbitNavigationController::apply_screen_anchor_dolly(
     return {};
 }
 
-Result<void> OrbitNavigationController::apply_screen_anchor_orbit(
-    scene::Storage& scene, EntityId camera, Float2 delta, std::optional<Bounds3> bounds_value) {
+Result<OrbitNavigationController::ScreenAnchorOrbit>
+OrbitNavigationController::screen_anchor_orbit(const scene::Storage& scene, EntityId camera,
+                                               Float2 delta) {
     if (!screen_anchor_.has_value()) {
         return Error{ErrorCode::invalid_viewport_input,
                      "Off-axis orbit requires a navigation screen anchor"};
@@ -309,49 +429,30 @@ Result<void> OrbitNavigationController::apply_screen_anchor_orbit(
     if (!finite_vector(camera_to_anchor) || !std::isfinite(anchor_distance) ||
         anchor_distance <= minimum_axis_length) {
         screen_anchor_.reset();
+        return ScreenAnchorOrbit{current_world_result.value(), 0.0F, false};
+    }
+    const std::optional<math::Rotation> rotation =
+        screen_anchor_rotation(basis.value(), delta, settings_);
+    if (!rotation.has_value()) {
+        return ScreenAnchorOrbit{current_world_result.value(), anchor_distance, false};
+    }
+    const Result<Float4x4> rotated = rotated_screen_anchor_camera(current_world_result.value(),
+                                                                  basis.value(), anchor, *rotation);
+    if (!rotated) {
+        return rotated.error();
+    }
+    return ScreenAnchorOrbit{rotated.value(), anchor_distance, true};
+}
+
+Result<void>
+OrbitNavigationController::commit_screen_anchor_orbit(scene::Storage& scene, EntityId camera,
+                                                      const ScreenAnchorOrbit& orbit,
+                                                      std::optional<Bounds3> bounds_value) {
+    if (!orbit.changed) {
         return {};
     }
-
-    float current_yaw = yaw_radians_;
-    float current_pitch = pitch_radians_;
-    angles_from_direction(basis.value().forward, current_yaw, current_pitch);
-    const float yaw_delta = -delta.x * settings_.orbit_sensitivity;
-    const float vertical_sign = settings_.invert_vertical_orbit ? 1.0F : -1.0F;
-    const float requested_pitch_delta = delta.y * vertical_sign * settings_.orbit_sensitivity;
-    const float clamped_pitch =
-        std::clamp(current_pitch + requested_pitch_delta, settings_.minimum_pitch_radians,
-                   settings_.maximum_pitch_radians);
-    const float pitch_delta = clamped_pitch - current_pitch;
-    if (yaw_delta == 0.0F && pitch_delta == 0.0F) {
-        return {};
-    }
-
-    const math::Rotation yaw_rotation = glm::angleAxis(yaw_delta, math::Vector3{0.0F, 1.0F, 0.0F});
-    math::Vector3 right_after_yaw = yaw_rotation * basis.value().right;
-    if (!finite_vector(right_after_yaw) || glm::length(right_after_yaw) <= minimum_axis_length) {
-        right_after_yaw = basis.value().right;
-    }
-    right_after_yaw = glm::normalize(right_after_yaw);
-    const math::Rotation pitch_rotation = glm::angleAxis(pitch_delta, right_after_yaw);
-    const math::Rotation rotation = glm::normalize(pitch_rotation * yaw_rotation);
-
-    const math::Vector3 camera_offset = basis.value().position - anchor;
-    const math::Vector3 new_position = anchor + rotation * camera_offset;
-    const math::Vector3 new_right = glm::normalize(rotation * basis.value().right);
-    const math::Vector3 new_up = glm::normalize(rotation * basis.value().up);
-    const math::Vector3 new_backward = glm::normalize(rotation * -basis.value().forward);
-    if (!finite_vector(new_position) || !finite_vector(new_right) || !finite_vector(new_up) ||
-        !finite_vector(new_backward)) {
-        return Error{ErrorCode::invalid_camera_configuration,
-                     "Off-axis orbit produced an invalid camera transform"};
-    }
-
-    math::Matrix4 camera_world = math::to_matrix(current_world_result.value());
-    camera_world[0] = math::Vector4{new_right, 0.0F};
-    camera_world[1] = math::Vector4{new_up, 0.0F};
-    camera_world[2] = math::Vector4{new_backward, 0.0F};
-    camera_world[3] = math::Vector4{new_position, 1.0F};
-    const Result<void> transform_result = set_camera_world_matrix(scene, camera, camera_world);
+    const Result<void> transform_result =
+        set_camera_world_matrix(scene, camera, math::to_matrix(orbit.camera_world));
     if (!transform_result) {
         return transform_result.error();
     }
@@ -371,7 +472,7 @@ Result<void> OrbitNavigationController::apply_screen_anchor_orbit(
 
     const BoundsInfo bounds = bounds_info(bounds_value);
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
-    distance_ = std::clamp(anchor_distance, limits.minimum, limits.maximum);
+    distance_ = std::clamp(orbit.anchor_distance, limits.minimum, limits.maximum);
     const math::Vector3 direction = direction_from_angles(yaw_radians_, pitch_radians_);
     pivot_ = math::to_float3(new_basis.value().position + direction * distance_);
     scene_ = scene.id();
@@ -379,6 +480,15 @@ Result<void> OrbitNavigationController::apply_screen_anchor_orbit(
     camera_world_ = camera_world_result.value();
     has_valid_state_ = true;
     return {};
+}
+
+Result<void> OrbitNavigationController::apply_screen_anchor_orbit(
+    scene::Storage& scene, EntityId camera, Float2 delta, std::optional<Bounds3> bounds_value) {
+    const Result<ScreenAnchorOrbit> orbit = screen_anchor_orbit(scene, camera, delta);
+    if (!orbit) {
+        return orbit.error();
+    }
+    return commit_screen_anchor_orbit(scene, camera, orbit.value(), bounds_value);
 }
 
 Result<void> OrbitNavigationController::apply_eye_orbit(scene::Storage& scene, EntityId camera,
@@ -425,8 +535,7 @@ Result<void> OrbitNavigationController::apply_eye_orbit(scene::Storage& scene, E
     has_valid_state_ = true;
     screen_anchor_.reset();
 
-    const Result<void> clip_result =
-        update_clip_planes(scene, camera, distance_, bounds.radius);
+    const Result<void> clip_result = update_clip_planes(scene, camera, distance_, bounds.radius);
     if (!clip_result) {
         return clip_result.error();
     }
@@ -450,31 +559,13 @@ Result<void> OrbitNavigationController::synchronize_from_camera(const scene::Sto
     }
 
     const BoundsInfo bounds = bounds_info(scene.world_bounds());
-    math::Vector3 pivot = preserve_existing_pivot && math::is_finite(pivot_)
-                              ? math::to_vector(pivot_)
-                              : basis.value().position + basis.value().forward;
-    if (!preserve_existing_pivot && bounds.has_bounds) {
-        pivot = bounds.center;
-    }
-
-    float distance = glm::length(pivot - basis.value().position);
-    if (!std::isfinite(distance) || distance <= minimum_axis_length) {
-        distance = bounds.has_bounds ? std::max(bounds.radius * 2.0F, settings_.minimum_distance)
-                                     : std::max(1.0F, settings_.minimum_distance);
-        pivot = basis.value().position + basis.value().forward * distance;
-    }
-    const DistanceLimits limits = effective_distance_limits(settings_, bounds);
-    distance = std::clamp(distance, limits.minimum, limits.maximum);
-
-    math::Vector3 direction = pivot - basis.value().position;
-    if (!finite_vector(direction) || glm::length(direction) <= minimum_axis_length) {
-        direction = basis.value().forward;
-    }
-    angles_from_direction(direction, yaw_radians_, pitch_radians_);
+    const SynchronizedView synchronized =
+        synchronized_view(basis.value(), bounds, settings_, pivot_, preserve_existing_pivot);
+    angles_from_direction(synchronized.direction, yaw_radians_, pitch_radians_);
     pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
                                 settings_.maximum_pitch_radians);
-    pivot_ = math::to_float3(pivot);
-    distance_ = distance;
+    pivot_ = math::to_float3(synchronized.pivot);
+    distance_ = synchronized.distance;
     scene_ = scene.id();
     camera_ = camera;
     camera_world_ = camera_world_result.value();
@@ -511,9 +602,10 @@ Result<void> OrbitNavigationController::apply_camera(scene::Storage& scene, Enti
     return {};
 }
 
-Result<void> OrbitNavigationController::fit_with_direction(scene::Storage& scene, EntityId camera,
-                                                           Extent2D extent, Float3 direction,
-                                                           std::optional<Bounds3> bounds_value) {
+Result<OrbitNavigationController::FitPreparation>
+OrbitNavigationController::prepare_fit(const scene::Storage& scene, EntityId camera,
+                                       Extent2D extent, Float3 direction,
+                                       std::optional<Bounds3> bounds_value) const {
     const Result<void> valid = validate_camera(scene, camera);
     if (!valid) {
         return valid.error();
@@ -531,7 +623,6 @@ Result<void> OrbitNavigationController::fit_with_direction(scene::Storage& scene
         glm::length(math::to_vector(direction)) <= minimum_axis_length) {
         direction = math::to_float3(canonical_direction());
     }
-
     const Result<Float4x4> old_matrix = scene.local_matrix(camera);
     if (!old_matrix) {
         return old_matrix.error();
@@ -540,29 +631,36 @@ Result<void> OrbitNavigationController::fit_with_direction(scene::Storage& scene
     if (!old_description) {
         return old_description.error();
     }
+    return FitPreparation{old_matrix.value(), old_description.value(), *bounds_value, direction,
+                          aspect.value()};
+}
 
-    const float vertical_half_angle = old_description.value().vertical_field_of_view_radians * 0.5F;
-    const float vertical_tangent = std::tan(vertical_half_angle);
-    const float horizontal_half_angle = std::atan(vertical_tangent * aspect.value());
-    const float horizontal_tangent = std::tan(horizontal_half_angle);
-    const float limiting_half_angle = std::min(vertical_half_angle, horizontal_half_angle);
-    const float sine = std::sin(limiting_half_angle);
-    if (!std::isfinite(sine) || sine <= 0.0F || !std::isfinite(vertical_tangent) ||
-        vertical_tangent <= 0.0F || !std::isfinite(horizontal_tangent) ||
-        horizontal_tangent <= 0.0F) {
-        return Error{ErrorCode::invalid_camera_configuration,
-                     "Camera fitting requires a valid field of view and aspect ratio"};
+Result<void> OrbitNavigationController::fit_with_direction(scene::Storage& scene, EntityId camera,
+                                                           Extent2D extent, Float3 direction,
+                                                           std::optional<Bounds3> bounds_value) {
+    const Result<FitPreparation> preparation =
+        prepare_fit(scene, camera, extent, direction, bounds_value);
+    if (!preparation) {
+        return preparation.error();
+    }
+    const Result<FitProjection> projection =
+        fit_projection(preparation.value().old_description, preparation.value().aspect);
+    if (!projection) {
+        return projection.error();
     }
 
-    angles_from_direction(math::to_vector(direction), yaw_radians_, pitch_radians_);
+    angles_from_direction(math::to_vector(preparation.value().direction), yaw_radians_,
+                          pitch_radians_);
     pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
                                 settings_.maximum_pitch_radians);
 
+    const BoundsInfo bounds = bounds_info(preparation.value().bounds);
     pivot_ = math::to_float3(bounds.center);
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     const float fit_distance = fit_distance_to_bounds(
-        *bounds_value, bounds.center, direction_from_angles(yaw_radians_, pitch_radians_),
-        vertical_tangent, horizontal_tangent);
+        preparation.value().bounds, bounds.center,
+        direction_from_angles(yaw_radians_, pitch_radians_), projection.value().vertical_tangent,
+        projection.value().horizontal_tangent);
     distance_ = std::clamp(fit_distance * fit_margin, limits.minimum, limits.maximum);
     const math::Vector3 fit_direction = direction_from_angles(yaw_radians_, pitch_radians_);
     const math::Vector3 position = math::to_vector(pivot_) - fit_direction * distance_;
@@ -582,15 +680,15 @@ Result<void> OrbitNavigationController::fit_with_direction(scene::Storage& scene
     screen_anchor_.reset();
     const Result<void> clip_result = update_clip_planes(scene, camera, distance_, bounds.radius);
     if (!clip_result) {
-        const Result<void> restore_matrix = scene.set_local_matrix(camera, old_matrix.value());
+        const Result<void> restore_matrix =
+            scene.set_local_matrix(camera, preparation.value().old_matrix);
         const Result<void> restore_camera =
-            scene.set_perspective_camera(camera, old_description.value());
+            scene.set_perspective_camera(camera, preparation.value().old_description);
         (void)restore_matrix;
         (void)restore_camera;
         return clip_result.error();
     }
     return {};
 }
-
 
 } // namespace elf3d::navigation

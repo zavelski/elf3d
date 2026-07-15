@@ -45,6 +45,18 @@ namespace elf3d::picking::geometry_detail {
                                                  EntityId entity) noexcept;
 [[nodiscard]] Result<Ray3> make_picking_ray(const scene::Storage& scene, EntityId camera,
                                             Extent2D extent, Float2 position_pixels);
+[[nodiscard]] Result<void> validate_refinement_request(const Ray3& ray,
+                                                       const PickCandidate& candidate) noexcept;
+[[nodiscard]] Result<std::optional<scene::RuntimePrimitiveView>>
+refinement_primitive(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+                     const PickCandidate& candidate);
+[[nodiscard]] Result<std::optional<std::pair<math::Matrix4, Ray3>>>
+refinement_transform(const scene::Storage& scene, EntityId entity, const Ray3& world_ray);
+void reset_latest_statistics(PickingStatistics& statistics,
+                             std::uint64_t cached_mesh_bvhs) noexcept;
+[[nodiscard]] bool accept_refined_position(const clipping::ClippingFilter& filter,
+                                           Float3 world_position,
+                                           PickingStatistics& statistics) noexcept;
 
 } // namespace elf3d::picking::geometry_detail
 
@@ -70,6 +82,7 @@ struct BvhNode {
 
 } // namespace
 
+using geometry_detail::accept_refined_position;
 using geometry_detail::axis_value;
 using geometry_detail::bounds_around_point;
 using geometry_detail::finite;
@@ -77,6 +90,9 @@ using geometry_detail::finite_matrix;
 using geometry_detail::finite_vec3;
 using geometry_detail::longest_axis;
 using geometry_detail::merge_bounds;
+using geometry_detail::refinement_primitive;
+using geometry_detail::refinement_transform;
+using geometry_detail::reset_latest_statistics;
 using geometry_detail::to_dvec3;
 using geometry_detail::to_float3_checked;
 using geometry_detail::transform_bounds;
@@ -85,6 +101,7 @@ using geometry_detail::triangle_bounds;
 using geometry_detail::triangle_centroid;
 using geometry_detail::valid_bounds;
 using geometry_detail::validate_pick_hit;
+using geometry_detail::validate_refinement_request;
 using geometry_detail::world_matrix;
 
 class PickingService::Impl final {
@@ -109,179 +126,134 @@ class PickingService::Impl final {
         MeshAcceleration acceleration;
     };
 
+    struct RefinementHitContext final {
+        EntityId entity;
+        MeshHandle mesh;
+        std::uint32_t primitive_index = 0;
+        math::Matrix4 world;
+        Ray3 world_ray;
+        Ray3 local_ray;
+        TriangleHit triangle;
+    };
+
+    struct NearestTriangle final {
+        std::optional<TriangleHit> hit;
+        float distance = std::numeric_limits<float>::max();
+    };
+
+    struct TraversalState final {
+        std::array<std::uint32_t, 128> stack{};
+        std::uint32_t stack_size = 0;
+        NearestTriangle nearest;
+    };
+
+    struct LeafRequest final {
+        BvhNode node;
+        Ray3 local_ray;
+        bool cull_back_face = false;
+    };
+
+    struct RayPickRequest final {
+        SceneId scene;
+        Ray3 ray;
+        PickOptions options;
+        scene::VisibilityFilter visibility;
+        clipping::ClippingFilter clipping_filter;
+    };
+
+    struct EntityPickContext final {
+        EntityId entity;
+        math::Matrix4 world;
+        Ray3 local_ray;
+    };
+
+    struct NearestPick final {
+        std::optional<PickHit> hit;
+        float distance = std::numeric_limits<float>::max();
+    };
+
     [[nodiscard]] Result<Ray3> make_picking_ray(const scene::Storage& scene, EntityId camera,
                                                 Extent2D extent, Float2 position_pixels) const {
         return geometry_detail::make_picking_ray(scene, camera, extent, position_pixels);
     }
 
-    [[nodiscard]] Result<std::optional<PickHit>> pick(const scene::Storage& scene, EntityId camera,
-                                                      Extent2D extent, Float2 position_pixels,
-                                                      const PickOptions& options) {
+    [[nodiscard]] Result<std::optional<PickHit>> pick(const scene::Storage& scene,
+                                                      const PickRequest& request) {
         const Result<scene::VisibilityFilter> visibility =
             scene::make_visibility_filter(scene, std::nullopt);
         if (!visibility) {
             return visibility.error();
         }
-        return pick(scene, camera, extent, position_pixels, options, visibility.value());
+        return pick(scene, request, visibility.value());
     }
 
-    [[nodiscard]] Result<std::optional<PickHit>> pick(const scene::Storage& scene, EntityId camera,
-                                                      Extent2D extent, Float2 position_pixels,
-                                                      const PickOptions& options,
+    [[nodiscard]] Result<std::optional<PickHit>> pick(const scene::Storage& scene,
+                                                      const PickRequest& request,
                                                       const scene::VisibilityFilter& visibility) {
-        return pick(scene, camera, extent, position_pixels, options, visibility,
-                    clipping::disabled_filter());
+        return pick(scene, request, visibility, clipping::disabled_filter());
     }
 
     [[nodiscard]] Result<std::optional<PickHit>>
-    pick(const scene::Storage& scene, EntityId camera, Extent2D extent, Float2 position_pixels,
-         const PickOptions& options, const scene::VisibilityFilter& visibility,
+    pick(const scene::Storage& scene, const PickRequest& request,
+         const scene::VisibilityFilter& visibility,
          const clipping::ClippingFilter& clipping_filter) {
-        const Result<Ray3> ray = make_picking_ray(scene, camera, extent, position_pixels);
+        const Result<Ray3> ray =
+            make_picking_ray(scene, request.camera, request.extent, request.position_pixels);
         if (!ray) {
             return ray.error();
         }
-        return pick_ray(scene, ray.value(), options, visibility, clipping_filter);
+        return pick_ray(scene, ray.value(), request.options, visibility, clipping_filter);
     }
 
-    [[nodiscard]] Result<std::optional<PickHit>> refine_candidate(
-        const scene::Storage& scene, EntityId camera, Extent2D extent, Float2 position_pixels,
-        const PickOptions& options, const scene::VisibilityFilter& visibility,
-        const clipping::ClippingFilter& clipping_filter, const PickCandidate& candidate) {
-        const Result<Ray3> ray = make_picking_ray(scene, camera, extent, position_pixels);
+    [[nodiscard]] Result<std::optional<PickHit>>
+    refine_candidate(const scene::Storage& scene, const PickRequest& request,
+                     const scene::VisibilityFilter& visibility,
+                     const clipping::ClippingFilter& clipping_filter,
+                     const PickCandidate& candidate) {
+        const Result<Ray3> ray =
+            make_picking_ray(scene, request.camera, request.extent, request.position_pixels);
         if (!ray) {
             return ray.error();
         }
 
-        statistics_.latest_instance_bounds_tests = 0;
-        statistics_.latest_mesh_bounds_tests = 0;
-        statistics_.latest_bvh_node_tests = 0;
-        statistics_.latest_triangle_tests = 0;
-        statistics_.latest_bvh_builds = 0;
-        statistics_.latest_clipping_bounds_rejected = 0;
-        statistics_.latest_clipping_hits_rejected = 0;
-        statistics_.latest_clipping_hits_accepted = 0;
-        statistics_.cached_mesh_bvhs = static_cast<std::uint64_t>(mesh_cache_.size());
-
-        if (!is_valid_ray(ray.value())) {
-            return Error{ErrorCode::invalid_picking_ray,
-                         "Picking requires a finite normalized world-space ray"};
+        reset_latest_statistics(statistics_, static_cast<std::uint64_t>(mesh_cache_.size()));
+        const Result<void> valid_request = validate_refinement_request(ray.value(), candidate);
+        if (!valid_request) {
+            return valid_request.error();
         }
-        if (!candidate.entity.is_valid() || !candidate.mesh.is_valid()) {
-            return Error{ErrorCode::invalid_argument,
-                         "Picking refinement requires a valid entity and mesh candidate"};
-        }
-
-        const Result<const scene::EntityRecord*> record_result = scene.entity(candidate.entity);
-        if (!record_result) {
-            return record_result.error();
-        }
-        const scene::EntityRecord& record = *record_result.value();
-        if (!record.model.has_value() ||
-            !scene::entity_visible_in_filter(scene, visibility, candidate.entity)) {
-            return std::optional<PickHit>{};
-        }
-        if (static_cast<std::size_t>(candidate.primitive_index) >=
-            record.model->primitives.size()) {
-            return std::optional<PickHit>{};
-        }
-        const Result<scene::RuntimePrimitiveView> primitive =
-            scene.runtime_primitive(candidate.entity, candidate.primitive_index);
+        const Result<std::optional<scene::RuntimePrimitiveView>> primitive =
+            refinement_primitive(scene, visibility, candidate);
         if (!primitive) {
             return primitive.error();
         }
-        if (primitive.value().mesh != candidate.mesh) {
+        if (!primitive.value().has_value()) {
             return std::optional<PickHit>{};
         }
-
-        const Result<math::Matrix4> world = world_matrix(scene, record.id);
-        if (!world || !finite_matrix(world.value())) {
+        const Result<std::optional<std::pair<math::Matrix4, Ray3>>> transform =
+            refinement_transform(scene, candidate.entity, ray.value());
+        if (!transform) {
+            return transform.error();
+        }
+        if (!transform.value().has_value()) {
             return std::optional<PickHit>{};
         }
-        const float determinant = glm::determinant(math::Matrix3{world.value()});
-        if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001F) {
+        const Result<std::optional<TriangleHit>> triangle = refinement_triangle(
+            *primitive.value(), transform.value()->second, request.options, candidate);
+        if (!triangle) {
+            return triangle.error();
+        }
+        if (!triangle.value().has_value()) {
             return std::optional<PickHit>{};
         }
-        const math::Matrix4 inverse_world = glm::inverse(world.value());
-        const Result<Ray3> local_ray = transform_ray_to_local(ray.value(), inverse_world);
-        if (!local_ray) {
-            return std::optional<PickHit>{};
-        }
-
-        if (!valid_bounds(primitive.value().bounds)) {
-            return Error{ErrorCode::invalid_mesh_data,
-                         "Picking encountered a mesh with invalid local bounds"};
-        }
-
-        const std::size_t base = static_cast<std::size_t>(candidate.triangle_index) * 3U;
-        const std::span<const std::uint32_t> indices = primitive.value().indices();
-        if (base + 2U >= indices.size()) {
-            return std::optional<PickHit>{};
-        }
-        const std::uint32_t i0 = indices[base];
-        const std::uint32_t i1 = indices[base + 1U];
-        const std::uint32_t i2 = indices[base + 2U];
-        if (static_cast<std::size_t>(i0) >= primitive.value().vertex_count() ||
-            static_cast<std::size_t>(i1) >= primitive.value().vertex_count() ||
-            static_cast<std::size_t>(i2) >= primitive.value().vertex_count()) {
-            return std::optional<PickHit>{};
-        }
-
-        ++statistics_.latest_triangle_tests;
-        const bool cull_back_face =
-            options.respect_material_sidedness && !primitive.value().material_view.double_sided;
-        std::optional<TriangleHit> triangle_hit = intersect_ray_triangle(
-            local_ray.value(), primitive.value().position(i0), primitive.value().position(i1),
-            primitive.value().position(i2), cull_back_face);
-        if (!triangle_hit.has_value()) {
-            return std::optional<PickHit>{};
-        }
-        triangle_hit->triangle_index = candidate.triangle_index;
-
-        const math::Vector3 local_position =
-            math::to_vector(local_ray.value().origin) +
-            math::to_vector(local_ray.value().direction) * triangle_hit->distance;
-        const math::Vector4 world_position4 = world.value() * math::Vector4{local_position, 1.0F};
-        const glm::dvec3 world_position{world_position4.x, world_position4.y, world_position4.z};
-        const glm::dvec3 world_distance_vector = world_position - to_dvec3(ray.value().origin);
-        const double world_distance = glm::length(world_distance_vector);
-        if (!finite_vec3(world_position) || !finite(world_distance) || world_distance < 0.0) {
-            return std::optional<PickHit>{};
-        }
-
-        PickHit hit;
-        hit.entity = record.id;
-        hit.mesh = primitive.value().mesh;
-        hit.primitive_index = candidate.primitive_index;
-        hit.triangle_index = triangle_hit->triangle_index;
-        hit.world_position = to_float3_checked(world_position);
-        if (clipping_filter.has_clipping()) {
-            if (!clipping::contains_point(clipping_filter, hit.world_position)) {
-                ++statistics_.latest_clipping_hits_rejected;
-                return std::optional<PickHit>{};
-            }
-            ++statistics_.latest_clipping_hits_accepted;
-        }
-
-        const math::Matrix3 normal_transform =
-            glm::transpose(glm::inverse(math::Matrix3{world.value()}));
-        math::Vector3 world_normal =
-            normal_transform * math::to_vector(triangle_hit->geometric_normal);
-        const float world_normal_length = glm::length(world_normal);
-        if (!std::isfinite(world_normal_length) || world_normal_length <= 0.000001F) {
-            return std::optional<PickHit>{};
-        }
-        world_normal /= world_normal_length;
-        hit.world_normal = math::to_float3(world_normal);
-        hit.barycentric_coordinates = triangle_hit->barycentric_coordinates;
-        hit.world_distance = static_cast<float>(world_distance);
-        if (!validate_pick_hit(hit)) {
-            return Error{ErrorCode::invalid_picking_ray,
-                         "Picking refinement produced a non-finite or invalid hit result"};
-        }
-        return std::optional<PickHit>{hit};
+        const RefinementHitContext context{candidate.entity,
+                                           primitive.value()->mesh,
+                                           candidate.primitive_index,
+                                           transform.value()->first,
+                                           ray.value(),
+                                           transform.value()->second,
+                                           *triangle.value()};
+        return refined_hit(context, clipping_filter);
     }
-
     [[nodiscard]] Result<std::optional<PickHit>>
     pick_ray(const scene::Storage& scene, const Ray3& ray, const PickOptions& options) {
         const Result<scene::VisibilityFilter> visibility =
@@ -302,163 +274,23 @@ class PickingService::Impl final {
     pick_ray(const scene::Storage& scene, const Ray3& ray, const PickOptions& options,
              const scene::VisibilityFilter& visibility,
              const clipping::ClippingFilter& clipping_filter) {
-        statistics_.latest_instance_bounds_tests = 0;
-        statistics_.latest_mesh_bounds_tests = 0;
-        statistics_.latest_bvh_node_tests = 0;
-        statistics_.latest_triangle_tests = 0;
-        statistics_.latest_bvh_builds = 0;
-        statistics_.latest_clipping_bounds_rejected = 0;
-        statistics_.latest_clipping_hits_rejected = 0;
-        statistics_.latest_clipping_hits_accepted = 0;
-        statistics_.cached_mesh_bvhs = static_cast<std::uint64_t>(mesh_cache_.size());
-
+        reset_latest_statistics(statistics_, static_cast<std::uint64_t>(mesh_cache_.size()));
         if (!is_valid_ray(ray)) {
             return Error{ErrorCode::invalid_picking_ray,
                          "Picking requires a finite normalized world-space ray"};
         }
 
-        std::optional<PickHit> nearest;
-        float nearest_world_distance = std::numeric_limits<float>::max();
-
+        const RayPickRequest request{scene.id(), ray, options, visibility, clipping_filter};
+        NearestPick nearest;
         for (const std::optional<scene::EntityRecord>& record : scene.entities()) {
-            if (!record.has_value() || !record->model.has_value() ||
-                !scene::entity_visible_in_filter(scene, visibility, record->id)) {
-                continue;
-            }
-            const Result<math::Matrix4> world = world_matrix(scene, record->id);
-            if (!world || !finite_matrix(world.value())) {
-                continue;
-            }
-            const float determinant = glm::determinant(math::Matrix3{world.value()});
-            if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001F) {
-                continue;
-            }
-            const math::Matrix4 inverse_world = glm::inverse(world.value());
-            const Result<Ray3> local_ray = transform_ray_to_local(ray, inverse_world);
-            if (!local_ray) {
-                continue;
-            }
-            const math::Matrix3 normal_transform =
-                glm::transpose(glm::inverse(math::Matrix3{world.value()}));
-
-            for (std::uint32_t primitive_index = 0;
-                 primitive_index < record->model->primitives.size(); ++primitive_index) {
-                const Result<scene::RuntimePrimitiveView> primitive =
-                    scene.runtime_primitive(record->id, primitive_index);
-                if (!primitive) {
-                    return primitive.error();
-                }
-                if (!valid_bounds(primitive.value().bounds)) {
-                    return Error{ErrorCode::invalid_mesh_data,
-                                 "Picking encountered a mesh with invalid local bounds"};
-                }
-
-                ++statistics_.latest_instance_bounds_tests;
-                const Bounds3 world_bounds =
-                    transform_bounds(primitive.value().bounds, world.value());
-                if (clipping_filter.has_clipping()) {
-                    const clipping::BoundsClassification classification =
-                        clipping::classify_bounds(clipping_filter, world_bounds);
-                    if (classification == clipping::BoundsClassification::outside) {
-                        ++statistics_.latest_clipping_bounds_rejected;
-                        continue;
-                    }
-                }
-                RayBoundsHit world_bounds_hit;
-                if (!intersect_ray_bounds(ray, world_bounds, world_bounds_hit)) {
-                    continue;
-                }
-
-                ++statistics_.latest_mesh_bounds_tests;
-                RayBoundsHit local_bounds_hit;
-                if (!intersect_ray_bounds(local_ray.value(), primitive.value().bounds,
-                                          local_bounds_hit)) {
-                    continue;
-                }
-
-                const Result<const MeshAcceleration*> acceleration_result =
-                    acceleration(scene.id(), primitive.value());
-                if (!acceleration_result) {
-                    return acceleration_result.error();
-                }
-
-                const bool cull_back_face = options.respect_material_sidedness &&
-                                            !primitive.value().material_view.double_sided;
-                const auto accept_hit = [&](const TriangleHit& hit) noexcept {
-                    if (!clipping_filter.has_clipping()) {
-                        return true;
-                    }
-                    const math::Vector3 local_position =
-                        math::to_vector(local_ray.value().origin) +
-                        math::to_vector(local_ray.value().direction) * hit.distance;
-                    const math::Vector4 world_position4 =
-                        world.value() * math::Vector4{local_position, 1.0F};
-                    const Float3 world_position{world_position4.x, world_position4.y,
-                                                world_position4.z};
-                    const bool accepted = clipping::contains_point(clipping_filter, world_position);
-                    if (accepted) {
-                        ++statistics_.latest_clipping_hits_accepted;
-                    } else {
-                        ++statistics_.latest_clipping_hits_rejected;
-                    }
-                    return accepted;
-                };
-                const std::optional<TriangleHit> triangle_hit =
-                    traverse_mesh(*acceleration_result.value(), primitive.value(),
-                                  local_ray.value(), cull_back_face, accept_hit);
-                if (!triangle_hit.has_value()) {
-                    continue;
-                }
-
-                const math::Vector3 local_position =
-                    math::to_vector(local_ray.value().origin) +
-                    math::to_vector(local_ray.value().direction) * triangle_hit->distance;
-                const math::Vector4 world_position4 =
-                    world.value() * math::Vector4{local_position, 1.0F};
-                const glm::dvec3 world_position{world_position4.x, world_position4.y,
-                                                world_position4.z};
-                const glm::dvec3 world_distance_vector = world_position - to_dvec3(ray.origin);
-                const double world_distance = glm::length(world_distance_vector);
-                if (!finite_vec3(world_position) || !finite(world_distance) ||
-                    world_distance < 0.0 ||
-                    world_distance >= static_cast<double>(nearest_world_distance)) {
-                    continue;
-                }
-
-                math::Vector3 world_normal =
-                    normal_transform * math::to_vector(triangle_hit->geometric_normal);
-                const float world_normal_length = glm::length(world_normal);
-                if (!std::isfinite(world_normal_length) || world_normal_length <= 0.000001F) {
-                    continue;
-                }
-                world_normal /= world_normal_length;
-
-                PickHit candidate;
-                candidate.entity = record->id;
-                candidate.mesh = primitive.value().mesh;
-                candidate.primitive_index = primitive_index;
-                candidate.triangle_index = triangle_hit->triangle_index;
-                candidate.world_position = to_float3_checked(world_position);
-                if (!clipping::contains_point(clipping_filter, candidate.world_position)) {
-                    ++statistics_.latest_clipping_hits_rejected;
-                    continue;
-                }
-                candidate.world_normal = math::to_float3(world_normal);
-                candidate.barycentric_coordinates = triangle_hit->barycentric_coordinates;
-                candidate.world_distance = static_cast<float>(world_distance);
-                if (!validate_pick_hit(candidate)) {
-                    return Error{ErrorCode::invalid_picking_ray,
-                                 "Picking produced a non-finite or invalid hit result"};
-                }
-                nearest_world_distance = candidate.world_distance;
-                nearest = candidate;
+            const Result<void> entity_result = pick_entity(scene, record, request, nearest);
+            if (!entity_result) {
+                return entity_result.error();
             }
         }
-
         statistics_.cached_mesh_bvhs = static_cast<std::uint64_t>(mesh_cache_.size());
-        return nearest;
+        return nearest.hit;
     }
-
     void release_scene(SceneId scene) noexcept {
         const std::uintptr_t engine_token = detail::SceneHandleAccess::engine_token(scene);
         const std::uint64_t scene_value = detail::SceneHandleAccess::value(scene);
@@ -479,6 +311,201 @@ class PickingService::Impl final {
     }
 
   private:
+    [[nodiscard]] Result<std::optional<TriangleHit>>
+    refinement_triangle(const scene::RuntimePrimitiveView& primitive, const Ray3& local_ray,
+                        const PickOptions& options, const PickCandidate& candidate) {
+        if (!valid_bounds(primitive.bounds)) {
+            return Error{ErrorCode::invalid_mesh_data,
+                         "Picking encountered a mesh with invalid local bounds"};
+        }
+        const std::size_t base = static_cast<std::size_t>(candidate.triangle_index) * 3U;
+        const std::span<const std::uint32_t> indices = primitive.indices();
+        if (base + 2U >= indices.size()) {
+            return std::optional<TriangleHit>{};
+        }
+        const std::uint32_t i0 = indices[base];
+        const std::uint32_t i1 = indices[base + 1U];
+        const std::uint32_t i2 = indices[base + 2U];
+        if (static_cast<std::size_t>(i0) >= primitive.vertex_count() ||
+            static_cast<std::size_t>(i1) >= primitive.vertex_count() ||
+            static_cast<std::size_t>(i2) >= primitive.vertex_count()) {
+            return std::optional<TriangleHit>{};
+        }
+        ++statistics_.latest_triangle_tests;
+        const bool cull_back_face =
+            options.respect_material_sidedness && !primitive.material_view.double_sided;
+        std::optional<TriangleHit> hit =
+            intersect_ray_triangle(local_ray, primitive.position(i0), primitive.position(i1),
+                                   primitive.position(i2), cull_back_face);
+        if (!hit.has_value()) {
+            return std::optional<TriangleHit>{};
+        }
+        hit->triangle_index = candidate.triangle_index;
+        return hit;
+    }
+
+    [[nodiscard]] Result<std::optional<PickHit>>
+    refined_hit(const RefinementHitContext& context,
+                const clipping::ClippingFilter& clipping_filter) {
+        const math::Vector3 local_position =
+            math::to_vector(context.local_ray.origin) +
+            math::to_vector(context.local_ray.direction) * context.triangle.distance;
+        const math::Vector4 world_position4 = context.world * math::Vector4{local_position, 1.0F};
+        const glm::dvec3 world_position{world_position4.x, world_position4.y, world_position4.z};
+        const double world_distance =
+            glm::length(world_position - to_dvec3(context.world_ray.origin));
+        if (!finite_vec3(world_position) || !finite(world_distance) || world_distance < 0.0) {
+            return std::optional<PickHit>{};
+        }
+
+        PickHit hit;
+        hit.entity = context.entity;
+        hit.mesh = context.mesh;
+        hit.primitive_index = context.primitive_index;
+        hit.triangle_index = context.triangle.triangle_index;
+        hit.world_position = to_float3_checked(world_position);
+        if (!accept_refined_position(clipping_filter, hit.world_position, statistics_)) {
+            return std::optional<PickHit>{};
+        }
+        const math::Matrix3 normal_transform =
+            glm::transpose(glm::inverse(math::Matrix3{context.world}));
+        math::Vector3 world_normal =
+            normal_transform * math::to_vector(context.triangle.geometric_normal);
+        const float world_normal_length = glm::length(world_normal);
+        if (!std::isfinite(world_normal_length) || world_normal_length <= 0.000001F) {
+            return std::optional<PickHit>{};
+        }
+        world_normal /= world_normal_length;
+        hit.world_normal = math::to_float3(world_normal);
+        hit.barycentric_coordinates = context.triangle.barycentric_coordinates;
+        hit.world_distance = static_cast<float>(world_distance);
+        if (!validate_pick_hit(hit)) {
+            return Error{ErrorCode::invalid_picking_ray,
+                         "Picking refinement produced a non-finite or invalid hit result"};
+        }
+        return std::optional<PickHit>{hit};
+    }
+
+    [[nodiscard]] bool reject_clipped_bounds(const clipping::ClippingFilter& filter,
+                                             Bounds3 world_bounds) noexcept {
+        if (!filter.has_clipping()) {
+            return false;
+        }
+        if (clipping::classify_bounds(filter, world_bounds) !=
+            clipping::BoundsClassification::outside) {
+            return false;
+        }
+        ++statistics_.latest_clipping_bounds_rejected;
+        return true;
+    }
+
+    [[nodiscard]] Result<std::optional<const MeshAcceleration*>>
+    prepare_primitive_acceleration(const scene::RuntimePrimitiveView& primitive,
+                                   const RayPickRequest& request, const EntityPickContext& entity) {
+        if (!valid_bounds(primitive.bounds)) {
+            return Error{ErrorCode::invalid_mesh_data,
+                         "Picking encountered a mesh with invalid local bounds"};
+        }
+        ++statistics_.latest_instance_bounds_tests;
+        const Bounds3 world_bounds = transform_bounds(primitive.bounds, entity.world);
+        if (reject_clipped_bounds(request.clipping_filter, world_bounds)) {
+            return std::optional<const MeshAcceleration*>{};
+        }
+        RayBoundsHit bounds_hit;
+        if (!intersect_ray_bounds(request.ray, world_bounds, bounds_hit)) {
+            return std::optional<const MeshAcceleration*>{};
+        }
+        ++statistics_.latest_mesh_bounds_tests;
+        if (!intersect_ray_bounds(entity.local_ray, primitive.bounds, bounds_hit)) {
+            return std::optional<const MeshAcceleration*>{};
+        }
+        const Result<const MeshAcceleration*> result = acceleration(request.scene, primitive);
+        if (!result) {
+            return result.error();
+        }
+        return std::optional{result.value()};
+    }
+
+    [[nodiscard]] Result<void> pick_primitive(const scene::RuntimePrimitiveView& primitive,
+                                              std::uint32_t primitive_index,
+                                              const RayPickRequest& request,
+                                              const EntityPickContext& entity,
+                                              NearestPick& nearest) {
+        const Result<std::optional<const MeshAcceleration*>> prepared =
+            prepare_primitive_acceleration(primitive, request, entity);
+        if (!prepared) {
+            return prepared.error();
+        }
+        if (!prepared.value().has_value()) {
+            return {};
+        }
+        const bool cull_back_face =
+            request.options.respect_material_sidedness && !primitive.material_view.double_sided;
+        const auto accept_hit = [&](const TriangleHit& hit) noexcept {
+            const math::Vector3 local_position =
+                math::to_vector(entity.local_ray.origin) +
+                math::to_vector(entity.local_ray.direction) * hit.distance;
+            const math::Vector4 world_position = entity.world * math::Vector4{local_position, 1.0F};
+            return accept_refined_position(request.clipping_filter,
+                                           {world_position.x, world_position.y, world_position.z},
+                                           statistics_);
+        };
+        const std::optional<TriangleHit> triangle = traverse_mesh(
+            **prepared.value(), primitive, entity.local_ray, cull_back_face, accept_hit);
+        if (!triangle.has_value()) {
+            return {};
+        }
+        const RefinementHitContext hit_context{entity.entity, primitive.mesh, primitive_index,
+                                               entity.world,  request.ray,    entity.local_ray,
+                                               *triangle};
+        const Result<std::optional<PickHit>> hit =
+            refined_hit(hit_context, clipping::disabled_filter());
+        if (!hit) {
+            return hit.error();
+        }
+        if (!hit.value().has_value() || hit.value()->world_distance >= nearest.distance) {
+            return {};
+        }
+        nearest.distance = hit.value()->world_distance;
+        nearest.hit = hit.value();
+        return {};
+    }
+
+    [[nodiscard]] Result<void> pick_entity(const scene::Storage& scene,
+                                           const std::optional<scene::EntityRecord>& record,
+                                           const RayPickRequest& request, NearestPick& nearest) {
+        if (!record.has_value() || !record->model.has_value()) {
+            return {};
+        }
+        if (!scene::entity_visible_in_filter(scene, request.visibility, record->id)) {
+            return {};
+        }
+        const Result<std::optional<std::pair<math::Matrix4, Ray3>>> transform =
+            refinement_transform(scene, record->id, request.ray);
+        if (!transform) {
+            return transform.error();
+        }
+        if (!transform.value().has_value()) {
+            return {};
+        }
+        const EntityPickContext entity{record->id, transform.value()->first,
+                                       transform.value()->second};
+        for (std::uint32_t primitive_index = 0; primitive_index < record->model->primitives.size();
+             ++primitive_index) {
+            const Result<scene::RuntimePrimitiveView> primitive =
+                scene.runtime_primitive(record->id, primitive_index);
+            if (!primitive) {
+                return primitive.error();
+            }
+            const Result<void> result =
+                pick_primitive(primitive.value(), primitive_index, request, entity, nearest);
+            if (!result) {
+                return result.error();
+            }
+        }
+        return {};
+    }
+
     [[nodiscard]] Result<const MeshAcceleration*>
     acceleration(SceneId scene_id, const scene::RuntimePrimitiveView& primitive) {
         const bool document_backed = primitive.document_primitive.is_valid();
@@ -505,6 +532,31 @@ class PickingService::Impl final {
         return &mesh_cache_.back().acceleration;
     }
 
+    [[nodiscard]] Result<TriangleReference>
+    make_triangle_reference(const scene::RuntimePrimitiveView& primitive,
+                            std::size_t triangle_index) const {
+        const std::span<const std::uint32_t> indices = primitive.indices();
+        const std::uint32_t i0 = indices[triangle_index * 3U];
+        const std::uint32_t i1 = indices[triangle_index * 3U + 1U];
+        const std::uint32_t i2 = indices[triangle_index * 3U + 2U];
+        if (static_cast<std::size_t>(i0) >= primitive.vertex_count() ||
+            static_cast<std::size_t>(i1) >= primitive.vertex_count() ||
+            static_cast<std::size_t>(i2) >= primitive.vertex_count()) {
+            return Error{ErrorCode::mesh_index_out_of_range,
+                         "Picking BVH encountered an index outside the vertex range"};
+        }
+        const Float3 a = primitive.position(i0);
+        const Float3 b = primitive.position(i1);
+        const Float3 c = primitive.position(i2);
+        const Bounds3 bounds = triangle_bounds(a, b, c);
+        if (!valid_bounds(bounds)) {
+            return Error{ErrorCode::invalid_mesh_data,
+                         "Picking BVH encountered non-finite triangle bounds"};
+        }
+        return TriangleReference{static_cast<std::uint32_t>(triangle_index), bounds,
+                                 triangle_centroid(a, b, c)};
+    }
+
     [[nodiscard]] Result<MeshAcceleration>
     build_acceleration(const scene::RuntimePrimitiveView& primitive) const {
         const std::span<const std::uint32_t> indices = primitive.indices();
@@ -522,25 +574,12 @@ class PickingService::Impl final {
         acceleration.triangle_order.reserve(triangle_count);
         acceleration.nodes.reserve(triangle_count * 2);
         for (std::size_t triangle_index = 0; triangle_index < triangle_count; ++triangle_index) {
-            const std::uint32_t i0 = indices[triangle_index * 3];
-            const std::uint32_t i1 = indices[triangle_index * 3 + 1];
-            const std::uint32_t i2 = indices[triangle_index * 3 + 2];
-            if (static_cast<std::size_t>(i0) >= primitive.vertex_count() ||
-                static_cast<std::size_t>(i1) >= primitive.vertex_count() ||
-                static_cast<std::size_t>(i2) >= primitive.vertex_count()) {
-                return Error{ErrorCode::mesh_index_out_of_range,
-                             "Picking BVH encountered an index outside the vertex range"};
+            const Result<TriangleReference> triangle =
+                make_triangle_reference(primitive, triangle_index);
+            if (!triangle) {
+                return triangle.error();
             }
-            const Float3 a = primitive.position(i0);
-            const Float3 b = primitive.position(i1);
-            const Float3 c = primitive.position(i2);
-            const Bounds3 bounds = triangle_bounds(a, b, c);
-            if (!valid_bounds(bounds)) {
-                return Error{ErrorCode::invalid_mesh_data,
-                             "Picking BVH encountered non-finite triangle bounds"};
-            }
-            acceleration.triangles.push_back(TriangleReference{
-                static_cast<std::uint32_t>(triangle_index), bounds, triangle_centroid(a, b, c)});
+            acceleration.triangles.push_back(triangle.value());
             acceleration.triangle_order.push_back(static_cast<std::uint32_t>(triangle_index));
         }
         if (acceleration.triangles.empty()) {
@@ -606,6 +645,54 @@ class PickingService::Impl final {
         return node_index;
     }
 
+    [[nodiscard]] std::optional<TriangleHit>
+    intersect_reference(const scene::RuntimePrimitiveView& primitive,
+                        const TriangleReference& triangle, const Ray3& local_ray,
+                        bool cull_back_face) {
+        const std::size_t base = static_cast<std::size_t>(triangle.triangle_index) * 3U;
+        const std::span<const std::uint32_t> indices = primitive.indices();
+        if (base + 2U >= indices.size()) {
+            return std::nullopt;
+        }
+        const std::uint32_t i0 = indices[base];
+        const std::uint32_t i1 = indices[base + 1U];
+        const std::uint32_t i2 = indices[base + 2U];
+        if (static_cast<std::size_t>(i0) >= primitive.vertex_count() ||
+            static_cast<std::size_t>(i1) >= primitive.vertex_count() ||
+            static_cast<std::size_t>(i2) >= primitive.vertex_count()) {
+            return std::nullopt;
+        }
+        ++statistics_.latest_triangle_tests;
+        std::optional<TriangleHit> hit =
+            intersect_ray_triangle(local_ray, primitive.position(i0), primitive.position(i1),
+                                   primitive.position(i2), cull_back_face);
+        if (hit.has_value()) {
+            hit->triangle_index = triangle.triangle_index;
+        }
+        return hit;
+    }
+
+    template <typename AcceptHit>
+    void traverse_leaf(const MeshAcceleration& acceleration,
+                       const scene::RuntimePrimitiveView& primitive, const LeafRequest& request,
+                       NearestTriangle& nearest, AcceptHit& accept_hit) {
+        for (std::uint32_t index = request.node.first_triangle;
+             index < request.node.first_triangle + request.node.triangle_count; ++index) {
+            const TriangleReference& triangle =
+                acceleration.triangles[acceleration.triangle_order[index]];
+            const std::optional<TriangleHit> hit =
+                intersect_reference(primitive, triangle, request.local_ray, request.cull_back_face);
+            if (!hit.has_value() || hit->distance >= nearest.distance) {
+                continue;
+            }
+            if (!accept_hit(*hit)) {
+                continue;
+            }
+            nearest.distance = hit->distance;
+            nearest.hit = hit;
+        }
+    }
+
     template <typename AcceptHit>
     [[nodiscard]] std::optional<TriangleHit>
     traverse_mesh(const MeshAcceleration& acceleration,
@@ -615,61 +702,29 @@ class PickingService::Impl final {
             return std::nullopt;
         }
 
-        std::array<std::uint32_t, 128> stack{};
-        std::uint32_t stack_size = 0;
-        stack[stack_size++] = 0;
-        std::optional<TriangleHit> nearest;
-        float nearest_distance = std::numeric_limits<float>::max();
+        TraversalState state;
+        state.stack[state.stack_size++] = 0;
 
-        while (stack_size != 0) {
-            const BvhNode& node = acceleration.nodes[stack[--stack_size]];
+        while (state.stack_size != 0U) {
+            const BvhNode& node = acceleration.nodes[state.stack[--state.stack_size]];
             ++statistics_.latest_bvh_node_tests;
             RayBoundsHit bounds_hit;
             if (!intersect_ray_bounds(local_ray, node.bounds, bounds_hit) ||
-                bounds_hit.entry_distance > nearest_distance) {
+                bounds_hit.entry_distance > state.nearest.distance) {
                 continue;
             }
             if (node.is_leaf) {
-                for (std::uint32_t index = node.first_triangle;
-                     index < node.first_triangle + node.triangle_count; ++index) {
-                    const TriangleReference& triangle =
-                        acceleration.triangles[acceleration.triangle_order[index]];
-                    const std::size_t base = static_cast<std::size_t>(triangle.triangle_index) * 3;
-                    const std::span<const std::uint32_t> indices = primitive.indices();
-                    if (base + 2 >= indices.size()) {
-                        continue;
-                    }
-                    const std::uint32_t i0 = indices[base];
-                    const std::uint32_t i1 = indices[base + 1];
-                    const std::uint32_t i2 = indices[base + 2];
-                    if (static_cast<std::size_t>(i0) >= primitive.vertex_count() ||
-                        static_cast<std::size_t>(i1) >= primitive.vertex_count() ||
-                        static_cast<std::size_t>(i2) >= primitive.vertex_count()) {
-                        continue;
-                    }
-                    ++statistics_.latest_triangle_tests;
-                    std::optional<TriangleHit> hit = intersect_ray_triangle(
-                        local_ray, primitive.position(i0), primitive.position(i1),
-                        primitive.position(i2), cull_back_face);
-                    if (hit.has_value() && hit->distance < nearest_distance) {
-                        TriangleHit candidate = *hit;
-                        candidate.triangle_index = triangle.triangle_index;
-                        if (!accept_hit(candidate)) {
-                            continue;
-                        }
-                        nearest_distance = candidate.distance;
-                        nearest = candidate;
-                    }
-                }
+                const LeafRequest request{node, local_ray, cull_back_face};
+                traverse_leaf(acceleration, primitive, request, state.nearest, accept_hit);
                 continue;
             }
-            if (stack_size + 2 > stack.size()) {
-                return nearest;
+            if (state.stack_size + 2U > state.stack.size()) {
+                return state.nearest.hit;
             }
-            stack[stack_size++] = node.right;
-            stack[stack_size++] = node.left;
+            state.stack[state.stack_size++] = node.right;
+            state.stack[state.stack_size++] = node.left;
         }
-        return nearest;
+        return state.nearest.hit;
     }
 
     PickingStatistics statistics_;
@@ -686,34 +741,30 @@ Result<Ray3> PickingService::make_picking_ray(const scene::Storage& scene, Entit
     return impl_->make_picking_ray(scene, camera, extent, position_pixels);
 }
 
-Result<std::optional<PickHit>> PickingService::pick(const scene::Storage& scene, EntityId camera,
-                                                    Extent2D extent, Float2 position_pixels,
-                                                    const PickOptions& options) {
-    return impl_->pick(scene, camera, extent, position_pixels, options);
+Result<std::optional<PickHit>> PickingService::pick(const scene::Storage& scene,
+                                                    const PickRequest& request) {
+    return impl_->pick(scene, request);
 }
 
-Result<std::optional<PickHit>> PickingService::pick(const scene::Storage& scene, EntityId camera,
-                                                    Extent2D extent, Float2 position_pixels,
-                                                    const PickOptions& options,
+Result<std::optional<PickHit>> PickingService::pick(const scene::Storage& scene,
+                                                    const PickRequest& request,
                                                     const scene::VisibilityFilter& visibility) {
-    return impl_->pick(scene, camera, extent, position_pixels, options, visibility);
+    return impl_->pick(scene, request, visibility);
 }
 
 Result<std::optional<PickHit>>
-PickingService::pick(const scene::Storage& scene, EntityId camera, Extent2D extent,
-                     Float2 position_pixels, const PickOptions& options,
+PickingService::pick(const scene::Storage& scene, const PickRequest& request,
                      const scene::VisibilityFilter& visibility,
                      const clipping::ClippingFilter& clipping_filter) {
-    return impl_->pick(scene, camera, extent, position_pixels, options, visibility,
-                       clipping_filter);
+    return impl_->pick(scene, request, visibility, clipping_filter);
 }
 
-Result<std::optional<PickHit>> PickingService::refine_candidate(
-    const scene::Storage& scene, EntityId camera, Extent2D extent, Float2 position_pixels,
-    const PickOptions& options, const scene::VisibilityFilter& visibility,
-    const clipping::ClippingFilter& clipping_filter, const PickCandidate& candidate) {
-    return impl_->refine_candidate(scene, camera, extent, position_pixels, options, visibility,
-                                   clipping_filter, candidate);
+Result<std::optional<PickHit>>
+PickingService::refine_candidate(const scene::Storage& scene, const PickRequest& request,
+                                 const scene::VisibilityFilter& visibility,
+                                 const clipping::ClippingFilter& clipping_filter,
+                                 const PickCandidate& candidate) {
+    return impl_->refine_candidate(scene, request, visibility, clipping_filter, candidate);
 }
 
 Result<std::optional<PickHit>>

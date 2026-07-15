@@ -1,6 +1,8 @@
 #include <elf3d/elf3d.h>
 #include <elf3d/model.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -75,7 +77,22 @@ scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept {
     return SceneLoadDiagnosticCategory::scene;
 }
 
-[[nodiscard]] SceneLoadDiagnosticCode scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
+[[nodiscard]] bool is_base_scene_diagnostic(ModelLoadDiagnosticCode code) noexcept {
+    constexpr std::array base_codes{
+        ModelLoadDiagnosticCode::generated_normals,
+        ModelLoadDiagnosticCode::degenerate_geometry,
+        ModelLoadDiagnosticCode::missing_texture_coordinates,
+        ModelLoadDiagnosticCode::unsupported_optional_extension,
+        ModelLoadDiagnosticCode::material_fallback,
+        ModelLoadDiagnosticCode::normal_map_fallback,
+        ModelLoadDiagnosticCode::camera_fallback,
+        ModelLoadDiagnosticCode::ignored_lights,
+    };
+    return std::find(base_codes.begin(), base_codes.end(), code) != base_codes.end();
+}
+
+[[nodiscard]] SceneLoadDiagnosticCode
+base_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
     switch (code) {
     case ModelLoadDiagnosticCode::generated_normals:
         return SceneLoadDiagnosticCode::generated_normals;
@@ -93,6 +110,14 @@ scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept {
         return SceneLoadDiagnosticCode::camera_fallback;
     case ModelLoadDiagnosticCode::ignored_lights:
         return SceneLoadDiagnosticCode::ignored_lights;
+    default:
+        return SceneLoadDiagnosticCode::material_fallback;
+    }
+}
+
+[[nodiscard]] SceneLoadDiagnosticCode
+extended_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
+    switch (code) {
     case ModelLoadDiagnosticCode::ignored_animation:
         return SceneLoadDiagnosticCode::ignored_animation;
     case ModelLoadDiagnosticCode::ignored_skin:
@@ -107,8 +132,14 @@ scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept {
         return SceneLoadDiagnosticCode::texture_fallback;
     case ModelLoadDiagnosticCode::skipped_unsupported_primitive:
         return SceneLoadDiagnosticCode::skipped_unsupported_primitive;
+    default:
+        return SceneLoadDiagnosticCode::material_fallback;
     }
-    return SceneLoadDiagnosticCode::material_fallback;
+}
+
+[[nodiscard]] SceneLoadDiagnosticCode scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
+    return is_base_scene_diagnostic(code) ? base_scene_diagnostic_code(code)
+                                          : extended_scene_diagnostic_code(code);
 }
 
 } // namespace

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.3
+
+- Raised the glTF node limit to 131,072 and discarded delayed pointer samples
+  outside the active viewport so large-model navigation no longer produces
+  out-of-bounds picking errors.
+- Made glTF/GLB export choose the smallest exact unsigned index width and emit
+  tab-indented, human-readable JSON while preserving supported model values and
+  opaque retained metadata.
+- Replaced the toolbar Reload action with Save As, reduced Q/W/E/A/S/D
+  navigation speed by half, and improved dark-dialog text-cursor contrast.
+- Added Save As double-click activation plus shared Open/Save file context
+  commands for opening, copying the quoted path, viewing properties, and using
+  installed EmEditor, Notepad, or Notepad++ applications.
+- Fixed clean parallel Visual Studio builds when grouped module sources share a
+  basename by separating their generated module-dependency metadata.
+
+## 0.8.2
+
+- Removed all remaining green-profile metric allowances and reduced reviewed
+  boundary allowances to 23 while preserving the existing public contracts.
+- Split large model, navigation, renderer, viewport, viewer, OpenGL backend,
+  and glTF implementation areas into focused private units with explicit
+  ownership and dependency boundaries.
+- Expanded focused regression coverage and kept the canonical Document,
+  rendering, interaction, picking, tools, and viewer workflows behaviorally
+  unchanged through the structural cleanup.
+
 ## 0.8.1
 
 - Added a professional glTF Open browser and matching Save As workflow with

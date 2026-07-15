@@ -259,41 +259,35 @@ Result<std::unique_ptr<Renderer>> Renderer::create(std::unique_ptr<graphics::Dev
     if (!pipeline_result) {
         return pipeline_result.error();
     }
-    return std::make_unique<Renderer>(ConstructionKey{}, std::move(device), engine_token,
-                                      std::move(pipeline_result).value());
+    Resources resources{std::move(device), engine_token, std::move(pipeline_result).value()};
+    return std::make_unique<Renderer>(ConstructionKey{}, std::move(resources));
 }
 
-Renderer::Renderer(ConstructionKey, std::unique_ptr<graphics::Device> device,
-                   std::uintptr_t engine_token,
-                   std::unique_ptr<graphics::GraphicsPipeline> pipeline) noexcept
-    : device_(std::move(device)), engine_token_(engine_token), pipeline_(std::move(pipeline)) {}
+Renderer::Renderer(ConstructionKey, Resources resources) noexcept
+    : device_(std::move(resources.device)), engine_token_(resources.engine_token),
+      pipeline_(std::move(resources.pipeline)) {}
 
-Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, EntityId camera,
-                                          graphics::RenderTarget& target, Color4 clear_color,
-                                          const BasicLighting& lighting,
-                                          const ViewportRenderOptions& options) {
+Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
+                                          graphics::RenderTarget& target,
+                                          const RenderRequest& request) {
     const Result<scene::VisibilityFilter> visibility =
         scene::make_visibility_filter(scene_storage, std::nullopt);
     if (!visibility) {
         return visibility.error();
     }
-    return render(scene_storage, camera, target, clear_color, lighting, options,
-                  visibility.value());
+    return render(scene_storage, target, request, visibility.value());
 }
 
-Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, EntityId camera,
-                                          graphics::RenderTarget& target, Color4 clear_color,
-                                          const BasicLighting& lighting,
-                                          const ViewportRenderOptions& options,
+Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
+                                          graphics::RenderTarget& target,
+                                          const RenderRequest& request,
                                           const scene::VisibilityFilter& visibility) {
-    return render(scene_storage, camera, target, clear_color, lighting, options, visibility,
-                  clipping::disabled_filter());
+    return render(scene_storage, target, request, visibility, clipping::disabled_filter());
 }
 
-Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, EntityId camera,
-                                          graphics::RenderTarget& target, Color4 clear_color,
-                                          const BasicLighting& lighting,
-                                          const ViewportRenderOptions& options,
+Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
+                                          graphics::RenderTarget& target,
+                                          const RenderRequest& request,
                                           const scene::VisibilityFilter& visibility,
                                           const clipping::ClippingFilter& clipping_filter) {
     if (!scene_storage.belongs_to_engine(engine_token_)) {
@@ -304,7 +298,7 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, E
         return Error{ErrorCode::graphics_shutdown, "Renderer graphics resources are unavailable"};
     }
 
-    const Result<void> clear_result = target.clear(clear_color);
+    const Result<void> clear_result = target.clear(request.clear_color);
     if (!clear_result) {
         return clear_result.error();
     }
@@ -314,97 +308,121 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage, E
         return statistics;
     }
 
-    Result<RenderList> list_result =
-        build_render_list(scene_storage, camera, target.extent(), visibility, clipping_filter);
+    Result<RenderList> list_result = build_render_list(
+        scene_storage, request.camera, target.extent(), visibility, clipping_filter);
     if (!list_result) {
         return list_result.error();
     }
 
-    RenderStatistics statistics;
-    const RenderList& list = list_result.value();
-    statistics.clipping_bounds_tested = list.clipping_bounds_tested;
-    statistics.clipping_bounds_rejected = list.clipping_bounds_rejected;
-    statistics.clipping_bounds_intersecting = list.clipping_bounds_intersecting;
-    for (const RenderItem& item : list.items) {
-        const Result<scene::RuntimePrimitiveView> primitive =
-            scene_storage.runtime_primitive(item.entity, item.primitive_index);
-        if (!primitive) {
-            return primitive.error();
-        }
-        Result<graphics::StaticMesh*> mesh = cached_mesh(scene_storage.id(), primitive.value());
-        if (!mesh) {
-            return mesh.error();
-        }
-        graphics::StaticMesh* const gpu_mesh = mesh.value();
-        const MaterialDescription material =
-            runtime_material_description(primitive.value().material_view);
-        std::array<graphics::Texture2D*, graphics::material_texture_count> textures{};
-        const Result<void> texture_result =
-            prepare_draw_textures(scene_storage, primitive.value(), textures,
-                                  statistics.gpu_texture_uploads, statistics.texture_bindings);
-        if (!texture_result) {
-            return texture_result.error();
-        }
+    RenderPass pass{request, std::move(list_result).value(), clipping_filter, {}};
+    pass.statistics.clipping_bounds_tested = pass.list.clipping_bounds_tested;
+    pass.statistics.clipping_bounds_rejected = pass.list.clipping_bounds_rejected;
+    pass.statistics.clipping_bounds_intersecting = pass.list.clipping_bounds_intersecting;
+    const Result<void> items_result = draw_render_items(scene_storage, target, pass);
+    if (!items_result) {
+        return items_result.error();
+    }
+    const Result<void> overlay_result = draw_render_overlay(target, pass);
+    if (!overlay_result) {
+        return overlay_result.error();
+    }
+    pass.statistics.unique_gpu_textures = static_cast<std::uint64_t>(texture_cache_.size());
+    return pass.statistics;
+}
 
-        graphics::DrawIndexedDescription draw;
-        draw.model_matrix = item.model_matrix.elements;
-        draw.view_matrix = list.view_matrix.elements;
-        draw.projection_matrix = list.projection_matrix.elements;
-        draw.normal_matrix = item.normal_matrix;
-        draw.base_color = material.base_color;
-        draw.camera_world_position = list.camera_world_position;
-        draw.light_direction = lighting.direction;
-        draw.light_color = lighting.color;
-        draw.ambient_intensity = lighting.ambient_intensity;
-        draw.diffuse_intensity = lighting.diffuse_intensity;
-        draw.metallic_factor = material.metallic_factor;
-        draw.roughness_factor = material.roughness_factor;
-        draw.emissive_factor = material.emissive_factor;
-        draw.occlusion_strength = material.occlusion_strength;
-        draw.ior = material.ior;
-        draw.specular_factor = material.specular_factor;
-        draw.specular_color_factor = material.specular_color_factor;
-        if (options.highlight.has_value() && options.highlight->entity == item.entity) {
-            draw.highlight_color = options.highlight->color;
-            draw.highlight_strength = std::clamp(options.highlight->strength, 0.0F, 1.0F);
-        }
-        draw.textures = textures;
-        draw.texture_mappings = {
-            material.base_color_texture_mapping, material.metallic_roughness_texture_mapping,
-            material.occlusion_texture_mapping, material.emissive_texture_mapping};
-        draw.alpha_mode = material.alpha_mode;
-        draw.alpha_cutoff = material.alpha_cutoff;
-        draw.unlit = material.unlit;
-        draw.double_sided = material.double_sided;
-        draw.front_face_clockwise = item.orientation_reversed;
-        apply_clipping_description(clipping_filter, draw);
-        const Result<void> draw_result = device_->draw_indexed(target, *pipeline_, *gpu_mesh, draw);
+Result<void> Renderer::draw_render_items(const scene::Storage& scene,
+                                         graphics::RenderTarget& target, RenderPass& pass) {
+    for (const RenderItem& item : pass.list.items) {
+        const Result<void> draw_result = draw_render_item(scene, target, item, pass);
         if (!draw_result) {
             return draw_result.error();
         }
+    }
+    return {};
+}
 
-        ++statistics.draw_calls;
-        statistics.vertices += gpu_mesh->vertex_count();
-        statistics.indices += gpu_mesh->index_count();
-        statistics.triangles += gpu_mesh->index_count() / 3;
+Result<void> Renderer::draw_render_item(const scene::Storage& scene, graphics::RenderTarget& target,
+                                        const RenderItem& item, RenderPass& pass) {
+    const Result<scene::RuntimePrimitiveView> primitive =
+        scene.runtime_primitive(item.entity, item.primitive_index);
+    if (!primitive) {
+        return primitive.error();
+    }
+    Result<graphics::StaticMesh*> mesh = cached_mesh(scene.id(), primitive.value());
+    if (!mesh) {
+        return mesh.error();
+    }
+    graphics::StaticMesh* const gpu_mesh = mesh.value();
+    const MaterialDescription material =
+        runtime_material_description(primitive.value().material_view);
+    std::array<graphics::Texture2D*, graphics::material_texture_count> textures{};
+    const Result<void> texture_result = prepare_draw_textures(scene, primitive.value(), textures,
+                                                              pass.statistics.gpu_texture_uploads,
+                                                              pass.statistics.texture_bindings);
+    if (!texture_result) {
+        return texture_result.error();
     }
 
-    if (!options.overlay_lines.empty() || !options.overlay_markers.empty()) {
-        const graphics::DrawOverlayDescription overlay{
-            list.view_matrix.elements,
-            list.projection_matrix.elements,
-            options.overlay_lines,
-            options.overlay_markers,
-        };
-        const Result<void> overlay_result = device_->draw_overlay(target, overlay);
-        if (!overlay_result) {
-            return overlay_result.error();
-        }
-        statistics.overlay_lines = static_cast<std::uint64_t>(options.overlay_lines.size());
-        statistics.overlay_markers = static_cast<std::uint64_t>(options.overlay_markers.size());
+    graphics::DrawIndexedDescription draw;
+    draw.model_matrix = item.model_matrix.elements;
+    draw.view_matrix = pass.list.view_matrix.elements;
+    draw.projection_matrix = pass.list.projection_matrix.elements;
+    draw.normal_matrix = item.normal_matrix;
+    draw.base_color = material.base_color;
+    draw.camera_world_position = pass.list.camera_world_position;
+    draw.light_direction = pass.request.lighting.direction;
+    draw.light_color = pass.request.lighting.color;
+    draw.ambient_intensity = pass.request.lighting.ambient_intensity;
+    draw.diffuse_intensity = pass.request.lighting.diffuse_intensity;
+    draw.metallic_factor = material.metallic_factor;
+    draw.roughness_factor = material.roughness_factor;
+    draw.emissive_factor = material.emissive_factor;
+    draw.occlusion_strength = material.occlusion_strength;
+    draw.ior = material.ior;
+    draw.specular_factor = material.specular_factor;
+    draw.specular_color_factor = material.specular_color_factor;
+    const std::optional<EntityHighlight>& highlight = pass.request.options.highlight;
+    if (highlight.has_value() && highlight->entity == item.entity) {
+        draw.highlight_color = highlight->color;
+        draw.highlight_strength = std::clamp(highlight->strength, 0.0F, 1.0F);
     }
-    statistics.unique_gpu_textures = static_cast<std::uint64_t>(texture_cache_.size());
-    return statistics;
+    draw.textures = textures;
+    draw.texture_mappings = {material.base_color_texture_mapping,
+                             material.metallic_roughness_texture_mapping,
+                             material.occlusion_texture_mapping, material.emissive_texture_mapping};
+    draw.alpha_mode = material.alpha_mode;
+    draw.alpha_cutoff = material.alpha_cutoff;
+    draw.unlit = material.unlit;
+    draw.double_sided = material.double_sided;
+    draw.front_face_clockwise = item.orientation_reversed;
+    apply_clipping_description(pass.clipping_filter, draw);
+    const Result<void> draw_result = device_->draw_indexed(target, *pipeline_, *gpu_mesh, draw);
+    if (!draw_result) {
+        return draw_result.error();
+    }
+
+    ++pass.statistics.draw_calls;
+    pass.statistics.vertices += gpu_mesh->vertex_count();
+    pass.statistics.indices += gpu_mesh->index_count();
+    pass.statistics.triangles += gpu_mesh->index_count() / 3;
+    return {};
+}
+
+Result<void> Renderer::draw_render_overlay(graphics::RenderTarget& target, RenderPass& pass) {
+    const ViewportRenderOptions& options = pass.request.options;
+    if (options.overlay_lines.empty() && options.overlay_markers.empty()) {
+        return {};
+    }
+    const graphics::DrawOverlayDescription overlay{pass.list.view_matrix.elements,
+                                                   pass.list.projection_matrix.elements,
+                                                   options.overlay_lines, options.overlay_markers};
+    const Result<void> overlay_result = device_->draw_overlay(target, overlay);
+    if (!overlay_result) {
+        return overlay_result.error();
+    }
+    pass.statistics.overlay_lines = static_cast<std::uint64_t>(options.overlay_lines.size());
+    pass.statistics.overlay_markers = static_cast<std::uint64_t>(options.overlay_markers.size());
+    return {};
 }
 
 void Renderer::release_scene(SceneId scene_id) noexcept {

@@ -2,6 +2,17 @@ add_executable(
     elf3d_viewer
     WIN32
     src/main.cpp
+    src/viewer_assets.cpp
+    src/viewer_browser.cpp
+    src/viewer_browser_context.cpp
+    src/viewer_browser_platform.cpp
+    src/viewer_chrome.cpp
+    src/viewer_panels.cpp
+    src/viewer_preferences.cpp
+    src/viewer_runtime.cpp
+    src/viewer_scene_panels.cpp
+    src/viewer_status.cpp
+    src/viewer_viewport.cpp
 )
 
 target_compile_features(elf3d_viewer PRIVATE cxx_std_20)
@@ -22,7 +33,9 @@ if(WIN32)
     target_link_libraries(
         elf3d_viewer
         PRIVATE
+            advapi32
             ole32
+            shell32
             windowscodecs
     )
 endif()

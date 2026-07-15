@@ -62,7 +62,7 @@ struct ViewportInteractionFrame {
 
 class ViewportInteractionState final {
   public:
-    [[nodiscard]] ViewportInteractionFrame update(const PointerInputSnapshot &input,
+    [[nodiscard]] ViewportInteractionFrame update(const PointerInputSnapshot& input,
                                                   float click_drag_threshold_pixels) noexcept;
     void cancel() noexcept;
 
@@ -70,6 +70,19 @@ class ViewportInteractionState final {
     [[nodiscard]] InteractionMode mode() const noexcept;
 
   private:
+    [[nodiscard]] ViewportInteractionFrame
+    button_transition_frame(const PointerInputSnapshot& input) const noexcept;
+    [[nodiscard]] ViewportInteractionFrame
+    focused_out_frame(const PointerInputSnapshot& input, ViewportInteractionFrame frame) noexcept;
+    void update_pending_click(const PointerInputSnapshot& input, float threshold_squared,
+                              ViewportInteractionFrame& frame) noexcept;
+    void start_pressed_interaction(const PointerInputSnapshot& input,
+                                   ViewportInteractionFrame& frame) noexcept;
+    void finish_released_drag(const PointerInputSnapshot& input,
+                              ViewportInteractionFrame& frame) noexcept;
+    void finish_frame(const PointerInputSnapshot& input, ViewportInteractionFrame& frame) noexcept;
+    void remember_buttons(const PointerInputSnapshot& input) noexcept;
+
     bool previous_left_down_ = false;
     bool previous_middle_down_ = false;
     bool previous_right_down_ = false;

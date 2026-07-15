@@ -16,6 +16,10 @@ The source-integrated static model library is exposed separately through:
 #include <elf3d/model.h>
 ```
 
+This canonical include transitively provides the focused document-scoped ID
+declarations from `elf3d/model_ids.h`; applications normally include
+`elf3d/model.h` directly.
+
 Build and link `elf3d_model` / `elf3d::model` when an application needs the
 canonical CPU-side `elf3d::Document` without renderer, backend, viewport, or
 viewer targets. This is not a stable DLL ABI; bulk model DTOs may own standard

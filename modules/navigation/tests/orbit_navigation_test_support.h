@@ -8,7 +8,8 @@ struct SceneFixture {
     elf3d::EntityId second_camera;
 };
 
-[[nodiscard]] inline bool nearly_equal(float left, float right, float tolerance = 0.0005F) noexcept {
+[[nodiscard]] inline bool nearly_equal(float left, float right,
+                                       float tolerance = 0.0005F) noexcept {
     return std::abs(left - right) <= tolerance;
 }
 
@@ -33,7 +34,7 @@ struct SceneFixture {
 }
 
 [[nodiscard]] inline bool nearly_equal(elf3d::Float3 left, elf3d::Float3 right,
-                                float tolerance = 0.0005F) noexcept {
+                                       float tolerance = 0.0005F) noexcept {
     return length(subtract(left, right)) <= tolerance;
 }
 
@@ -42,7 +43,7 @@ struct SceneFixture {
 }
 
 [[nodiscard]] inline SceneFixture make_scene(std::uint64_t id_value, elf3d::Float3 minimum,
-                                      elf3d::Float3 maximum) {
+                                             elf3d::Float3 maximum) {
     elf3d::scene::Storage scene{scene_id(id_value)};
     const std::array<elf3d::VertexPositionNormal, 8> vertices{{
         {minimum, {0.0F, 1.0F, 0.0F}},
@@ -67,13 +68,13 @@ struct SceneFixture {
 }
 
 [[nodiscard]] inline elf3d::Float3 camera_position(const elf3d::scene::Storage& scene,
-                                            elf3d::EntityId camera) {
+                                                   elf3d::EntityId camera) {
     const elf3d::math::Matrix4 world = elf3d::math::to_matrix(scene.world_matrix(camera).value());
     return {world[3].x, world[3].y, world[3].z};
 }
 
 [[nodiscard]] inline elf3d::Float3 camera_forward(const elf3d::scene::Storage& scene,
-                                           elf3d::EntityId camera) {
+                                                  elf3d::EntityId camera) {
     const elf3d::math::Matrix4 world = elf3d::math::to_matrix(scene.world_matrix(camera).value());
     elf3d::math::Vector3 right{world[0]};
     elf3d::math::Vector3 up{world[1]};
@@ -84,13 +85,13 @@ struct SceneFixture {
 }
 
 [[nodiscard]] inline elf3d::Float3 camera_right(const elf3d::scene::Storage& scene,
-                                         elf3d::EntityId camera) {
+                                                elf3d::EntityId camera) {
     const elf3d::math::Matrix4 world = elf3d::math::to_matrix(scene.world_matrix(camera).value());
     return elf3d::math::to_float3(glm::normalize(elf3d::math::Vector3{world[0]}));
 }
 
-[[nodiscard]] inline bool camera_looks_at(const elf3d::scene::Storage& scene, elf3d::EntityId camera,
-                                   elf3d::Float3 pivot) {
+[[nodiscard]] inline bool camera_looks_at(const elf3d::scene::Storage& scene,
+                                          elf3d::EntityId camera, elf3d::Float3 pivot) {
     const elf3d::Float3 position = camera_position(scene, camera);
     const elf3d::math::Vector3 to_pivot =
         glm::normalize(elf3d::math::to_vector(subtract(pivot, position)));
@@ -99,21 +100,21 @@ struct SceneFixture {
 }
 
 inline void set_camera_position(elf3d::scene::Storage& scene, elf3d::EntityId camera,
-                         elf3d::Float3 position) {
+                                elf3d::Float3 position) {
     elf3d::math::Matrix4 world = elf3d::math::to_matrix(scene.world_matrix(camera).value());
     world[3] = elf3d::math::Vector4{position.x, position.y, position.z, 1.0F};
     static_cast<void>(scene.set_local_matrix(camera, elf3d::math::to_float4x4(world)));
 }
 
 [[nodiscard]] inline float signed_camera_distance_to(const elf3d::scene::Storage& scene,
-                                              elf3d::EntityId camera,
-                                              elf3d::Float3 world_position) {
+                                                     elf3d::EntityId camera,
+                                                     elf3d::Float3 world_position) {
     return dot(subtract(world_position, camera_position(scene, camera)),
                camera_forward(scene, camera));
 }
 
 [[nodiscard]] inline bool depth_ratio_within_limit(const elf3d::scene::Storage& scene,
-                                            elf3d::EntityId camera) {
+                                                   elf3d::EntityId camera) {
     const elf3d::PerspectiveCameraDescription description =
         scene.perspective_camera(camera).value();
     return description.near_plane > 0.0F && description.far_plane > description.near_plane &&
@@ -121,8 +122,8 @@ inline void set_camera_position(elf3d::scene::Storage& scene, elf3d::EntityId ca
 }
 
 [[nodiscard]] inline elf3d::Float2 project_to_ndc(const elf3d::scene::Storage& scene,
-                                           elf3d::EntityId camera, elf3d::Extent2D extent,
-                                           elf3d::Float3 world_position) {
+                                                  elf3d::EntityId camera, elf3d::Extent2D extent,
+                                                  elf3d::Float3 world_position) {
     const elf3d::Float4x4 camera_world = scene.world_matrix(camera).value();
     const elf3d::math::Matrix4 view =
         elf3d::math::to_matrix(elf3d::math::camera_view_matrix(camera_world).value());
@@ -140,7 +141,7 @@ inline void set_camera_position(elf3d::scene::Storage& scene, elf3d::EntityId ca
 }
 
 [[nodiscard]] inline bool bounds_visible(const elf3d::scene::Storage& scene, elf3d::EntityId camera,
-                                  elf3d::Extent2D extent) {
+                                         elf3d::Extent2D extent) {
     const std::optional<elf3d::Bounds3> bounds_result = scene.world_bounds();
     if (!bounds_result.has_value()) {
         return false;
@@ -183,8 +184,8 @@ inline void set_camera_position(elf3d::scene::Storage& scene, elf3d::EntityId ca
 }
 
 [[nodiscard]] inline float maximum_projected_bounds_extent(const elf3d::scene::Storage& scene,
-                                                    elf3d::EntityId camera,
-                                                    elf3d::Extent2D extent) {
+                                                           elf3d::EntityId camera,
+                                                           elf3d::Extent2D extent) {
     const std::optional<elf3d::Bounds3> bounds_result = scene.world_bounds();
     if (!bounds_result.has_value()) {
         return 0.0F;
@@ -218,5 +219,20 @@ inline void set_camera_position(elf3d::scene::Storage& scene, elf3d::EntityId ca
     return input;
 }
 
+inline constexpr float navigation_test_click_threshold = 4.0F;
+
+struct NavigationTestContext {
+    explicit NavigationTestContext(std::uint64_t scene_value)
+        : fixture(make_scene(scene_value, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F})) {}
+
+    SceneFixture fixture;
+    elf3d::navigation::OrbitNavigationController navigation;
+};
+
+[[nodiscard]] inline elf3d::Result<elf3d::navigation::NavigationUpdate>
+update_navigation(NavigationTestContext& context, const elf3d::ViewportInput& input) {
+    return context.navigation.update(context.fixture.scene, context.fixture.camera, {800, 600},
+                                     input, navigation_test_click_threshold);
+}
 
 } // namespace elf3d::navigation::test_support

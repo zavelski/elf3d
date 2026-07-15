@@ -24,7 +24,7 @@ namespace {
                   channel(color.alpha, 1.0F)};
 }
 
-[[nodiscard]] bool valid_settings(const SelectionSettings &settings) noexcept {
+[[nodiscard]] bool valid_settings(const SelectionSettings& settings) noexcept {
     return std::isfinite(settings.click_drag_threshold_pixels) &&
            settings.click_drag_threshold_pixels >= 0.0F &&
            std::isfinite(settings.highlight_strength) && settings.highlight_strength >= 0.0F &&
@@ -33,38 +33,34 @@ namespace {
 
 } // namespace
 
-Result<std::optional<PickHit>> SelectionController::select_at(picking::PickingService &picking,
-                                                              const scene::Storage &scene,
-                                                              EntityId camera, Extent2D extent,
-                                                              Float2 position_pixels) {
+Result<std::optional<PickHit>> SelectionController::select_at(picking::PickingService& picking,
+                                                              const scene::Storage& scene,
+                                                              SelectionTarget target) {
     const Result<scene::VisibilityFilter> visibility =
         scene::make_visibility_filter(scene, std::nullopt);
     if (!visibility) {
         return visibility.error();
     }
-    return select_at(picking, scene, camera, extent, position_pixels, visibility.value());
+    return select_at(picking, scene, target, visibility.value());
 }
 
 Result<std::optional<PickHit>>
-SelectionController::select_at(picking::PickingService &picking, const scene::Storage &scene,
-                               EntityId camera, Extent2D extent, Float2 position_pixels,
-                               const scene::VisibilityFilter &visibility) {
-    return select_at(picking, scene, camera, extent, position_pixels, visibility,
-                     clipping::disabled_filter());
+SelectionController::select_at(picking::PickingService& picking, const scene::Storage& scene,
+                               SelectionTarget target, const scene::VisibilityFilter& visibility) {
+    return select_at(picking, scene, target, visibility, clipping::disabled_filter());
 }
 
 Result<std::optional<PickHit>>
-SelectionController::select_at(picking::PickingService &picking, const scene::Storage &scene,
-                               EntityId camera, Extent2D extent, Float2 position_pixels,
-                               const scene::VisibilityFilter &visibility,
-                               const clipping::ClippingFilter &clipping_filter) {
+SelectionController::select_at(picking::PickingService& picking, const scene::Storage& scene,
+                               SelectionTarget target, const scene::VisibilityFilter& visibility,
+                               const clipping::ClippingFilter& clipping_filter) {
     if (!enabled_) {
         return std::optional<PickHit>{};
     }
 
+    const picking::PickRequest request{target.camera, target.extent, target.position_pixels, {}};
     const Result<std::optional<PickHit>> pick_result =
-        picking.pick(scene, camera, extent, position_pixels, PickOptions{}, visibility,
-                     clipping_filter);
+        picking.pick(scene, request, visibility, clipping_filter);
     if (!pick_result) {
         return pick_result.error();
     }
@@ -80,8 +76,8 @@ SelectionController::select_at(picking::PickingService &picking, const scene::St
     return hit_;
 }
 
-Result<std::optional<PickHit>>
-SelectionController::select_hit(const scene::Storage &scene, const std::optional<PickHit> &hit) {
+Result<std::optional<PickHit>> SelectionController::select_hit(const scene::Storage& scene,
+                                                               const std::optional<PickHit>& hit) {
     if (!enabled_) {
         return std::optional<PickHit>{};
     }
@@ -90,7 +86,7 @@ SelectionController::select_hit(const scene::Storage &scene, const std::optional
         return std::optional<PickHit>{};
     }
 
-    const Result<const scene::EntityRecord *> record = scene.entity(hit->entity);
+    const Result<const scene::EntityRecord*> record = scene.entity(hit->entity);
     if (!record) {
         return record.error();
     }
@@ -100,9 +96,9 @@ SelectionController::select_hit(const scene::Storage &scene, const std::optional
     return hit_;
 }
 
-Result<void> SelectionController::set_selected_entity(const scene::Storage &scene,
+Result<void> SelectionController::set_selected_entity(const scene::Storage& scene,
                                                       EntityId entity) {
-    const Result<const scene::EntityRecord *> record = scene.entity(entity);
+    const Result<const scene::EntityRecord*> record = scene.entity(entity);
     if (!record) {
         return record.error();
     }
@@ -128,7 +124,7 @@ void SelectionController::clear_scene(SceneId scene) noexcept {
     }
 }
 
-void SelectionController::validate_against(const scene::Storage &scene) noexcept {
+void SelectionController::validate_against(const scene::Storage& scene) noexcept {
     if (!entity_.has_value()) {
         return;
     }
@@ -136,7 +132,7 @@ void SelectionController::validate_against(const scene::Storage &scene) noexcept
         clear();
         return;
     }
-    const Result<const scene::EntityRecord *> record = scene.entity(*entity_);
+    const Result<const scene::EntityRecord*> record = scene.entity(*entity_);
     if (!record) {
         clear();
     }
@@ -172,7 +168,7 @@ bool SelectionController::enabled() const noexcept {
     return enabled_;
 }
 
-Result<void> SelectionController::set_settings(const SelectionSettings &settings) noexcept {
+Result<void> SelectionController::set_settings(const SelectionSettings& settings) noexcept {
     if (!valid_settings(settings)) {
         return Error{ErrorCode::invalid_selection_settings,
                      "Selection settings require a finite non-negative click threshold and "

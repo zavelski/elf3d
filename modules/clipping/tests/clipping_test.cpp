@@ -21,9 +21,7 @@ namespace {
            nearly_equal(left.z, right.z, tolerance);
 }
 
-} // namespace
-
-int elf3d_clipping_test() {
+[[nodiscard]] int verify_section_planes() {
     elf3d::SectionPlane plane;
     plane.enabled = true;
     plane.normal = {2.0F, 0.0F, 0.0F};
@@ -42,7 +40,10 @@ int elf3d_clipping_test() {
         elf3d::ErrorCode::invalid_section_plane) {
         return 3;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_clipping_boxes() {
     const elf3d::ClippingBox box{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}, true};
     if (!elf3d::clipping::validated_clipping_box(box)) {
         return 4;
@@ -59,7 +60,10 @@ int elf3d_clipping_test() {
         elf3d::ErrorCode::invalid_clipping_box) {
         return 6;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_plane_filters() {
     const elf3d::clipping::ClippingFilter disabled = elf3d::clipping::disabled_filter();
     constexpr elf3d::Bounds3 default_bounds{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
     if (!elf3d::clipping::contains_point(disabled, {100.0F, -20.0F, 7.0F}) ||
@@ -68,29 +72,37 @@ int elf3d_clipping_test() {
         return 7;
     }
 
-    plane = {};
+    elf3d::SectionPlane plane;
     plane.enabled = true;
     plane.normal = {1.0F, 0.0F, 0.0F};
     const auto plane_filter = elf3d::clipping::make_filter(plane, {}, 1);
-    if (!plane_filter || !elf3d::clipping::contains_point(plane_filter.value(), {0.0F, 0.0F, 0.0F}) ||
+    if (!plane_filter ||
+        !elf3d::clipping::contains_point(plane_filter.value(), {0.0F, 0.0F, 0.0F}) ||
         !elf3d::clipping::contains_point(plane_filter.value(), {2.0F, 0.0F, 0.0F}) ||
         elf3d::clipping::contains_point(plane_filter.value(), {-0.1F, 0.0F, 0.0F})) {
         return 8;
     }
     plane.retained_half_space = elf3d::PlaneHalfSpace::negative;
     const auto flipped_filter = elf3d::clipping::make_filter(plane, {}, 2);
-    if (!flipped_filter || !elf3d::clipping::contains_point(flipped_filter.value(), {-2.0F, 0.0F, 0.0F}) ||
+    if (!flipped_filter ||
+        !elf3d::clipping::contains_point(flipped_filter.value(), {-2.0F, 0.0F, 0.0F}) ||
         elf3d::clipping::contains_point(flipped_filter.value(), {0.1F, 0.0F, 0.0F})) {
         return 9;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_box_filters() {
+    elf3d::SectionPlane plane;
+    plane.normal = {1.0F, 0.0F, 0.0F};
     const std::array<elf3d::ClippingBox, 2> disjoint_boxes{{
         {{-2.0F, -1.0F, -1.0F}, {-1.0F, 1.0F, 1.0F}, true},
         {{1.0F, -1.0F, -1.0F}, {2.0F, 1.0F, 1.0F}, true},
     }};
     plane.enabled = false;
     const auto boxes_filter = elf3d::clipping::make_filter(plane, disjoint_boxes, 3);
-    if (!boxes_filter || !elf3d::clipping::contains_point(boxes_filter.value(), {-1.5F, 0.0F, 0.0F}) ||
+    if (!boxes_filter ||
+        !elf3d::clipping::contains_point(boxes_filter.value(), {-1.5F, 0.0F, 0.0F}) ||
         !elf3d::clipping::contains_point(boxes_filter.value(), {1.5F, 0.0F, 0.0F}) ||
         elf3d::clipping::contains_point(boxes_filter.value(), {0.0F, 0.0F, 0.0F})) {
         return 10;
@@ -103,7 +115,14 @@ int elf3d_clipping_test() {
         !elf3d::clipping::contains_point(combined.value(), {1.5F, 0.0F, 0.0F})) {
         return 11;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_bounds_classification() {
+    elf3d::SectionPlane plane;
+    plane.enabled = true;
+    plane.normal = {1.0F, 0.0F, 0.0F};
+    const auto plane_filter = elf3d::clipping::make_filter(plane, {}, 1);
     const elf3d::Bounds3 centered{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
     const elf3d::Bounds3 positive{{0.25F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
     const elf3d::Bounds3 negative{{-1.0F, -1.0F, -1.0F}, {-0.25F, 1.0F, 1.0F}};
@@ -115,6 +134,21 @@ int elf3d_clipping_test() {
             elf3d::clipping::BoundsClassification::intersecting) {
         return 12;
     }
+    return 0;
+}
+
+[[nodiscard]] int verify_clipped_bounds() {
+    elf3d::SectionPlane plane;
+    plane.enabled = true;
+    plane.normal = {1.0F, 0.0F, 0.0F};
+    const auto plane_filter = elf3d::clipping::make_filter(plane, {}, 1);
+    const std::array<elf3d::ClippingBox, 2> disjoint_boxes{{
+        {{-2.0F, -1.0F, -1.0F}, {-1.0F, 1.0F, 1.0F}, true},
+        {{1.0F, -1.0F, -1.0F}, {2.0F, 1.0F, 1.0F}, true},
+    }};
+    plane.enabled = false;
+    const auto boxes_filter = elf3d::clipping::make_filter(plane, disjoint_boxes, 3);
+    const elf3d::Bounds3 centered{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
     const std::optional<elf3d::Bounds3> clipped =
         elf3d::clipping::clipped_bounds(plane_filter.value(), centered);
     if (!clipped.has_value() || !nearly_equal(clipped->minimum.x, 0.0F) ||
@@ -127,22 +161,42 @@ int elf3d_clipping_test() {
         !nearly_equal(union_bounds->maximum.x, 1.0F)) {
         return 14;
     }
-    const std::optional<elf3d::Bounds3> empty =
-        elf3d::clipping::clipped_bounds(boxes_filter.value(),
-                                        elf3d::Bounds3{{-0.25F, -0.25F, -0.25F},
-                                                       {0.25F, 0.25F, 0.25F}});
+    const std::optional<elf3d::Bounds3> empty = elf3d::clipping::clipped_bounds(
+        boxes_filter.value(), elf3d::Bounds3{{-0.25F, -0.25F, -0.25F}, {0.25F, 0.25F, 0.25F}});
     if (empty.has_value()) {
         return 15;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_transformed_bounds() {
+    const elf3d::Bounds3 centered{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
     const elf3d::math::Matrix4 native_translated =
         glm::translate(elf3d::math::Matrix4{1.0F}, elf3d::math::Vector3{4.0F, 0.0F, 0.0F});
     const elf3d::Float4x4 translated = elf3d::math::to_float4x4(native_translated);
     const elf3d::Bounds3 transformed = elf3d::clipping::transform_bounds(centered, translated);
-    if (!nearly_equal(transformed.minimum.x, 3.0F) ||
-        !nearly_equal(transformed.maximum.x, 5.0F)) {
+    if (!nearly_equal(transformed.minimum.x, 3.0F) || !nearly_equal(transformed.maximum.x, 5.0F)) {
         return 16;
     }
+    return 0;
+}
 
+} // namespace
+
+int elf3d_clipping_test() {
+    const std::array<int, 7> results{{
+        verify_section_planes(),
+        verify_clipping_boxes(),
+        verify_plane_filters(),
+        verify_box_filters(),
+        verify_bounds_classification(),
+        verify_clipped_bounds(),
+        verify_transformed_bounds(),
+    }};
+    for (const int result : results) {
+        if (result != 0) {
+            return result;
+        }
+    }
     return 0;
 }

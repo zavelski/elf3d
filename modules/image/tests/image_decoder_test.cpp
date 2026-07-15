@@ -81,28 +81,49 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
     return crc ^ 0xffffffffU;
 }
 
-} // namespace
+[[nodiscard]] bool has_rgb_pixels(const elf3d::image::DecodedImage& image) {
+    return pixel(image, 0) == 255 && pixel(image, 1) == 0 && pixel(image, 4) == 0 &&
+           pixel(image, 5) == 255 && pixel(image, 8) == 0 && pixel(image, 10) == 255;
+}
 
-int elf3d_image_decode_test() {
+[[nodiscard]] int verify_rgb_png() {
     const auto rgb = elf3d::image::decode_png_or_jpeg(bytes(rgb_png));
     if (!rgb || rgb.value().width != 2 || rgb.value().height != 2 ||
-        rgb.value().pixels.size() != 16 || pixel(rgb.value(), 0) != 255 ||
-        pixel(rgb.value(), 1) != 0 || pixel(rgb.value(), 4) != 0 || pixel(rgb.value(), 5) != 255 ||
-        pixel(rgb.value(), 8) != 0 || pixel(rgb.value(), 10) != 255) {
+        rgb.value().pixels.size() != 16 || !has_rgb_pixels(rgb.value())) {
         return 1;
     }
+    return 0;
+}
+
+[[nodiscard]] int verify_rgba_png() {
     const auto rgba = elf3d::image::decode_png_or_jpeg(bytes(rgba_png));
     if (!rgba || pixel(rgba.value(), 0) != 1 || pixel(rgba.value(), 3) != 4 ||
         pixel(rgba.value(), 15) != 16) {
         return 2;
     }
+    return 0;
+}
+
+[[nodiscard]] int verify_gray_png() {
     const auto gray = elf3d::image::decode_png_or_jpeg(bytes(gray_png));
     if (!gray || pixel(gray.value(), 0) != 0 || pixel(gray.value(), 3) != 255 ||
         pixel(gray.value(), 4) != 64 || pixel(gray.value(), 5) != 64 ||
         pixel(gray.value(), 7) != 255) {
         return 3;
     }
+    return 0;
+}
 
+[[nodiscard]] int verify_truncated_jpeg(std::span<const std::byte> jpeg) {
+    const auto truncated_jpeg_result = elf3d::image::decode_png_or_jpeg(jpeg.first(32));
+    if (truncated_jpeg_result ||
+        truncated_jpeg_result.error().code() != elf3d::ErrorCode::image_decode_failed) {
+        return 5;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_jpeg() {
     constexpr std::string_view jpeg_base64 =
         "/9j/4AAQSkZJRgABAQAAAQABAAD/"
         "2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCg"
@@ -126,14 +147,10 @@ int elf3d_image_decode_test() {
         pixel(decoded_jpeg.value(), 2) > 80 || pixel(decoded_jpeg.value(), 3) != 255) {
         return 4;
     }
+    return verify_truncated_jpeg(jpeg);
+}
 
-    const std::span<const std::byte> truncated_jpeg{jpeg.data(), 32};
-    const auto truncated_jpeg_result = elf3d::image::decode_png_or_jpeg(truncated_jpeg);
-    if (truncated_jpeg_result ||
-        truncated_jpeg_result.error().code() != elf3d::ErrorCode::image_decode_failed) {
-        return 5;
-    }
-
+[[nodiscard]] int verify_invalid_images() {
     const std::array<std::byte, 3> malformed{};
     if (elf3d::image::decode_png_or_jpeg(malformed).error().code() !=
         elf3d::ErrorCode::image_decode_failed) {
@@ -154,4 +171,26 @@ int elf3d_image_decode_test() {
         return 7;
     }
     return 0;
+}
+
+} // namespace
+
+int elf3d_image_decode_test() {
+    const int rgb = verify_rgb_png();
+    if (rgb != 0) {
+        return rgb;
+    }
+    const int rgba = verify_rgba_png();
+    if (rgba != 0) {
+        return rgba;
+    }
+    const int gray = verify_gray_png();
+    if (gray != 0) {
+        return gray;
+    }
+    const int jpeg = verify_jpeg();
+    if (jpeg != 0) {
+        return jpeg;
+    }
+    return verify_invalid_images();
 }

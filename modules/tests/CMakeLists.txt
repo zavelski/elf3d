@@ -113,6 +113,7 @@ add_executable(
         tools_test_driver.cpp
         ${PROJECT_SOURCE_DIR}/modules/navigation/tests/orbit_navigation_anchor_depth_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/navigation/tests/orbit_navigation_continuous_motion_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/navigation/tests/orbit_navigation_keyboard_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/navigation/tests/orbit_navigation_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/picking/tests/picking_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/tools/selection/tests/selection_test.cpp

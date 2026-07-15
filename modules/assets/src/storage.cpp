@@ -36,22 +36,27 @@ bool valid_alpha_mode(AlphaMode mode) noexcept {
     return mode == AlphaMode::opaque || mode == AlphaMode::mask || mode == AlphaMode::blend;
 }
 
+bool valid_texture_wrap(TextureWrap wrap) noexcept {
+    return wrap == TextureWrap::repeat || wrap == TextureWrap::mirrored_repeat ||
+           wrap == TextureWrap::clamp_to_edge;
+}
+
+bool valid_minification_filter(TextureFilter filter) noexcept {
+    return filter == TextureFilter::nearest || filter == TextureFilter::linear ||
+           filter == TextureFilter::nearest_mipmap_nearest ||
+           filter == TextureFilter::linear_mipmap_nearest ||
+           filter == TextureFilter::nearest_mipmap_linear ||
+           filter == TextureFilter::linear_mipmap_linear;
+}
+
+bool valid_magnification_filter(TextureFilter filter) noexcept {
+    return filter == TextureFilter::nearest || filter == TextureFilter::linear;
+}
+
 bool valid_sampler(const SamplerDescription &sampler) noexcept {
-    const auto valid_wrap = [](TextureWrap wrap) {
-        return wrap == TextureWrap::repeat || wrap == TextureWrap::mirrored_repeat ||
-               wrap == TextureWrap::clamp_to_edge;
-    };
-    const auto valid_filter = [](TextureFilter filter) {
-        return filter == TextureFilter::nearest || filter == TextureFilter::linear ||
-               filter == TextureFilter::nearest_mipmap_nearest ||
-               filter == TextureFilter::linear_mipmap_nearest ||
-               filter == TextureFilter::nearest_mipmap_linear ||
-               filter == TextureFilter::linear_mipmap_linear;
-    };
-    return valid_wrap(sampler.wrap_u) && valid_wrap(sampler.wrap_v) &&
-           valid_filter(sampler.min_filter) &&
-           (sampler.mag_filter == TextureFilter::nearest ||
-            sampler.mag_filter == TextureFilter::linear);
+    return valid_texture_wrap(sampler.wrap_u) && valid_texture_wrap(sampler.wrap_v) &&
+           valid_minification_filter(sampler.min_filter) &&
+           valid_magnification_filter(sampler.mag_filter);
 }
 
 MaterialDescription sanitized_material(const MaterialDescription &description) noexcept {
@@ -71,34 +76,49 @@ MaterialDescription sanitized_material(const MaterialDescription &description) n
     return result;
 }
 
-Result<void> validate_material(const MaterialDescription &description,
+bool has_valid_texture_handles(const MaterialDescription &description,
                                const Storage &storage) noexcept {
     const auto valid_texture = [&storage](TextureAssetHandle texture) {
         return !texture.is_valid() || static_cast<bool>(storage.texture(texture));
     };
-    if (!valid_texture(description.base_color_texture) ||
-        !valid_texture(description.metallic_roughness_texture) ||
-        !valid_texture(description.normal_texture) ||
-        !valid_texture(description.occlusion_texture) ||
-        !valid_texture(description.emissive_texture)) {
+    return valid_texture(description.base_color_texture) &&
+           valid_texture(description.metallic_roughness_texture) &&
+           valid_texture(description.normal_texture) &&
+           valid_texture(description.occlusion_texture) &&
+           valid_texture(description.emissive_texture);
+}
+
+bool has_valid_texture_mappings(const MaterialDescription &description) noexcept {
+    return finite_mapping(description.base_color_texture_mapping) &&
+           finite_mapping(description.metallic_roughness_texture_mapping) &&
+           finite_mapping(description.normal_texture_mapping) &&
+           finite_mapping(description.occlusion_texture_mapping) &&
+           finite_mapping(description.emissive_texture_mapping);
+}
+
+bool has_valid_material_scalars(const MaterialDescription &description) noexcept {
+    return valid_alpha_mode(description.alpha_mode) && std::isfinite(description.alpha_cutoff) &&
+           std::isfinite(description.metallic_factor) && std::isfinite(description.roughness_factor) &&
+           std::isfinite(description.normal_scale) && std::isfinite(description.occlusion_strength) &&
+           std::isfinite(description.ior) && std::isfinite(description.specular_factor);
+}
+
+bool has_valid_material_colors(const MaterialDescription &description) noexcept {
+    return math::is_finite(description.emissive_factor) &&
+           math::is_finite(description.specular_color_factor);
+}
+
+Result<void> validate_material(const MaterialDescription &description,
+                               const Storage &storage) noexcept {
+    if (!has_valid_texture_handles(description, storage)) {
         return Error{ErrorCode::invalid_texture_asset_handle,
                      "Material textures must belong to the same scene asset storage"};
     }
-    if (!finite_mapping(description.base_color_texture_mapping) ||
-        !finite_mapping(description.metallic_roughness_texture_mapping) ||
-        !finite_mapping(description.normal_texture_mapping) ||
-        !finite_mapping(description.occlusion_texture_mapping) ||
-        !finite_mapping(description.emissive_texture_mapping)) {
+    if (!has_valid_texture_mappings(description)) {
         return Error{ErrorCode::invalid_texcoord,
                      "Material texture mappings require UV set 0 or 1 and finite transforms"};
     }
-    if (!valid_alpha_mode(description.alpha_mode) || !std::isfinite(description.alpha_cutoff) ||
-        !std::isfinite(description.metallic_factor) ||
-        !std::isfinite(description.roughness_factor) ||
-        !math::is_finite(description.emissive_factor) || !std::isfinite(description.normal_scale) ||
-        !std::isfinite(description.occlusion_strength) || !std::isfinite(description.ior) ||
-        !std::isfinite(description.specular_factor) ||
-        !math::is_finite(description.specular_color_factor)) {
+    if (!has_valid_material_scalars(description) || !has_valid_material_colors(description)) {
         return Error{ErrorCode::invalid_material_handle,
                      "Material factors, alpha values, and colors must be finite"};
     }

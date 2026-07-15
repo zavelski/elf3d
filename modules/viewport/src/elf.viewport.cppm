@@ -11,28 +11,29 @@ module;
 export module elf.viewport;
 
 import elf.clipping;
-import elf.core;
 import elf.graphics;
-import elf.navigation;
 import elf.picking;
 import elf.renderer;
 import elf.scene;
-import elf.tool.clipping;
-import elf.tool.measurement;
-import elf.tool.selection;
-import elf.tool.visibility;
 
 export namespace elf3d::viewport {
+
+struct ViewportPickRequest {
+    EntityId camera;
+    Float2 position_pixels;
+    PickOptions options;
+};
 
 class OffscreenViewport final {
   private:
     struct ConstructionKey final {};
+    class State;
 
   public:
-    [[nodiscard]] static Result<std::unique_ptr<OffscreenViewport>>
-    create(graphics::Device& device, Extent2D initial_extent);
+    [[nodiscard]] static Result<std::unique_ptr<OffscreenViewport>> create(graphics::Device& device,
+                                                                           Extent2D initial_extent);
 
-    ~OffscreenViewport() = default;
+    ~OffscreenViewport() noexcept;
 
     OffscreenViewport(const OffscreenViewport&) = delete;
     OffscreenViewport& operator=(const OffscreenViewport&) = delete;
@@ -71,13 +72,14 @@ class OffscreenViewport final {
     [[nodiscard]] Result<Ray3> make_picking_ray(picking::PickingService& picking,
                                                 const scene::Storage& scene, EntityId camera,
                                                 Float2 position_pixels) const;
-    [[nodiscard]] Result<std::optional<PickHit>>
-    pick(renderer::Renderer& renderer, picking::PickingService& picking,
-         const scene::Storage& scene, EntityId camera, Float2 position_pixels,
-         const PickOptions& options = {});
-    [[nodiscard]] Result<std::optional<PickHit>>
-    select_at(renderer::Renderer& renderer, picking::PickingService& picking,
-              const scene::Storage& scene, EntityId camera, Float2 position_pixels);
+    [[nodiscard]] Result<std::optional<PickHit>> pick(renderer::Renderer& renderer,
+                                                      picking::PickingService& picking,
+                                                      const scene::Storage& scene,
+                                                      const ViewportPickRequest& request);
+    [[nodiscard]] Result<std::optional<PickHit>> select_at(renderer::Renderer& renderer,
+                                                           picking::PickingService& picking,
+                                                           const scene::Storage& scene,
+                                                           EntityId camera, Float2 position_pixels);
     [[nodiscard]] Result<void> set_selected_entity(const scene::Storage& scene, EntityId entity);
     void clear_selection() noexcept;
     void clear_scene_selection(SceneId scene) noexcept;
@@ -142,26 +144,68 @@ class OffscreenViewport final {
                       std::unique_ptr<graphics::PickingTarget> picking_target) noexcept;
 
   private:
+    struct InteractionFrame {
+        EntityId camera;
+        ViewportInput input;
+        scene::VisibilityFilter visibility;
+        elf3d::clipping::ClippingFilter clipping_filter;
+    };
+
+    struct PickOperation {
+        EntityId camera;
+        Float2 position_pixels;
+        PickOptions options;
+        elf3d::clipping::ClippingFilter clipping_filter;
+    };
+
     [[nodiscard]] Result<std::optional<PickHit>>
     pick_gpu_first(renderer::Renderer& renderer, picking::PickingService& picking,
-                   const scene::Storage& scene, EntityId camera, Float2 position_pixels,
-                   const PickOptions& options, const scene::VisibilityFilter& visibility,
-                   const elf3d::clipping::ClippingFilter& clipping_filter);
+                   const scene::Storage& scene, const scene::VisibilityFilter& visibility,
+                   const PickOperation& operation);
     [[nodiscard]] Result<std::optional<Float3>>
     focus_depth_anchor(renderer::Renderer& renderer, const scene::Storage& scene, EntityId camera,
                        const scene::VisibilityFilter& visibility,
                        const elf3d::clipping::ClippingFilter& clipping_filter);
+    [[nodiscard]] Result<InteractionFrame> interaction_frame(scene::Storage& scene, EntityId camera,
+                                                             const ViewportInput& input);
+    [[nodiscard]] ViewportInput normalized_pointer_hover(const ViewportInput& input) const noexcept;
+    [[nodiscard]] Result<void>
+    update_orbit_screen_anchor(renderer::Renderer& renderer, scene::Storage& scene,
+                               const InteractionFrame& frame,
+                               std::optional<Float2> orbit_start_position);
+    [[nodiscard]] Result<void> handle_navigation_click(renderer::Renderer& renderer,
+                                                       picking::PickingService& picking,
+                                                       scene::Storage& scene,
+                                                       const InteractionFrame& frame,
+                                                       std::optional<Float2> click_position);
+    [[nodiscard]] Result<void> handle_measurement_click(renderer::Renderer& renderer,
+                                                        picking::PickingService& picking,
+                                                        scene::Storage& scene,
+                                                        const InteractionFrame& frame,
+                                                        Float2 click_position);
+    [[nodiscard]] Result<void> handle_selection_click(renderer::Renderer& renderer,
+                                                      picking::PickingService& picking,
+                                                      scene::Storage& scene,
+                                                      const InteractionFrame& frame,
+                                                      Float2 click_position);
+    [[nodiscard]] Result<bool> hide_clicked_entity(scene::Storage& scene,
+                                                   const InteractionFrame& frame,
+                                                   const std::optional<PickHit>& hit);
+    [[nodiscard]] Result<void> select_control_click(const scene::Storage& scene,
+                                                    const InteractionFrame& frame,
+                                                    const std::optional<PickHit>& hit);
+    [[nodiscard]] Result<void> anchor_plain_click(scene::Storage& scene,
+                                                  const InteractionFrame& frame,
+                                                  const std::optional<PickHit>& hit);
+    [[nodiscard]] Result<void> update_measurement_preview(renderer::Renderer& renderer,
+                                                          picking::PickingService& picking,
+                                                          scene::Storage& scene,
+                                                          const InteractionFrame& frame);
 
     std::unique_ptr<graphics::RenderTarget> render_target_;
     std::unique_ptr<graphics::PickingTarget> picking_target_;
-    navigation::OrbitNavigationController navigation_;
-    tools::selection::SelectionController selection_;
-    tools::visibility::VisibilityController visibility_;
-    tools::clipping::ClippingController clipping_;
+    std::unique_ptr<State> state_;
     ViewportTool active_tool_ = ViewportTool::selection;
-    tools::measurement::DistanceMeasurementController measurement_;
-    tools::measurement::MeasurementOverlay measurement_overlay_;
-    tools::clipping::ClippingOverlay clipping_overlay_;
     std::array<OverlayLineSegment, 2 + 4 + maximum_clipping_boxes * 12> overlay_lines_;
     std::array<OverlayPointMarker, 3> overlay_markers_;
     std::size_t overlay_line_count_ = 0;

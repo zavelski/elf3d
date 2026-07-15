@@ -36,6 +36,11 @@ constexpr std::string_view metadata_fixture = R"json({
   "scene":0
 })json";
 
+constexpr std::string_view expected_root_extras =
+    R"json({"tag":"root","nested":[1,true,null,{"k":"brace }"}]})json";
+constexpr std::string_view expected_root_extension =
+    R"json({"tag":"root-ext","nested":{"array":[1,2]}})json";
+
 [[nodiscard]] std::uint64_t next_suffix() noexcept {
     static std::uint64_t value = 0;
     return ++value;
@@ -93,30 +98,32 @@ class TemporaryDirectory final {
     return !metadata.extras_json.has_value() && metadata.extensions.empty();
 }
 
-[[nodiscard]] bool all_supported_metadata_matches(const elf3d::Document& document) {
-    const elf3d::DocumentView view = document.view();
-    if (view.root_metadata().extras_json !=
-            std::optional<std::string_view>{
-                R"json({"tag":"root","nested":[1,true,null,{"k":"brace }"}]})json"} ||
-        view.root_metadata().extensions.size() != 1U ||
-        view.root_metadata().extensions[0].data !=
-            R"json({"tag":"root-ext","nested":{"array":[1,2]}})json" ||
-        !metadata_matches(view.asset_metadata(), "asset")) {
-        return false;
-    }
+[[nodiscard]] bool root_metadata_matches(const elf3d::DocumentView& view) {
+    return view.root_metadata().extras_json ==
+               std::optional<std::string_view>{expected_root_extras} &&
+           view.root_metadata().extensions.size() == 1U &&
+           view.root_metadata().extensions[0].data == expected_root_extension &&
+           metadata_matches(view.asset_metadata(), "asset");
+}
+
+[[nodiscard]] bool scene_graph_metadata_matches(const elf3d::DocumentView& view) {
     const auto scene = view.scene_at(0U);
     const auto node = view.node_at(0U);
     const auto mesh = view.mesh_at(0U);
     const auto primitive = view.primitive_at(0U);
+    return scene && node && mesh && primitive &&
+           metadata_matches(scene.value().metadata, "scene") &&
+           metadata_matches(node.value().metadata, "node") &&
+           metadata_matches(mesh.value().metadata, "mesh") &&
+           metadata_matches(primitive.value().metadata, "primitive");
+}
+
+[[nodiscard]] bool resource_metadata_matches(const elf3d::DocumentView& view) {
     const auto material = view.material_at(0U);
     const auto image = view.image_at(0U);
     const auto texture = view.texture_at(0U);
     const auto sampler = view.sampler_at(0U);
-    return scene && node && mesh && primitive && material && image && texture && sampler &&
-           metadata_matches(scene.value().metadata, "scene") &&
-           metadata_matches(node.value().metadata, "node") &&
-           metadata_matches(mesh.value().metadata, "mesh") &&
-           metadata_matches(primitive.value().metadata, "primitive") &&
+    return material && image && texture && sampler &&
            metadata_matches(material.value().metadata, "material") &&
            metadata_matches(image.value().metadata, "image") &&
            metadata_matches(texture.value().metadata, "texture") &&
@@ -124,25 +131,38 @@ class TemporaryDirectory final {
            material.value().description.ior == 1.33F;
 }
 
-[[nodiscard]] bool all_supported_metadata_is_empty(const elf3d::Document& document) {
+[[nodiscard]] bool all_supported_metadata_matches(const elf3d::Document& document) {
     const elf3d::DocumentView view = document.view();
+    return root_metadata_matches(view) && scene_graph_metadata_matches(view) &&
+           resource_metadata_matches(view);
+}
+
+[[nodiscard]] bool scene_graph_metadata_is_empty(const elf3d::DocumentView& view) {
     const auto scene = view.scene_at(0U);
     const auto node = view.node_at(0U);
     const auto mesh = view.mesh_at(0U);
     const auto primitive = view.primitive_at(0U);
+    return scene && node && mesh && primitive && metadata_is_empty(scene.value().metadata) &&
+           metadata_is_empty(node.value().metadata) && metadata_is_empty(mesh.value().metadata) &&
+           metadata_is_empty(primitive.value().metadata);
+}
+
+[[nodiscard]] bool resource_metadata_is_empty(const elf3d::DocumentView& view) {
     const auto material = view.material_at(0U);
     const auto image = view.image_at(0U);
     const auto texture = view.texture_at(0U);
     const auto sampler = view.sampler_at(0U);
-    return metadata_is_empty(view.root_metadata()) && metadata_is_empty(view.asset_metadata()) &&
-           scene && node && mesh && primitive && material && image && texture && sampler &&
-           metadata_is_empty(scene.value().metadata) && metadata_is_empty(node.value().metadata) &&
-           metadata_is_empty(mesh.value().metadata) &&
-           metadata_is_empty(primitive.value().metadata) &&
+    return material && image && texture && sampler &&
            metadata_is_empty(material.value().metadata) &&
            metadata_is_empty(image.value().metadata) &&
            metadata_is_empty(texture.value().metadata) &&
            metadata_is_empty(sampler.value().metadata);
+}
+
+[[nodiscard]] bool all_supported_metadata_is_empty(const elf3d::Document& document) {
+    const elf3d::DocumentView view = document.view();
+    return metadata_is_empty(view.root_metadata()) && metadata_is_empty(view.asset_metadata()) &&
+           scene_graph_metadata_is_empty(view) && resource_metadata_is_empty(view);
 }
 
 [[nodiscard]] bool has_unpreserved_metadata_diagnostic(const elf3d::ModelLoadReport& report) {
@@ -172,6 +192,81 @@ class TemporaryDirectory final {
            loaded.value().document.material_at(0U).value().description.ior == 1.33F;
 }
 
+[[nodiscard]] int verify_preserved_metadata(const TemporaryDirectory& temporary,
+                                            const elf3d::LoadedDocument& loaded) {
+    if (!all_supported_metadata_matches(loaded.document)) {
+        return 21;
+    }
+    if (!has_unpreserved_metadata_diagnostic(loaded.report)) {
+        return 22;
+    }
+    if (loaded.document.preserved_metadata_stale()) {
+        return 23;
+    }
+    if (!round_trip_preserves(temporary.path() / "preserved.gltf", loaded.document) ||
+        !round_trip_preserves(temporary.path() / "preserved.glb", loaded.document)) {
+        return 3;
+    }
+    const auto json = read_text(temporary.path() / "preserved.gltf");
+    if (!json || json->find(R"json("extensionsUsed": ["KHR_materials_ior", "EXT_elf_raw"])json") ==
+                     std::string::npos) {
+        return 4;
+    }
+    return 0;
+}
+
+[[nodiscard]] int mark_metadata_stale(elf3d::Document& document) {
+    elf3d::Document foreign;
+    const auto foreign_node = foreign.create_node();
+    if (!foreign_node || document.set_node_matrix(foreign_node.value(), {}) ||
+        document.preserved_metadata_stale()) {
+        return 5;
+    }
+    const auto node = document.node_at(0U);
+    if (!node) {
+        return 6;
+    }
+    elf3d::Float4x4 changed = node.value().local_matrix;
+    changed.elements[12] = 2.0F;
+    if (!document.set_node_matrix(node.value().id, changed) ||
+        !document.preserved_metadata_stale()) {
+        return 7;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_stale_outputs(const TemporaryDirectory& temporary,
+                                       const elf3d::Document& document) {
+    const elf3d::DocumentValidationReport validation = elf3d::validate_document(document.view());
+    const std::size_t warnings = static_cast<std::size_t>(std::count_if(
+        validation.diagnostics.begin(), validation.diagnostics.end(),
+        [](const elf3d::DocumentDiagnostic& diagnostic) noexcept {
+            return diagnostic.code == elf3d::DocumentDiagnosticCode::stale_preserved_metadata;
+        }));
+    if (validation.has_errors() || warnings != 1U ||
+        !stale_write_drops(temporary.path() / "stale.gltf", document) ||
+        !stale_write_drops(temporary.path() / "stale.glb", document)) {
+        return 8;
+    }
+    const auto json = read_text(temporary.path() / "stale.gltf");
+    if (!json || json->find("EXT_elf_raw") != std::string::npos ||
+        json->find("KHR_materials_ior") == std::string::npos) {
+        return 9;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_mutable_access_stales(const std::filesystem::path& source) {
+    auto loaded = elf3d::load_document(source.string());
+    if (!loaded ||
+        !loaded.value().document.mutable_positions(
+            loaded.value().document.primitive_at(0U).value().id) ||
+        !loaded.value().document.preserved_metadata_stale()) {
+        return 10;
+    }
+    return 0;
+}
+
 } // namespace
 
 int elf3d_gltf_metadata_round_trip_test() {
@@ -184,66 +279,17 @@ int elf3d_gltf_metadata_round_trip_test() {
     if (!loaded) {
         return 20;
     }
-    if (!all_supported_metadata_matches(loaded.value().document)) {
-        return 21;
+    const int preserved = verify_preserved_metadata(temporary, loaded.value());
+    if (preserved != 0) {
+        return preserved;
     }
-    if (!has_unpreserved_metadata_diagnostic(loaded.value().report)) {
-        return 22;
+    const int stale = mark_metadata_stale(loaded.value().document);
+    if (stale != 0) {
+        return stale;
     }
-    if (loaded.value().document.preserved_metadata_stale()) {
-        return 23;
+    const int stale_outputs = verify_stale_outputs(temporary, loaded.value().document);
+    if (stale_outputs != 0) {
+        return stale_outputs;
     }
-    if (!round_trip_preserves(temporary.path() / "preserved.gltf", loaded.value().document) ||
-        !round_trip_preserves(temporary.path() / "preserved.glb", loaded.value().document)) {
-        return 3;
-    }
-    const auto preserved_json = read_text(temporary.path() / "preserved.gltf");
-    if (!preserved_json ||
-        preserved_json->find(R"json("extensionsUsed":["KHR_materials_ior","EXT_elf_raw"])json") ==
-            std::string::npos) {
-        return 4;
-    }
-
-    elf3d::Document foreign;
-    const auto foreign_node = foreign.create_node();
-    if (!foreign_node || loaded.value().document.set_node_matrix(foreign_node.value(), {}) ||
-        loaded.value().document.preserved_metadata_stale()) {
-        return 5;
-    }
-    const auto node = loaded.value().document.node_at(0U);
-    if (!node) {
-        return 6;
-    }
-    elf3d::Float4x4 changed = node.value().local_matrix;
-    changed.elements[12] = 2.0F;
-    if (!loaded.value().document.set_node_matrix(node.value().id, changed) ||
-        !loaded.value().document.preserved_metadata_stale()) {
-        return 7;
-    }
-    const elf3d::DocumentValidationReport validation =
-        elf3d::validate_document(loaded.value().document.view());
-    const std::size_t stale_warnings = static_cast<std::size_t>(std::count_if(
-        validation.diagnostics.begin(), validation.diagnostics.end(),
-        [](const elf3d::DocumentDiagnostic& diagnostic) noexcept {
-            return diagnostic.code == elf3d::DocumentDiagnosticCode::stale_preserved_metadata;
-        }));
-    if (validation.has_errors() || stale_warnings != 1U ||
-        !stale_write_drops(temporary.path() / "stale.gltf", loaded.value().document) ||
-        !stale_write_drops(temporary.path() / "stale.glb", loaded.value().document)) {
-        return 8;
-    }
-    const auto stale_json = read_text(temporary.path() / "stale.gltf");
-    if (!stale_json || stale_json->find("EXT_elf_raw") != std::string::npos ||
-        stale_json->find("KHR_materials_ior") == std::string::npos) {
-        return 9;
-    }
-
-    auto mutable_loaded = elf3d::load_document(source.string());
-    if (!mutable_loaded ||
-        !mutable_loaded.value().document.mutable_positions(
-            mutable_loaded.value().document.primitive_at(0U).value().id) ||
-        !mutable_loaded.value().document.preserved_metadata_stale()) {
-        return 10;
-    }
-    return 0;
+    return verify_mutable_access_stales(source);
 }
