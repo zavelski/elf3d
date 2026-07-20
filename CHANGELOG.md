@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.4
+
+- Reworked the public README into a product overview with quick links, feature
+  highlights, product entry points, build instructions, current scope, and a
+  repository map.
+- Added a Mermaid composition diagram that presents the four public products,
+  nine grouped CMake module targets, and their dependency direction.
+- Added a credited Elf3D Viewer screenshot of the Madame Walker Theatre model
+  plus original social-preview artwork, with explicit CC BY 4.0 attribution
+  and third-party notice coverage.
+
 ## 0.8.3
 
 - Raised the glTF node limit to 131,072 and discarded delayed pointer samples
