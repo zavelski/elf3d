@@ -70,7 +70,7 @@ BasicLighting Viewport::basic_lighting() const noexcept {
                                                           : BasicLighting{};
 }
 
-Result<void> Viewport::update_navigation(Scene& scene, EntityId camera,
+Result<void> Viewport::update_navigation(Scene& scene, EntityId camera_entity,
                                          const ViewportInput& input) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
@@ -87,7 +87,13 @@ Result<void> Viewport::update_navigation(Scene& scene, EntityId camera,
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport navigation requires a live scene"};
         }
-        return impl_->viewport->update_navigation(*renderer, *picking, *storage, camera, input);
+        const Result<PerspectiveCameraDescription> camera =
+            storage->perspective_camera(camera_entity);
+        if (!camera) {
+            return camera.error();
+        }
+        return impl_->viewport->update_navigation(*renderer, *picking, *storage, camera_entity,
+                                                  input);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -95,7 +101,7 @@ Result<void> Viewport::update_navigation(Scene& scene, EntityId camera,
     }
 }
 
-Result<void> Viewport::set_examine_pivot(Scene& scene, EntityId camera,
+Result<void> Viewport::set_examine_pivot(Scene& scene, EntityId camera_entity,
                                          Float3 world_position) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
@@ -107,7 +113,7 @@ Result<void> Viewport::set_examine_pivot(Scene& scene, EntityId camera,
             return Error{ErrorCode::invalid_argument,
                          "Viewport pivot update requires a live scene"};
         }
-        return impl_->viewport->set_examine_pivot(*storage, camera, world_position);
+        return impl_->viewport->set_examine_pivot(*storage, camera_entity, world_position);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -115,7 +121,7 @@ Result<void> Viewport::set_examine_pivot(Scene& scene, EntityId camera,
     }
 }
 
-Result<void> Viewport::fit_to_scene(Scene& scene, EntityId camera) noexcept {
+Result<void> Viewport::fit_to_scene(Scene& scene, EntityId camera_entity) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -125,7 +131,7 @@ Result<void> Viewport::fit_to_scene(Scene& scene, EntityId camera) noexcept {
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport fitting requires a live scene"};
         }
-        return impl_->viewport->fit_to_scene(*storage, camera);
+        return impl_->viewport->fit_to_scene(*storage, camera_entity);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -133,7 +139,7 @@ Result<void> Viewport::fit_to_scene(Scene& scene, EntityId camera) noexcept {
     }
 }
 
-Result<void> Viewport::reset_view(Scene& scene, EntityId camera) noexcept {
+Result<void> Viewport::reset_view(Scene& scene, EntityId camera_entity) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -143,7 +149,7 @@ Result<void> Viewport::reset_view(Scene& scene, EntityId camera) noexcept {
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport reset requires a live scene"};
         }
-        return impl_->viewport->reset_view(*storage, camera);
+        return impl_->viewport->reset_view(*storage, camera_entity);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -151,7 +157,7 @@ Result<void> Viewport::reset_view(Scene& scene, EntityId camera) noexcept {
     }
 }
 
-Result<void> Viewport::synchronize_navigation(const Scene& scene, EntityId camera) noexcept {
+Result<void> Viewport::synchronize_navigation(const Scene& scene, EntityId camera_entity) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -162,7 +168,7 @@ Result<void> Viewport::synchronize_navigation(const Scene& scene, EntityId camer
             return Error{ErrorCode::invalid_argument,
                          "Viewport navigation synchronization requires a live scene"};
         }
-        return impl_->viewport->synchronize_navigation(*storage, camera);
+        return impl_->viewport->synchronize_navigation(*storage, camera_entity);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -221,7 +227,7 @@ ViewportTool Viewport::active_tool() const noexcept {
                                                           : ViewportTool::selection;
 }
 
-Result<Ray3> Viewport::make_picking_ray(const Scene& scene, EntityId camera,
+Result<Ray3> Viewport::make_picking_ray(const Scene& scene, EntityId camera_entity,
                                         Float2 position_pixels) const noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
@@ -237,7 +243,8 @@ Result<Ray3> Viewport::make_picking_ray(const Scene& scene, EntityId camera,
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport picking requires a live scene"};
         }
-        return impl_->viewport->make_picking_ray(*picking, *storage, camera, position_pixels);
+        return impl_->viewport->make_picking_ray(*picking, *storage, camera_entity,
+                                                 position_pixels);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -245,7 +252,7 @@ Result<Ray3> Viewport::make_picking_ray(const Scene& scene, EntityId camera,
     }
 }
 
-Result<std::optional<PickHit>> Viewport::pick(const Scene& scene, EntityId camera,
+Result<std::optional<PickHit>> Viewport::pick(const Scene& scene, EntityId camera_entity,
                                               Float2 position_pixels,
                                               const PickOptions& options) const noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
@@ -263,7 +270,7 @@ Result<std::optional<PickHit>> Viewport::pick(const Scene& scene, EntityId camer
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport picking requires a live scene"};
         }
-        const viewport::ViewportPickRequest request{camera, position_pixels, options};
+        const viewport::ViewportPickRequest request{camera_entity, position_pixels, options};
         return impl_->viewport->pick(*renderer, *picking, *storage, request);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
@@ -272,7 +279,7 @@ Result<std::optional<PickHit>> Viewport::pick(const Scene& scene, EntityId camer
     }
 }
 
-Result<std::optional<PickHit>> Viewport::select_at(const Scene& scene, EntityId camera,
+Result<std::optional<PickHit>> Viewport::select_at(const Scene& scene, EntityId camera_entity,
                                                    Float2 position_pixels) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
@@ -289,7 +296,8 @@ Result<std::optional<PickHit>> Viewport::select_at(const Scene& scene, EntityId 
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport selection requires a live scene"};
         }
-        return impl_->viewport->select_at(*renderer, *picking, *storage, camera, position_pixels);
+        return impl_->viewport->select_at(*renderer, *picking, *storage, camera_entity,
+                                          position_pixels);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -297,7 +305,7 @@ Result<std::optional<PickHit>> Viewport::select_at(const Scene& scene, EntityId 
     }
 }
 
-Result<void> Viewport::set_selected_entity(const Scene& scene, EntityId entity) noexcept {
+Result<void> Viewport::set_selected_entity(const Scene& scene, EntityId selected_entity) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -307,7 +315,7 @@ Result<void> Viewport::set_selected_entity(const Scene& scene, EntityId entity) 
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport selection requires a live scene"};
         }
-        return impl_->viewport->set_selected_entity(*storage, entity);
+        return impl_->viewport->set_selected_entity(*storage, selected_entity);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -459,7 +467,7 @@ MeasurementStatistics Viewport::measurement_statistics() const noexcept {
 }
 
 Result<ProjectedViewportPoint>
-Viewport::project_world_to_viewport(const Scene& scene, EntityId camera,
+Viewport::project_world_to_viewport(const Scene& scene, EntityId camera_entity,
                                     Float3 world_position) const noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
@@ -470,7 +478,7 @@ Viewport::project_world_to_viewport(const Scene& scene, EntityId camera,
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport projection requires a live scene"};
         }
-        return impl_->viewport->project_world_to_viewport(*storage, camera, world_position);
+        return impl_->viewport->project_world_to_viewport(*storage, camera_entity, world_position);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -478,7 +486,7 @@ Viewport::project_world_to_viewport(const Scene& scene, EntityId camera,
     }
 }
 
-Result<void> Viewport::isolate_entity(const Scene& scene, EntityId entity) noexcept {
+Result<void> Viewport::isolate_entity(const Scene& scene, EntityId isolated_entity) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -488,7 +496,7 @@ Result<void> Viewport::isolate_entity(const Scene& scene, EntityId entity) noexc
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport isolation requires a live scene"};
         }
-        return impl_->viewport->isolate_entity(*storage, entity);
+        return impl_->viewport->isolate_entity(*storage, isolated_entity);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -511,7 +519,7 @@ std::optional<EntityId> Viewport::isolated_entity() const noexcept {
                                                           : std::nullopt;
 }
 
-Result<void> Viewport::hide_selected(Scene& scene) noexcept {
+Result<void> Viewport::hide_selected_in_scene(Scene& scene) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -530,7 +538,7 @@ Result<void> Viewport::hide_selected(Scene& scene) noexcept {
     }
 }
 
-Result<void> Viewport::show_selected(Scene& scene) noexcept {
+Result<void> Viewport::show_selected_in_scene(Scene& scene) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -720,7 +728,7 @@ ClippingSnapshot Viewport::clipping_snapshot() const noexcept {
                                                           : ClippingSnapshot{};
 }
 
-Result<void> Viewport::render(const Scene& scene, EntityId camera) noexcept {
+Result<void> Viewport::render(const Scene& scene, EntityId camera_entity) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "The viewport has no graphics resources"};
     }
@@ -735,7 +743,7 @@ Result<void> Viewport::render(const Scene& scene, EntityId camera) noexcept {
         if (storage == nullptr) {
             return Error{ErrorCode::invalid_argument, "Viewport rendering requires a live scene"};
         }
-        return impl_->viewport->render(*renderer, *storage, camera);
+        return impl_->viewport->render(*renderer, *storage, camera_entity);
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -743,7 +751,7 @@ Result<void> Viewport::render(const Scene& scene, EntityId camera) noexcept {
     }
 }
 
-RenderStatistics Viewport::statistics() const noexcept {
+RenderStatistics Viewport::render_statistics() const noexcept {
     return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->statistics()
                                                           : RenderStatistics{};
 }

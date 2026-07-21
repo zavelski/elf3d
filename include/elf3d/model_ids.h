@@ -16,7 +16,7 @@ class DocumentSceneId final {
     constexpr DocumentSceneId() noexcept = default;
 
     [[nodiscard]] constexpr bool is_valid() const noexcept {
-        return document_ != 0 && value_ != 0;
+        return document_token_ != 0 && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
@@ -28,10 +28,10 @@ class DocumentSceneId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr DocumentSceneId(std::uintptr_t document, std::uint64_t value) noexcept
-        : document_(document), value_(value) {}
+    constexpr DocumentSceneId(std::uint64_t document_token, std::uint64_t value) noexcept
+        : document_token_(document_token), value_(value) {}
 
-    std::uintptr_t document_ = 0;
+    std::uint64_t document_token_ = 0;
     std::uint64_t value_ = 0;
 };
 
@@ -40,7 +40,7 @@ class NodeId final {
     constexpr NodeId() noexcept = default;
 
     [[nodiscard]] constexpr bool is_valid() const noexcept {
-        return document_ != 0 && value_ != 0;
+        return document_token_ != 0 && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
@@ -52,10 +52,10 @@ class NodeId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr NodeId(std::uintptr_t document, std::uint64_t value) noexcept
-        : document_(document), value_(value) {}
+    constexpr NodeId(std::uint64_t document_token, std::uint64_t value) noexcept
+        : document_token_(document_token), value_(value) {}
 
-    std::uintptr_t document_ = 0;
+    std::uint64_t document_token_ = 0;
     std::uint64_t value_ = 0;
 };
 
@@ -64,7 +64,7 @@ class MeshId final {
     constexpr MeshId() noexcept = default;
 
     [[nodiscard]] constexpr bool is_valid() const noexcept {
-        return document_ != 0 && value_ != 0;
+        return document_token_ != 0 && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
@@ -76,10 +76,10 @@ class MeshId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr MeshId(std::uintptr_t document, std::uint64_t value) noexcept
-        : document_(document), value_(value) {}
+    constexpr MeshId(std::uint64_t document_token, std::uint64_t value) noexcept
+        : document_token_(document_token), value_(value) {}
 
-    std::uintptr_t document_ = 0;
+    std::uint64_t document_token_ = 0;
     std::uint64_t value_ = 0;
 };
 
@@ -88,7 +88,7 @@ class PrimitiveId final {
     constexpr PrimitiveId() noexcept = default;
 
     [[nodiscard]] constexpr bool is_valid() const noexcept {
-        return document_ != 0 && value_ != 0;
+        return document_token_ != 0 && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
@@ -100,10 +100,10 @@ class PrimitiveId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr PrimitiveId(std::uintptr_t document, std::uint64_t value) noexcept
-        : document_(document), value_(value) {}
+    constexpr PrimitiveId(std::uint64_t document_token, std::uint64_t value) noexcept
+        : document_token_(document_token), value_(value) {}
 
-    std::uintptr_t document_ = 0;
+    std::uint64_t document_token_ = 0;
     std::uint64_t value_ = 0;
 };
 
@@ -112,7 +112,7 @@ class MaterialId final {
     constexpr MaterialId() noexcept = default;
 
     [[nodiscard]] constexpr bool is_valid() const noexcept {
-        return document_ != 0 && value_ != 0;
+        return document_token_ != 0 && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
@@ -124,10 +124,10 @@ class MaterialId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr MaterialId(std::uintptr_t document, std::uint64_t value) noexcept
-        : document_(document), value_(value) {}
+    constexpr MaterialId(std::uint64_t document_token, std::uint64_t value) noexcept
+        : document_token_(document_token), value_(value) {}
 
-    std::uintptr_t document_ = 0;
+    std::uint64_t document_token_ = 0;
     std::uint64_t value_ = 0;
 };
 
@@ -136,7 +136,7 @@ class ImageId final {
     constexpr ImageId() noexcept = default;
 
     [[nodiscard]] constexpr bool is_valid() const noexcept {
-        return document_ != 0 && value_ != 0;
+        return document_token_ != 0 && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
@@ -148,10 +148,10 @@ class ImageId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr ImageId(std::uintptr_t document, std::uint64_t value) noexcept
-        : document_(document), value_(value) {}
+    constexpr ImageId(std::uint64_t document_token, std::uint64_t value) noexcept
+        : document_token_(document_token), value_(value) {}
 
-    std::uintptr_t document_ = 0;
+    std::uint64_t document_token_ = 0;
     std::uint64_t value_ = 0;
 };
 
@@ -160,7 +160,7 @@ class TextureId final {
     constexpr TextureId() noexcept = default;
 
     [[nodiscard]] constexpr bool is_valid() const noexcept {
-        return document_ != 0 && value_ != 0;
+        return document_token_ != 0 && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
@@ -172,10 +172,10 @@ class TextureId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr TextureId(std::uintptr_t document, std::uint64_t value) noexcept
-        : document_(document), value_(value) {}
+    constexpr TextureId(std::uint64_t document_token, std::uint64_t value) noexcept
+        : document_token_(document_token), value_(value) {}
 
-    std::uintptr_t document_ = 0;
+    std::uint64_t document_token_ = 0;
     std::uint64_t value_ = 0;
 };
 
@@ -184,7 +184,7 @@ class SamplerId final {
     constexpr SamplerId() noexcept = default;
 
     [[nodiscard]] constexpr bool is_valid() const noexcept {
-        return document_ != 0 && value_ != 0;
+        return document_token_ != 0 && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
@@ -196,10 +196,10 @@ class SamplerId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr SamplerId(std::uintptr_t document, std::uint64_t value) noexcept
-        : document_(document), value_(value) {}
+    constexpr SamplerId(std::uint64_t document_token, std::uint64_t value) noexcept
+        : document_token_(document_token), value_(value) {}
 
-    std::uintptr_t document_ = 0;
+    std::uint64_t document_token_ = 0;
     std::uint64_t value_ = 0;
 };
 

@@ -108,6 +108,15 @@ enum class ErrorCode {
     unsupported_vertex_layout,
     foreign_engine_object,
     unexpected_exception,
+    invalid_document_scene_id,
+    invalid_node_id,
+    invalid_mesh_id,
+    invalid_primitive_id,
+    invalid_material_id,
+    invalid_material_description,
+    invalid_image_id,
+    invalid_texture_id,
+    invalid_sampler_id,
 };
 
 class Error final {

@@ -1,9 +1,10 @@
 #include <elf3d/assets.h>
+#include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
 #include <elf3d/graphics.h>
 #include <elf3d/model.h>
+#include <elf3d/rendering.h>
 #include <elf3d/scene.h>
-#include <elf3d/viewport.h>
 
 #include <algorithm>
 #include <array>
@@ -24,7 +25,6 @@ import elf.scene;
 
 namespace {
 
-using elf3d::renderer::tests::fake_device_state;
 using elf3d::renderer::tests::FakeDevice;
 using elf3d::renderer::tests::FakeDeviceState;
 using elf3d::renderer::tests::FakePickingTarget;
@@ -50,7 +50,7 @@ using elf3d::renderer::tests::FakeRenderTarget;
     return mass * mass;
 }
 
-constexpr std::uintptr_t engine_token = 11;
+constexpr std::uint64_t engine_token = 11;
 constexpr std::array<elf3d::VertexPositionNormal, 3> test_vertices{{
     {{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
     {{1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
@@ -80,6 +80,10 @@ struct RendererContext {
     elf3d::EntityId non_camera;
     std::unique_ptr<elf3d::renderer::Renderer> renderer;
     FakeRenderTarget target;
+
+    [[nodiscard]] FakeDeviceState& device_state() noexcept {
+        return static_cast<FakeDevice&>(renderer->device()).state();
+    }
 };
 
 [[nodiscard]] int prepare_mesh_and_textures(RendererContext& context) {
@@ -168,7 +172,6 @@ struct RendererContext {
 }
 
 [[nodiscard]] int prepare_context(RendererContext& context) {
-    fake_device_state() = {};
     const int resources = prepare_mesh_and_textures(context);
     if (resources != 0) {
         return resources;
@@ -200,7 +203,7 @@ struct RendererContext {
         return 3;
     }
     context.renderer = std::move(renderer.value());
-    if (!has_expected_shader_sources(fake_device_state())) {
+    if (!has_expected_shader_sources(context.device_state())) {
         return 31;
     }
     return 0;
@@ -252,11 +255,11 @@ struct RendererContext {
         context.renderer->render(context.scene, context.target, render_request(context.camera));
     const auto second =
         context.renderer->render(context.scene, context.target, render_request(context.camera));
-    if (!has_expected_render_counts(first, second, fake_device_state()) ||
-        !has_expected_texture_uploads(fake_device_state()) ||
-        !has_expected_texture_mapping(fake_device_state()) ||
-        !has_expected_material_parameters(fake_device_state()) ||
-        !has_expected_raster_state(fake_device_state())) {
+    if (!has_expected_render_counts(first, second, context.device_state()) ||
+        !has_expected_texture_uploads(context.device_state()) ||
+        !has_expected_texture_mapping(context.device_state()) ||
+        !has_expected_material_parameters(context.device_state()) ||
+        !has_expected_raster_state(context.device_state())) {
         return 4;
     }
     return 0;
@@ -284,15 +287,15 @@ has_expected_gpu_pick_summary(const elf3d::Result<elf3d::renderer::GpuPickResult
 
 [[nodiscard]] int verify_gpu_pick(RendererContext& context) {
     FakePickingTarget picking_target;
-    fake_device_state().picking_pixel = elf3d::graphics::PickingPixel{2U, 1U, 0U, 0.5F};
+    context.device_state().picking_pixel = elf3d::graphics::PickingPixel{2U, 1U, 0U, 0.5F};
     const elf3d::scene::VisibilityFilter visibility =
         elf3d::scene::make_visibility_filter(context.scene, std::nullopt).value();
     const elf3d::renderer::GpuPickRequest request{
         context.camera, {319.5F, 179.5F}, picking_target.extent_value, {319.5F, 179.5F}};
     const auto gpu_pick = context.renderer->gpu_pick(context.scene, picking_target, visibility,
                                                      elf3d::clipping::disabled_filter(), request);
-    if (!has_expected_gpu_pick_summary(gpu_pick, picking_target, fake_device_state()) ||
-        !has_expected_gpu_pick_draws(fake_device_state()) ||
+    if (!has_expected_gpu_pick_summary(gpu_pick, picking_target, context.device_state()) ||
+        !has_expected_gpu_pick_draws(context.device_state()) ||
         !has_expected_gpu_hit(gpu_pick.value(), context)) {
         return 45;
     }
@@ -311,9 +314,9 @@ has_expected_gpu_pick_summary(const elf3d::Result<elf3d::renderer::GpuPickResult
     FakePickingTarget anchor_target;
     anchor_target.extent_value = {4, 4};
     const elf3d::Extent2D viewport_extent{640, 360};
-    fake_device_state().picking_depths.assign(16U, 1.0F);
-    fake_device_state().picking_depths[static_cast<std::size_t>(1U * 4U + 1U)] = 0.25F;
-    fake_device_state().picking_depths[static_cast<std::size_t>(1U * 4U + 3U)] = 0.75F;
+    context.device_state().picking_depths.assign(16U, 1.0F);
+    context.device_state().picking_depths[static_cast<std::size_t>(1U * 4U + 1U)] = 0.25F;
+    context.device_state().picking_depths[static_cast<std::size_t>(1U * 4U + 3U)] = 0.75F;
     const elf3d::scene::VisibilityFilter visibility =
         elf3d::scene::make_visibility_filter(context.scene, std::nullopt).value();
     const elf3d::renderer::GpuFocusDepthRequest request{context.camera, viewport_extent};
@@ -346,7 +349,7 @@ has_expected_gpu_pick_summary(const elf3d::Result<elf3d::renderer::GpuPickResult
         !nearly_equal(projected_anchor.value().position_pixels.y, expected_screen.y, 0.001F)) {
         return 47;
     }
-    fake_device_state().picking_depths.clear();
+    context.device_state().picking_depths.clear();
     return 0;
 }
 
@@ -374,13 +377,13 @@ has_expected_highlighted_render(const elf3d::Result<elf3d::EntityId>& shared_mod
         elf3d::EntityHighlight{context.model, elf3d::Color4{1.0F, 0.2F, 0.0F, 1.0F}, 0.6F};
     const auto highlighted = context.renderer->render(context.scene, context.target,
                                                       render_request(context.camera, options));
-    if (!has_expected_highlighted_render(shared_model, highlighted, fake_device_state())) {
+    if (!has_expected_highlighted_render(shared_model, highlighted, context.device_state())) {
         return 41;
     }
     const auto hidden = context.scene.set_entity_visible(context.model, false);
     const auto hidden_render = context.renderer->render(context.scene, context.target,
                                                         render_request(context.camera, options));
-    if (!has_expected_hidden_render(hidden, hidden_render, fake_device_state())) {
+    if (!has_expected_hidden_render(hidden, hidden_render, context.device_state())) {
         return 42;
     }
     const auto restored = context.scene.show_all_entities();
@@ -403,9 +406,9 @@ has_expected_highlighted_render(const elf3d::Result<elf3d::EntityId>& shared_mod
     const auto render = context.renderer->render(context.scene, context.target,
                                                  render_request(context.camera, options));
     if (!render || render.value().overlay_lines != 1 || render.value().overlay_markers != 1 ||
-        fake_device_state().overlay_draw_count != 1 ||
-        fake_device_state().overlay_line_count != 1 ||
-        fake_device_state().overlay_marker_count != 1) {
+        context.device_state().overlay_draw_count != 1 ||
+        context.device_state().overlay_line_count != 1 ||
+        context.device_state().overlay_marker_count != 1) {
         return 44;
     }
     return 0;
@@ -450,10 +453,10 @@ has_expected_clipped_list(const elf3d::Result<elf3d::renderer::RenderList>& list
     if (!has_expected_clipped_list(list)) {
         return 45;
     }
-    const std::size_t previous_draw_count = fake_device_state().draws.size();
+    const std::size_t previous_draw_count = context.device_state().draws.size();
     const auto render = context.renderer->render(
         context.scene, context.target, render_request(context.camera), visibility, filter);
-    if (!has_expected_clipped_render(render, fake_device_state(), previous_draw_count)) {
+    if (!has_expected_clipped_render(render, context.device_state(), previous_draw_count)) {
         return 46;
     }
     return 0;
@@ -464,13 +467,14 @@ has_expected_clipped_list(const elf3d::Result<elf3d::renderer::RenderList>& list
         elf3d::scene::make_visibility_filter(context.scene, std::nullopt).value();
     const elf3d::clipping::ClippingFilter filter =
         elf3d::clipping::make_filter(cutting_plane_at(10.0F), {}, 102).value();
-    const std::size_t previous_draw_count = fake_device_state().draws.size();
+    const std::size_t previous_draw_count = context.device_state().draws.size();
     const auto render = context.renderer->render(
         context.scene, context.target, render_request(context.camera), visibility, filter);
     if (!render || render.value().draw_calls != 0 || render.value().clipping_bounds_tested != 3 ||
         render.value().clipping_bounds_rejected != 3 || render.value().unique_gpu_textures != 3 ||
-        fake_device_state().draws.size() != previous_draw_count ||
-        fake_device_state().upload_count != 1 || fake_device_state().texture_upload_count != 3) {
+        context.device_state().draws.size() != previous_draw_count ||
+        context.device_state().upload_count != 1 ||
+        context.device_state().texture_upload_count != 3) {
         return 47;
     }
     return 0;
@@ -485,17 +489,17 @@ has_expected_clipped_list(const elf3d::Result<elf3d::renderer::RenderList>& list
         elf3d::clipping::make_filter(elf3d::SectionPlane{}, boxes, 103).value();
     const elf3d::scene::VisibilityFilter visibility =
         elf3d::scene::make_visibility_filter(context.scene, std::nullopt).value();
-    const std::size_t previous_draw_count = fake_device_state().draws.size();
+    const std::size_t previous_draw_count = context.device_state().draws.size();
     const auto render = context.renderer->render(
         context.scene, context.target, render_request(context.camera), visibility, filter);
     if (!render || render.value().draw_calls != 3 || render.value().clipping_bounds_tested != 3 ||
         render.value().clipping_bounds_rejected != 0 ||
         render.value().clipping_bounds_intersecting != 0 ||
-        fake_device_state().draws.size() != previous_draw_count + 3 ||
-        fake_device_state().draws[previous_draw_count].clipping_box_count != 1 ||
-        fake_device_state().draws[previous_draw_count].clipping_boxes[0].minimum !=
+        context.device_state().draws.size() != previous_draw_count + 3 ||
+        context.device_state().draws[previous_draw_count].clipping_box_count != 1 ||
+        context.device_state().draws[previous_draw_count].clipping_boxes[0].minimum !=
             boxes[1].minimum ||
-        fake_device_state().draws[previous_draw_count].clipping_boxes[0].maximum !=
+        context.device_state().draws[previous_draw_count].clipping_boxes[0].maximum !=
             boxes[1].maximum) {
         return 48;
     }
@@ -524,18 +528,18 @@ has_expected_clipped_list(const elf3d::Result<elf3d::renderer::RenderList>& list
     }
     const auto initial_render =
         context.renderer->render(second_scene, context.target, render_request(camera.value()));
-    if (!has_upload_counts(initial_render, fake_device_state(), 2, 3)) {
+    if (!has_upload_counts(initial_render, context.device_state(), 2, 3)) {
         return 5;
     }
     context.renderer->release_scene(context.id);
     const auto retained_render =
         context.renderer->render(second_scene, context.target, render_request(camera.value()));
-    if (!has_upload_counts(retained_render, fake_device_state(), 2, 3)) {
+    if (!has_upload_counts(retained_render, context.device_state(), 2, 3)) {
         return 6;
     }
     const auto reloaded_render =
         context.renderer->render(context.scene, context.target, render_request(context.camera));
-    if (!has_upload_counts(reloaded_render, fake_device_state(), 3, 6)) {
+    if (!has_upload_counts(reloaded_render, context.device_state(), 3, 6)) {
         return 6;
     }
     context.renderer->release_scene(second_id);
@@ -564,7 +568,7 @@ struct PreviousDrawCounts {
     elf3d::ModelMaterialDescription material_description;
     material_description.base_color = {0.1F, 0.2F, 0.3F, 0.4F};
     material_description.double_sided = true;
-    material_description.alpha_mode = elf3d::ModelAlphaMode::blend;
+    material_description.alpha_mode = elf3d::AlphaMode::blend;
     const auto material = document.create_material(material_description);
     if (!mesh || !material) {
         return 49;
@@ -626,11 +630,11 @@ has_expected_document_render(const DocumentContext& document,
     }
     const auto list =
         elf3d::renderer::build_render_list(document.scene, document.camera, {640, 360});
-    const PreviousDrawCounts previous{fake_device_state().upload_count,
-                                      fake_device_state().draws.size()};
+    const PreviousDrawCounts previous{context.device_state().upload_count,
+                                      context.device_state().draws.size()};
     const auto render =
         context.renderer->render(document.scene, context.target, render_request(document.camera));
-    if (!has_expected_document_render(document, list, render, fake_device_state(), previous)) {
+    if (!has_expected_document_render(document, list, render, context.device_state(), previous)) {
         return 49;
     }
     return 0;

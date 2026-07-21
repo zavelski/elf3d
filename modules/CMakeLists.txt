@@ -27,7 +27,7 @@ add_library(elf3d::foundation_modules ALIAS elf3d_foundation_modules)
 elf3d_configure_module_group(elf3d_foundation_modules)
 target_include_directories(
     elf3d_foundation_modules
-    PUBLIC
+    PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/math/include
 )
 target_sources(
@@ -38,7 +38,7 @@ target_sources(
             core/src/elf.core.cppm
             math/src/elf.math.cppm
 )
-target_link_libraries(elf3d_foundation_modules PUBLIC glm::glm)
+target_link_libraries(elf3d_foundation_modules PRIVATE glm::glm)
 
 add_library(
     elf3d_model_modules
@@ -48,6 +48,10 @@ add_library(
         model/src/document_mutation.cpp
         model/src/document_validation.cpp
         model/src/document_views.cpp
+        model/include/elf3d/model/detail/document_builder.h
+        model/include/elf3d/model/detail/document_handle_access.h
+        model/include/elf3d/model/detail/document_storage.h
+        model/include/elf3d/model/detail/imported_metadata.h
 )
 add_library(elf3d::model_modules ALIAS elf3d_model_modules)
 elf3d_configure_module_group(elf3d_model_modules)
@@ -270,6 +274,7 @@ add_library(
         navigation/src/orbit_navigation_state.cpp
         navigation/src/orbit_navigation.cpp
         navigation/src/orbit_navigation_update.cpp
+        picking/src/geometry_detail.h
         picking/src/service_geometry.cpp
         picking/src/service.cpp
         tools/selection/src/selection_controller.cpp
@@ -296,6 +301,7 @@ target_link_libraries(
     PUBLIC
         elf3d_foundation_modules
         elf3d_domain_modules
+        elf3d_graphics_modules
 )
 
 add_library(

@@ -1,12 +1,13 @@
 module;
 
-#include <elf3d/viewport.h>
+#include <elf3d/rendering.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <utility>
@@ -245,7 +246,7 @@ void apply_clipping_description(const clipping::ClippingFilter& filter,
 }
 
 Result<std::unique_ptr<Renderer>> Renderer::create(std::unique_ptr<graphics::Device> device,
-                                                   std::uintptr_t engine_token) {
+                                                   std::uint64_t engine_token) {
     if (!device || engine_token == 0) {
         return Error{ErrorCode::graphics_shutdown,
                      "Renderer creation requires an active graphics device and engine identity"};

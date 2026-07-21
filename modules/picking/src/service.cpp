@@ -2,9 +2,10 @@ module;
 
 #include <elf3d/core/assert.h>
 #include <elf3d/core/result.h>
-#include <elf3d/math/detail/glm_helpers.h>
 #include <elf3d/picking.h>
 #include <elf3d/scene.h>
+
+#include "geometry_detail.h"
 
 #include <algorithm>
 #include <array>
@@ -24,10 +25,6 @@ import elf.scene;
 
 namespace elf3d::picking::geometry_detail {
 
-[[nodiscard]] bool finite(double value) noexcept;
-[[nodiscard]] bool finite_vec3(const glm::dvec3& value) noexcept;
-[[nodiscard]] glm::dvec3 to_dvec3(Float3 value) noexcept;
-[[nodiscard]] Float3 to_float3_checked(const glm::dvec3& value) noexcept;
 [[nodiscard]] bool valid_bounds(Bounds3 bounds) noexcept;
 [[nodiscard]] Bounds3 triangle_bounds(Float3 a, Float3 b, Float3 c) noexcept;
 [[nodiscard]] Float3 triangle_centroid(Float3 a, Float3 b, Float3 c) noexcept;
@@ -36,13 +33,8 @@ namespace elf3d::picking::geometry_detail {
 [[nodiscard]] Bounds3 merge_bounds(Bounds3 bounds, Float3 point) noexcept;
 [[nodiscard]] double axis_value(Float3 value, int axis) noexcept;
 [[nodiscard]] int longest_axis(Bounds3 bounds) noexcept;
-[[nodiscard]] bool finite_matrix(const math::Matrix4& matrix) noexcept;
-[[nodiscard]] Bounds3 transform_bounds(Bounds3 local_bounds, const math::Matrix4& world) noexcept;
-[[nodiscard]] Result<Ray3> transform_ray_to_local(const Ray3& world_ray,
-                                                  const math::Matrix4& inverse_world);
+[[nodiscard]] Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4& world) noexcept;
 [[nodiscard]] bool validate_pick_hit(const PickHit& hit) noexcept;
-[[nodiscard]] Result<math::Matrix4> world_matrix(const scene::Storage& scene,
-                                                 EntityId entity) noexcept;
 [[nodiscard]] Result<Ray3> make_picking_ray(const scene::Storage& scene, EntityId camera,
                                             Extent2D extent, Float2 position_pixels);
 [[nodiscard]] Result<void> validate_refinement_request(const Ray3& ray,
@@ -50,7 +42,7 @@ namespace elf3d::picking::geometry_detail {
 [[nodiscard]] Result<std::optional<scene::RuntimePrimitiveView>>
 refinement_primitive(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
                      const PickCandidate& candidate);
-[[nodiscard]] Result<std::optional<std::pair<math::Matrix4, Ray3>>>
+[[nodiscard]] Result<std::optional<std::pair<Float4x4, Ray3>>>
 refinement_transform(const scene::Storage& scene, EntityId entity, const Ray3& world_ray);
 void reset_latest_statistics(PickingStatistics& statistics,
                              std::uint64_t cached_mesh_bvhs) noexcept;
@@ -80,34 +72,34 @@ struct BvhNode {
     bool is_leaf = false;
 };
 
+[[nodiscard]] Float3 multiply(const math::Matrix3x3& matrix, Float3 vector) noexcept {
+    return Float3{matrix[0] * vector.x + matrix[3] * vector.y + matrix[6] * vector.z,
+                  matrix[1] * vector.x + matrix[4] * vector.y + matrix[7] * vector.z,
+                  matrix[2] * vector.x + matrix[5] * vector.y + matrix[8] * vector.z};
+}
+
 } // namespace
 
 using geometry_detail::accept_refined_position;
 using geometry_detail::axis_value;
 using geometry_detail::bounds_around_point;
-using geometry_detail::finite;
-using geometry_detail::finite_matrix;
-using geometry_detail::finite_vec3;
 using geometry_detail::longest_axis;
 using geometry_detail::merge_bounds;
 using geometry_detail::refinement_primitive;
 using geometry_detail::refinement_transform;
 using geometry_detail::reset_latest_statistics;
-using geometry_detail::to_dvec3;
-using geometry_detail::to_float3_checked;
+using geometry_detail::to_double3;
 using geometry_detail::transform_bounds;
-using geometry_detail::transform_ray_to_local;
 using geometry_detail::triangle_bounds;
 using geometry_detail::triangle_centroid;
 using geometry_detail::valid_bounds;
 using geometry_detail::validate_pick_hit;
 using geometry_detail::validate_refinement_request;
-using geometry_detail::world_matrix;
 
 class PickingService::Impl final {
   public:
     struct MeshCacheKey {
-        std::uintptr_t engine = 0;
+        std::uint64_t engine = 0;
         std::uint64_t scene = 0;
         std::uint64_t geometry = 0;
         bool document_backed = false;
@@ -130,7 +122,7 @@ class PickingService::Impl final {
         EntityId entity;
         MeshHandle mesh;
         std::uint32_t primitive_index = 0;
-        math::Matrix4 world;
+        Float4x4 world;
         Ray3 world_ray;
         Ray3 local_ray;
         TriangleHit triangle;
@@ -163,7 +155,7 @@ class PickingService::Impl final {
 
     struct EntityPickContext final {
         EntityId entity;
-        math::Matrix4 world;
+        Float4x4 world;
         Ray3 local_ray;
     };
 
@@ -229,7 +221,7 @@ class PickingService::Impl final {
         if (!primitive.value().has_value()) {
             return std::optional<PickHit>{};
         }
-        const Result<std::optional<std::pair<math::Matrix4, Ray3>>> transform =
+        const Result<std::optional<std::pair<Float4x4, Ray3>>> transform =
             refinement_transform(scene, candidate.entity, ray.value());
         if (!transform) {
             return transform.error();
@@ -292,7 +284,7 @@ class PickingService::Impl final {
         return nearest.hit;
     }
     void release_scene(SceneId scene) noexcept {
-        const std::uintptr_t engine_token = detail::SceneHandleAccess::engine_token(scene);
+        const std::uint64_t engine_token = detail::SceneHandleAccess::engine_token(scene);
         const std::uint64_t scene_value = detail::SceneHandleAccess::value(scene);
         mesh_cache_.erase(
             std::remove_if(mesh_cache_.begin(), mesh_cache_.end(),
@@ -347,14 +339,14 @@ class PickingService::Impl final {
     [[nodiscard]] Result<std::optional<PickHit>>
     refined_hit(const RefinementHitContext& context,
                 const clipping::ClippingFilter& clipping_filter) {
-        const math::Vector3 local_position =
-            math::to_vector(context.local_ray.origin) +
-            math::to_vector(context.local_ray.direction) * context.triangle.distance;
-        const math::Vector4 world_position4 = context.world * math::Vector4{local_position, 1.0F};
-        const glm::dvec3 world_position{world_position4.x, world_position4.y, world_position4.z};
-        const double world_distance =
-            glm::length(world_position - to_dvec3(context.world_ray.origin));
-        if (!finite_vec3(world_position) || !finite(world_distance) || world_distance < 0.0) {
+        const Float3 local_position =
+            math::add(context.local_ray.origin,
+                      math::scale(context.local_ray.direction, context.triangle.distance));
+        const Float3 world_position = math::transform_point(context.world, local_position);
+        const double world_distance = geometry_detail::length(geometry_detail::subtract(
+            to_double3(world_position), to_double3(context.world_ray.origin)));
+        if (!math::is_finite(world_position) || !std::isfinite(world_distance) ||
+            world_distance < 0.0) {
             return std::optional<PickHit>{};
         }
 
@@ -363,20 +355,21 @@ class PickingService::Impl final {
         hit.mesh = context.mesh;
         hit.primitive_index = context.primitive_index;
         hit.triangle_index = context.triangle.triangle_index;
-        hit.world_position = to_float3_checked(world_position);
+        hit.world_position = world_position;
         if (!accept_refined_position(clipping_filter, hit.world_position, statistics_)) {
             return std::optional<PickHit>{};
         }
-        const math::Matrix3 normal_transform =
-            glm::transpose(glm::inverse(math::Matrix3{context.world}));
-        math::Vector3 world_normal =
-            normal_transform * math::to_vector(context.triangle.geometric_normal);
-        const float world_normal_length = glm::length(world_normal);
+        const Result<math::Matrix3x3> normal_transform = math::normal_matrix(context.world);
+        if (!normal_transform) {
+            return std::optional<PickHit>{};
+        }
+        Float3 world_normal = multiply(normal_transform.value(), context.triangle.geometric_normal);
+        const float world_normal_length = math::vector_length(world_normal);
         if (!std::isfinite(world_normal_length) || world_normal_length <= 0.000001F) {
             return std::optional<PickHit>{};
         }
-        world_normal /= world_normal_length;
-        hit.world_normal = math::to_float3(world_normal);
+        world_normal = math::scale(world_normal, 1.0F / world_normal_length);
+        hit.world_normal = world_normal;
         hit.barycentric_coordinates = context.triangle.barycentric_coordinates;
         hit.world_distance = static_cast<float>(world_distance);
         if (!validate_pick_hit(hit)) {
@@ -442,12 +435,10 @@ class PickingService::Impl final {
         const bool cull_back_face =
             request.options.respect_material_sidedness && !primitive.material_view.double_sided;
         const auto accept_hit = [&](const TriangleHit& hit) noexcept {
-            const math::Vector3 local_position =
-                math::to_vector(entity.local_ray.origin) +
-                math::to_vector(entity.local_ray.direction) * hit.distance;
-            const math::Vector4 world_position = entity.world * math::Vector4{local_position, 1.0F};
+            const Float3 local_position = math::add(
+                entity.local_ray.origin, math::scale(entity.local_ray.direction, hit.distance));
             return accept_refined_position(request.clipping_filter,
-                                           {world_position.x, world_position.y, world_position.z},
+                                           math::transform_point(entity.world, local_position),
                                            statistics_);
         };
         const std::optional<TriangleHit> triangle = traverse_mesh(
@@ -480,7 +471,7 @@ class PickingService::Impl final {
         if (!scene::entity_visible_in_filter(scene, request.visibility, record->id)) {
             return {};
         }
-        const Result<std::optional<std::pair<math::Matrix4, Ray3>>> transform =
+        const Result<std::optional<std::pair<Float4x4, Ray3>>> transform =
             refinement_transform(scene, record->id, request.ray);
         if (!transform) {
             return transform.error();

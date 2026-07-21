@@ -401,7 +401,7 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 [[nodiscard]] Result<void> attach_perspective_camera(DocumentConstructionState& state,
                                                      const cgltf_node& node, NodeId node_id,
                                                      const std::string& context) {
-    ModelPerspectiveCameraDescription camera;
+    PerspectiveCameraDescription camera;
     camera.vertical_field_of_view_radians = node.camera->data.perspective.yfov;
     camera.near_plane = node.camera->data.perspective.znear;
     camera.far_plane =

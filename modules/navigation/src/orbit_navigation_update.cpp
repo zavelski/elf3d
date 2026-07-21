@@ -100,10 +100,10 @@ interaction_input(const ViewportInput& input) noexcept {
         bounds.minimum.z > bounds.maximum.z) {
         return {};
     }
-    const math::Vector3 minimum = math::to_vector(bounds.minimum);
-    const math::Vector3 maximum = math::to_vector(bounds.maximum);
-    const math::Vector3 center = (minimum + maximum) * 0.5F;
-    float radius = glm::length((maximum - minimum) * 0.5F);
+    const Float3 minimum = bounds.minimum;
+    const Float3 maximum = bounds.maximum;
+    const Float3 center = math::scale(math::add(minimum, maximum), 0.5F);
+    float radius = math::vector_length(math::scale(math::subtract(maximum, minimum), 0.5F));
     if (!finite_vector(center) || !std::isfinite(radius)) {
         return {};
     }
@@ -180,10 +180,10 @@ interaction_input(const ViewportInput& input) noexcept {
     return distance;
 }
 
-[[nodiscard]] math::Vector3 direction_from_angles(float yaw, float pitch) noexcept {
+[[nodiscard]] Float3 direction_from_angles(float yaw, float pitch) noexcept {
     const float cosine = std::cos(pitch);
-    return glm::normalize(
-        math::Vector3{cosine * std::sin(yaw), std::sin(pitch), cosine * std::cos(yaw)});
+    return math::normalized(
+        Float3{cosine * std::sin(yaw), std::sin(pitch), cosine * std::cos(yaw)});
 }
 
 void apply_orbit_delta(Float2 delta, const OrbitNavigationSettings& settings, float& yaw,
@@ -241,15 +241,15 @@ struct PanRequest final {
     if (scale.value() == 0.0F) {
         return PanOffset{};
     }
-    const math::Vector3 direction =
-        direction_from_angles(request.yaw_radians, request.pitch_radians);
-    math::Vector3 right = glm::normalize(glm::cross(direction, math::Vector3{0.0F, 1.0F, 0.0F}));
-    if (!finite_vector(right) || glm::length(right) <= minimum_axis_length) {
-        right = math::Vector3{1.0F, 0.0F, 0.0F};
+    const Float3 direction = direction_from_angles(request.yaw_radians, request.pitch_radians);
+    Float3 right = math::normalized(math::cross(direction, Float3{0.0F, 1.0F, 0.0F}));
+    if (!finite_vector(right) || math::vector_length(right) <= minimum_axis_length) {
+        right = Float3{1.0F, 0.0F, 0.0F};
     }
-    const math::Vector3 up = glm::normalize(glm::cross(right, direction));
-    const math::Vector3 offset = (-right * delta.x + up * delta.y) * scale.value() *
-                                 request.scale.settings.pan_sensitivity * request.speed_scale;
+    const Float3 up = math::normalized(math::cross(right, direction));
+    const Float3 offset =
+        math::scale(math::add(math::scale(right, -delta.x), math::scale(up, delta.y)),
+                    scale.value() * request.scale.settings.pan_sensitivity * request.speed_scale);
     return PanOffset{true, offset};
 }
 
@@ -440,7 +440,7 @@ Result<void> OrbitNavigationController::apply_pointer_pan(scene::Storage& scene,
         return offset.error();
     }
     if (offset.value().has_value) {
-        pivot_ = math::to_float3(math::to_vector(pivot_) + offset.value().value);
+        pivot_ = math::add(pivot_, offset.value().value);
         frame.changed = true;
     }
     return {};
@@ -529,7 +529,7 @@ Result<void> OrbitNavigationController::apply_keyboard_pan(scene::Storage& scene
             return offset.error();
         }
         if (offset.value().has_value) {
-            pivot_ = math::to_float3(math::to_vector(pivot_) + offset.value().value);
+            pivot_ = math::add(pivot_, offset.value().value);
             frame.changed = true;
         }
     }
@@ -540,7 +540,7 @@ Result<void> OrbitNavigationController::apply_keyboard_pan(scene::Storage& scene
             return offset.error();
         }
         if (offset.value().has_value) {
-            pivot_ = math::to_float3(math::to_vector(pivot_) + offset.value().value);
+            pivot_ = math::add(pivot_, offset.value().value);
             frame.changed = true;
         }
     }

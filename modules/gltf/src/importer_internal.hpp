@@ -3,6 +3,7 @@
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
 #include <elf3d/model.h>
+#include <elf3d/model/detail/document_builder.h>
 
 #include <cgltf.h>
 
@@ -80,6 +81,7 @@ using importer_input::path_from_utf8;
 using importer_input::path_to_utf8;
 using importer_input::read_external_file;
 using importer_input::release_external_file;
+using model::detail::DocumentBuilder;
 
 struct CgltfDeleter {
     void operator()(cgltf_data* data) const noexcept {
@@ -133,7 +135,7 @@ struct ImportState {
 
 struct ImportedTextureView {
     TextureId texture;
-    ModelTextureMapping mapping;
+    TextureMapping mapping;
 };
 
 struct ImportedMesh {
@@ -147,7 +149,7 @@ struct ConstructedDocument {
     DocumentSceneId default_scene;
 };
 
-using TexcoordAvailability = std::array<bool, model_maximum_texture_coordinate_sets>;
+using TexcoordAvailability = std::array<bool, maximum_texture_coordinate_sets>;
 
 struct PrimitiveTextureState {
     const TexcoordAvailability& available_texcoords;
@@ -195,8 +197,8 @@ unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_
                                                        std::string_view context);
 [[nodiscard]] Result<std::vector<float>> unpack_color(const cgltf_accessor& accessor,
                                                       std::string_view context);
-[[nodiscard]] Result<ModelTextureMapping> texture_mapping(const cgltf_texture_view& view,
-                                                          std::string_view context);
+[[nodiscard]] Result<TextureMapping> texture_mapping(const cgltf_texture_view& view,
+                                                     std::string_view context);
 [[nodiscard]] TexcoordAvailability
 primitive_texcoord_availability(const cgltf_primitive& primitive);
 [[nodiscard]] Result<bool>

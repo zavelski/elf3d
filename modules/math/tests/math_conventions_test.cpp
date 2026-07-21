@@ -215,10 +215,30 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
+[[nodiscard]] int verify_project_owned_boundary_operations() {
+    const elf3d::Float3 right = elf3d::math::cross({1.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
+    const elf3d::Quaternion rotation =
+        elf3d::math::rotation_from_axis_angle(1.5707963268F, {0.0F, 1.0F, 0.0F});
+    const elf3d::Float3 rotated = elf3d::math::rotate_vector(rotation, {0.0F, 0.0F, -1.0F});
+    const elf3d::Float4x4 translated = elf3d::math::transform_matrix(
+        elf3d::Transform{{4.0F, 2.0F, -1.0F}, {}, {1.0F, 1.0F, 1.0F}});
+    const elf3d::Result<elf3d::Float4x4> inverse = elf3d::math::inverse_affine_matrix(translated);
+    const elf3d::Float3 origin =
+        inverse ? elf3d::math::transform_point(inverse.value(), {4.0F, 2.0F, -1.0F})
+                : elf3d::Float3{};
+    if (right != elf3d::Float3{0.0F, 0.0F, 1.0F} || !inverse || !nearly_equal(rotated.x, -1.0F) ||
+        !nearly_equal(rotated.y, 0.0F) || !nearly_equal(rotated.z, 0.0F) ||
+        !nearly_equal(origin.x, 0.0F) || !nearly_equal(origin.y, 0.0F) ||
+        !nearly_equal(origin.z, 0.0F)) {
+        return 17;
+    }
+    return 0;
+}
+
 } // namespace
 
 int elf3d_math_conventions_test() {
-    const std::array<int, 10> results{{
+    const std::array<int, 11> results{{
         verify_basic_conventions(),
         verify_world_composition(),
         verify_rotation_transform(),
@@ -229,6 +249,7 @@ int elf3d_math_conventions_test() {
         verify_viewport_projection(),
         verify_small_affine_matrix(),
         verify_singular_matrix(),
+        verify_project_owned_boundary_operations(),
     }};
     for (const int result : results) {
         if (result != 0) {

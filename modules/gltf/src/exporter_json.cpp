@@ -319,7 +319,7 @@ void append_cameras(std::string& output, const ExportData& document) {
             output.push_back(',');
         }
         first = false;
-        const ModelPerspectiveCameraDescription& camera = *node.perspective_camera;
+        const PerspectiveCameraDescription& camera = *node.perspective_camera;
         output.append("{\"type\":\"perspective\",\"perspective\":{\"yfov\":");
         append_float(output, camera.vertical_field_of_view_radians);
         output.append(",\"znear\":");
@@ -482,11 +482,11 @@ void append_material_texture_slots(std::string& output, const ModelMaterialDescr
 void append_material_properties(std::string& output, const ModelMaterialDescription& material) {
     output.append(",\"emissiveFactor\":");
     append_float3(output, material.emissive_factor);
-    if (material.alpha_mode != ModelAlphaMode::opaque) {
+    if (material.alpha_mode != AlphaMode::opaque) {
         output.append(",\"alphaMode\":");
-        append_string(output, material.alpha_mode == ModelAlphaMode::mask ? "MASK" : "BLEND");
+        append_string(output, material.alpha_mode == AlphaMode::mask ? "MASK" : "BLEND");
     }
-    if (material.alpha_mode == ModelAlphaMode::mask) {
+    if (material.alpha_mode == AlphaMode::mask) {
         output.append(",\"alphaCutoff\":");
         append_float(output, material.alpha_cutoff);
     }
@@ -662,7 +662,7 @@ void append_samplers(std::string& output, const ExportData& document) {
         if (index != 0U) {
             output.push_back(',');
         }
-        const ModelSamplerDescription& sampler = document.samplers[index].description;
+        const SamplerDescription& sampler = document.samplers[index].description;
         output.append("{\"magFilter\":");
         append_unsigned(output, filter_value(sampler.mag_filter));
         output.append(",\"minFilter\":");

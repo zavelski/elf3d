@@ -1,13 +1,14 @@
 #include <elf3d/model.h>
 
 #include <algorithm>
-#include <cstdint>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 import elf.gltf;
 import elf.model;
@@ -41,16 +42,10 @@ constexpr std::string_view expected_root_extras =
 constexpr std::string_view expected_root_extension =
     R"json({"tag":"root-ext","nested":{"array":[1,2]}})json";
 
-[[nodiscard]] std::uint64_t next_suffix() noexcept {
-    static std::uint64_t value = 0;
-    return ++value;
-}
-
 class TemporaryDirectory final {
   public:
     TemporaryDirectory()
-        : path_(std::filesystem::temp_directory_path() /
-                ("elf3d_gltf_metadata_" + std::to_string(next_suffix()))) {
+        : path_(std::filesystem::temp_directory_path() / "elf3d_gltf_metadata_test") {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
         std::filesystem::create_directories(path_);
@@ -256,11 +251,29 @@ class TemporaryDirectory final {
     return 0;
 }
 
-[[nodiscard]] int verify_mutable_access_stales(const std::filesystem::path& source) {
+[[nodiscard]] int verify_replacement_stales(const std::filesystem::path& source) {
     auto loaded = elf3d::load_document(source.string());
-    if (!loaded ||
-        !loaded.value().document.mutable_positions(
-            loaded.value().document.primitive_at(0U).value().id) ||
+    if (!loaded) {
+        return 10;
+    }
+    const auto primitive = loaded.value().document.primitive_at(0U);
+    if (!primitive) {
+        return 10;
+    }
+    elf3d::PrimitiveData replacement;
+    replacement.positions.assign(primitive.value().data.positions.begin(),
+                                 primitive.value().data.positions.end());
+    replacement.normals.assign(primitive.value().data.normals.begin(),
+                               primitive.value().data.normals.end());
+    replacement.texcoord0.assign(primitive.value().data.texcoord0.begin(),
+                                 primitive.value().data.texcoord0.end());
+    replacement.texcoord1.assign(primitive.value().data.texcoord1.begin(),
+                                 primitive.value().data.texcoord1.end());
+    replacement.colors.assign(primitive.value().data.colors.begin(),
+                              primitive.value().data.colors.end());
+    replacement.indices.assign(primitive.value().data.indices.begin(),
+                               primitive.value().data.indices.end());
+    if (!loaded.value().document.replace_primitive(primitive.value().id, std::move(replacement)) ||
         !loaded.value().document.preserved_metadata_stale()) {
         return 10;
     }
@@ -291,5 +304,5 @@ int elf3d_gltf_metadata_round_trip_test() {
     if (stale_outputs != 0) {
         return stale_outputs;
     }
-    return verify_mutable_access_stales(source);
+    return verify_replacement_stales(source);
 }

@@ -1,6 +1,6 @@
 module;
 
-#include <elf3d/viewport.h>
+#include <elf3d/rendering.h>
 
 #include <algorithm>
 #include <cstdint>

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -32,6 +33,15 @@ namespace {
 
 [[noreturn]] void fatal_unexpected_boundary_exception() noexcept {
     fatal_error("Elf3D boundary encountered an unexpected exception");
+}
+
+[[nodiscard]] std::uint64_t allocate_engine_owner_token() noexcept {
+    static std::atomic<std::uint64_t> next_token{1};
+    const std::uint64_t token = next_token.fetch_add(1, std::memory_order_relaxed);
+    if (token == 0) {
+        fatal_error("Elf3D exhausted engine owner identities");
+    }
+    return token;
 }
 
 [[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value) {
@@ -71,6 +81,8 @@ scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept {
         return SceneLoadDiagnosticCategory::light;
     case ModelLoadDiagnosticCategory::animation:
         return SceneLoadDiagnosticCategory::animation;
+    case ModelLoadDiagnosticCategory::metadata:
+        return SceneLoadDiagnosticCategory::metadata;
     case ModelLoadDiagnosticCategory::scene:
         return SceneLoadDiagnosticCategory::scene;
     }
@@ -132,6 +144,8 @@ extended_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
         return SceneLoadDiagnosticCode::texture_fallback;
     case ModelLoadDiagnosticCode::skipped_unsupported_primitive:
         return SceneLoadDiagnosticCode::skipped_unsupported_primitive;
+    case ModelLoadDiagnosticCode::metadata_not_preserved:
+        return SceneLoadDiagnosticCode::metadata_not_preserved;
     default:
         return SceneLoadDiagnosticCode::material_fallback;
     }
@@ -198,7 +212,7 @@ class Engine::Impl final {
         std::weak_ptr<picking::PickingService> picking;
     };
 
-    Impl() = default;
+    Impl() noexcept : engine_token(allocate_engine_owner_token()) {}
 
     explicit Impl(GraphicsBackend backend) : Impl() {
         this->backend = backend;
@@ -220,6 +234,7 @@ class Engine::Impl final {
     }
 
     GraphicsBackend backend = GraphicsBackend::none;
+    std::uint64_t engine_token = 0;
     std::shared_ptr<renderer::Renderer> renderer;
     std::shared_ptr<picking::PickingService> picking;
     std::uint64_t next_scene_value = 1;
@@ -253,8 +268,8 @@ Result<std::unique_ptr<Engine>> Engine::create(const EngineConfiguration& config
         }
 
         auto impl = std::make_unique<Impl>(configuration.graphics_backend);
-        Result<std::unique_ptr<renderer::Renderer>> renderer_result = renderer::Renderer::create(
-            std::move(device_result).value(), reinterpret_cast<std::uintptr_t>(impl.get()));
+        Result<std::unique_ptr<renderer::Renderer>> renderer_result =
+            renderer::Renderer::create(std::move(device_result).value(), impl->engine_token);
         if (!renderer_result) {
             return renderer_result.error();
         }
@@ -311,8 +326,8 @@ Result<std::unique_ptr<Scene>> Engine::create_scene() noexcept {
         release_ticket->picking = impl_->picking;
         Scene::ReleaseContext release_context{
             reinterpret_cast<std::uintptr_t>(release_ticket.get()), &Impl::release_scene};
-        Result<std::unique_ptr<Scene>> scene = Scene::create(
-            reinterpret_cast<std::uintptr_t>(impl_.get()), scene_value, std::move(release_context));
+        Result<std::unique_ptr<Scene>> scene =
+            Scene::create(impl_->engine_token, scene_value, std::move(release_context));
         if (!scene) {
             return scene.error();
         }
@@ -325,18 +340,8 @@ Result<std::unique_ptr<Scene>> Engine::create_scene() noexcept {
     }
 }
 
-Result<std::unique_ptr<Scene>> Engine::load_scene(std::string_view path_utf8,
-                                                  const SceneLoadOptions& options) noexcept {
-    Result<LoadedScene> loaded_result = load_scene_with_report(path_utf8, options);
-    if (!loaded_result) {
-        return loaded_result.error();
-    }
-    LoadedScene loaded = std::move(loaded_result).value();
-    return std::move(loaded.scene);
-}
-
-Result<LoadedScene> Engine::load_scene_with_report(std::string_view path_utf8,
-                                                   const SceneLoadOptions& options) noexcept {
+Result<LoadedScene> Engine::load_scene(std::string_view path_utf8,
+                                       const ModelLoadOptions& options) noexcept {
     try {
         Result<std::unique_ptr<Scene>> scene_result = create_scene();
         if (!scene_result) {
@@ -349,10 +354,8 @@ Result<LoadedScene> Engine::load_scene_with_report(std::string_view path_utf8,
                          "Scene loading could not access the new scene construction surface"};
         }
 
-        const ModelLoadOptions model_options{options.generate_missing_normals,
-                                             options.import_node_names};
         Result<LoadedDocument> loaded_document =
-            gltf::load_document(path_from_utf8(path_utf8), model_options);
+            gltf::load_document(path_from_utf8(path_utf8), options);
         if (!loaded_document) {
             return loaded_document.error();
         }

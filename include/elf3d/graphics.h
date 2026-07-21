@@ -16,8 +16,28 @@ enum class GraphicsBackend {
     opengl,
 };
 
+enum class OverlayDepthMode {
+    depth_tested,
+    always_visible,
+};
+
+struct OverlayLineSegment {
+    Float3 start_world;
+    Float3 end_world;
+    Color4 color{1.0F, 1.0F, 1.0F, 1.0F};
+    float thickness_pixels = 1.0F;
+    OverlayDepthMode depth_mode = OverlayDepthMode::always_visible;
+};
+
+struct OverlayPointMarker {
+    Float3 position_world;
+    Color4 color{1.0F, 1.0F, 1.0F, 1.0F};
+    float radius_pixels = 4.0F;
+    OverlayDepthMode depth_mode = OverlayDepthMode::always_visible;
+};
+
 using GraphicsProcedure = void (*)();
-using GraphicsProcedureLoader = GraphicsProcedure (*)(const char *name) noexcept;
+using GraphicsProcedureLoader = GraphicsProcedure (*)(const char* name) noexcept;
 
 struct OpenGLConfiguration {
     // The host must make its OpenGL context current before Engine::create.
@@ -37,7 +57,7 @@ class TextureHandle final {
         return value_ != 0;
     }
 
-    bool operator==(const TextureHandle &) const = default;
+    bool operator==(const TextureHandle&) const = default;
 
   private:
     friend class detail::TextureHandleAccess;

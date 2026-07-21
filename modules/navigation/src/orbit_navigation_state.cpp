@@ -2,10 +2,10 @@ module;
 
 #include "orbit_navigation_detail.h"
 #include <elf3d/core/assert.h>
-#include <elf3d/math/detail/glm_helpers.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <optional>
 
 module elf.navigation;
@@ -17,7 +17,7 @@ import elf.scene;
 namespace elf3d::navigation {
 namespace navigation_detail {
 
-[[nodiscard]] bool finite_vector(const math::Vector3& value) noexcept;
+[[nodiscard]] bool finite_vector(const Float3& value) noexcept;
 [[nodiscard]] bool nearly_equal_matrix(const Float4x4& left, const Float4x4& right) noexcept;
 [[nodiscard]] bool valid_settings(const OrbitNavigationSettings& settings) noexcept;
 [[nodiscard]] BoundsInfo bounds_info(std::optional<Bounds3> bounds_value) noexcept;
@@ -30,22 +30,21 @@ namespace navigation_detail {
                                                const OrbitNavigationSettings& settings,
                                                float motion_reference_distance) noexcept;
 [[nodiscard]] float clamp_signed_distance(float distance, DistanceLimits limits) noexcept;
-[[nodiscard]] math::Vector3 canonical_direction() noexcept;
-[[nodiscard]] math::Vector3 direction_from_angles(float yaw, float pitch) noexcept;
-[[nodiscard]] CameraBasis basis_from_forward(const math::Vector3& direction) noexcept;
-[[nodiscard]] float fit_distance_to_bounds(const Bounds3& bounds, const math::Vector3& center,
-                                           const math::Vector3& direction, float vertical_tangent,
+[[nodiscard]] Float3 canonical_direction() noexcept;
+[[nodiscard]] Float3 direction_from_angles(float yaw, float pitch) noexcept;
+[[nodiscard]] CameraBasis basis_from_forward(const Float3& direction) noexcept;
+[[nodiscard]] float fit_distance_to_bounds(const Bounds3& bounds, const Float3& center,
+                                           const Float3& direction, float vertical_tangent,
                                            float horizontal_tangent) noexcept;
-void angles_from_direction(const math::Vector3& direction, float& yaw, float& pitch) noexcept;
+void angles_from_direction(const Float3& direction, float& yaw, float& pitch) noexcept;
 void apply_orbit_delta(Float2 delta, const OrbitNavigationSettings& settings, float& yaw,
                        float& pitch) noexcept;
 [[nodiscard]] Result<CameraBasis> camera_basis(const scene::Storage& scene, EntityId camera);
-[[nodiscard]] Transform look_at_transform(const math::Vector3& position,
-                                          const math::Vector3& direction) noexcept;
+[[nodiscard]] Transform look_at_transform(const Float3& position, const Float3& direction) noexcept;
 [[nodiscard]] Result<void> set_camera_world_transform(scene::Storage& scene, EntityId camera,
                                                       const Transform& world_transform);
 [[nodiscard]] Result<void> set_camera_world_matrix(scene::Storage& scene, EntityId camera,
-                                                   const math::Matrix4& camera_world);
+                                                   const Float4x4& camera_world);
 [[nodiscard]] Result<void> validate_camera(const scene::Storage& scene, EntityId camera);
 [[nodiscard]] Result<float> aspect_ratio(Extent2D extent) noexcept;
 [[nodiscard]] Result<void> update_clip_planes(scene::Storage& scene, EntityId camera,
@@ -59,19 +58,27 @@ using namespace navigation_detail;
 
 namespace {
 
-[[nodiscard]] math::Vector3 screen_anchor_ray(const CameraBasis& basis,
-                                              const math::Vector3& camera_position,
-                                              const math::Vector3& anchor) noexcept {
-    math::Vector3 ray = anchor - camera_position;
-    const float distance = glm::length(ray);
-    if (!finite_vector(ray) || !std::isfinite(distance) || distance <= minimum_axis_length ||
-        glm::dot(ray, basis.forward) <= 0.0F) {
-        return basis.forward;
-    }
-    return glm::normalize(ray);
+void set_matrix_column(Float4x4& matrix, std::size_t column, Float3 value,
+                       float homogeneous) noexcept {
+    const std::size_t offset = column * 4;
+    matrix.elements[offset] = value.x;
+    matrix.elements[offset + 1] = value.y;
+    matrix.elements[offset + 2] = value.z;
+    matrix.elements[offset + 3] = homogeneous;
 }
 
-[[nodiscard]] std::optional<math::Rotation>
+[[nodiscard]] Float3 screen_anchor_ray(const CameraBasis& basis, const Float3& camera_position,
+                                       const Float3& anchor) noexcept {
+    const Float3 ray = math::subtract(anchor, camera_position);
+    const float distance = math::vector_length(ray);
+    if (!finite_vector(ray) || !std::isfinite(distance) || distance <= minimum_axis_length ||
+        math::dot(ray, basis.forward) <= 0.0F) {
+        return basis.forward;
+    }
+    return math::normalized(ray);
+}
+
+[[nodiscard]] std::optional<Quaternion>
 screen_anchor_rotation(const CameraBasis& basis, Float2 delta,
                        const OrbitNavigationSettings& settings) noexcept {
     float current_yaw = 0.0F;
@@ -87,39 +94,44 @@ screen_anchor_rotation(const CameraBasis& basis, Float2 delta,
     if (yaw_delta == 0.0F && pitch_delta == 0.0F) {
         return std::nullopt;
     }
-    const math::Rotation yaw_rotation = glm::angleAxis(yaw_delta, math::Vector3{0.0F, 1.0F, 0.0F});
-    math::Vector3 right_after_yaw = yaw_rotation * basis.right;
-    if (!finite_vector(right_after_yaw) || glm::length(right_after_yaw) <= minimum_axis_length) {
+    const Quaternion yaw_rotation =
+        math::rotation_from_axis_angle(yaw_delta, Float3{0.0F, 1.0F, 0.0F});
+    Float3 right_after_yaw = math::rotate_vector(yaw_rotation, basis.right);
+    if (!finite_vector(right_after_yaw) ||
+        math::vector_length(right_after_yaw) <= minimum_axis_length) {
         right_after_yaw = basis.right;
     }
-    const math::Rotation pitch_rotation =
-        glm::angleAxis(pitch_delta, glm::normalize(right_after_yaw));
-    return glm::normalize(pitch_rotation * yaw_rotation);
+    const Quaternion pitch_rotation =
+        math::rotation_from_axis_angle(pitch_delta, math::normalized(right_after_yaw));
+    return math::compose_rotations(pitch_rotation, yaw_rotation);
 }
 
-[[nodiscard]] Result<Float4x4>
-rotated_screen_anchor_camera(const Float4x4& current_world, const CameraBasis& basis,
-                             const math::Vector3& anchor, const math::Rotation& rotation) noexcept {
-    const math::Vector3 new_position = anchor + rotation * (basis.position - anchor);
-    const math::Vector3 new_right = glm::normalize(rotation * basis.right);
-    const math::Vector3 new_up = glm::normalize(rotation * basis.up);
-    const math::Vector3 new_backward = glm::normalize(rotation * -basis.forward);
+[[nodiscard]] Result<Float4x4> rotated_screen_anchor_camera(const Float4x4& current_world,
+                                                            const CameraBasis& basis,
+                                                            const Float3& anchor,
+                                                            const Quaternion& rotation) noexcept {
+    const Float3 new_position =
+        math::add(anchor, math::rotate_vector(rotation, math::subtract(basis.position, anchor)));
+    const Float3 new_right = math::normalized(math::rotate_vector(rotation, basis.right));
+    const Float3 new_up = math::normalized(math::rotate_vector(rotation, basis.up));
+    const Float3 new_backward =
+        math::normalized(math::rotate_vector(rotation, math::negate(basis.forward)));
     if (!finite_vector(new_position) || !finite_vector(new_right) || !finite_vector(new_up) ||
         !finite_vector(new_backward)) {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Off-axis orbit produced an invalid camera transform"};
     }
-    math::Matrix4 camera_world = math::to_matrix(current_world);
-    camera_world[0] = math::Vector4{new_right, 0.0F};
-    camera_world[1] = math::Vector4{new_up, 0.0F};
-    camera_world[2] = math::Vector4{new_backward, 0.0F};
-    camera_world[3] = math::Vector4{new_position, 1.0F};
-    return math::to_float4x4(camera_world);
+    Float4x4 camera_world = current_world;
+    set_matrix_column(camera_world, 0, new_right, 0.0F);
+    set_matrix_column(camera_world, 1, new_up, 0.0F);
+    set_matrix_column(camera_world, 2, new_backward, 0.0F);
+    set_matrix_column(camera_world, 3, new_position, 1.0F);
+    return camera_world;
 }
 
 struct SynchronizedView final {
-    math::Vector3 pivot;
-    math::Vector3 direction;
+    Float3 pivot;
+    Float3 direction;
     float distance = 1.0F;
 };
 
@@ -133,21 +145,21 @@ struct SynchronizedView final {
                                                  const OrbitNavigationSettings& settings,
                                                  Float3 existing_pivot,
                                                  bool preserve_existing_pivot) noexcept {
-    math::Vector3 pivot = preserve_existing_pivot && math::is_finite(existing_pivot)
-                              ? math::to_vector(existing_pivot)
-                              : basis.position + basis.forward;
+    Float3 pivot = preserve_existing_pivot && math::is_finite(existing_pivot)
+                       ? existing_pivot
+                       : math::add(basis.position, basis.forward);
     if (!preserve_existing_pivot && bounds.has_bounds) {
         pivot = bounds.center;
     }
-    float distance = glm::length(pivot - basis.position);
+    float distance = math::vector_length(math::subtract(pivot, basis.position));
     if (!std::isfinite(distance) || distance <= minimum_axis_length) {
         distance = fallback_synchronized_distance(bounds, settings.minimum_distance);
-        pivot = basis.position + basis.forward * distance;
+        pivot = math::add(basis.position, math::scale(basis.forward, distance));
     }
     const DistanceLimits limits = effective_distance_limits(settings, bounds);
     distance = std::clamp(distance, limits.minimum, limits.maximum);
-    math::Vector3 direction = pivot - basis.position;
-    if (!finite_vector(direction) || glm::length(direction) <= minimum_axis_length) {
+    Float3 direction = math::subtract(pivot, basis.position);
+    if (!finite_vector(direction) || math::vector_length(direction) <= minimum_axis_length) {
         direction = basis.forward;
     }
     return SynchronizedView{pivot, direction, distance};
@@ -215,8 +227,8 @@ Result<void> OrbitNavigationController::fit_to_scene(scene::Storage& scene, Enti
                                                      const scene::VisibilityFilter& visibility) {
     cancel_interaction();
     const Result<CameraBasis> basis = camera_basis(scene, camera);
-    const math::Vector3 direction = basis ? basis.value().forward : canonical_direction();
-    return fit_with_direction(scene, camera, extent, math::to_float3(direction),
+    const Float3 direction = basis ? basis.value().forward : canonical_direction();
+    return fit_with_direction(scene, camera, extent, direction,
                               scene.visible_world_bounds(visibility));
 }
 
@@ -234,7 +246,7 @@ Result<void> OrbitNavigationController::reset_view(scene::Storage& scene, Entity
                                                    Extent2D extent,
                                                    const scene::VisibilityFilter& visibility) {
     cancel_interaction();
-    return fit_with_direction(scene, camera, extent, math::to_float3(canonical_direction()),
+    return fit_with_direction(scene, camera, extent, canonical_direction(),
                               scene.visible_world_bounds(visibility));
 }
 
@@ -242,15 +254,14 @@ Result<void> OrbitNavigationController::fit_to_bounds(scene::Storage& scene, Ent
                                                       Extent2D extent, Bounds3 bounds) {
     cancel_interaction();
     const Result<CameraBasis> basis = camera_basis(scene, camera);
-    const math::Vector3 direction = basis ? basis.value().forward : canonical_direction();
-    return fit_with_direction(scene, camera, extent, math::to_float3(direction), bounds);
+    const Float3 direction = basis ? basis.value().forward : canonical_direction();
+    return fit_with_direction(scene, camera, extent, direction, bounds);
 }
 
 Result<void> OrbitNavigationController::reset_to_bounds(scene::Storage& scene, EntityId camera,
                                                         Extent2D extent, Bounds3 bounds) {
     cancel_interaction();
-    return fit_with_direction(scene, camera, extent, math::to_float3(canonical_direction()),
-                              bounds);
+    return fit_with_direction(scene, camera, extent, canonical_direction(), bounds);
 }
 
 Result<void> OrbitNavigationController::synchronize(const scene::Storage& scene, EntityId camera) {
@@ -345,24 +356,24 @@ Result<void> OrbitNavigationController::apply_screen_anchor_dolly(
         return current_world_result.error();
     }
 
-    math::Matrix4 camera_world = math::to_matrix(current_world_result.value());
+    Float4x4 camera_world = current_world_result.value();
     const Result<CameraBasis> current_basis = camera_basis(scene, camera);
     if (!current_basis) {
         return current_basis.error();
     }
-    const math::Vector3 camera_position{camera_world[3]};
-    const math::Vector3 anchor = math::to_vector(screen_anchor_.value());
-    const math::Vector3 ray = screen_anchor_ray(current_basis.value(), camera_position, anchor);
+    const Float3 camera_position = math::matrix_column(camera_world, 3);
+    const Float3 anchor = screen_anchor_.value();
+    const Float3 ray = screen_anchor_ray(current_basis.value(), camera_position, anchor);
 
     const BoundsInfo bounds = bounds_info(bounds_value);
     const float signed_anchor_distance =
-        glm::dot(anchor - camera_position, current_basis.value().forward);
+        math::dot(math::subtract(anchor, camera_position), current_basis.value().forward);
     const float motion_reference = local_motion_reference_distance(signed_anchor_distance, bounds);
     const float step =
         dolly_step_from_multiplier(multiplier, signed_anchor_distance, settings_, motion_reference);
-    const math::Vector3 new_position = camera_position + ray * step;
+    const Float3 new_position = math::add(camera_position, math::scale(ray, step));
 
-    camera_world[3] = math::Vector4{new_position, 1.0F};
+    set_matrix_column(camera_world, 3, new_position, 1.0F);
     const Result<void> transform_result = set_camera_world_matrix(scene, camera, camera_world);
     if (!transform_result) {
         return transform_result.error();
@@ -387,14 +398,16 @@ OrbitNavigationController::finish_screen_anchor_dolly(scene::Storage& scene, Ent
     angles_from_direction(basis.value().forward, yaw_radians_, pitch_radians_);
     pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
                                 settings_.maximum_pitch_radians);
-    math::Vector3 centerline_pivot = math::to_vector(pivot_);
+    Float3 centerline_pivot = pivot_;
     if (!finite_vector(centerline_pivot)) {
         centerline_pivot =
-            basis.value().position + basis.value().forward * sanitized_motion_reference(distance_);
+            math::add(basis.value().position,
+                      math::scale(basis.value().forward, sanitized_motion_reference(distance_)));
     }
     distance_ = clamp_signed_distance(
-        glm::dot(centerline_pivot - basis.value().position, basis.value().forward), limits);
-    pivot_ = math::to_float3(basis.value().position + basis.value().forward * distance_);
+        math::dot(math::subtract(centerline_pivot, basis.value().position), basis.value().forward),
+        limits);
+    pivot_ = math::add(basis.value().position, math::scale(basis.value().forward, distance_));
     scene_ = scene.id();
     camera_ = camera;
     camera_world_ = camera_world_result.value();
@@ -423,15 +436,15 @@ OrbitNavigationController::screen_anchor_orbit(const scene::Storage& scene, Enti
         return current_world_result.error();
     }
 
-    const math::Vector3 anchor = math::to_vector(screen_anchor_.value());
-    const math::Vector3 camera_to_anchor = anchor - basis.value().position;
-    const float anchor_distance = glm::length(camera_to_anchor);
+    const Float3 anchor = screen_anchor_.value();
+    const Float3 camera_to_anchor = math::subtract(anchor, basis.value().position);
+    const float anchor_distance = math::vector_length(camera_to_anchor);
     if (!finite_vector(camera_to_anchor) || !std::isfinite(anchor_distance) ||
         anchor_distance <= minimum_axis_length) {
         screen_anchor_.reset();
         return ScreenAnchorOrbit{current_world_result.value(), 0.0F, false};
     }
-    const std::optional<math::Rotation> rotation =
+    const std::optional<Quaternion> rotation =
         screen_anchor_rotation(basis.value(), delta, settings_);
     if (!rotation.has_value()) {
         return ScreenAnchorOrbit{current_world_result.value(), anchor_distance, false};
@@ -452,7 +465,7 @@ OrbitNavigationController::commit_screen_anchor_orbit(scene::Storage& scene, Ent
         return {};
     }
     const Result<void> transform_result =
-        set_camera_world_matrix(scene, camera, math::to_matrix(orbit.camera_world));
+        set_camera_world_matrix(scene, camera, orbit.camera_world);
     if (!transform_result) {
         return transform_result.error();
     }
@@ -473,8 +486,8 @@ OrbitNavigationController::commit_screen_anchor_orbit(scene::Storage& scene, Ent
     const BoundsInfo bounds = bounds_info(bounds_value);
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     distance_ = std::clamp(orbit.anchor_distance, limits.minimum, limits.maximum);
-    const math::Vector3 direction = direction_from_angles(yaw_radians_, pitch_radians_);
-    pivot_ = math::to_float3(new_basis.value().position + direction * distance_);
+    const Float3 direction = direction_from_angles(yaw_radians_, pitch_radians_);
+    pivot_ = math::add(new_basis.value().position, math::scale(direction, distance_));
     scene_ = scene.id();
     camera_ = camera;
     camera_world_ = camera_world_result.value();
@@ -504,7 +517,7 @@ Result<void> OrbitNavigationController::apply_eye_orbit(scene::Storage& scene, E
     angles_from_direction(basis.value().forward, next_yaw, next_pitch);
     apply_orbit_delta(delta, settings_, next_yaw, next_pitch);
 
-    const math::Vector3 direction = direction_from_angles(next_yaw, next_pitch);
+    const Float3 direction = direction_from_angles(next_yaw, next_pitch);
     const Transform transform = look_at_transform(basis.value().position, direction);
     const Result<void> transform_result = set_camera_world_transform(scene, camera, transform);
     if (!transform_result) {
@@ -528,7 +541,8 @@ Result<void> OrbitNavigationController::apply_eye_orbit(scene::Storage& scene, E
     const BoundsInfo bounds = bounds_info(bounds_value);
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     distance_ = std::clamp(sanitized_motion_reference(distance_), limits.minimum, limits.maximum);
-    pivot_ = math::to_float3(new_basis.value().position + new_basis.value().forward * distance_);
+    pivot_ =
+        math::add(new_basis.value().position, math::scale(new_basis.value().forward, distance_));
     scene_ = scene.id();
     camera_ = camera;
     camera_world_ = camera_world_result.value();
@@ -564,7 +578,7 @@ Result<void> OrbitNavigationController::synchronize_from_camera(const scene::Sto
     angles_from_direction(synchronized.direction, yaw_radians_, pitch_radians_);
     pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
                                 settings_.maximum_pitch_radians);
-    pivot_ = math::to_float3(synchronized.pivot);
+    pivot_ = synchronized.pivot;
     distance_ = synchronized.distance;
     scene_ = scene.id();
     camera_ = camera;
@@ -578,8 +592,8 @@ Result<void> OrbitNavigationController::apply_camera(scene::Storage& scene, Enti
     const BoundsInfo bounds = bounds_info(scene.world_bounds());
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     distance_ = clamp_signed_distance(distance_, limits);
-    const math::Vector3 direction = direction_from_angles(yaw_radians_, pitch_radians_);
-    const math::Vector3 position = math::to_vector(pivot_) - direction * distance_;
+    const Float3 direction = direction_from_angles(yaw_radians_, pitch_radians_);
+    const Float3 position = math::subtract(pivot_, math::scale(direction, distance_));
     const Transform transform = look_at_transform(position, direction);
     const Result<void> transform_result = set_camera_world_transform(scene, camera, transform);
     if (!transform_result) {
@@ -619,9 +633,8 @@ OrbitNavigationController::prepare_fit(const scene::Storage& scene, EntityId cam
         return Error{ErrorCode::scene_has_no_bounds,
                      "Camera fitting requires a scene with renderable bounds"};
     }
-    if (!math::is_finite(direction) ||
-        glm::length(math::to_vector(direction)) <= minimum_axis_length) {
-        direction = math::to_float3(canonical_direction());
+    if (!math::is_finite(direction) || math::vector_length(direction) <= minimum_axis_length) {
+        direction = canonical_direction();
     }
     const Result<Float4x4> old_matrix = scene.local_matrix(camera);
     if (!old_matrix) {
@@ -649,21 +662,20 @@ Result<void> OrbitNavigationController::fit_with_direction(scene::Storage& scene
         return projection.error();
     }
 
-    angles_from_direction(math::to_vector(preparation.value().direction), yaw_radians_,
-                          pitch_radians_);
+    angles_from_direction(preparation.value().direction, yaw_radians_, pitch_radians_);
     pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
                                 settings_.maximum_pitch_radians);
 
     const BoundsInfo bounds = bounds_info(preparation.value().bounds);
-    pivot_ = math::to_float3(bounds.center);
+    pivot_ = bounds.center;
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     const float fit_distance = fit_distance_to_bounds(
         preparation.value().bounds, bounds.center,
         direction_from_angles(yaw_radians_, pitch_radians_), projection.value().vertical_tangent,
         projection.value().horizontal_tangent);
     distance_ = std::clamp(fit_distance * fit_margin, limits.minimum, limits.maximum);
-    const math::Vector3 fit_direction = direction_from_angles(yaw_radians_, pitch_radians_);
-    const math::Vector3 position = math::to_vector(pivot_) - fit_direction * distance_;
+    const Float3 fit_direction = direction_from_angles(yaw_radians_, pitch_radians_);
+    const Float3 position = math::subtract(pivot_, math::scale(fit_direction, distance_));
     const Transform transform = look_at_transform(position, fit_direction);
     const Result<void> transform_result = set_camera_world_transform(scene, camera, transform);
     if (!transform_result) {

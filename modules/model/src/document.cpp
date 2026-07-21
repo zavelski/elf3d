@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -9,6 +10,18 @@
 #include <utility>
 
 namespace elf3d::model::detail {
+namespace {
+
+[[nodiscard]] std::uint64_t allocate_document_owner_token() noexcept {
+    static std::atomic<std::uint64_t> next_token{1};
+    const std::uint64_t token = next_token.fetch_add(1, std::memory_order_relaxed);
+    if (token == 0) {
+        fatal_error("Elf3D exhausted document owner identities");
+    }
+    return token;
+}
+
+} // namespace
 
 [[nodiscard]] bool finite(float value) noexcept {
     return std::isfinite(value);
@@ -31,30 +44,29 @@ namespace elf3d::model::detail {
                        [](float element) noexcept { return finite(element); });
 }
 
-[[nodiscard]] bool valid_alpha(ModelAlphaMode mode) noexcept {
-    return mode == ModelAlphaMode::opaque || mode == ModelAlphaMode::mask ||
-           mode == ModelAlphaMode::blend;
+[[nodiscard]] bool valid_alpha(AlphaMode mode) noexcept {
+    return mode == AlphaMode::opaque || mode == AlphaMode::mask || mode == AlphaMode::blend;
 }
 
-[[nodiscard]] bool valid_wrap(ModelTextureWrap wrap) noexcept {
-    return wrap == ModelTextureWrap::repeat || wrap == ModelTextureWrap::mirrored_repeat ||
-           wrap == ModelTextureWrap::clamp_to_edge;
+[[nodiscard]] bool valid_wrap(TextureWrap wrap) noexcept {
+    return wrap == TextureWrap::repeat || wrap == TextureWrap::mirrored_repeat ||
+           wrap == TextureWrap::clamp_to_edge;
 }
 
-[[nodiscard]] bool valid_filter(ModelTextureFilter filter) noexcept {
-    return filter == ModelTextureFilter::nearest || filter == ModelTextureFilter::linear ||
-           filter == ModelTextureFilter::nearest_mipmap_nearest ||
-           filter == ModelTextureFilter::linear_mipmap_nearest ||
-           filter == ModelTextureFilter::nearest_mipmap_linear ||
-           filter == ModelTextureFilter::linear_mipmap_linear;
+[[nodiscard]] bool valid_filter(TextureFilter filter) noexcept {
+    return filter == TextureFilter::nearest || filter == TextureFilter::linear ||
+           filter == TextureFilter::nearest_mipmap_nearest ||
+           filter == TextureFilter::linear_mipmap_nearest ||
+           filter == TextureFilter::nearest_mipmap_linear ||
+           filter == TextureFilter::linear_mipmap_linear;
 }
 
-[[nodiscard]] bool valid_mag_filter(ModelTextureFilter filter) noexcept {
-    return filter == ModelTextureFilter::nearest || filter == ModelTextureFilter::linear;
+[[nodiscard]] bool valid_mag_filter(TextureFilter filter) noexcept {
+    return filter == TextureFilter::nearest || filter == TextureFilter::linear;
 }
 
 [[nodiscard]] bool
-valid_perspective_camera(const ModelPerspectiveCameraDescription& description) noexcept {
+valid_perspective_camera(const PerspectiveCameraDescription& description) noexcept {
     constexpr float pi = 3.14159265358979323846F;
     return finite(description.vertical_field_of_view_radians) && finite(description.near_plane) &&
            finite(description.far_plane) && description.vertical_field_of_view_radians > 0.0F &&
@@ -62,8 +74,8 @@ valid_perspective_camera(const ModelPerspectiveCameraDescription& description) n
            description.far_plane > description.near_plane;
 }
 
-[[nodiscard]] bool valid_mapping(ModelTextureMapping mapping) noexcept {
-    return mapping.texcoord_set < model_maximum_texture_coordinate_sets &&
+[[nodiscard]] bool valid_mapping(TextureMapping mapping) noexcept {
+    return mapping.texcoord_set < maximum_texture_coordinate_sets &&
            finite(mapping.transform.offset) && finite(mapping.transform.scale) &&
            finite(mapping.transform.rotation_radians);
 }
@@ -133,11 +145,11 @@ inline constexpr std::size_t model_maximum_source_image_bytes = 64ULL * 1024ULL 
 
 [[nodiscard]] Result<std::size_t> expected_image_bytes(std::uint32_t image_width,
                                                        std::uint32_t image_height,
-                                                       ModelPixelFormat format) noexcept {
+                                                       PixelFormat format) noexcept {
     if (image_width == 0 || image_height == 0) {
         return Error{ErrorCode::zero_image_dimensions, "Images require nonzero dimensions"};
     }
-    if (format != ModelPixelFormat::rgba8_unorm) {
+    if (format != PixelFormat::rgba8_unorm) {
         return Error{ErrorCode::unsupported_texture_format,
                      "Document images currently support only RGBA8 UNORM pixels"};
     }
@@ -367,8 +379,11 @@ namespace elf3d {
 using model::detail::merge;
 using model::detail::metadata_view;
 
-std::uintptr_t Document::Storage::token() const noexcept {
-    return reinterpret_cast<std::uintptr_t>(this);
+Document::Storage::Storage() noexcept
+    : owner_token_(model::detail::allocate_document_owner_token()) {}
+
+std::uint64_t Document::Storage::token() const noexcept {
+    return owner_token_;
 }
 
 bool DocumentValidationReport::has_errors() const noexcept {
@@ -447,7 +462,7 @@ std::size_t Document::sampler_count() const noexcept {
 
 Result<DocumentSceneView> Document::scene_at(std::size_t index) const noexcept {
     if (storage_ == nullptr || index >= storage_->scenes.size()) {
-        return Error{ErrorCode::invalid_argument,
+        return Error{ErrorCode::invalid_document_scene_id,
                      "The document scene index is outside the document"};
     }
     const Storage::SceneRecord& record = storage_->scenes[index];
@@ -456,7 +471,7 @@ Result<DocumentSceneView> Document::scene_at(std::size_t index) const noexcept {
 
 Result<NodeView> Document::node_at(std::size_t index) const noexcept {
     if (storage_ == nullptr || index >= storage_->nodes.size()) {
-        return Error{ErrorCode::invalid_entity, "The document node index is outside the document"};
+        return Error{ErrorCode::invalid_node_id, "The document node index is outside the document"};
     }
     const Storage::NodeRecord& record = storage_->nodes[index];
     return NodeView{record.id,
@@ -471,8 +486,7 @@ Result<NodeView> Document::node_at(std::size_t index) const noexcept {
 
 Result<MeshView> Document::mesh_at(std::size_t index) const noexcept {
     if (storage_ == nullptr || index >= storage_->meshes.size()) {
-        return Error{ErrorCode::invalid_mesh_handle,
-                     "The document mesh index is outside the document"};
+        return Error{ErrorCode::invalid_mesh_id, "The document mesh index is outside the document"};
     }
     const Storage::MeshRecord& record = storage_->meshes[index];
     return MeshView{record.id, record.name, record.primitives, record.bounds,
@@ -481,7 +495,7 @@ Result<MeshView> Document::mesh_at(std::size_t index) const noexcept {
 
 Result<PrimitiveView> Document::primitive_at(std::size_t index) const noexcept {
     if (storage_ == nullptr || index >= storage_->primitives.size()) {
-        return Error{ErrorCode::invalid_mesh_handle,
+        return Error{ErrorCode::invalid_primitive_id,
                      "The document primitive index is outside the document"};
     }
     const Storage::PrimitiveRecord& record = storage_->primitives[index];
@@ -491,7 +505,7 @@ Result<PrimitiveView> Document::primitive_at(std::size_t index) const noexcept {
 
 Result<MaterialView> Document::material_at(std::size_t index) const noexcept {
     if (storage_ == nullptr || index >= storage_->materials.size()) {
-        return Error{ErrorCode::invalid_material_handle,
+        return Error{ErrorCode::invalid_material_id,
                      "The document material index is outside the document"};
     }
     const Storage::MaterialRecord& record = storage_->materials[index];
@@ -500,7 +514,7 @@ Result<MaterialView> Document::material_at(std::size_t index) const noexcept {
 
 Result<ImageView> Document::image_at(std::size_t index) const noexcept {
     if (storage_ == nullptr || index >= storage_->images.size()) {
-        return Error{ErrorCode::invalid_image_handle,
+        return Error{ErrorCode::invalid_image_id,
                      "The document image index is outside the document"};
     }
     const Storage::ImageRecord& record = storage_->images[index];
@@ -512,7 +526,7 @@ Result<ImageView> Document::image_at(std::size_t index) const noexcept {
 
 Result<TextureView> Document::texture_at(std::size_t index) const noexcept {
     if (storage_ == nullptr || index >= storage_->textures.size()) {
-        return Error{ErrorCode::invalid_texture_asset_handle,
+        return Error{ErrorCode::invalid_texture_id,
                      "The document texture index is outside the document"};
     }
     const Storage::TextureRecord& record = storage_->textures[index];
@@ -521,7 +535,7 @@ Result<TextureView> Document::texture_at(std::size_t index) const noexcept {
 
 Result<SamplerView> Document::sampler_at(std::size_t index) const noexcept {
     if (storage_ == nullptr || index >= storage_->samplers.size()) {
-        return Error{ErrorCode::invalid_sampler_description,
+        return Error{ErrorCode::invalid_sampler_id,
                      "The document sampler index is outside the document"};
     }
     const Storage::SamplerRecord& record = storage_->samplers[index];
@@ -530,7 +544,7 @@ Result<SamplerView> Document::sampler_at(std::size_t index) const noexcept {
 
 Result<DocumentSceneView> Document::scene(DocumentSceneId scene_id) const noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_argument, "The document is empty"};
+        return Error{ErrorCode::invalid_document_scene_id, "The document is empty"};
     }
     const Result<const Storage::SceneRecord*> record = storage_->scene(scene_id);
     if (!record) {
@@ -542,7 +556,7 @@ Result<DocumentSceneView> Document::scene(DocumentSceneId scene_id) const noexce
 
 Result<NodeView> Document::node(NodeId node_id) const noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_entity, "The document is empty"};
+        return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
     const Result<const Storage::NodeRecord*> record = storage_->node(node_id);
     if (!record) {
@@ -560,7 +574,7 @@ Result<NodeView> Document::node(NodeId node_id) const noexcept {
 
 Result<MeshView> Document::mesh(MeshId mesh_id) const noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_mesh_handle, "The document is empty"};
+        return Error{ErrorCode::invalid_mesh_id, "The document is empty"};
     }
     const Result<const Storage::MeshRecord*> record = storage_->mesh(mesh_id);
     if (!record) {
@@ -572,7 +586,7 @@ Result<MeshView> Document::mesh(MeshId mesh_id) const noexcept {
 
 Result<PrimitiveView> Document::primitive(PrimitiveId primitive_id) const noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_mesh_handle, "The document is empty"};
+        return Error{ErrorCode::invalid_primitive_id, "The document is empty"};
     }
     const Result<const Storage::PrimitiveRecord*> record = storage_->primitive(primitive_id);
     if (!record) {
@@ -585,7 +599,7 @@ Result<PrimitiveView> Document::primitive(PrimitiveId primitive_id) const noexce
 
 Result<MaterialView> Document::material(MaterialId material_id) const noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_material_handle, "The document is empty"};
+        return Error{ErrorCode::invalid_material_id, "The document is empty"};
     }
     const Result<const Storage::MaterialRecord*> record = storage_->material(material_id);
     if (!record) {
@@ -597,7 +611,7 @@ Result<MaterialView> Document::material(MaterialId material_id) const noexcept {
 
 Result<ImageView> Document::image(ImageId image_id) const noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_image_handle, "The document is empty"};
+        return Error{ErrorCode::invalid_image_id, "The document is empty"};
     }
     const Result<const Storage::ImageRecord*> record = storage_->image(image_id);
     if (!record) {
@@ -615,7 +629,7 @@ Result<ImageView> Document::image(ImageId image_id) const noexcept {
 
 Result<TextureView> Document::texture(TextureId texture_id) const noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_texture_asset_handle, "The document is empty"};
+        return Error{ErrorCode::invalid_texture_id, "The document is empty"};
     }
     const Result<const Storage::TextureRecord*> record = storage_->texture(texture_id);
     if (!record) {
@@ -627,7 +641,7 @@ Result<TextureView> Document::texture(TextureId texture_id) const noexcept {
 
 Result<SamplerView> Document::sampler(SamplerId sampler_id) const noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_sampler_description, "The document is empty"};
+        return Error{ErrorCode::invalid_sampler_id, "The document is empty"};
     }
     const Result<const Storage::SamplerRecord*> record = storage_->sampler(sampler_id);
     if (!record) {

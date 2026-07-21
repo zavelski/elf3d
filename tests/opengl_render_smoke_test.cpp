@@ -90,6 +90,7 @@ void configure_hidden_context() noexcept {
 struct SmokeFixture {
     std::unique_ptr<elf3d::Scene> scene;
     std::unique_ptr<elf3d::Viewport> viewport;
+    elf3d::EntityId non_camera_entity;
     elf3d::EntityId camera;
 };
 
@@ -139,12 +140,13 @@ struct SmokeAssets {
 }
 
 [[nodiscard]] int create_scene_entities(SmokeFixture& fixture, const SmokeAssets& assets) {
-    const auto far_model = fixture.scene->create_model(assets.mesh, assets.red);
-    const auto near_model = fixture.scene->create_model(assets.mesh, assets.green);
-    const auto camera = fixture.scene->create_perspective_camera({});
+    const auto far_model = fixture.scene->create_model_entity(assets.mesh, assets.red);
+    const auto near_model = fixture.scene->create_model_entity(assets.mesh, assets.green);
+    const auto camera = fixture.scene->create_perspective_camera_entity({});
     if (!far_model || !near_model || !camera) {
         return fail(4, "OpenGL smoke test failed to create scene entities");
     }
+    fixture.non_camera_entity = far_model.value();
     fixture.camera = camera.value();
     elf3d::Transform far_transform;
     far_transform.translation = {0.0F, 0.0F, -3.0F};
@@ -157,11 +159,38 @@ struct SmokeAssets {
     return 0;
 }
 
+[[nodiscard]] int verify_camera_role_errors(SmokeFixture& fixture) {
+    const elf3d::Result<void> navigation = fixture.viewport->update_navigation(
+        *fixture.scene, fixture.non_camera_entity, elf3d::ViewportInput{});
+    if (navigation || navigation.error().code() != elf3d::ErrorCode::entity_has_no_camera) {
+        return fail(20, "Viewport navigation accepted a non-camera entity");
+    }
+
+    const elf3d::Result<elf3d::Ray3> picking_ray = fixture.viewport->make_picking_ray(
+        *fixture.scene, fixture.non_camera_entity, {32.0F, 32.0F});
+    if (picking_ray || picking_ray.error().code() != elf3d::ErrorCode::entity_has_no_camera) {
+        return fail(21, "Viewport picking accepted a non-camera entity");
+    }
+
+    const elf3d::Result<elf3d::ProjectedViewportPoint> projection =
+        fixture.viewport->project_world_to_viewport(*fixture.scene, fixture.non_camera_entity, {});
+    if (projection || projection.error().code() != elf3d::ErrorCode::entity_has_no_camera) {
+        return fail(22, "Viewport projection accepted a non-camera entity");
+    }
+
+    const elf3d::Result<void> rendered =
+        fixture.viewport->render(*fixture.scene, fixture.non_camera_entity);
+    if (rendered || rendered.error().code() != elf3d::ErrorCode::entity_has_no_camera) {
+        return fail(23, "Viewport rendering accepted a non-camera entity");
+    }
+    return 0;
+}
+
 [[nodiscard]] int render_scene(SmokeFixture& fixture) {
     fixture.viewport->set_clear_color({0.0F, 0.0F, 0.0F, 1.0F});
     const elf3d::Result<void> render_result =
         fixture.viewport->render(*fixture.scene, fixture.camera);
-    if (!render_result || fixture.viewport->statistics().draw_calls != 2) {
+    if (!render_result || fixture.viewport->render_statistics().draw_calls != 2) {
         return fail(6, "OpenGL smoke test failed to render the transparent scene");
     }
     return 0;
@@ -214,6 +243,10 @@ struct SmokeAssets {
     const int entities = create_scene_entities(fixture, assets);
     if (entities != 0) {
         return entities;
+    }
+    const int camera_roles = verify_camera_role_errors(fixture);
+    if (camera_roles != 0) {
+        return camera_roles;
     }
     const int rendered = render_scene(fixture);
     if (rendered != 0) {

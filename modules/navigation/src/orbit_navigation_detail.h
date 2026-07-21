@@ -1,12 +1,12 @@
 #pragma once
 
-#include <elf3d/math/detail/glm_helpers.h>
+#include <elf3d/math/value_types.h>
 
 #include <cmath>
 
 namespace elf3d::navigation::navigation_detail {
 
-[[nodiscard]] inline bool finite_vector(const math::Vector3& value) noexcept {
+[[nodiscard]] inline bool finite_vector(const Float3& value) noexcept {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
@@ -25,20 +25,20 @@ inline constexpr float maximum_keyboard_frame_delta_seconds = 0.25F;
 
 struct BoundsInfo {
     bool has_bounds = false;
-    math::Vector3 center{};
+    Float3 center{};
     float radius = 1.0F;
 };
 
 struct CameraBasis {
-    math::Vector3 position{};
-    math::Vector3 right{1.0F, 0.0F, 0.0F};
-    math::Vector3 up{0.0F, 1.0F, 0.0F};
-    math::Vector3 forward{0.0F, 0.0F, -1.0F};
+    Float3 position{};
+    Float3 right{1.0F, 0.0F, 0.0F};
+    Float3 up{0.0F, 1.0F, 0.0F};
+    Float3 forward{0.0F, 0.0F, -1.0F};
 };
 
 struct PanOffset {
     bool has_value = false;
-    math::Vector3 value{};
+    Float3 value{};
 };
 
 struct KeyboardPanDelta {

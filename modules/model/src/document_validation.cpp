@@ -222,7 +222,7 @@ class DocumentValidation final {
     static void validate_samplers(const Document::Storage& storage,
                                   DocumentValidationReport& report) {
         for (const Document::Storage::SamplerRecord& sampler_record : storage.samplers) {
-            const ModelSamplerDescription& description = sampler_record.description;
+            const SamplerDescription& description = sampler_record.description;
             if (!valid_wrap(description.wrap_u) || !valid_wrap(description.wrap_v) ||
                 !valid_filter(description.min_filter) ||
                 !valid_mag_filter(description.mag_filter)) {

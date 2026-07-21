@@ -7,6 +7,10 @@ include is:
 #include <elf3d/elf3d.h>
 ```
 
+Focused hosts may include `graphics.h` for backend and overlay vocabulary,
+`rendering.h` for render configuration and statistics, and `viewport.h` for
+the caller-owned viewport facade. The umbrella header provides all three.
+
 Build the `elf3d` target and link the resulting shared library and import
 library with a compatible Visual Studio C++20 configuration.
 
@@ -57,7 +61,7 @@ Rendering viewports require a configured graphics backend.
 ## Loading a Scene
 
 ```cpp
-auto loaded_result = engine->load_scene_with_report("model.glb");
+auto loaded_result = engine->load_scene("model.glb");
 if (!loaded_result) {
     report_error(loaded_result.error());
     return;
@@ -73,38 +77,63 @@ for (std::size_t index = 0; index < loaded.report.diagnostic_count(); ++index) {
 }
 ```
 
-Loading paths are UTF-8 strings. Use `load_scene()` when the compatibility
-report is not required.
+Loading paths are UTF-8 strings. `load_scene()` is the single scene-loading
+operation and always returns the structured compatibility report with the
+loaded Scene.
 
-## Saving a Loaded Scene
+## Exporting a Loaded Document
 
 ```cpp
-auto saved = loaded.scene->save_model("copy.glb");
+auto saved = scene->export_loaded_document("copy.glb");
 if (!saved) {
     report_error(saved.error());
 }
 ```
 
-`Scene::save_model()` exports the canonical `Document` retained by a scene
+`Scene::export_loaded_document()` exports the canonical `Document` retained by a scene
 loaded from glTF/GLB. The target extension selects `.glb` or `.gltf`; glTF may
 create buffer and image sidecars. Runtime visibility, viewport tools, and
 Scene-created compatibility assets are intentionally not export data. A
-procedural Scene therefore cannot be saved through this operation.
+procedural Scene therefore cannot be exported through this operation. The
+retained imported Document is immutable through Scene, so the current
+Document-only write diagnostics are not reachable through this facade bridge.
 
 ## Creating and Rendering a Viewport
 
 ```cpp
-auto viewport = engine->create_viewport({1280, 720}).value();
-auto camera = scene->create_perspective_camera({}).value();
+auto viewport_result = engine->create_viewport({1280, 720});
+if (!viewport_result) {
+    report_error(viewport_result.error());
+    return;
+}
+auto viewport = std::move(viewport_result).value();
+
+auto camera_result = scene->create_perspective_camera_entity({});
+if (!camera_result) {
+    report_error(camera_result.error());
+    return;
+}
+const elf3d::EntityId camera_entity = camera_result.value();
 
 while (host_running()) {
     elf3d::ViewportInput input = translate_host_input();
-    (void)viewport->update_navigation(*scene, camera, input);
-    (void)viewport->render(*scene, camera);
+    auto navigation = viewport->update_navigation(*scene, camera_entity, input);
+    if (!navigation) {
+        report_error(navigation.error());
+        break;
+    }
+    auto rendered = viewport->render(*scene, camera_entity);
+    if (!rendered) {
+        report_error(rendered.error());
+        break;
+    }
 
-    auto texture =
-        engine->native_texture_view(viewport->color_texture()).value();
-    present_texture(texture);
+    auto texture = engine->native_texture_view(viewport->color_texture());
+    if (!texture) {
+        report_error(texture.error());
+        break;
+    }
+    present_texture(texture.value());
 }
 ```
 
@@ -122,10 +151,17 @@ and texture presentation.
   diagnostics.
 - `Engine`: scene and viewport creation, loading, and native texture access.
 - `Scene`: hierarchy, transforms, cameras, model-backed loaded data,
-  Scene-created convenience assets, visibility, bounds, and statistics.
+  Scene-created convenience assets, visibility, bounds, statistics, and
+  retained-Document export.
 - `Viewport`: rendering, navigation, picking, selection, visibility,
   measurement, clipping, overlays, and statistics.
 - `Result<T>` and `Error`: expected operation results and error context.
+
+Identical model/runtime POD vocabulary is declared once in
+`elf3d/model_types.h`. This includes `AlphaMode`, `PixelFormat`,
+`PerspectiveCameraDescription`, texture mapping and sampler values, and
+`ModelLoadOptions`. Document-specific DTOs remain distinct where they contain
+document-scoped IDs or additional persistent data.
 
 All exported functions, destructors, and callbacks are explicitly `noexcept`.
 Memory exhaustion is fatal by default and is not reported as a recoverable
@@ -156,3 +192,17 @@ Shutdown in this order:
 
 Scene mutation, loading, rendering, navigation, picking, and graphics-resource
 management are used from the owning application and graphics thread.
+
+## Compile-Checked Examples
+
+The canonical examples are compiled by the normal full-engine test build:
+
+- [`embedded_viewer.cpp`](../examples/embedded_viewer.cpp)
+- [`load_and_report.cpp`](../examples/load_and_report.cpp)
+- [`procedural_scene.cpp`](../examples/procedural_scene.cpp)
+- [`picking_and_selection.cpp`](../examples/picking_and_selection.cpp)
+- [`document_roundtrip.cpp`](../examples/document_roundtrip.cpp)
+- [`multi_viewport.cpp`](../examples/multi_viewport.cpp)
+
+They check every `Result` before value access and are the preferred source for
+application integration code.

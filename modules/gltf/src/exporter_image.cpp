@@ -42,7 +42,7 @@ class PngImage final {
 };
 
 [[nodiscard]] Result<std::vector<std::byte>> encode_png(const ImageView& image) {
-    if (image.format != ModelPixelFormat::rgba8_unorm) {
+    if (image.format != PixelFormat::rgba8_unorm) {
         return Error{ErrorCode::unsupported_texture_format,
                      "glTF export supports only RGBA8 document images"};
     }

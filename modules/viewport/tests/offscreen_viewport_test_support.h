@@ -116,20 +116,23 @@ struct FakeDeviceState {
     int latest_overlay_markers = 0;
 };
 
-[[nodiscard]] inline FakeDeviceState& fake_device_state() noexcept {
-    static FakeDeviceState state;
-    return state;
-}
-
 class FakeDevice final : public elf3d::graphics::Device {
   public:
+    [[nodiscard]] FakeDeviceState& state() noexcept {
+        return state_;
+    }
+
+    [[nodiscard]] const FakeDeviceState& state() const noexcept {
+        return state_;
+    }
+
     [[nodiscard]] elf3d::GraphicsBackend backend() const noexcept override {
         return elf3d::GraphicsBackend::opengl;
     }
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::RenderTarget>>
     create_render_target(elf3d::Extent2D initial_extent) noexcept override {
-        fake_device_state().latest_render_target_extent = initial_extent;
+        state_.latest_render_target_extent = initial_extent;
         auto target = std::make_unique<FakeRenderTarget>(initial_extent);
         return std::unique_ptr<elf3d::graphics::RenderTarget>{std::move(target)};
     }
@@ -147,7 +150,7 @@ class FakeDevice final : public elf3d::graphics::Device {
                                 "Fake texture is unavailable"};
         }
         return elf3d::NativeTextureView{elf3d::NativeGraphicsApi::opengl, 1,
-                                        fake_device_state().latest_render_target_extent};
+                                        state_.latest_render_target_extent};
     }
 
     class FakeMesh final : public elf3d::graphics::StaticMesh {
@@ -204,8 +207,8 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<void>
     draw_overlay(elf3d::graphics::RenderTarget&,
                  const elf3d::graphics::DrawOverlayDescription& description) noexcept override {
-        fake_device_state().latest_overlay_lines = static_cast<int>(description.lines.size());
-        fake_device_state().latest_overlay_markers = static_cast<int>(description.markers.size());
+        state_.latest_overlay_lines = static_cast<int>(description.lines.size());
+        state_.latest_overlay_markers = static_cast<int>(description.markers.size());
         return {};
     }
     [[nodiscard]] elf3d::Result<void>
@@ -216,24 +219,26 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<std::optional<elf3d::graphics::PickingPixel>>
     read_picking_pixel(elf3d::graphics::PickingTarget&,
                        elf3d::Float2 position_pixels) noexcept override {
-        fake_device_state().last_picking_read_position = position_pixels;
-        ++fake_device_state().picking_pixel_read_count;
-        return fake_device_state().picking_pixel;
+        state_.last_picking_read_position = position_pixels;
+        ++state_.picking_pixel_read_count;
+        return state_.picking_pixel;
     }
     [[nodiscard]] elf3d::Result<std::vector<float>>
     read_picking_depths(elf3d::graphics::PickingTarget& target) noexcept override {
-        ++fake_device_state().picking_depths_read_count;
-        fake_device_state().last_picking_read_extent = target.extent();
-        if (!fake_device_state().picking_depths.empty()) {
-            return fake_device_state().picking_depths;
+        ++state_.picking_depths_read_count;
+        state_.last_picking_read_extent = target.extent();
+        if (!state_.picking_depths.empty()) {
+            return state_.picking_depths;
         }
         const elf3d::Extent2D target_extent = target.extent();
         return std::vector<float>(static_cast<std::size_t>(target_extent.width) *
                                       static_cast<std::size_t>(target_extent.height),
-                                  fake_device_state().picking_pixel.has_value()
-                                      ? fake_device_state().picking_pixel->depth
-                                      : 1.0F);
+                                  state_.picking_pixel.has_value() ? state_.picking_pixel->depth
+                                                                   : 1.0F);
     }
+
+  private:
+    FakeDeviceState state_;
 };
 
 } // namespace elf3d::viewport::tests

@@ -4,6 +4,7 @@
 #include <elf3d/core/result.h>
 #include <elf3d/math/value_types.h>
 #include <elf3d/model_ids.h>
+#include <elf3d/model_types.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -17,75 +18,16 @@
 
 namespace elf3d {
 
-inline constexpr std::uint32_t model_maximum_texture_coordinate_sets = 2;
-
-enum class ModelAlphaMode {
-    opaque,
-    mask,
-    blend,
-};
-
-enum class ModelPixelFormat {
-    rgba8_unorm,
-};
-
 enum class ModelImageMimeType {
     none,
     png,
     jpeg,
 };
 
-struct ModelPerspectiveCameraDescription {
-    float vertical_field_of_view_radians = 1.0471975512F;
-    float near_plane = 0.1F;
-    float far_plane = 1000.0F;
-
-    bool operator==(const ModelPerspectiveCameraDescription&) const = default;
-};
-
-enum class ModelTextureWrap {
-    repeat,
-    mirrored_repeat,
-    clamp_to_edge,
-};
-
-enum class ModelTextureFilter {
-    nearest,
-    linear,
-    nearest_mipmap_nearest,
-    linear_mipmap_nearest,
-    nearest_mipmap_linear,
-    linear_mipmap_linear,
-};
-
-struct ModelTextureTransform {
-    Float2 offset;
-    Float2 scale{1.0F, 1.0F};
-    float rotation_radians = 0.0F;
-
-    bool operator==(const ModelTextureTransform&) const = default;
-};
-
-struct ModelTextureMapping {
-    std::uint32_t texcoord_set = 0;
-    ModelTextureTransform transform;
-
-    bool operator==(const ModelTextureMapping&) const = default;
-};
-
-struct ModelSamplerDescription {
-    ModelTextureWrap wrap_u = ModelTextureWrap::repeat;
-    ModelTextureWrap wrap_v = ModelTextureWrap::repeat;
-    ModelTextureFilter min_filter = ModelTextureFilter::linear;
-    ModelTextureFilter mag_filter = ModelTextureFilter::linear;
-
-    bool operator==(const ModelSamplerDescription&) const = default;
-};
-
 struct ModelImageDescription {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
-    ModelPixelFormat format = ModelPixelFormat::rgba8_unorm;
+    PixelFormat format = PixelFormat::rgba8_unorm;
     std::span<const std::byte> pixels;
     // Optional original PNG/JPEG stream corresponding to the decoded pixels.
     ModelImageMimeType source_mime_type = ModelImageMimeType::none;
@@ -127,7 +69,7 @@ struct ModelMaterialDescription {
     TextureId metallic_roughness_texture;
 
     bool unlit = false;
-    ModelAlphaMode alpha_mode = ModelAlphaMode::opaque;
+    AlphaMode alpha_mode = AlphaMode::opaque;
     float alpha_cutoff = 0.5F;
     Float3 emissive_factor;
     float emissive_strength = 1.0F;
@@ -139,11 +81,11 @@ struct ModelMaterialDescription {
     TextureId normal_texture;
     TextureId occlusion_texture;
     TextureId emissive_texture;
-    ModelTextureMapping base_color_texture_mapping;
-    ModelTextureMapping metallic_roughness_texture_mapping;
-    ModelTextureMapping normal_texture_mapping;
-    ModelTextureMapping occlusion_texture_mapping;
-    ModelTextureMapping emissive_texture_mapping;
+    TextureMapping base_color_texture_mapping;
+    TextureMapping metallic_roughness_texture_mapping;
+    TextureMapping normal_texture_mapping;
+    TextureMapping occlusion_texture_mapping;
+    TextureMapping emissive_texture_mapping;
 
     bool operator==(const ModelMaterialDescription&) const = default;
 };
@@ -189,7 +131,7 @@ struct ImageView {
     ImageId id;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
-    ModelPixelFormat format = ModelPixelFormat::rgba8_unorm;
+    PixelFormat format = PixelFormat::rgba8_unorm;
     std::span<const std::byte> pixels;
     ModelImageMimeType source_mime_type = ModelImageMimeType::none;
     std::span<const std::byte> source_bytes;
@@ -204,7 +146,7 @@ struct TextureView {
 
 struct SamplerView {
     SamplerId id;
-    ModelSamplerDescription description;
+    SamplerDescription description;
     ModelJsonMetadataView metadata;
 };
 
@@ -223,7 +165,7 @@ struct NodeView {
     std::span<const NodeId> children;
     Float4x4 local_matrix;
     std::optional<MeshId> mesh;
-    std::optional<ModelPerspectiveCameraDescription> perspective_camera;
+    std::optional<PerspectiveCameraDescription> perspective_camera;
     ModelJsonMetadataView metadata;
 };
 
@@ -282,11 +224,6 @@ struct DocumentValidationReport {
     std::vector<DocumentDiagnostic> diagnostics;
 
     [[nodiscard]] bool has_errors() const noexcept;
-};
-
-struct ModelLoadOptions {
-    bool generate_missing_normals = true;
-    bool import_node_names = true;
 };
 
 enum class ModelImageWritePolicy {
@@ -427,7 +364,7 @@ class Document final {
     [[nodiscard]] Result<MaterialId>
     create_material(const ModelMaterialDescription& description = {});
     [[nodiscard]] Result<ImageId> create_image(const ModelImageDescription& description);
-    [[nodiscard]] Result<SamplerId> create_sampler(const ModelSamplerDescription& description = {});
+    [[nodiscard]] Result<SamplerId> create_sampler(const SamplerDescription& description = {});
     [[nodiscard]] Result<TextureId> create_texture(const ModelTextureDescription& description);
     [[nodiscard]] Result<PrimitiveId> create_primitive(MeshId mesh, MaterialId material,
                                                        const PrimitiveDataView& data);
@@ -442,14 +379,11 @@ class Document final {
     [[nodiscard]] Result<void> clear_node_mesh(NodeId node);
     [[nodiscard]] Result<void> set_node_matrix(NodeId node, const Float4x4& matrix);
     [[nodiscard]] Result<void>
-    set_node_perspective_camera(NodeId node, const ModelPerspectiveCameraDescription& description);
+    set_node_perspective_camera(NodeId node, const PerspectiveCameraDescription& description);
     [[nodiscard]] Result<void> clear_node_perspective_camera(NodeId node);
     [[nodiscard]] Result<void> replace_primitive(PrimitiveId primitive,
                                                  const PrimitiveDataView& data);
     [[nodiscard]] Result<void> replace_primitive(PrimitiveId primitive, PrimitiveData&& data);
-    [[nodiscard]] Result<std::span<Float3>> mutable_positions(PrimitiveId primitive) noexcept;
-    [[nodiscard]] Result<std::span<Float3>> mutable_normals(PrimitiveId primitive) noexcept;
-    [[nodiscard]] Result<void> update_primitive_bounds(PrimitiveId primitive) noexcept;
 
   private:
     friend class DocumentView;
@@ -506,42 +440,6 @@ class DocumentView final {
     const Document* document_ = nullptr;
 };
 
-class DocumentBuilder final {
-  public:
-    DocumentBuilder();
-    ~DocumentBuilder() noexcept;
-
-    DocumentBuilder(const DocumentBuilder&) = delete;
-    DocumentBuilder& operator=(const DocumentBuilder&) = delete;
-    DocumentBuilder(DocumentBuilder&&) noexcept;
-    DocumentBuilder& operator=(DocumentBuilder&&) noexcept;
-
-    [[nodiscard]] Result<DocumentSceneId> create_scene(std::string_view name = {});
-    [[nodiscard]] Result<NodeId> create_node(std::string_view name = {});
-    [[nodiscard]] Result<MeshId> create_mesh(std::string_view name = {});
-    [[nodiscard]] Result<ImageId> create_image(const ModelImageDescription& description);
-    [[nodiscard]] Result<SamplerId> create_sampler(const ModelSamplerDescription& description = {});
-    [[nodiscard]] Result<TextureId> create_texture(const ModelTextureDescription& description);
-    [[nodiscard]] Result<MaterialId>
-    create_material(const ModelMaterialDescription& description = {});
-    [[nodiscard]] Result<PrimitiveId> create_primitive(MeshId mesh, MaterialId material,
-                                                       const PrimitiveDataView& data);
-    [[nodiscard]] Result<PrimitiveId> create_primitive(MeshId mesh, MaterialId material,
-                                                       PrimitiveData&& data);
-    [[nodiscard]] Result<void> add_scene_root(DocumentSceneId scene, NodeId node);
-    [[nodiscard]] Result<void> set_default_scene(DocumentSceneId scene);
-    [[nodiscard]] Result<void> clear_default_scene() noexcept;
-    [[nodiscard]] Result<void> set_parent(NodeId node, NodeId parent);
-    [[nodiscard]] Result<void> set_node_mesh(NodeId node, MeshId mesh);
-    [[nodiscard]] Result<void> set_node_matrix(NodeId node, const Float4x4& matrix);
-    [[nodiscard]] Result<void>
-    set_node_perspective_camera(NodeId node, const ModelPerspectiveCameraDescription& description);
-    [[nodiscard]] Result<Document> finish();
-
-  private:
-    Document document_;
-};
-
 struct LoadedDocument {
     Document document;
     DocumentSceneId default_scene;
@@ -554,117 +452,6 @@ struct LoadedDocument {
 [[nodiscard]] Result<ModelWriteReport>
 save_document(std::string_view path_utf8, DocumentView document,
               const ModelWriteOptions& options = {}) noexcept;
-
-namespace model::detail {
-
-class DocumentHandleAccess final {
-  public:
-    [[nodiscard]] static constexpr DocumentSceneId create_scene(std::uintptr_t document,
-                                                                std::uint64_t value) noexcept {
-        return DocumentSceneId{document, value};
-    }
-
-    [[nodiscard]] static constexpr NodeId create_node(std::uintptr_t document,
-                                                      std::uint64_t value) noexcept {
-        return NodeId{document, value};
-    }
-
-    [[nodiscard]] static constexpr MeshId create_mesh(std::uintptr_t document,
-                                                      std::uint64_t value) noexcept {
-        return MeshId{document, value};
-    }
-
-    [[nodiscard]] static constexpr PrimitiveId create_primitive(std::uintptr_t document,
-                                                                std::uint64_t value) noexcept {
-        return PrimitiveId{document, value};
-    }
-
-    [[nodiscard]] static constexpr MaterialId create_material(std::uintptr_t document,
-                                                              std::uint64_t value) noexcept {
-        return MaterialId{document, value};
-    }
-
-    [[nodiscard]] static constexpr ImageId create_image(std::uintptr_t document,
-                                                        std::uint64_t value) noexcept {
-        return ImageId{document, value};
-    }
-
-    [[nodiscard]] static constexpr TextureId create_texture(std::uintptr_t document,
-                                                            std::uint64_t value) noexcept {
-        return TextureId{document, value};
-    }
-
-    [[nodiscard]] static constexpr SamplerId create_sampler(std::uintptr_t document,
-                                                            std::uint64_t value) noexcept {
-        return SamplerId{document, value};
-    }
-
-    [[nodiscard]] static constexpr std::uintptr_t document(DocumentSceneId id) noexcept {
-        return id.document_;
-    }
-
-    [[nodiscard]] static constexpr std::uintptr_t document(NodeId id) noexcept {
-        return id.document_;
-    }
-
-    [[nodiscard]] static constexpr std::uintptr_t document(MeshId id) noexcept {
-        return id.document_;
-    }
-
-    [[nodiscard]] static constexpr std::uintptr_t document(PrimitiveId id) noexcept {
-        return id.document_;
-    }
-
-    [[nodiscard]] static constexpr std::uintptr_t document(MaterialId id) noexcept {
-        return id.document_;
-    }
-
-    [[nodiscard]] static constexpr std::uintptr_t document(ImageId id) noexcept {
-        return id.document_;
-    }
-
-    [[nodiscard]] static constexpr std::uintptr_t document(TextureId id) noexcept {
-        return id.document_;
-    }
-
-    [[nodiscard]] static constexpr std::uintptr_t document(SamplerId id) noexcept {
-        return id.document_;
-    }
-
-    [[nodiscard]] static constexpr std::uint64_t value(DocumentSceneId id) noexcept {
-        return id.value_;
-    }
-
-    [[nodiscard]] static constexpr std::uint64_t value(NodeId id) noexcept {
-        return id.value_;
-    }
-
-    [[nodiscard]] static constexpr std::uint64_t value(MeshId id) noexcept {
-        return id.value_;
-    }
-
-    [[nodiscard]] static constexpr std::uint64_t value(PrimitiveId id) noexcept {
-        return id.value_;
-    }
-
-    [[nodiscard]] static constexpr std::uint64_t value(MaterialId id) noexcept {
-        return id.value_;
-    }
-
-    [[nodiscard]] static constexpr std::uint64_t value(ImageId id) noexcept {
-        return id.value_;
-    }
-
-    [[nodiscard]] static constexpr std::uint64_t value(TextureId id) noexcept {
-        return id.value_;
-    }
-
-    [[nodiscard]] static constexpr std::uint64_t value(SamplerId id) noexcept {
-        return id.value_;
-    }
-};
-
-} // namespace model::detail
 
 } // namespace elf3d
 

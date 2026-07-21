@@ -2,6 +2,7 @@ module;
 
 #include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
+#include <elf3d/graphics.h>
 #include <elf3d/measurement.h>
 #include <elf3d/picking.h>
 #include <elf3d/scene.h>
@@ -16,6 +17,7 @@ export module elf.tool.measurement;
 
 import elf.clipping;
 import elf.core;
+import elf.graphics;
 import elf.picking;
 import elf.scene;
 

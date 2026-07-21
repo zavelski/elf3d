@@ -134,10 +134,10 @@ create_textures(elf3d::Document& document, const elf3d::image::DecodedImage& dec
     constexpr std::array<std::byte, 4> rgba{std::byte{0xff}, std::byte{0x20}, std::byte{0x10},
                                             std::byte{0xff}};
     const auto decoded_image = document.create_image(
-        elf3d::ModelImageDescription{1U, 1U, elf3d::ModelPixelFormat::rgba8_unorm, rgba});
-    const auto source_image = document.create_image(elf3d::ModelImageDescription{
-        decoded.width, decoded.height, elf3d::ModelPixelFormat::rgba8_unorm, decoded.pixels,
-        elf3d::ModelImageMimeType::jpeg, jpeg});
+        elf3d::ModelImageDescription{1U, 1U, elf3d::PixelFormat::rgba8_unorm, rgba});
+    const auto source_image = document.create_image(
+        elf3d::ModelImageDescription{decoded.width, decoded.height, elf3d::PixelFormat::rgba8_unorm,
+                                     decoded.pixels, elf3d::ModelImageMimeType::jpeg, jpeg});
     const auto sampler = document.create_sampler();
     if (!decoded_image || !source_image || !sampler) {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument,

@@ -1,7 +1,6 @@
 module;
 
 #include <elf3d/graphics.h>
-#include <elf3d/measurement.h>
 
 #include <glad/gl.h>
 

@@ -2,6 +2,7 @@
 #define ELF3D_MODEL_DETAIL_DOCUMENT_STORAGE_H
 
 #include <elf3d/model.h>
+#include <elf3d/model/detail/document_handle_access.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -14,11 +15,11 @@
 namespace elf3d::model::detail {
 
 [[nodiscard]] bool finite(const Float4x4& value) noexcept;
-[[nodiscard]] bool valid_wrap(ModelTextureWrap wrap) noexcept;
-[[nodiscard]] bool valid_filter(ModelTextureFilter filter) noexcept;
-[[nodiscard]] bool valid_mag_filter(ModelTextureFilter filter) noexcept;
+[[nodiscard]] bool valid_wrap(TextureWrap wrap) noexcept;
+[[nodiscard]] bool valid_filter(TextureFilter filter) noexcept;
+[[nodiscard]] bool valid_mag_filter(TextureFilter filter) noexcept;
 [[nodiscard]] bool
-valid_perspective_camera(const ModelPerspectiveCameraDescription& description) noexcept;
+valid_perspective_camera(const PerspectiveCameraDescription& description) noexcept;
 [[nodiscard]] bool valid_material_factors(const ModelMaterialDescription& description) noexcept;
 [[nodiscard]] bool valid_material_mappings(const ModelMaterialDescription& description) noexcept;
 [[nodiscard]] Result<void>
@@ -38,6 +39,8 @@ namespace elf3d {
 
 class Document::Storage final {
   public:
+    Storage() noexcept;
+
     struct SceneRecord {
         DocumentSceneId id;
         std::string name;
@@ -52,7 +55,7 @@ class Document::Storage final {
         std::vector<NodeId> children;
         Float4x4 local_matrix;
         std::optional<MeshId> mesh;
-        std::optional<ModelPerspectiveCameraDescription> perspective_camera;
+        std::optional<PerspectiveCameraDescription> perspective_camera;
         ModelJsonMetadata metadata;
     };
 
@@ -83,7 +86,7 @@ class Document::Storage final {
         ImageId id;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
-        ModelPixelFormat format = ModelPixelFormat::rgba8_unorm;
+        PixelFormat format = PixelFormat::rgba8_unorm;
         std::vector<std::byte> pixels;
         ModelImageMimeType source_mime_type = ModelImageMimeType::none;
         std::vector<std::byte> source_bytes;
@@ -98,197 +101,196 @@ class Document::Storage final {
 
     struct SamplerRecord {
         SamplerId id;
-        ModelSamplerDescription description;
+        SamplerDescription description;
         ModelJsonMetadata metadata;
     };
 
-    [[nodiscard]] std::uintptr_t token() const noexcept;
+    [[nodiscard]] std::uint64_t token() const noexcept;
 
     [[nodiscard]] bool owns(DocumentSceneId id) const noexcept {
-        return id.is_valid() && model::detail::DocumentHandleAccess::document(id) == token();
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
     [[nodiscard]] bool owns(NodeId id) const noexcept {
-        return id.is_valid() && model::detail::DocumentHandleAccess::document(id) == token();
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
     [[nodiscard]] bool owns(MeshId id) const noexcept {
-        return id.is_valid() && model::detail::DocumentHandleAccess::document(id) == token();
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
     [[nodiscard]] bool owns(PrimitiveId id) const noexcept {
-        return id.is_valid() && model::detail::DocumentHandleAccess::document(id) == token();
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
     [[nodiscard]] bool owns(MaterialId id) const noexcept {
-        return id.is_valid() && model::detail::DocumentHandleAccess::document(id) == token();
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
     [[nodiscard]] bool owns(ImageId id) const noexcept {
-        return id.is_valid() && model::detail::DocumentHandleAccess::document(id) == token();
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
     [[nodiscard]] bool owns(TextureId id) const noexcept {
-        return id.is_valid() && model::detail::DocumentHandleAccess::document(id) == token();
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
     [[nodiscard]] bool owns(SamplerId id) const noexcept {
-        return id.is_valid() && model::detail::DocumentHandleAccess::document(id) == token();
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
     [[nodiscard]] Result<SceneRecord*> mutable_scene(DocumentSceneId id) noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_argument,
+            return Error{ErrorCode::invalid_document_scene_id,
                          "The scene identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= scenes.size()) {
-            return Error{ErrorCode::invalid_argument, "The scene identifier is stale"};
+            return Error{ErrorCode::invalid_document_scene_id, "The scene identifier is stale"};
         }
         return &scenes[index];
     }
 
     [[nodiscard]] Result<const SceneRecord*> scene(DocumentSceneId id) const noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_argument,
+            return Error{ErrorCode::invalid_document_scene_id,
                          "The scene identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= scenes.size()) {
-            return Error{ErrorCode::invalid_argument, "The scene identifier is stale"};
+            return Error{ErrorCode::invalid_document_scene_id, "The scene identifier is stale"};
         }
         return &scenes[index];
     }
 
     [[nodiscard]] Result<NodeRecord*> mutable_node(NodeId id) noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_entity,
+            return Error{ErrorCode::invalid_node_id,
                          "The node identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= nodes.size()) {
-            return Error{ErrorCode::invalid_entity, "The node identifier is stale"};
+            return Error{ErrorCode::invalid_node_id, "The node identifier is stale"};
         }
         return &nodes[index];
     }
 
     [[nodiscard]] Result<const NodeRecord*> node(NodeId id) const noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_entity,
+            return Error{ErrorCode::invalid_node_id,
                          "The node identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= nodes.size()) {
-            return Error{ErrorCode::invalid_entity, "The node identifier is stale"};
+            return Error{ErrorCode::invalid_node_id, "The node identifier is stale"};
         }
         return &nodes[index];
     }
 
     [[nodiscard]] Result<MeshRecord*> mutable_mesh(MeshId id) noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_mesh_handle,
+            return Error{ErrorCode::invalid_mesh_id,
                          "The mesh identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= meshes.size()) {
-            return Error{ErrorCode::invalid_mesh_handle, "The mesh identifier is stale"};
+            return Error{ErrorCode::invalid_mesh_id, "The mesh identifier is stale"};
         }
         return &meshes[index];
     }
 
     [[nodiscard]] Result<const MeshRecord*> mesh(MeshId id) const noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_mesh_handle,
+            return Error{ErrorCode::invalid_mesh_id,
                          "The mesh identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= meshes.size()) {
-            return Error{ErrorCode::invalid_mesh_handle, "The mesh identifier is stale"};
+            return Error{ErrorCode::invalid_mesh_id, "The mesh identifier is stale"};
         }
         return &meshes[index];
     }
 
     [[nodiscard]] Result<PrimitiveRecord*> mutable_primitive(PrimitiveId id) noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_mesh_handle,
+            return Error{ErrorCode::invalid_primitive_id,
                          "The primitive identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= primitives.size()) {
-            return Error{ErrorCode::invalid_mesh_handle, "The primitive identifier is stale"};
+            return Error{ErrorCode::invalid_primitive_id, "The primitive identifier is stale"};
         }
         return &primitives[index];
     }
 
     [[nodiscard]] Result<const PrimitiveRecord*> primitive(PrimitiveId id) const noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_mesh_handle,
+            return Error{ErrorCode::invalid_primitive_id,
                          "The primitive identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= primitives.size()) {
-            return Error{ErrorCode::invalid_mesh_handle, "The primitive identifier is stale"};
+            return Error{ErrorCode::invalid_primitive_id, "The primitive identifier is stale"};
         }
         return &primitives[index];
     }
 
     [[nodiscard]] Result<const MaterialRecord*> material(MaterialId id) const noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_material_handle,
+            return Error{ErrorCode::invalid_material_id,
                          "The material identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= materials.size()) {
-            return Error{ErrorCode::invalid_material_handle, "The material identifier is stale"};
+            return Error{ErrorCode::invalid_material_id, "The material identifier is stale"};
         }
         return &materials[index];
     }
 
     [[nodiscard]] Result<const ImageRecord*> image(ImageId id) const noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_image_handle,
+            return Error{ErrorCode::invalid_image_id,
                          "The image identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= images.size()) {
-            return Error{ErrorCode::invalid_image_handle, "The image identifier is stale"};
+            return Error{ErrorCode::invalid_image_id, "The image identifier is stale"};
         }
         return &images[index];
     }
 
     [[nodiscard]] Result<const TextureRecord*> texture(TextureId id) const noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_texture_asset_handle,
+            return Error{ErrorCode::invalid_texture_id,
                          "The texture identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= textures.size()) {
-            return Error{ErrorCode::invalid_texture_asset_handle,
-                         "The texture identifier is stale"};
+            return Error{ErrorCode::invalid_texture_id, "The texture identifier is stale"};
         }
         return &textures[index];
     }
 
     [[nodiscard]] Result<const SamplerRecord*> sampler(SamplerId id) const noexcept {
         if (!owns(id)) {
-            return Error{ErrorCode::invalid_sampler_description,
+            return Error{ErrorCode::invalid_sampler_id,
                          "The sampler identifier does not belong to this document"};
         }
         const std::size_t index =
             static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
         if (index >= samplers.size()) {
-            return Error{ErrorCode::invalid_sampler_description, "The sampler identifier is stale"};
+            return Error{ErrorCode::invalid_sampler_id, "The sampler identifier is stale"};
         }
         return &samplers[index];
     }
@@ -388,6 +390,8 @@ class Document::Storage final {
     bool preserved_metadata_stale = false;
 
   private:
+    std::uint64_t owner_token_ = 0;
+
     void accumulate_node_statistics(DocumentStatistics& statistics) const noexcept {
         for (const NodeRecord& node : nodes) {
             if (node.perspective_camera.has_value()) {

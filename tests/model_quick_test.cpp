@@ -105,7 +105,7 @@ void configure_hidden_context() noexcept {
 [[nodiscard]] int verify_render_statistics(elf3d::Viewport& viewport, elf3d::Scene& scene,
                                            elf3d::EntityId camera) {
     const elf3d::Result<void> render_result = viewport.render(scene, camera);
-    const elf3d::RenderStatistics statistics = viewport.statistics();
+    const elf3d::RenderStatistics statistics = viewport.render_statistics();
     if (!render_result || statistics.draw_calls != 2 || statistics.triangles != 4 ||
         statistics.vertices != 8 || statistics.indices != 12 || statistics.texture_bindings != 3 ||
         statistics.gpu_texture_uploads != 3 || statistics.unique_gpu_textures != 3) {
@@ -143,8 +143,7 @@ void configure_hidden_context() noexcept {
     const std::filesystem::path model_path = std::filesystem::path{ELF3D_TEST_SOURCE_DIR} /
                                              "tests" / "fixtures" / "elf3d_smoke" /
                                              "elf3d_smoke.gltf";
-    elf3d::Result<elf3d::LoadedScene> loaded_result =
-        engine.load_scene_with_report(path_to_utf8(model_path));
+    elf3d::Result<elf3d::LoadedScene> loaded_result = engine.load_scene(path_to_utf8(model_path));
     if (!loaded_result) {
         std::cerr << loaded_result.error().message() << '\n';
         return 3;
@@ -154,7 +153,8 @@ void configure_hidden_context() noexcept {
     if (imported != 0) {
         return imported;
     }
-    const elf3d::Result<elf3d::EntityId> camera = loaded.scene->create_perspective_camera({});
+    const elf3d::Result<elf3d::EntityId> camera =
+        loaded.scene->create_perspective_camera_entity({});
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
         engine.create_viewport({64, 64});
     if (!camera || !viewport_result) {

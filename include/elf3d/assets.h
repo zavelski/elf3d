@@ -2,14 +2,13 @@
 #define ELF3D_ASSETS_H
 
 #include <elf3d/math/value_types.h>
+#include <elf3d/model_types.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <span>
 
 namespace elf3d {
-
-inline constexpr std::uint32_t maximum_texture_coordinate_sets = 2;
 
 namespace detail {
 class SceneHandleAccess;
@@ -28,15 +27,15 @@ class SceneId final {
         return value_;
     }
 
-    bool operator==(const SceneId &) const = default;
+    bool operator==(const SceneId&) const = default;
 
   private:
     friend class detail::SceneHandleAccess;
 
-    constexpr SceneId(std::uintptr_t engine_token, std::uint64_t value) noexcept
+    constexpr SceneId(std::uint64_t engine_token, std::uint64_t value) noexcept
         : engine_token_(engine_token), value_(value) {}
 
-    std::uintptr_t engine_token_ = 0;
+    std::uint64_t engine_token_ = 0;
     std::uint64_t value_ = 0;
 };
 
@@ -53,7 +52,7 @@ class EntityId final {
         return value_;
     }
 
-    bool operator==(const EntityId &) const = default;
+    bool operator==(const EntityId&) const = default;
 
   private:
     friend class detail::SceneHandleAccess;
@@ -78,7 +77,7 @@ class MeshHandle final {
         return value_;
     }
 
-    bool operator==(const MeshHandle &) const = default;
+    bool operator==(const MeshHandle&) const = default;
 
   private:
     friend class detail::SceneHandleAccess;
@@ -102,7 +101,7 @@ class MaterialHandle final {
         return value_;
     }
 
-    bool operator==(const MaterialHandle &) const = default;
+    bool operator==(const MaterialHandle&) const = default;
 
   private:
     friend class detail::SceneHandleAccess;
@@ -126,7 +125,7 @@ class ImageHandle final {
         return value_;
     }
 
-    bool operator==(const ImageHandle &) const = default;
+    bool operator==(const ImageHandle&) const = default;
 
   private:
     friend class detail::SceneHandleAccess;
@@ -151,7 +150,7 @@ class TextureAssetHandle final {
         return value_;
     }
 
-    bool operator==(const TextureAssetHandle &) const = default;
+    bool operator==(const TextureAssetHandle&) const = default;
 
   private:
     friend class detail::SceneHandleAccess;
@@ -167,7 +166,7 @@ struct VertexPositionNormal {
     Float3 position;
     Float3 normal;
 
-    bool operator==(const VertexPositionNormal &) const = default;
+    bool operator==(const VertexPositionNormal&) const = default;
 };
 
 struct VertexPositionNormalTexCoord {
@@ -177,28 +176,7 @@ struct VertexPositionNormalTexCoord {
     Float2 texcoord1;
     Color4 color{1.0F, 1.0F, 1.0F, 1.0F};
 
-    bool operator==(const VertexPositionNormalTexCoord &) const = default;
-};
-
-enum class AlphaMode {
-    opaque,
-    mask,
-    blend,
-};
-
-struct TextureTransform {
-    Float2 offset;
-    Float2 scale{1.0F, 1.0F};
-    float rotation_radians = 0.0F;
-
-    bool operator==(const TextureTransform &) const = default;
-};
-
-struct TextureMapping {
-    std::uint32_t texcoord_set = 0;
-    TextureTransform transform;
-
-    bool operator==(const TextureMapping &) const = default;
+    bool operator==(const VertexPositionNormalTexCoord&) const = default;
 };
 
 struct MeshDataView {
@@ -215,10 +193,6 @@ struct TexturedMeshDataView {
     std::span<const std::uint32_t> indices;
 };
 
-enum class PixelFormat {
-    rgba8_unorm,
-};
-
 struct ImageDescription {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
@@ -228,36 +202,11 @@ struct ImageDescription {
     std::span<const std::byte> pixels;
 };
 
-enum class TextureWrap {
-    repeat,
-    mirrored_repeat,
-    clamp_to_edge,
-};
-
-enum class TextureFilter {
-    nearest,
-    linear,
-    nearest_mipmap_nearest,
-    linear_mipmap_nearest,
-    nearest_mipmap_linear,
-    linear_mipmap_linear,
-};
-
-struct SamplerDescription {
-    TextureWrap wrap_u = TextureWrap::repeat;
-    TextureWrap wrap_v = TextureWrap::repeat;
-    // glTF's default sampler uses LINEAR for both minification and magnification.
-    TextureFilter min_filter = TextureFilter::linear;
-    TextureFilter mag_filter = TextureFilter::linear;
-
-    bool operator==(const SamplerDescription &) const = default;
-};
-
 struct TextureDescription {
     ImageHandle image;
     SamplerDescription sampler;
 
-    bool operator==(const TextureDescription &) const = default;
+    bool operator==(const TextureDescription&) const = default;
 };
 
 struct MaterialDescription {
@@ -286,14 +235,14 @@ struct MaterialDescription {
     TextureAssetHandle emissive_texture;
     TextureMapping emissive_texture_mapping;
 
-    bool operator==(const MaterialDescription &) const = default;
+    bool operator==(const MaterialDescription&) const = default;
 };
 
 struct ModelPrimitiveBinding {
     MeshHandle mesh;
     MaterialHandle material;
 
-    bool operator==(const ModelPrimitiveBinding &) const = default;
+    bool operator==(const ModelPrimitiveBinding&) const = default;
 };
 
 } // namespace elf3d

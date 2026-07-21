@@ -39,19 +39,17 @@ class Storage final {
     explicit Storage(SceneId scene) noexcept;
 
     [[nodiscard]] SceneId scene_id() const noexcept;
-    [[nodiscard]] Result<MeshHandle> create_mesh(const MeshDataView &data);
-    [[nodiscard]] Result<MeshHandle> create_mesh(const TexturedMeshDataView &data);
-    [[nodiscard]] Result<ImageHandle> create_image(const ImageDescription &description);
-    [[nodiscard]] Result<TextureAssetHandle>
-    create_texture(const TextureDescription &description);
-    [[nodiscard]] Result<MaterialHandle> create_material(const MaterialDescription &description);
+    [[nodiscard]] Result<MeshHandle> create_mesh(const MeshDataView& data);
+    [[nodiscard]] Result<MeshHandle> create_mesh(const TexturedMeshDataView& data);
+    [[nodiscard]] Result<ImageHandle> create_image(const ImageDescription& description);
+    [[nodiscard]] Result<TextureAssetHandle> create_texture(const TextureDescription& description);
+    [[nodiscard]] Result<MaterialHandle> create_material(const MaterialDescription& description);
     [[nodiscard]] Result<void> set_material(MaterialHandle material,
-                                            const MaterialDescription &description);
-    [[nodiscard]] Result<const MeshAsset *> mesh(MeshHandle mesh) const noexcept;
-    [[nodiscard]] Result<const MaterialAsset *> material(MaterialHandle material) const noexcept;
-    [[nodiscard]] Result<const ImageAsset *> image(ImageHandle image) const noexcept;
-    [[nodiscard]] Result<const TextureAsset *>
-    texture(TextureAssetHandle texture) const noexcept;
+                                            const MaterialDescription& description);
+    [[nodiscard]] Result<const MeshAsset*> mesh(MeshHandle mesh) const noexcept;
+    [[nodiscard]] Result<const MaterialAsset*> material(MaterialHandle material) const noexcept;
+    [[nodiscard]] Result<const ImageAsset*> image(ImageHandle image) const noexcept;
+    [[nodiscard]] Result<const TextureAsset*> texture(TextureAssetHandle texture) const noexcept;
     [[nodiscard]] std::span<const MeshAsset> meshes() const noexcept;
     [[nodiscard]] std::span<const MaterialAsset> materials() const noexcept;
     [[nodiscard]] std::span<const ImageAsset> images() const noexcept;
@@ -76,7 +74,7 @@ export namespace elf3d::detail {
 
 class SceneHandleAccess final {
   public:
-    [[nodiscard]] static constexpr SceneId create_scene(std::uintptr_t engine_token,
+    [[nodiscard]] static constexpr SceneId create_scene(std::uint64_t engine_token,
                                                         std::uint64_t value) noexcept {
         return SceneId{engine_token, value};
     }
@@ -101,12 +99,12 @@ class SceneHandleAccess final {
         return ImageHandle{scene, value};
     }
 
-    [[nodiscard]] static constexpr TextureAssetHandle
-    create_texture(SceneId scene, std::uint64_t value) noexcept {
+    [[nodiscard]] static constexpr TextureAssetHandle create_texture(SceneId scene,
+                                                                     std::uint64_t value) noexcept {
         return TextureAssetHandle{scene, value};
     }
 
-    [[nodiscard]] static constexpr std::uintptr_t engine_token(SceneId scene) noexcept {
+    [[nodiscard]] static constexpr std::uint64_t engine_token(SceneId scene) noexcept {
         return scene.engine_token_;
     }
 

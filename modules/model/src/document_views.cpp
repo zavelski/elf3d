@@ -1,4 +1,5 @@
 #include <elf3d/model.h>
+#include <elf3d/model/detail/document_builder.h>
 
 #include <utility>
 
@@ -59,104 +60,108 @@ std::size_t DocumentView::sampler_count() const noexcept {
 }
 
 Result<DocumentSceneView> DocumentView::scene_at(std::size_t index) const noexcept {
-    return document_ != nullptr
-               ? document_->scene_at(index)
-               : Result<DocumentSceneView>{Error{ErrorCode::invalid_argument, "The view is empty"}};
+    return document_ != nullptr ? document_->scene_at(index)
+                                : Result<DocumentSceneView>{Error{
+                                      ErrorCode::invalid_document_scene_id, "The view is empty"}};
 }
 
 Result<NodeView> DocumentView::node_at(std::size_t index) const noexcept {
     return document_ != nullptr
                ? document_->node_at(index)
-               : Result<NodeView>{Error{ErrorCode::invalid_entity, "The view is empty"}};
+               : Result<NodeView>{Error{ErrorCode::invalid_node_id, "The view is empty"}};
 }
 
 Result<MeshView> DocumentView::mesh_at(std::size_t index) const noexcept {
     return document_ != nullptr
                ? document_->mesh_at(index)
-               : Result<MeshView>{Error{ErrorCode::invalid_mesh_handle, "The view is empty"}};
+               : Result<MeshView>{Error{ErrorCode::invalid_mesh_id, "The view is empty"}};
 }
 
 Result<PrimitiveView> DocumentView::primitive_at(std::size_t index) const noexcept {
     return document_ != nullptr
                ? document_->primitive_at(index)
-               : Result<PrimitiveView>{Error{ErrorCode::invalid_mesh_handle, "The view is empty"}};
+               : Result<PrimitiveView>{Error{ErrorCode::invalid_primitive_id, "The view is empty"}};
 }
 
 Result<MaterialView> DocumentView::material_at(std::size_t index) const noexcept {
-    return document_ != nullptr ? document_->material_at(index)
-                                : Result<MaterialView>{Error{ErrorCode::invalid_material_handle,
-                                                             "The view is empty"}};
+    return document_ != nullptr
+               ? document_->material_at(index)
+               : Result<MaterialView>{Error{ErrorCode::invalid_material_id, "The view is empty"}};
 }
 
 Result<ImageView> DocumentView::image_at(std::size_t index) const noexcept {
     return document_ != nullptr
                ? document_->image_at(index)
-               : Result<ImageView>{Error{ErrorCode::invalid_image_handle, "The view is empty"}};
+               : Result<ImageView>{Error{ErrorCode::invalid_image_id, "The view is empty"}};
 }
 
 Result<TextureView> DocumentView::texture_at(std::size_t index) const noexcept {
-    return document_ != nullptr ? document_->texture_at(index)
-                                : Result<TextureView>{Error{ErrorCode::invalid_texture_asset_handle,
-                                                            "The view is empty"}};
+    return document_ != nullptr
+               ? document_->texture_at(index)
+               : Result<TextureView>{Error{ErrorCode::invalid_texture_id, "The view is empty"}};
 }
 
 Result<SamplerView> DocumentView::sampler_at(std::size_t index) const noexcept {
-    return document_ != nullptr ? document_->sampler_at(index)
-                                : Result<SamplerView>{Error{ErrorCode::invalid_sampler_description,
-                                                            "The view is empty"}};
+    return document_ != nullptr
+               ? document_->sampler_at(index)
+               : Result<SamplerView>{Error{ErrorCode::invalid_sampler_id, "The view is empty"}};
 }
 
 Result<DocumentSceneView> DocumentView::scene(DocumentSceneId scene_id) const noexcept {
-    return document_ != nullptr
-               ? document_->scene(scene_id)
-               : Result<DocumentSceneView>{Error{ErrorCode::invalid_argument, "The view is empty"}};
+    return document_ != nullptr ? document_->scene(scene_id)
+                                : Result<DocumentSceneView>{Error{
+                                      ErrorCode::invalid_document_scene_id, "The view is empty"}};
 }
 
 Result<NodeView> DocumentView::node(NodeId node_id) const noexcept {
     return document_ != nullptr
                ? document_->node(node_id)
-               : Result<NodeView>{Error{ErrorCode::invalid_entity, "The view is empty"}};
+               : Result<NodeView>{Error{ErrorCode::invalid_node_id, "The view is empty"}};
 }
 
 Result<MeshView> DocumentView::mesh(MeshId mesh_id) const noexcept {
     return document_ != nullptr
                ? document_->mesh(mesh_id)
-               : Result<MeshView>{Error{ErrorCode::invalid_mesh_handle, "The view is empty"}};
+               : Result<MeshView>{Error{ErrorCode::invalid_mesh_id, "The view is empty"}};
 }
 
 Result<PrimitiveView> DocumentView::primitive(PrimitiveId primitive_id) const noexcept {
     return document_ != nullptr
                ? document_->primitive(primitive_id)
-               : Result<PrimitiveView>{Error{ErrorCode::invalid_mesh_handle, "The view is empty"}};
+               : Result<PrimitiveView>{Error{ErrorCode::invalid_primitive_id, "The view is empty"}};
 }
 
 Result<MaterialView> DocumentView::material(MaterialId material_id) const noexcept {
-    return document_ != nullptr ? document_->material(material_id)
-                                : Result<MaterialView>{Error{ErrorCode::invalid_material_handle,
-                                                             "The view is empty"}};
+    return document_ != nullptr
+               ? document_->material(material_id)
+               : Result<MaterialView>{Error{ErrorCode::invalid_material_id, "The view is empty"}};
 }
 
 Result<ImageView> DocumentView::image(ImageId image_id) const noexcept {
     return document_ != nullptr
                ? document_->image(image_id)
-               : Result<ImageView>{Error{ErrorCode::invalid_image_handle, "The view is empty"}};
+               : Result<ImageView>{Error{ErrorCode::invalid_image_id, "The view is empty"}};
 }
 
 Result<TextureView> DocumentView::texture(TextureId texture_id) const noexcept {
-    return document_ != nullptr ? document_->texture(texture_id)
-                                : Result<TextureView>{Error{ErrorCode::invalid_texture_asset_handle,
-                                                            "The view is empty"}};
+    return document_ != nullptr
+               ? document_->texture(texture_id)
+               : Result<TextureView>{Error{ErrorCode::invalid_texture_id, "The view is empty"}};
 }
 
 Result<SamplerView> DocumentView::sampler(SamplerId sampler_id) const noexcept {
-    return document_ != nullptr ? document_->sampler(sampler_id)
-                                : Result<SamplerView>{Error{ErrorCode::invalid_sampler_description,
-                                                            "The view is empty"}};
+    return document_ != nullptr
+               ? document_->sampler(sampler_id)
+               : Result<SamplerView>{Error{ErrorCode::invalid_sampler_id, "The view is empty"}};
 }
 
 std::optional<Bounds3> DocumentView::bounds() const noexcept {
     return document_ != nullptr ? document_->bounds() : std::nullopt;
 }
+
+} // namespace elf3d
+
+namespace elf3d::model::detail {
 
 DocumentBuilder::DocumentBuilder() = default;
 
@@ -182,7 +187,7 @@ Result<ImageId> DocumentBuilder::create_image(const ModelImageDescription& descr
     return document_.create_image(description);
 }
 
-Result<SamplerId> DocumentBuilder::create_sampler(const ModelSamplerDescription& description) {
+Result<SamplerId> DocumentBuilder::create_sampler(const SamplerDescription& description) {
     return document_.create_sampler(description);
 }
 
@@ -230,7 +235,7 @@ Result<void> DocumentBuilder::set_node_matrix(NodeId node_id, const Float4x4& ma
 
 Result<void>
 DocumentBuilder::set_node_perspective_camera(NodeId node_id,
-                                             const ModelPerspectiveCameraDescription& description) {
+                                             const PerspectiveCameraDescription& description) {
     return document_.set_node_perspective_camera(node_id, description);
 }
 
@@ -242,4 +247,4 @@ Result<Document> DocumentBuilder::finish() {
     return std::move(document_);
 }
 
-} // namespace elf3d
+} // namespace elf3d::model::detail

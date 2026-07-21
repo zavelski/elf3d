@@ -30,18 +30,6 @@ namespace {
     return RuntimeAlphaMode::opaque;
 }
 
-[[nodiscard]] RuntimeAlphaMode runtime_alpha_mode(ModelAlphaMode mode) noexcept {
-    switch (mode) {
-    case ModelAlphaMode::opaque:
-        return RuntimeAlphaMode::opaque;
-    case ModelAlphaMode::mask:
-        return RuntimeAlphaMode::mask;
-    case ModelAlphaMode::blend:
-        return RuntimeAlphaMode::blend;
-    }
-    return RuntimeAlphaMode::opaque;
-}
-
 [[nodiscard]] RuntimeTextureWrap runtime_texture_wrap(TextureWrap wrap) noexcept {
     switch (wrap) {
     case TextureWrap::repeat:
@@ -49,18 +37,6 @@ namespace {
     case TextureWrap::mirrored_repeat:
         return RuntimeTextureWrap::mirrored_repeat;
     case TextureWrap::clamp_to_edge:
-        return RuntimeTextureWrap::clamp_to_edge;
-    }
-    return RuntimeTextureWrap::repeat;
-}
-
-[[nodiscard]] RuntimeTextureWrap runtime_texture_wrap(ModelTextureWrap wrap) noexcept {
-    switch (wrap) {
-    case ModelTextureWrap::repeat:
-        return RuntimeTextureWrap::repeat;
-    case ModelTextureWrap::mirrored_repeat:
-        return RuntimeTextureWrap::mirrored_repeat;
-    case ModelTextureWrap::clamp_to_edge:
         return RuntimeTextureWrap::clamp_to_edge;
     }
     return RuntimeTextureWrap::repeat;
@@ -84,32 +60,7 @@ namespace {
     return RuntimeTextureFilter::linear;
 }
 
-[[nodiscard]] RuntimeTextureFilter runtime_texture_filter(ModelTextureFilter filter) noexcept {
-    switch (filter) {
-    case ModelTextureFilter::nearest:
-        return RuntimeTextureFilter::nearest;
-    case ModelTextureFilter::linear:
-        return RuntimeTextureFilter::linear;
-    case ModelTextureFilter::nearest_mipmap_nearest:
-        return RuntimeTextureFilter::nearest_mipmap_nearest;
-    case ModelTextureFilter::linear_mipmap_nearest:
-        return RuntimeTextureFilter::linear_mipmap_nearest;
-    case ModelTextureFilter::nearest_mipmap_linear:
-        return RuntimeTextureFilter::nearest_mipmap_linear;
-    case ModelTextureFilter::linear_mipmap_linear:
-        return RuntimeTextureFilter::linear_mipmap_linear;
-    }
-    return RuntimeTextureFilter::linear;
-}
-
 [[nodiscard]] RuntimeTextureMapping runtime_texture_mapping(TextureMapping mapping) noexcept {
-    return RuntimeTextureMapping{mapping.texcoord_set,
-                                 RuntimeTextureTransform{mapping.transform.offset,
-                                                         mapping.transform.scale,
-                                                         mapping.transform.rotation_radians}};
-}
-
-[[nodiscard]] RuntimeTextureMapping runtime_texture_mapping(ModelTextureMapping mapping) noexcept {
     return RuntimeTextureMapping{mapping.texcoord_set,
                                  RuntimeTextureTransform{mapping.transform.offset,
                                                          mapping.transform.scale,
@@ -182,12 +133,6 @@ namespace {
         runtime_texture_filter(sampler.min_filter), runtime_texture_filter(sampler.mag_filter)};
 }
 
-[[nodiscard]] RuntimeSamplerDescription runtime_sampler(ModelSamplerDescription sampler) noexcept {
-    return RuntimeSamplerDescription{
-        runtime_texture_wrap(sampler.wrap_u), runtime_texture_wrap(sampler.wrap_v),
-        runtime_texture_filter(sampler.min_filter), runtime_texture_filter(sampler.mag_filter)};
-}
-
 [[nodiscard]] constexpr std::size_t
 runtime_texture_slot_index(RuntimeMaterialTextureSlot slot) noexcept {
     return static_cast<std::size_t>(slot);
@@ -231,10 +176,8 @@ struct PendingSceneNode {
         }
     }
     if (node.perspective_camera.has_value()) {
-        const ModelPerspectiveCameraDescription& source = *node.perspective_camera;
-        const Result<void> camera_result = storage.attach_perspective_camera(
-            entity, PerspectiveCameraDescription{source.vertical_field_of_view_radians,
-                                                 source.near_plane, source.far_plane});
+        const Result<void> camera_result =
+            storage.attach_perspective_camera(entity, *node.perspective_camera);
         if (!camera_result) {
             return camera_result.error();
         }

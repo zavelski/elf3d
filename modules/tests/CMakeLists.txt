@@ -16,6 +16,12 @@ elf3d_link_object_libraries(
     elf3d_foundation_tests
         elf3d_foundation_modules
 )
+target_include_directories(
+    elf3d_foundation_tests
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/modules/math/include
+)
+target_link_libraries(elf3d_foundation_tests PRIVATE glm::glm)
 add_test(NAME elf3d.core_vocabulary COMMAND elf3d_foundation_tests --case core_vocabulary)
 add_test(NAME elf3d.math_conventions COMMAND elf3d_foundation_tests --case math_conventions)
 
@@ -90,6 +96,11 @@ elf3d_link_object_libraries(
     elf3d_model_tests
         elf3d_foundation_modules
         elf3d_model_modules
+)
+target_include_directories(
+    elf3d_model_tests
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/modules/model/include
 )
 add_test(NAME elf3d.model_document COMMAND elf3d_model_tests --case model_document)
 add_test(NAME elf3d.model_processing COMMAND elf3d_model_tests --case model_processing)

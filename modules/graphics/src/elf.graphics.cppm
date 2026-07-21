@@ -3,7 +3,7 @@ module;
 #include <elf3d/clipping.h>
 #include <elf3d/core/result.h>
 #include <elf3d/graphics.h>
-#include <elf3d/measurement.h>
+#include <elf3d/model_types.h>
 
 #include <array>
 #include <cstddef>
@@ -248,20 +248,18 @@ class Device {
     create_texture_2d(const Texture2DDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<GraphicsPipeline>>
     create_graphics_pipeline(const GraphicsPipelineDescription& description) noexcept = 0;
-    [[nodiscard]] virtual Result<void> draw_indexed(RenderTarget& target,
-                                                    GraphicsPipeline& pipeline, StaticMesh& mesh,
-                                                    const DrawIndexedDescription& description)
-        noexcept = 0;
-    [[nodiscard]] virtual Result<void> draw_overlay(RenderTarget& target,
-                                                    const DrawOverlayDescription& description)
-        noexcept = 0;
+    [[nodiscard]] virtual Result<void>
+    draw_indexed(RenderTarget& target, GraphicsPipeline& pipeline, StaticMesh& mesh,
+                 const DrawIndexedDescription& description) noexcept = 0;
+    [[nodiscard]] virtual Result<void>
+    draw_overlay(RenderTarget& target, const DrawOverlayDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void>
     draw_picking_indexed(PickingTarget& target, StaticMesh& mesh,
                          const PickingDrawDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<std::optional<PickingPixel>>
     read_picking_pixel(PickingTarget& target, Float2 position_pixels) noexcept = 0;
-    [[nodiscard]] virtual Result<std::vector<float>> read_picking_depths(PickingTarget& target)
-        noexcept = 0;
+    [[nodiscard]] virtual Result<std::vector<float>>
+    read_picking_depths(PickingTarget& target) noexcept = 0;
 
   protected:
     Device() = default;

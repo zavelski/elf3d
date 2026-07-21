@@ -100,24 +100,24 @@ unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_
     }
 }
 
-[[nodiscard]] bool texture_transform_is_finite(const ModelTextureTransform& transform) noexcept {
+[[nodiscard]] bool texture_transform_is_finite(const TextureTransform& transform) noexcept {
     return std::isfinite(transform.offset.x) && std::isfinite(transform.offset.y) &&
            std::isfinite(transform.scale.x) && std::isfinite(transform.scale.y) &&
            std::isfinite(transform.rotation_radians);
 }
 
-[[nodiscard]] Result<ModelTextureMapping> texture_mapping(const cgltf_texture_view& view,
-                                                          std::string_view context) {
+[[nodiscard]] Result<TextureMapping> texture_mapping(const cgltf_texture_view& view,
+                                                     std::string_view context) {
     const cgltf_int selected_set =
         view.has_transform && view.transform.has_texcoord ? view.transform.texcoord : view.texcoord;
     if (selected_set < 0 ||
-        selected_set >= static_cast<cgltf_int>(model_maximum_texture_coordinate_sets)) {
+        selected_set >= static_cast<cgltf_int>(maximum_texture_coordinate_sets)) {
         return Error{ErrorCode::invalid_texcoord,
                      std::string{context} + " references unsupported TEXCOORD_" +
                          std::to_string(selected_set) + "; Elf3D supports UV sets 0 and 1"};
     }
 
-    ModelTextureMapping mapping;
+    TextureMapping mapping;
     mapping.texcoord_set = static_cast<std::uint32_t>(selected_set);
     if (view.has_transform) {
         mapping.transform.offset = {view.transform.offset[0], view.transform.offset[1]};
@@ -134,8 +134,7 @@ unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_
 [[nodiscard]] TexcoordAvailability
 primitive_texcoord_availability(const cgltf_primitive& primitive) {
     TexcoordAvailability availability{};
-    for (cgltf_int set = 0; set < static_cast<cgltf_int>(model_maximum_texture_coordinate_sets);
-         ++set) {
+    for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets); ++set) {
         availability[static_cast<std::size_t>(set)] =
             cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, set) != nullptr;
     }
@@ -149,7 +148,7 @@ texture_view_uses_unavailable_texcoord(const cgltf_texture_view& view,
     if (view.texture == nullptr) {
         return false;
     }
-    Result<ModelTextureMapping> mapping = texture_mapping(view, context);
+    Result<TextureMapping> mapping = texture_mapping(view, context);
     if (!mapping) {
         return mapping.error();
     }
@@ -219,7 +218,7 @@ material_uses_unavailable_texcoord(const cgltf_material& material,
                                                               const cgltf_texture_view& view,
                                                               std::string_view slot_name,
                                                               std::string_view context) {
-    Result<ModelTextureMapping> mapping = texture_mapping(view, context);
+    Result<TextureMapping> mapping = texture_mapping(view, context);
     if (!mapping) {
         return mapping.error();
     }

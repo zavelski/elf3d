@@ -2,7 +2,6 @@ module;
 
 #include "orbit_navigation_detail.h"
 #include <elf3d/core/assert.h>
-#include <elf3d/math/detail/glm_helpers.h>
 
 #include <algorithm>
 #include <array>
@@ -44,7 +43,7 @@ to_navigation_mode(interaction::InteractionMode mode) noexcept {
     return NavigationInteractionMode::none;
 }
 
-[[nodiscard]] std::array<math::Vector3, 8> bounds_corners(const Bounds3& bounds) noexcept {
+[[nodiscard]] std::array<Float3, 8> bounds_corners(const Bounds3& bounds) noexcept {
     return {{
         {bounds.minimum.x, bounds.minimum.y, bounds.minimum.z},
         {bounds.maximum.x, bounds.minimum.y, bounds.minimum.z},
@@ -82,25 +81,25 @@ to_navigation_mode(interaction::InteractionMode mode) noexcept {
            valid_pitch_settings(settings);
 }
 
-[[nodiscard]] math::Vector3 canonical_direction() noexcept {
-    return glm::normalize(math::Vector3{-1.0F, -0.75F, -1.0F});
+[[nodiscard]] Float3 canonical_direction() noexcept {
+    return math::normalized(Float3{-1.0F, -0.75F, -1.0F});
 }
 
-[[nodiscard]] CameraBasis basis_from_forward(const math::Vector3& direction) noexcept {
-    const math::Vector3 forward =
-        finite_vector(direction) && glm::length(direction) > minimum_axis_length
-            ? glm::normalize(direction)
+[[nodiscard]] CameraBasis basis_from_forward(const Float3& direction) noexcept {
+    const Float3 forward =
+        finite_vector(direction) && math::vector_length(direction) > minimum_axis_length
+            ? math::normalized(direction)
             : canonical_direction();
-    math::Vector3 right = glm::cross(forward, math::Vector3{0.0F, 1.0F, 0.0F});
-    if (glm::length(right) <= minimum_axis_length) {
-        right = glm::cross(forward, math::Vector3{0.0F, 0.0F, 1.0F});
+    Float3 right = math::cross(forward, Float3{0.0F, 1.0F, 0.0F});
+    if (math::vector_length(right) <= minimum_axis_length) {
+        right = math::cross(forward, Float3{0.0F, 0.0F, 1.0F});
     }
-    right = glm::normalize(right);
-    return CameraBasis{{}, right, glm::normalize(glm::cross(right, forward)), forward};
+    right = math::normalized(right);
+    return CameraBasis{{}, right, math::normalized(math::cross(right, forward)), forward};
 }
 
-[[nodiscard]] float fit_distance_to_bounds(const Bounds3& bounds, const math::Vector3& center,
-                                           const math::Vector3& direction, float vertical_tangent,
+[[nodiscard]] float fit_distance_to_bounds(const Bounds3& bounds, const Float3& center,
+                                           const Float3& direction, float vertical_tangent,
                                            float horizontal_tangent) noexcept {
     if (!std::isfinite(vertical_tangent) || !std::isfinite(horizontal_tangent) ||
         vertical_tangent <= 0.0F || horizontal_tangent <= 0.0F) {
@@ -109,20 +108,20 @@ to_navigation_mode(interaction::InteractionMode mode) noexcept {
 
     const CameraBasis basis = basis_from_forward(direction);
     float distance = minimum_axis_length;
-    for (const math::Vector3 corner : bounds_corners(bounds)) {
-        const math::Vector3 offset = corner - center;
-        const float forward_offset = glm::dot(offset, basis.forward);
+    for (const Float3 corner : bounds_corners(bounds)) {
+        const Float3 offset = math::subtract(corner, center);
+        const float forward_offset = math::dot(offset, basis.forward);
         const float horizontal_distance =
-            std::abs(glm::dot(offset, basis.right)) / horizontal_tangent - forward_offset;
+            std::abs(math::dot(offset, basis.right)) / horizontal_tangent - forward_offset;
         const float vertical_distance =
-            std::abs(glm::dot(offset, basis.up)) / vertical_tangent - forward_offset;
+            std::abs(math::dot(offset, basis.up)) / vertical_tangent - forward_offset;
         distance = std::max({distance, horizontal_distance, vertical_distance});
     }
     return std::isfinite(distance) ? distance : 0.0F;
 }
 
-void angles_from_direction(const math::Vector3& direction, float& yaw, float& pitch) noexcept {
-    const math::Vector3 normalized = glm::normalize(direction);
+void angles_from_direction(const Float3& direction, float& yaw, float& pitch) noexcept {
+    const Float3 normalized = math::normalized(direction);
     pitch = std::asin(std::clamp(normalized.y, -1.0F, 1.0F));
     yaw = std::atan2(normalized.x, normalized.z);
 }
@@ -137,37 +136,32 @@ void angles_from_direction(const math::Vector3& direction, float& yaw, float& pi
         return view.error();
     }
 
-    const math::Matrix4 camera_world = math::to_matrix(camera_world_result.value());
-    const math::Vector3 position{camera_world[3]};
-    math::Vector3 right{camera_world[0]};
-    math::Vector3 up{camera_world[1]};
+    const Float4x4& camera_world = camera_world_result.value();
+    const Float3 position = math::matrix_column(camera_world, 3);
+    Float3 right = math::matrix_column(camera_world, 0);
+    Float3 up = math::matrix_column(camera_world, 1);
     if (!finite_vector(position) || !finite_vector(right) || !finite_vector(up) ||
-        glm::length(right) <= minimum_axis_length) {
+        math::vector_length(right) <= minimum_axis_length) {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Navigation requires a finite camera world transform"};
     }
-    right = glm::normalize(right);
-    up -= right * glm::dot(right, up);
-    if (glm::length(up) <= minimum_axis_length) {
+    right = math::normalized(right);
+    up = math::subtract(up, math::scale(right, math::dot(right, up)));
+    if (math::vector_length(up) <= minimum_axis_length) {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Navigation requires a non-degenerate camera orientation"};
     }
-    up = glm::normalize(up);
-    const math::Vector3 backward = glm::normalize(glm::cross(right, up));
-    return CameraBasis{position, right, up, -backward};
+    up = math::normalized(up);
+    const Float3 backward = math::normalized(math::cross(right, up));
+    return CameraBasis{position, right, up, math::negate(backward)};
 }
 
-[[nodiscard]] Transform look_at_transform(const math::Vector3& position,
-                                          const math::Vector3& direction) noexcept {
+[[nodiscard]] Transform look_at_transform(const Float3& position,
+                                          const Float3& direction) noexcept {
     const CameraBasis basis = basis_from_forward(direction);
-
-    math::Matrix4 rotation_matrix{1.0F};
-    rotation_matrix[0] = math::Vector4{basis.right, 0.0F};
-    rotation_matrix[1] = math::Vector4{basis.up, 0.0F};
-    rotation_matrix[2] = math::Vector4{-basis.forward, 0.0F};
-    const math::Rotation rotation = glm::normalize(glm::quat_cast(math::Matrix3{rotation_matrix}));
-    return Transform{math::to_float3(position), math::to_quaternion(rotation),
-                     Float3{1.0F, 1.0F, 1.0F}};
+    const Quaternion rotation =
+        math::rotation_from_basis(basis.right, basis.up, math::negate(basis.forward));
+    return Transform{position, rotation, Float3{1.0F, 1.0F, 1.0F}};
 }
 
 [[nodiscard]] Result<void> set_camera_world_transform(scene::Storage& scene, EntityId camera,
@@ -176,7 +170,7 @@ void angles_from_direction(const math::Vector3& direction, float& yaw, float& pi
     if (!record) {
         return record.error();
     }
-    const math::Matrix4 camera_world = math::to_matrix(math::transform_matrix(world_transform));
+    const Float4x4 camera_world = math::transform_matrix(world_transform);
     if (!record.value()->parent.has_value()) {
         return scene.set_local_transform(camera, world_transform);
     }
@@ -185,38 +179,38 @@ void angles_from_direction(const math::Vector3& direction, float& yaw, float& pi
     if (!parent_world_result) {
         return parent_world_result.error();
     }
-    const math::Matrix4 parent_world = math::to_matrix(parent_world_result.value());
-    const float determinant = glm::determinant(math::Matrix3{parent_world});
-    if (!std::isfinite(determinant) || std::abs(determinant) <= minimum_axis_length) {
+    const Result<Float4x4> inverse_parent =
+        math::inverse_affine_matrix(parent_world_result.value());
+    if (!inverse_parent) {
         return Error{ErrorCode::invalid_transform_matrix,
                      "The camera parent transform is not invertible"};
     }
     return scene.set_local_matrix(camera,
-                                  math::to_float4x4(glm::inverse(parent_world) * camera_world));
+                                  math::compose_world(inverse_parent.value(), camera_world));
 }
 
 [[nodiscard]] Result<void> set_camera_world_matrix(scene::Storage& scene, EntityId camera,
-                                                   const math::Matrix4& camera_world) {
+                                                   const Float4x4& camera_world) {
     const Result<const scene::EntityRecord*> record = scene.entity(camera);
     if (!record) {
         return record.error();
     }
     if (!record.value()->parent.has_value()) {
-        return scene.set_local_matrix(camera, math::to_float4x4(camera_world));
+        return scene.set_local_matrix(camera, camera_world);
     }
 
     const Result<Float4x4> parent_world_result = scene.world_matrix(*record.value()->parent);
     if (!parent_world_result) {
         return parent_world_result.error();
     }
-    const math::Matrix4 parent_world = math::to_matrix(parent_world_result.value());
-    const float determinant = glm::determinant(math::Matrix3{parent_world});
-    if (!std::isfinite(determinant) || std::abs(determinant) <= minimum_axis_length) {
+    const Result<Float4x4> inverse_parent =
+        math::inverse_affine_matrix(parent_world_result.value());
+    if (!inverse_parent) {
         return Error{ErrorCode::invalid_transform_matrix,
                      "The camera parent transform is not invertible"};
     }
     return scene.set_local_matrix(camera,
-                                  math::to_float4x4(glm::inverse(parent_world) * camera_world));
+                                  math::compose_world(inverse_parent.value(), camera_world));
 }
 
 [[nodiscard]] Result<void> validate_camera(const scene::Storage& scene, EntityId camera) {

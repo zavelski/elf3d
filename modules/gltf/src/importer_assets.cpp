@@ -176,7 +176,7 @@ namespace elf3d::gltf::importer_detail {
                      "Imported scene images exceed the 512 MiB decoded-image limit"};
     }
     const Result<ImageId> created = builder.create_image(ModelImageDescription{
-        decoded.value().width, decoded.value().height, ModelPixelFormat::rgba8_unorm,
+        decoded.value().width, decoded.value().height, PixelFormat::rgba8_unorm,
         decoded.value().pixels, encoded.value().mime, encoded.value().bytes});
     if (!created) {
         return created.error();
@@ -187,62 +187,62 @@ namespace elf3d::gltf::importer_detail {
     return created.value();
 }
 
-[[nodiscard]] Result<ModelTextureWrap> texture_wrap(cgltf_wrap_mode wrap) {
+[[nodiscard]] Result<TextureWrap> texture_wrap(cgltf_wrap_mode wrap) {
     switch (wrap) {
     case cgltf_wrap_mode_repeat:
-        return ModelTextureWrap::repeat;
+        return TextureWrap::repeat;
     case cgltf_wrap_mode_mirrored_repeat:
-        return ModelTextureWrap::mirrored_repeat;
+        return TextureWrap::mirrored_repeat;
     case cgltf_wrap_mode_clamp_to_edge:
-        return ModelTextureWrap::clamp_to_edge;
+        return TextureWrap::clamp_to_edge;
     default:
         return Error{ErrorCode::invalid_sampler_wrap,
                      "A glTF sampler contains an invalid wrap mode"};
     }
 }
 
-[[nodiscard]] Result<ModelTextureFilter> min_filter(cgltf_filter_type filter) {
+[[nodiscard]] Result<TextureFilter> min_filter(cgltf_filter_type filter) {
     switch (filter) {
     case cgltf_filter_type_undefined:
     case cgltf_filter_type_linear:
-        return ModelTextureFilter::linear;
+        return TextureFilter::linear;
     case cgltf_filter_type_nearest:
-        return ModelTextureFilter::nearest;
+        return TextureFilter::nearest;
     case cgltf_filter_type_nearest_mipmap_nearest:
-        return ModelTextureFilter::nearest_mipmap_nearest;
+        return TextureFilter::nearest_mipmap_nearest;
     case cgltf_filter_type_linear_mipmap_nearest:
-        return ModelTextureFilter::linear_mipmap_nearest;
+        return TextureFilter::linear_mipmap_nearest;
     case cgltf_filter_type_nearest_mipmap_linear:
-        return ModelTextureFilter::nearest_mipmap_linear;
+        return TextureFilter::nearest_mipmap_linear;
     case cgltf_filter_type_linear_mipmap_linear:
-        return ModelTextureFilter::linear_mipmap_linear;
+        return TextureFilter::linear_mipmap_linear;
     default:
         return Error{ErrorCode::invalid_sampler_filter,
                      "A glTF sampler contains an invalid minification filter"};
     }
 }
 
-[[nodiscard]] Result<ModelTextureFilter> mag_filter(cgltf_filter_type filter) {
+[[nodiscard]] Result<TextureFilter> mag_filter(cgltf_filter_type filter) {
     switch (filter) {
     case cgltf_filter_type_undefined:
     case cgltf_filter_type_linear:
-        return ModelTextureFilter::linear;
+        return TextureFilter::linear;
     case cgltf_filter_type_nearest:
-        return ModelTextureFilter::nearest;
+        return TextureFilter::nearest;
     default:
         return Error{ErrorCode::invalid_sampler_filter,
                      "A glTF sampler magnification filter must be NEAREST or LINEAR"};
     }
 }
 
-[[nodiscard]] Result<ModelSamplerDescription> sampler_description(const cgltf_sampler* sampler) {
+[[nodiscard]] Result<SamplerDescription> sampler_description(const cgltf_sampler* sampler) {
     if (sampler == nullptr) {
-        return ModelSamplerDescription{};
+        return SamplerDescription{};
     }
-    Result<ModelTextureWrap> wrap_u = texture_wrap(sampler->wrap_s);
-    Result<ModelTextureWrap> wrap_v = texture_wrap(sampler->wrap_t);
-    Result<ModelTextureFilter> minimum = min_filter(sampler->min_filter);
-    Result<ModelTextureFilter> magnification = mag_filter(sampler->mag_filter);
+    Result<TextureWrap> wrap_u = texture_wrap(sampler->wrap_s);
+    Result<TextureWrap> wrap_v = texture_wrap(sampler->wrap_t);
+    Result<TextureFilter> minimum = min_filter(sampler->min_filter);
+    Result<TextureFilter> magnification = mag_filter(sampler->mag_filter);
     if (!wrap_u) {
         return wrap_u.error();
     }
@@ -255,8 +255,8 @@ namespace elf3d::gltf::importer_detail {
     if (!magnification) {
         return magnification.error();
     }
-    return ModelSamplerDescription{wrap_u.value(), wrap_v.value(), minimum.value(),
-                                   magnification.value()};
+    return SamplerDescription{wrap_u.value(), wrap_v.value(), minimum.value(),
+                              magnification.value()};
 }
 
 [[nodiscard]] Result<SamplerId> sampler_for(const cgltf_data& data, const cgltf_sampler* source,
@@ -265,7 +265,7 @@ namespace elf3d::gltf::importer_detail {
                                             std::optional<SamplerId>& default_sampler) {
     if (source == nullptr) {
         if (!default_sampler.has_value()) {
-            const Result<SamplerId> created = builder.create_sampler(ModelSamplerDescription{});
+            const Result<SamplerId> created = builder.create_sampler(SamplerDescription{});
             if (!created) {
                 return created.error();
             }
@@ -281,7 +281,7 @@ namespace elf3d::gltf::importer_detail {
     if (samplers[index].has_value()) {
         return samplers[index].value();
     }
-    Result<ModelSamplerDescription> description = sampler_description(source);
+    Result<SamplerDescription> description = sampler_description(source);
     if (!description) {
         return description.error();
     }
@@ -298,7 +298,7 @@ namespace elf3d::gltf::importer_detail {
 
 [[nodiscard]] Result<void> validate_sampler_inputs(const cgltf_data& data) {
     for (cgltf_size sampler_index = 0; sampler_index < data.samplers_count; ++sampler_index) {
-        const Result<ModelSamplerDescription> sampler =
+        const Result<SamplerDescription> sampler =
             sampler_description(&data.samplers[sampler_index]);
         if (!sampler) {
             return sampler.error();
@@ -313,8 +313,7 @@ namespace elf3d::gltf::importer_detail {
                                                         cgltf_size primitive_index) {
     const cgltf_accessor* positions =
         cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0);
-    for (cgltf_int set = 0; set < static_cast<cgltf_int>(model_maximum_texture_coordinate_sets);
-         ++set) {
+    for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets); ++set) {
         const cgltf_accessor* texcoords =
             cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, set);
         if (texcoords == nullptr) {

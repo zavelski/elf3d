@@ -184,7 +184,7 @@ class Storage final {
     explicit Storage(SceneId id) noexcept;
 
     [[nodiscard]] SceneId id() const noexcept;
-    [[nodiscard]] bool belongs_to_engine(std::uintptr_t engine_token) const noexcept;
+    [[nodiscard]] bool belongs_to_engine(std::uint64_t engine_token) const noexcept;
     [[nodiscard]] std::uint64_t revision() const noexcept;
     [[nodiscard]] std::uint64_t hierarchy_revision() const noexcept;
     [[nodiscard]] std::uint64_t visibility_revision() const noexcept;
@@ -255,6 +255,8 @@ class Storage final {
     [[nodiscard]] Result<MeshHandle> document_mesh_handle(PrimitiveId primitive);
     [[nodiscard]] bool is_document_mesh_handle(MeshHandle mesh) const noexcept;
     [[nodiscard]] Result<Bounds3> document_mesh_bounds(MeshHandle mesh) const noexcept;
+    void expand_world_bounds(std::optional<Bounds3>& bounds,
+                             const EntityRecord& entity) const noexcept;
     [[nodiscard]] Result<RuntimePrimitiveView>
     document_runtime_primitive(const ModelPrimitiveBinding& binding,
                                PrimitiveId document_primitive) const noexcept;

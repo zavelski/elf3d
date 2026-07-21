@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.8.6
+
+- Made `Engine::load_scene()` the single scene-loading operation, returning the
+  loaded Scene together with structured compatibility diagnostics and
+  preserving metadata warnings through the shared-library facade.
+- Hardened Engine- and Document-scoped identities with non-address owner
+  tokens and distinct machine-readable failure codes for every persistent
+  Document ID family.
+- Simplified the model construction and mutation surface by keeping importer
+  staging private and making validated `replace_primitive()` the canonical
+  geometry replacement operation.
+- Tightened rendering, math, picking, tool, and test boundaries by introducing
+  focused render vocabulary, containing GLM in the math boundary, removing
+  shared mutable test state, and consolidating repeated bounds and framebuffer
+  operations.
+
+## 0.8.5
+
+- Standardized public engine operation names around explicit entity creation,
+  camera descriptions, local visibility, render statistics, and loaded
+  Document export semantics.
+- Unified identical model and runtime POD vocabulary in `model_types.h`,
+  removing redundant `Model*` type families while keeping document-scoped DTOs
+  distinct.
+- Added six compile-checked integration examples covering embedded rendering,
+  load diagnostics, procedural scenes, picking and selection, Document
+  round-trips, and multiple viewports.
+- Added precise `entity_has_no_camera` failures across camera-dependent Scene
+  and Viewport operations and strengthened public API, module-graph, and policy
+  enforcement coverage.
+
 ## 0.8.4
 
 - Reworked the public README into a product overview with quick links, feature

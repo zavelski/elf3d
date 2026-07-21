@@ -1,5 +1,7 @@
 #include <elf3d/model.h>
+#include <elf3d/model/detail/document_handle_access.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -24,7 +26,7 @@ struct SampleAssets {
     elf3d::SamplerId sampler;
     elf3d::TextureId texture;
     elf3d::MaterialId material;
-    elf3d::ModelSamplerDescription sampler_description;
+    elf3d::SamplerDescription sampler_description;
     elf3d::ModelMaterialDescription material_description;
 };
 
@@ -192,38 +194,43 @@ struct SampleAssets {
     return 0;
 }
 
+[[nodiscard]] bool replace_with_widened_triangle(SampleDocument& sample) {
+    elf3d::PrimitiveData widened_triangle = triangle_data();
+    widened_triangle.positions[1].x = 2.0F;
+    return sample.document.replace_primitive(sample.primitive, std::move(widened_triangle)) &&
+           sample.document.bounds()->maximum.x == 2.0F;
+}
+
+[[nodiscard]] bool reject_invalid_replacement_without_mutation(SampleDocument& sample) {
+    elf3d::PrimitiveData invalid_quad = quad_data();
+    invalid_quad.indices.back() = 99U;
+    return !sample.document.replace_primitive(sample.primitive, std::move(invalid_quad)) &&
+           sample.document.statistics().vertices == 3U &&
+           sample.document.bounds()->maximum.x == 2.0F;
+}
+
+[[nodiscard]] bool replace_with_quad(SampleDocument& sample) {
+    elf3d::PrimitiveData quad = quad_data();
+    const elf3d::DocumentStatistics replaced_statistics{1, 1, 1, 1, 4, 6, 2, 1};
+    return sample.document.replace_primitive(sample.primitive, std::move(quad)) &&
+           sample.document.statistics() == replaced_statistics &&
+           sample.document.bounds()->minimum.x == -1.0F &&
+           sample.document.bounds()->maximum.y == 1.0F;
+}
+
 [[nodiscard]] int test_mutation_and_replacement() {
     std::optional<SampleDocument> sample = create_sample_document();
     if (!sample.has_value()) {
         return 1;
     }
-
-    elf3d::Result<std::span<elf3d::Float3>> positions =
-        sample->document.mutable_positions(sample->primitive);
-    if (!positions) {
+    if (!replace_with_widened_triangle(*sample)) {
         return 2;
     }
-    positions.value()[1].x = 2.0F;
-    if (!sample->document.update_primitive_bounds(sample->primitive)) {
+    if (!reject_invalid_replacement_without_mutation(*sample)) {
         return 3;
     }
-    if (sample->document.bounds()->maximum.x != 2.0F) {
+    if (!replace_with_quad(*sample)) {
         return 4;
-    }
-
-    elf3d::PrimitiveData quad = quad_data();
-    if (!sample->document.replace_primitive(sample->primitive, std::move(quad))) {
-        return 5;
-    }
-    const elf3d::DocumentStatistics replaced_statistics{1, 1, 1, 1, 4, 6, 2, 1};
-    if (sample->document.statistics() != replaced_statistics) {
-        return 6;
-    }
-    if (sample->document.bounds()->minimum.x != -1.0F) {
-        return 7;
-    }
-    if (sample->document.bounds()->maximum.y != 1.0F) {
-        return 8;
     }
 
     return 0;
@@ -246,7 +253,7 @@ struct SampleAssets {
     if (foreign_result) {
         return 3;
     }
-    if (foreign_result.error().code() != elf3d::ErrorCode::invalid_material_handle) {
+    if (foreign_result.error().code() != elf3d::ErrorCode::invalid_material_id) {
         return 4;
     }
 
@@ -274,14 +281,14 @@ struct SampleAssets {
     return 0;
 }
 
-[[nodiscard]] bool has_initial_default_scene(const elf3d::Document &document,
-                                             const elf3d::Result<elf3d::DocumentSceneId> &first,
-                                             const elf3d::Result<elf3d::DocumentSceneId> &second) {
+[[nodiscard]] bool has_initial_default_scene(const elf3d::Document& document,
+                                             const elf3d::Result<elf3d::DocumentSceneId>& first,
+                                             const elf3d::Result<elf3d::DocumentSceneId>& second) {
     return first && second &&
            document.default_scene() == std::optional<elf3d::DocumentSceneId>{first.value()};
 }
 
-[[nodiscard]] bool has_selected_default_scene(elf3d::Document &document,
+[[nodiscard]] bool has_selected_default_scene(elf3d::Document& document,
                                               elf3d::DocumentSceneId scene) {
     return document.set_default_scene(scene) &&
            document.view().default_scene() == std::optional<elf3d::DocumentSceneId>{scene};
@@ -314,16 +321,15 @@ struct SampleAssets {
     constexpr std::array<std::byte, 8> png_source{std::byte{0x89}, std::byte{0x50}, std::byte{0x4e},
                                                   std::byte{0x47}, std::byte{0x0d}, std::byte{0x0a},
                                                   std::byte{0x1a}, std::byte{0x0a}};
-    const elf3d::Result<elf3d::ImageId> image =
-        sample.document.create_image({1, 1, elf3d::ModelPixelFormat::rgba8_unorm, pixel,
-                                      elf3d::ModelImageMimeType::png, png_source});
+    const elf3d::Result<elf3d::ImageId> image = sample.document.create_image(
+        {1, 1, elf3d::PixelFormat::rgba8_unorm, pixel, elf3d::ModelImageMimeType::png, png_source});
     if (!image) {
         return std::nullopt;
     }
 
-    sample.sampler_description = elf3d::ModelSamplerDescription{
-        elf3d::ModelTextureWrap::clamp_to_edge, elf3d::ModelTextureWrap::mirrored_repeat,
-        elf3d::ModelTextureFilter::linear_mipmap_linear, elf3d::ModelTextureFilter::nearest};
+    sample.sampler_description = elf3d::SamplerDescription{
+        elf3d::TextureWrap::clamp_to_edge, elf3d::TextureWrap::mirrored_repeat,
+        elf3d::TextureFilter::linear_mipmap_linear, elf3d::TextureFilter::nearest};
     const elf3d::Result<elf3d::SamplerId> sampler =
         sample.document.create_sampler(sample.sampler_description);
     if (!sampler) {
@@ -399,10 +405,10 @@ struct SampleAssets {
 [[nodiscard]] bool sample_stale_texture_is_rejected(const SampleAssets& sample) {
     const elf3d::TextureId stale_texture =
         elf3d::model::detail::DocumentHandleAccess::create_texture(
-            elf3d::model::detail::DocumentHandleAccess::document(sample.texture),
+            elf3d::model::detail::DocumentHandleAccess::document_token(sample.texture),
             sample.texture.debug_value() + 1U);
     return sample.document.texture(stale_texture).error().code() ==
-           elf3d::ErrorCode::invalid_texture_asset_handle;
+           elf3d::ErrorCode::invalid_texture_id;
 }
 
 [[nodiscard]] int test_model_asset_views_and_statistics() {
@@ -430,11 +436,11 @@ struct SampleAssets {
     const std::array<std::byte, 4> pixel = single_pixel();
     const std::array<std::byte, 1> short_pixel{std::byte{0}};
 
-    if (document.create_image({0, 1, elf3d::ModelPixelFormat::rgba8_unorm, pixel}).error().code() !=
+    if (document.create_image({0, 1, elf3d::PixelFormat::rgba8_unorm, pixel}).error().code() !=
         elf3d::ErrorCode::zero_image_dimensions) {
         return 1;
     }
-    if (document.create_image({1, 1, elf3d::ModelPixelFormat::rgba8_unorm, short_pixel})
+    if (document.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, short_pixel})
             .error()
             .code() != elf3d::ErrorCode::invalid_argument) {
         return 2;
@@ -448,14 +454,14 @@ struct SampleAssets {
     }
     const std::array<std::byte, 3> jpeg_source{std::byte{0xff}, std::byte{0xd8}, std::byte{0xff}};
     if (document
-            .create_image({1, 1, elf3d::ModelPixelFormat::rgba8_unorm, pixel,
+            .create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel,
                            elf3d::ModelImageMimeType::none, jpeg_source})
             .error()
             .code() != elf3d::ErrorCode::invalid_argument) {
         return 4;
     }
     if (document
-            .create_image({1, 1, elf3d::ModelPixelFormat::rgba8_unorm, pixel,
+            .create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel,
                            elf3d::ModelImageMimeType::png, jpeg_source})
             .error()
             .code() != elf3d::ErrorCode::invalid_argument) {
@@ -466,8 +472,8 @@ struct SampleAssets {
 
 [[nodiscard]] int test_model_sampler_rejections() {
     elf3d::Document document;
-    elf3d::ModelSamplerDescription invalid_sampler;
-    invalid_sampler.mag_filter = elf3d::ModelTextureFilter::linear_mipmap_linear;
+    elf3d::SamplerDescription invalid_sampler;
+    invalid_sampler.mag_filter = elf3d::TextureFilter::linear_mipmap_linear;
     if (document.create_sampler(invalid_sampler).error().code() !=
         elf3d::ErrorCode::invalid_sampler_description) {
         return 1;
@@ -489,10 +495,10 @@ struct TextureRejectionInputs {
     TextureRejectionInputs inputs;
     const std::array<std::byte, 4> pixel = single_pixel();
     const elf3d::Result<elf3d::ImageId> image =
-        inputs.document.create_image({1, 1, elf3d::ModelPixelFormat::rgba8_unorm, pixel});
+        inputs.document.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel});
     const elf3d::Result<elf3d::SamplerId> sampler = inputs.document.create_sampler({});
     const elf3d::Result<elf3d::ImageId> foreign_image =
-        inputs.foreign_document.create_image({1, 1, elf3d::ModelPixelFormat::rgba8_unorm, pixel});
+        inputs.foreign_document.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel});
     const elf3d::Result<elf3d::SamplerId> foreign_sampler =
         inputs.foreign_document.create_sampler({});
     if (!image || !sampler || !foreign_image || !foreign_sampler) {
@@ -517,11 +523,11 @@ struct TextureRejectionInputs {
         return 1;
     }
     if (inputs->document.create_texture({inputs->foreign_image, inputs->sampler}).error().code() !=
-        elf3d::ErrorCode::invalid_image_handle) {
+        elf3d::ErrorCode::invalid_image_id) {
         return 2;
     }
     if (inputs->document.create_texture({inputs->image, inputs->foreign_sampler}).error().code() !=
-        elf3d::ErrorCode::invalid_sampler_description) {
+        elf3d::ErrorCode::invalid_sampler_id) {
         return 3;
     }
     return 0;
@@ -535,14 +541,14 @@ struct TextureRejectionInputs {
     elf3d::ModelMaterialDescription material_with_foreign_texture;
     material_with_foreign_texture.base_color_texture = inputs->foreign_texture;
     if (inputs->document.create_material(material_with_foreign_texture).error().code() !=
-        elf3d::ErrorCode::invalid_texture_asset_handle) {
+        elf3d::ErrorCode::invalid_texture_id) {
         return 2;
     }
     elf3d::ModelMaterialDescription invalid_mapping;
     invalid_mapping.base_color_texture_mapping.texcoord_set =
-        elf3d::model_maximum_texture_coordinate_sets;
+        elf3d::maximum_texture_coordinate_sets;
     if (inputs->document.create_material(invalid_mapping).error().code() !=
-        elf3d::ErrorCode::invalid_material_handle) {
+        elf3d::ErrorCode::invalid_material_description) {
         return 3;
     }
     return 0;
@@ -564,72 +570,158 @@ struct TextureRejectionInputs {
     return 0;
 }
 
-[[nodiscard]] elf3d::Result<elf3d::MaterialId>
-create_builder_material_with_texture(elf3d::DocumentBuilder& builder) {
+struct DocumentIdentityFixture final {
+    elf3d::Document document;
+    elf3d::DocumentSceneId scene;
+    elf3d::NodeId node;
+    elf3d::MeshId mesh;
+    elf3d::PrimitiveId primitive;
+    elf3d::MaterialId material;
+    elf3d::ImageId image;
+    elf3d::TextureId texture;
+    elf3d::SamplerId sampler;
+};
+
+[[nodiscard]] std::optional<DocumentIdentityFixture> create_document_identity_fixture() {
+    elf3d::Document document;
+    const auto scene = document.create_scene();
+    const auto node = document.create_node();
+    const auto mesh = document.create_mesh();
+    const auto material = document.create_material();
     const std::array<std::byte, 4> pixel = single_pixel();
-    const auto built_image =
-        builder.create_image({1, 1, elf3d::ModelPixelFormat::rgba8_unorm, pixel});
+    const auto image = document.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel});
+    const auto sampler = document.create_sampler();
+    const std::array fixture_created{static_cast<bool>(scene), static_cast<bool>(node),
+                                     static_cast<bool>(mesh),  static_cast<bool>(material),
+                                     static_cast<bool>(image), static_cast<bool>(sampler)};
+    if (!std::all_of(fixture_created.begin(), fixture_created.end(),
+                     [](bool created) noexcept { return created; })) {
+        return std::nullopt;
+    }
+    const auto primitive =
+        document.create_primitive(mesh.value(), material.value(), triangle_data());
+    const auto texture = document.create_texture({image.value(), sampler.value()});
+    if (!primitive || !texture) {
+        return std::nullopt;
+    }
+    return DocumentIdentityFixture{std::move(document), scene.value(),     node.value(),
+                                   mesh.value(),        primitive.value(), material.value(),
+                                   image.value(),       texture.value(),   sampler.value()};
+}
+
+[[nodiscard]] int test_document_identity_errors() {
+    std::optional<DocumentIdentityFixture> fixture = create_document_identity_fixture();
+    if (!fixture.has_value()) {
+        return 1;
+    }
+
+    elf3d::Document foreign;
+    const std::array actual_codes{
+        foreign.scene(fixture->scene).error().code(),
+        foreign.node(fixture->node).error().code(),
+        foreign.mesh(fixture->mesh).error().code(),
+        foreign.primitive(fixture->primitive).error().code(),
+        foreign.material(fixture->material).error().code(),
+        foreign.image(fixture->image).error().code(),
+        foreign.texture(fixture->texture).error().code(),
+        foreign.sampler(fixture->sampler).error().code(),
+    };
+    constexpr std::array expected_codes{
+        elf3d::ErrorCode::invalid_document_scene_id, elf3d::ErrorCode::invalid_node_id,
+        elf3d::ErrorCode::invalid_mesh_id,           elf3d::ErrorCode::invalid_primitive_id,
+        elf3d::ErrorCode::invalid_material_id,       elf3d::ErrorCode::invalid_image_id,
+        elf3d::ErrorCode::invalid_texture_id,        elf3d::ErrorCode::invalid_sampler_id,
+    };
+    if (actual_codes != expected_codes) {
+        return 2;
+    }
+
+    const std::uint64_t owner_token =
+        elf3d::model::detail::DocumentHandleAccess::document_token(fixture->node);
+    elf3d::Document moved = std::move(fixture->document);
+    if (!moved.node(fixture->node)) {
+        return 3;
+    }
+    moved = elf3d::Document{};
+    const auto replacement_node = moved.create_node();
+    if (!replacement_node) {
+        return 4;
+    }
+    if (elf3d::model::detail::DocumentHandleAccess::document_token(replacement_node.value()) ==
+        owner_token) {
+        return 5;
+    }
+    if (moved.node(fixture->node).error().code() != elf3d::ErrorCode::invalid_node_id) {
+        return 6;
+    }
+    return 0;
+}
+
+[[nodiscard]] elf3d::Result<elf3d::MaterialId>
+create_document_material_with_texture(elf3d::Document& document) {
+    const std::array<std::byte, 4> pixel = single_pixel();
+    const auto built_image = document.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel});
     if (!built_image) {
         return built_image.error();
     }
-    const auto built_sampler = builder.create_sampler({});
+    const auto built_sampler = document.create_sampler({});
     if (!built_sampler) {
         return built_sampler.error();
     }
-    const auto built_texture = builder.create_texture({built_image.value(), built_sampler.value()});
+    const auto built_texture =
+        document.create_texture({built_image.value(), built_sampler.value()});
     if (!built_texture) {
         return built_texture.error();
     }
     elf3d::ModelMaterialDescription material_description;
     material_description.base_color_texture = built_texture.value();
-    return builder.create_material(material_description);
+    return document.create_material(material_description);
 }
 
-[[nodiscard]] elf3d::Result<void> populate_builder_scene(elf3d::DocumentBuilder& builder,
-                                                         elf3d::MaterialId material) {
-    const auto built_scene = builder.create_scene("Built");
+[[nodiscard]] elf3d::Result<void> populate_document_scene(elf3d::Document& document,
+                                                          elf3d::MaterialId material) {
+    const auto built_scene = document.create_scene("Built");
     if (!built_scene) {
         return built_scene.error();
     }
-    const auto built_node = builder.create_node("BuiltNode");
+    const auto built_node = document.create_node("BuiltNode");
     if (!built_node) {
         return built_node.error();
     }
-    const auto built_mesh = builder.create_mesh("BuiltMesh");
+    const auto built_mesh = document.create_mesh("BuiltMesh");
     if (!built_mesh) {
         return built_mesh.error();
     }
     elf3d::PrimitiveData built_triangle = triangle_data();
     const auto built_primitive =
-        builder.create_primitive(built_mesh.value(), material, built_triangle.view());
+        document.create_primitive(built_mesh.value(), material, built_triangle.view());
     if (!built_primitive) {
         return built_primitive.error();
     }
     const elf3d::Result<void> mesh_result =
-        builder.set_node_mesh(built_node.value(), built_mesh.value());
+        document.set_node_mesh(built_node.value(), built_mesh.value());
     if (!mesh_result) {
         return mesh_result.error();
     }
-    return builder.add_scene_root(built_scene.value(), built_node.value());
+    return document.add_scene_root(built_scene.value(), built_node.value());
 }
 
 [[nodiscard]] std::optional<elf3d::Document> create_built_document() {
-    elf3d::DocumentBuilder builder;
-    const auto built_material = create_builder_material_with_texture(builder);
+    elf3d::Document document;
+    const auto built_material = create_document_material_with_texture(document);
     if (!built_material) {
         return std::nullopt;
     }
-    if (!populate_builder_scene(builder, built_material.value())) {
+    if (!populate_document_scene(document, built_material.value())) {
         return std::nullopt;
     }
-    elf3d::Result<elf3d::Document> built_document = builder.finish();
-    if (!built_document) {
+    if (elf3d::validate_document(document.view()).has_errors()) {
         return std::nullopt;
     }
-    return std::move(built_document).value();
+    return std::move(document);
 }
 
-[[nodiscard]] int test_builder_finish() {
+[[nodiscard]] int test_direct_document_construction() {
     std::optional<elf3d::Document> built_document = create_built_document();
     if (!built_document.has_value()) {
         return 1;
@@ -664,7 +756,10 @@ int elf3d_model_document_test() {
     if (const int result = test_model_asset_rejections(); result != 0) {
         return 400 + result;
     }
-    if (const int result = test_builder_finish(); result != 0) {
+    if (const int result = test_document_identity_errors(); result != 0) {
+        return 450 + result;
+    }
+    if (const int result = test_direct_document_construction(); result != 0) {
         return 500 + result;
     }
     return 0;

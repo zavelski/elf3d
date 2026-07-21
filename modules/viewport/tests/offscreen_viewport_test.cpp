@@ -29,7 +29,6 @@ import elf.viewport;
 
 namespace {
 
-using elf3d::viewport::tests::fake_device_state;
 using elf3d::viewport::tests::FakeDevice;
 using elf3d::viewport::tests::FakeDeviceState;
 using elf3d::viewport::tests::FakePickingTarget;
@@ -49,10 +48,13 @@ struct ViewportContext {
     elf3d::EntityId camera;
     elf3d::EntityId model;
     std::unique_ptr<elf3d::viewport::OffscreenViewport> viewport;
+
+    [[nodiscard]] FakeDeviceState& device_state() noexcept {
+        return static_cast<FakeDevice&>(renderer->device()).state();
+    }
 };
 
 [[nodiscard]] int prepare_viewport_context(ViewportContext& context) {
-    fake_device_state() = {};
     auto owned_device = std::make_unique<FakeDevice>();
     auto renderer = elf3d::renderer::Renderer::create(std::move(owned_device), 1);
     if (!renderer) {
@@ -163,7 +165,7 @@ struct DynamicAnchorContext {
     if (!context.viewport->reset_view(context.scene, context.camera)) {
         return 840;
     }
-    FakeDeviceState& state = fake_device_state();
+    FakeDeviceState& state = context.device_state();
     state.picking_pixel = elf3d::graphics::PickingPixel{1U, 0U, 0U, 0.5F};
     state.picking_depths.assign(anchor_context.pixel_count, 0.5F);
     FakePickingTarget reference_target{anchor_context.target_extent};
@@ -190,7 +192,7 @@ struct DynamicAnchorContext {
 
 [[nodiscard]] int begin_dynamic_orbit(ViewportContext& context,
                                       DynamicAnchorContext& anchor_context) {
-    FakeDeviceState& state = fake_device_state();
+    FakeDeviceState& state = context.device_state();
     state.picking_depths_read_count = 0;
     state.picking_pixel_read_count = 0;
     anchor_context.input.is_focused = true;
@@ -265,7 +267,7 @@ struct DynamicAnchorContext {
     if (!context.viewport->reset_view(context.scene, context.camera)) {
         return 867;
     }
-    FakeDeviceState& state = fake_device_state();
+    FakeDeviceState& state = context.device_state();
     state.picking_depths.assign(256U * 144U, 0.5F);
     state.picking_depths_read_count = 0;
     state.picking_pixel_read_count = 0;
@@ -319,7 +321,7 @@ struct DynamicAnchorContext {
     if (!context.viewport->reset_view(context.scene, context.camera)) {
         return 858;
     }
-    FakeDeviceState& state = fake_device_state();
+    FakeDeviceState& state = context.device_state();
     state.picking_depths_read_count = 0;
     state.picking_pixel_read_count = 0;
     elf3d::ViewportInput input;
@@ -370,7 +372,7 @@ struct DynamicAnchorContext {
     if (!context.viewport->reset_view(context.scene, context.camera)) {
         return 850;
     }
-    FakeDeviceState& state = fake_device_state();
+    FakeDeviceState& state = context.device_state();
     state.picking_pixel.reset();
     state.picking_depths.clear();
     state.picking_depths_read_count = 0;
@@ -400,7 +402,7 @@ struct DynamicAnchorContext {
     if (!context.viewport->reset_view(context.scene, context.camera)) {
         return 874;
     }
-    FakeDeviceState& state = fake_device_state();
+    FakeDeviceState& state = context.device_state();
     state.picking_pixel_read_count = 0;
     elf3d::ViewportInput input;
     input.is_focused = true;
@@ -439,7 +441,7 @@ struct DynamicAnchorContext {
     input.is_focused = true;
     input.is_hovered = true;
     input.pointer_position_pixels = {319.5F, 179.5F};
-    fake_device_state().picking_pixel = elf3d::graphics::PickingPixel{1U, 0U, 0U, 0.5F};
+    context.device_state().picking_pixel = elf3d::graphics::PickingPixel{1U, 0U, 0U, 0.5F};
     input.left_button_down = true;
     if (!update_navigation(context, input)) {
         return 81;
@@ -460,7 +462,7 @@ struct DynamicAnchorContext {
     if (!has_expected_pick_statistics(statistics)) {
         return 824;
     }
-    if (!has_expected_scaled_pick_position(fake_device_state())) {
+    if (!has_expected_scaled_pick_position(context.device_state())) {
         return 865;
     }
     return 0;
@@ -637,7 +639,7 @@ has_independent_box_configuration(const elf3d::Result<std::uint32_t>& added_box,
 [[nodiscard]] bool has_measurement_overlay(ViewportContext& context,
                                            const elf3d::Result<void>& render) {
     const elf3d::RenderStatistics statistics = context.viewport->statistics();
-    const FakeDeviceState& state = fake_device_state();
+    const FakeDeviceState& state = context.device_state();
     return render && statistics.overlay_lines == 1 && statistics.overlay_markers == 2 &&
            state.latest_overlay_lines == 1 && state.latest_overlay_markers == 2;
 }

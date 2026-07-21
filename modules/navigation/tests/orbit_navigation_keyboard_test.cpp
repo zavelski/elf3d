@@ -1,6 +1,5 @@
 #include <elf3d/assets.h>
 #include <elf3d/core/result.h>
-#include <elf3d/math/detail/glm_helpers.h>
 #include <elf3d/navigation.h>
 #include <elf3d/scene.h>
 

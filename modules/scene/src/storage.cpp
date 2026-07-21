@@ -44,7 +44,7 @@ SceneId Storage::id() const noexcept {
     return id_;
 }
 
-bool Storage::belongs_to_engine(std::uintptr_t engine_token) const noexcept {
+bool Storage::belongs_to_engine(std::uint64_t engine_token) const noexcept {
     return detail::SceneHandleAccess::engine_token(id_) == engine_token;
 }
 
@@ -597,41 +597,47 @@ std::optional<Bounds3> Storage::world_bounds() const noexcept {
         if (!record.has_value() || !record->model.has_value()) {
             continue;
         }
-        const Result<Float4x4> world_result = world_matrix(record->id);
-        ELF3D_ASSERT(world_result.has_value());
-        for (std::uint32_t primitive_index = 0; primitive_index < record->model->primitives.size();
-             ++primitive_index) {
-            const Result<RuntimePrimitiveView> primitive =
-                runtime_primitive(record->id, primitive_index);
-            ELF3D_ASSERT(primitive.has_value());
-            const Bounds3& local = primitive.value().bounds;
-            const std::array<Float3, 8> corners{{
-                {local.minimum.x, local.minimum.y, local.minimum.z},
-                {local.maximum.x, local.minimum.y, local.minimum.z},
-                {local.minimum.x, local.maximum.y, local.minimum.z},
-                {local.maximum.x, local.maximum.y, local.minimum.z},
-                {local.minimum.x, local.minimum.y, local.maximum.z},
-                {local.maximum.x, local.minimum.y, local.maximum.z},
-                {local.minimum.x, local.maximum.y, local.maximum.z},
-                {local.maximum.x, local.maximum.y, local.maximum.z},
-            }};
-            for (const Float3 corner : corners) {
-                const Float3 point = math::transform_point(world_result.value(), corner);
-                ELF3D_ASSERT(math::is_finite(point));
-                if (!result.has_value()) {
-                    result = Bounds3{point, point};
-                    continue;
-                }
-                result->minimum.x = std::min(result->minimum.x, point.x);
-                result->minimum.y = std::min(result->minimum.y, point.y);
-                result->minimum.z = std::min(result->minimum.z, point.z);
-                result->maximum.x = std::max(result->maximum.x, point.x);
-                result->maximum.y = std::max(result->maximum.y, point.y);
-                result->maximum.z = std::max(result->maximum.z, point.z);
-            }
-        }
+        expand_world_bounds(result, *record);
     }
     return result;
+}
+
+void Storage::expand_world_bounds(std::optional<Bounds3>& bounds,
+                                  const EntityRecord& entity) const noexcept {
+    ELF3D_ASSERT(entity.model.has_value());
+    const Result<Float4x4> world_result = world_matrix(entity.id);
+    ELF3D_ASSERT(world_result.has_value());
+    for (std::uint32_t primitive_index = 0; primitive_index < entity.model->primitives.size();
+         ++primitive_index) {
+        const Result<RuntimePrimitiveView> primitive =
+            runtime_primitive(entity.id, primitive_index);
+        ELF3D_ASSERT(primitive.has_value());
+        const Bounds3& local = primitive.value().bounds;
+        const std::array<Float3, 8> corners{{
+            {local.minimum.x, local.minimum.y, local.minimum.z},
+            {local.maximum.x, local.minimum.y, local.minimum.z},
+            {local.minimum.x, local.maximum.y, local.minimum.z},
+            {local.maximum.x, local.maximum.y, local.minimum.z},
+            {local.minimum.x, local.minimum.y, local.maximum.z},
+            {local.maximum.x, local.minimum.y, local.maximum.z},
+            {local.minimum.x, local.maximum.y, local.maximum.z},
+            {local.maximum.x, local.maximum.y, local.maximum.z},
+        }};
+        for (const Float3 corner : corners) {
+            const Float3 point = math::transform_point(world_result.value(), corner);
+            ELF3D_ASSERT(math::is_finite(point));
+            if (!bounds.has_value()) {
+                bounds = Bounds3{point, point};
+                continue;
+            }
+            bounds->minimum.x = std::min(bounds->minimum.x, point.x);
+            bounds->minimum.y = std::min(bounds->minimum.y, point.y);
+            bounds->minimum.z = std::min(bounds->minimum.z, point.z);
+            bounds->maximum.x = std::max(bounds->maximum.x, point.x);
+            bounds->maximum.y = std::max(bounds->maximum.y, point.y);
+            bounds->maximum.z = std::max(bounds->maximum.z, point.z);
+        }
+    }
 }
 
 SceneHierarchyStatistics Storage::hierarchy_statistics() const noexcept {

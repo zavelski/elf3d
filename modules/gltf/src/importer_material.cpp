@@ -232,13 +232,13 @@ void apply_material_factors(MaterialBuildState& state) {
 [[nodiscard]] Result<void> apply_alpha_mode(MaterialBuildState& state) {
     switch (state.source.alpha_mode) {
     case cgltf_alpha_mode_opaque:
-        state.description.alpha_mode = ModelAlphaMode::opaque;
+        state.description.alpha_mode = AlphaMode::opaque;
         break;
     case cgltf_alpha_mode_mask:
-        state.description.alpha_mode = ModelAlphaMode::mask;
+        state.description.alpha_mode = AlphaMode::mask;
         break;
     case cgltf_alpha_mode_blend:
-        state.description.alpha_mode = ModelAlphaMode::blend;
+        state.description.alpha_mode = AlphaMode::blend;
         break;
     default:
         return Error{ErrorCode::scene_import_failed,

@@ -67,11 +67,11 @@ Result<MaterialId> Document::create_material(const ModelMaterialDescription& des
         storage_ = std::make_unique<Storage>();
     }
     if (!storage_->valid_material_textures(description)) {
-        return Error{ErrorCode::invalid_texture_asset_handle,
+        return Error{ErrorCode::invalid_texture_id,
                      "Material texture identifiers must belong to the same document"};
     }
     if (!valid_material_factors(description) || !valid_material_mappings(description)) {
-        return Error{ErrorCode::invalid_material_handle,
+        return Error{ErrorCode::invalid_material_description,
                      "Material factors and texture mappings must be finite and valid"};
     }
     const MaterialId id = model::detail::DocumentHandleAccess::create_material(
@@ -104,7 +104,7 @@ Result<ImageId> Document::create_image(const ModelImageDescription& description)
     return id;
 }
 
-Result<SamplerId> Document::create_sampler(const ModelSamplerDescription& description) {
+Result<SamplerId> Document::create_sampler(const SamplerDescription& description) {
     if (storage_ == nullptr) {
         storage_ = std::make_unique<Storage>();
     }
@@ -125,11 +125,10 @@ Result<TextureId> Document::create_texture(const ModelTextureDescription& descri
         storage_ = std::make_unique<Storage>();
     }
     if (!storage_->image(description.image)) {
-        return Error{ErrorCode::invalid_image_handle,
-                     "Texture image must belong to the same document"};
+        return Error{ErrorCode::invalid_image_id, "Texture image must belong to the same document"};
     }
     if (!storage_->sampler(description.sampler)) {
-        return Error{ErrorCode::invalid_sampler_description,
+        return Error{ErrorCode::invalid_sampler_id,
                      "Texture sampler must belong to the same document"};
     }
     const TextureId id = model::detail::DocumentHandleAccess::create_texture(
@@ -151,14 +150,14 @@ Result<PrimitiveId> Document::create_primitive(MeshId mesh_id, MaterialId materi
 Result<PrimitiveId> Document::create_primitive(MeshId mesh_id, MaterialId material_id,
                                                PrimitiveData&& data) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_mesh_handle, "Primitive creation requires a live document"};
+        return Error{ErrorCode::invalid_mesh_id, "Primitive creation requires a live document"};
     }
     Result<Storage::MeshRecord*> mesh_record = storage_->mutable_mesh(mesh_id);
     if (!mesh_record) {
         return mesh_record.error();
     }
     if (!storage_->material(material_id)) {
-        return Error{ErrorCode::invalid_material_handle,
+        return Error{ErrorCode::invalid_material_id,
                      "Primitive material must belong to the same document"};
     }
     const Result<void> validation = validate_primitive_data(data.view());
@@ -186,7 +185,7 @@ Result<PrimitiveId> Document::create_primitive(MeshId mesh_id, MaterialId materi
 
 Result<void> Document::add_scene_root(DocumentSceneId scene_id, NodeId node_id) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_argument, "The document is empty"};
+        return Error{ErrorCode::invalid_document_scene_id, "The document is empty"};
     }
     Result<Storage::SceneRecord*> scene_record = storage_->mutable_scene(scene_id);
     if (!scene_record) {
@@ -210,10 +209,10 @@ Result<void> Document::add_scene_root(DocumentSceneId scene_id, NodeId node_id) 
 
 Result<void> Document::set_default_scene(DocumentSceneId scene_id) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_argument, "The document is empty"};
+        return Error{ErrorCode::invalid_document_scene_id, "The document is empty"};
     }
     if (!storage_->scene(scene_id)) {
-        return Error{ErrorCode::invalid_argument,
+        return Error{ErrorCode::invalid_document_scene_id,
                      "The default scene must belong to the same document"};
     }
     if (storage_->default_scene != scene_id) {
@@ -225,7 +224,7 @@ Result<void> Document::set_default_scene(DocumentSceneId scene_id) {
 
 Result<void> Document::clear_default_scene() noexcept {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_argument, "The document is empty"};
+        return Error{ErrorCode::invalid_document_scene_id, "The document is empty"};
     }
     if (storage_->default_scene.has_value()) {
         storage_->default_scene.reset();
@@ -236,7 +235,7 @@ Result<void> Document::clear_default_scene() noexcept {
 
 Result<void> Document::set_parent(NodeId node_id, NodeId parent_id) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_entity, "The document is empty"};
+        return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
     Result<Storage::NodeRecord*> child = storage_->mutable_node(node_id);
     if (!child) {
@@ -266,7 +265,7 @@ Result<void> Document::set_parent(NodeId node_id, NodeId parent_id) {
 
 Result<void> Document::clear_parent(NodeId node_id) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_entity, "The document is empty"};
+        return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
     Result<Storage::NodeRecord*> node_record = storage_->mutable_node(node_id);
     if (!node_record) {
@@ -288,14 +287,14 @@ Result<void> Document::clear_parent(NodeId node_id) {
 
 Result<void> Document::set_node_mesh(NodeId node_id, MeshId mesh_id) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_entity, "The document is empty"};
+        return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
     Result<Storage::NodeRecord*> node_record = storage_->mutable_node(node_id);
     if (!node_record) {
         return node_record.error();
     }
     if (!storage_->mesh(mesh_id)) {
-        return Error{ErrorCode::invalid_mesh_handle, "Node mesh must belong to the same document"};
+        return Error{ErrorCode::invalid_mesh_id, "Node mesh must belong to the same document"};
     }
     if (node_record.value()->mesh == mesh_id) {
         return {};
@@ -307,7 +306,7 @@ Result<void> Document::set_node_mesh(NodeId node_id, MeshId mesh_id) {
 
 Result<void> Document::clear_node_mesh(NodeId node_id) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_entity, "The document is empty"};
+        return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
     Result<Storage::NodeRecord*> node_record = storage_->mutable_node(node_id);
     if (!node_record) {
@@ -323,7 +322,7 @@ Result<void> Document::clear_node_mesh(NodeId node_id) {
 
 Result<void> Document::set_node_matrix(NodeId node_id, const Float4x4& matrix) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_entity, "The document is empty"};
+        return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
     if (!finite(matrix)) {
         return Error{ErrorCode::invalid_transform_matrix, "Node matrices must be finite"};
@@ -342,9 +341,9 @@ Result<void> Document::set_node_matrix(NodeId node_id, const Float4x4& matrix) {
 
 Result<void>
 Document::set_node_perspective_camera(NodeId node_id,
-                                      const ModelPerspectiveCameraDescription& description) {
+                                      const PerspectiveCameraDescription& description) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_entity, "The document is empty"};
+        return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
     if (!valid_perspective_camera(description)) {
         return Error{ErrorCode::invalid_camera_configuration,
@@ -365,7 +364,7 @@ Document::set_node_perspective_camera(NodeId node_id,
 
 Result<void> Document::clear_node_perspective_camera(NodeId node_id) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_entity, "The document is empty"};
+        return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
     Result<Storage::NodeRecord*> node_record = storage_->mutable_node(node_id);
     if (!node_record) {
@@ -389,7 +388,7 @@ Result<void> Document::replace_primitive(PrimitiveId primitive_id, const Primiti
 
 Result<void> Document::replace_primitive(PrimitiveId primitive_id, PrimitiveData&& data) {
     if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_mesh_handle, "The document is empty"};
+        return Error{ErrorCode::invalid_primitive_id, "The document is empty"};
     }
     Result<Storage::PrimitiveRecord*> primitive_record = storage_->mutable_primitive(primitive_id);
     if (!primitive_record) {
@@ -404,52 +403,6 @@ Result<void> Document::replace_primitive(PrimitiveId primitive_id, PrimitiveData
         return bounds.error();
     }
     primitive_record.value()->data = std::move(data);
-    primitive_record.value()->bounds = bounds.value();
-    Result<Storage::MeshRecord*> mesh_record =
-        storage_->mutable_mesh(primitive_record.value()->mesh);
-    if (mesh_record) {
-        storage_->update_mesh_bounds(*mesh_record.value());
-    }
-    storage_->note_mutation();
-    return {};
-}
-
-Result<std::span<Float3>> Document::mutable_positions(PrimitiveId primitive_id) noexcept {
-    if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_mesh_handle, "The document is empty"};
-    }
-    Result<Storage::PrimitiveRecord*> primitive_record = storage_->mutable_primitive(primitive_id);
-    if (!primitive_record) {
-        return primitive_record.error();
-    }
-    storage_->note_mutation();
-    return std::span<Float3>{primitive_record.value()->data.positions};
-}
-
-Result<std::span<Float3>> Document::mutable_normals(PrimitiveId primitive_id) noexcept {
-    if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_mesh_handle, "The document is empty"};
-    }
-    Result<Storage::PrimitiveRecord*> primitive_record = storage_->mutable_primitive(primitive_id);
-    if (!primitive_record) {
-        return primitive_record.error();
-    }
-    storage_->note_mutation();
-    return std::span<Float3>{primitive_record.value()->data.normals};
-}
-
-Result<void> Document::update_primitive_bounds(PrimitiveId primitive_id) noexcept {
-    if (storage_ == nullptr) {
-        return Error{ErrorCode::invalid_mesh_handle, "The document is empty"};
-    }
-    Result<Storage::PrimitiveRecord*> primitive_record = storage_->mutable_primitive(primitive_id);
-    if (!primitive_record) {
-        return primitive_record.error();
-    }
-    const Result<Bounds3> bounds = primitive_bounds(primitive_record.value()->data.view());
-    if (!bounds) {
-        return bounds.error();
-    }
     primitive_record.value()->bounds = bounds.value();
     Result<Storage::MeshRecord*> mesh_record =
         storage_->mutable_mesh(primitive_record.value()->mesh);

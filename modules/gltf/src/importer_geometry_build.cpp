@@ -83,8 +83,7 @@ enum class NormalImportOutcome : std::uint8_t {
 }
 
 [[nodiscard]] Result<void> import_texcoords(PrimitiveBuildState& state) {
-    for (cgltf_int set = 0; set < static_cast<cgltf_int>(model_maximum_texture_coordinate_sets);
-         ++set) {
+    for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets); ++set) {
         const cgltf_accessor* accessor =
             cgltf_find_accessor(&state.source, cgltf_attribute_type_texcoord, set);
         if (accessor == nullptr) {
@@ -118,7 +117,7 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     for (cgltf_size index = 0; index < state.source.attributes_count; ++index) {
         const cgltf_attribute& attribute = state.source.attributes[index];
         if (attribute.type == cgltf_attribute_type_texcoord &&
-            attribute.index >= static_cast<cgltf_int>(model_maximum_texture_coordinate_sets)) {
+            attribute.index >= static_cast<cgltf_int>(maximum_texture_coordinate_sets)) {
             add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::geometry,
                            ModelLoadDiagnosticCode::material_fallback,
                            "Additional UV sets beyond TEXCOORD_1 are not preserved unless "

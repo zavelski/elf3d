@@ -2,7 +2,7 @@ module;
 
 #include <elf3d/core/result.h>
 #include <elf3d/math/value_types.h>
-#include <elf3d/viewport.h>
+#include <elf3d/rendering.h>
 
 #include <array>
 #include <cstdint>
@@ -97,13 +97,13 @@ class Renderer final {
     struct ConstructionKey final {};
     struct Resources final {
         std::unique_ptr<graphics::Device> device;
-        std::uintptr_t engine_token = 0;
+        std::uint64_t engine_token = 0;
         std::unique_ptr<graphics::GraphicsPipeline> pipeline;
     };
 
   public:
     [[nodiscard]] static Result<std::unique_ptr<Renderer>>
-    create(std::unique_ptr<graphics::Device> device, std::uintptr_t engine_token);
+    create(std::unique_ptr<graphics::Device> device, std::uint64_t engine_token);
 
     Renderer(ConstructionKey, Resources resources) noexcept;
 
@@ -201,7 +201,7 @@ class Renderer final {
                        const RenderList& list, const clipping::ClippingFilter& clipping_filter);
 
     std::unique_ptr<graphics::Device> device_;
-    std::uintptr_t engine_token_ = 0;
+    std::uint64_t engine_token_ = 0;
     std::unique_ptr<graphics::GraphicsPipeline> pipeline_;
     std::vector<MeshCacheEntry> mesh_cache_;
     std::vector<TextureCacheEntry> texture_cache_;

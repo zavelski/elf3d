@@ -106,6 +106,71 @@ bool is_finite(Quaternion value) noexcept {
            std::isfinite(value.w);
 }
 
+Float3 add(Float3 left, Float3 right) noexcept {
+    return to_float3(to_vector(left) + to_vector(right));
+}
+
+Float3 subtract(Float3 left, Float3 right) noexcept {
+    return to_float3(to_vector(left) - to_vector(right));
+}
+
+Float3 scale(Float3 value, float factor) noexcept {
+    return to_float3(to_vector(value) * factor);
+}
+
+Float3 negate(Float3 value) noexcept {
+    return to_float3(-to_vector(value));
+}
+
+float dot(Float3 left, Float3 right) noexcept {
+    return glm::dot(to_vector(left), to_vector(right));
+}
+
+Float3 cross(Float3 left, Float3 right) noexcept {
+    return to_float3(glm::cross(to_vector(left), to_vector(right)));
+}
+
+float vector_length(Float3 value) noexcept {
+    return glm::length(to_vector(value));
+}
+
+Float3 normalized(Float3 value) noexcept {
+    return to_float3(glm::normalize(to_vector(value)));
+}
+
+Quaternion normalized(Quaternion value) noexcept {
+    return to_quaternion(glm::normalize(to_rotation(value)));
+}
+
+Quaternion rotation_from_axis_angle(float angle_radians, Float3 axis) noexcept {
+    return to_quaternion(glm::angleAxis(angle_radians, glm::normalize(to_vector(axis))));
+}
+
+Quaternion compose_rotations(Quaternion left, Quaternion right) noexcept {
+    return to_quaternion(glm::normalize(to_rotation(left) * to_rotation(right)));
+}
+
+Float3 rotate_vector(Quaternion rotation, Float3 value) noexcept {
+    return to_float3(glm::normalize(to_rotation(rotation)) * to_vector(value));
+}
+
+Quaternion rotation_from_basis(Float3 right, Float3 up, Float3 backward) noexcept {
+    Matrix3 basis{1.0F};
+    basis[0] = to_vector(right);
+    basis[1] = to_vector(up);
+    basis[2] = to_vector(backward);
+    return to_quaternion(glm::normalize(glm::quat_cast(basis)));
+}
+
+Float3 matrix_column(const Float4x4& matrix, std::size_t column) noexcept {
+    if (column >= 4) {
+        return {};
+    }
+    const std::size_t offset = column * 4;
+    return Float3{matrix.elements[offset], matrix.elements[offset + 1],
+                  matrix.elements[offset + 2]};
+}
+
 bool is_valid_transform(const Transform& transform) noexcept {
     if (!is_finite(transform.translation) || !is_finite(transform.rotation) ||
         !is_finite(transform.scale)) {
@@ -144,6 +209,14 @@ Transform normalized_transform(const Transform& transform) noexcept {
 
 Float4x4 compose_world(const Float4x4& parent_world, const Float4x4& local) noexcept {
     return to_float4x4(to_matrix(parent_world) * to_matrix(local));
+}
+
+Result<Float4x4> inverse_affine_matrix(const Float4x4& matrix) noexcept {
+    if (!is_valid_affine_matrix(matrix)) {
+        return Error{ErrorCode::invalid_transform_matrix,
+                     "An affine matrix must be finite and invertible"};
+    }
+    return to_float4x4(glm::inverse(to_matrix(matrix)));
 }
 
 Float4x4 transform_matrix(const Transform& transform) noexcept {
@@ -226,6 +299,12 @@ Result<bool> orientation_reversed(const Float4x4& model) noexcept {
 
 Float3 transform_point(const Float4x4& matrix, Float3 point) noexcept {
     const Vector4 transformed = to_matrix(matrix) * Vector4{point.x, point.y, point.z, 1.0F};
+    return Float3{transformed.x, transformed.y, transformed.z};
+}
+
+Float3 transform_direction(const Float4x4& matrix, Float3 direction) noexcept {
+    const Vector4 transformed =
+        to_matrix(matrix) * Vector4{direction.x, direction.y, direction.z, 0.0F};
     return Float3{transformed.x, transformed.y, transformed.z};
 }
 

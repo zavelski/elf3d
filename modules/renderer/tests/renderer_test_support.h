@@ -126,13 +126,16 @@ struct FakeDeviceState {
     std::string fragment_shader_source;
 };
 
-[[nodiscard]] inline FakeDeviceState& fake_device_state() noexcept {
-    static FakeDeviceState state;
-    return state;
-}
-
 class FakeDevice final : public elf3d::graphics::Device {
   public:
+    [[nodiscard]] FakeDeviceState& state() noexcept {
+        return state_;
+    }
+
+    [[nodiscard]] const FakeDeviceState& state() const noexcept {
+        return state_;
+    }
+
     [[nodiscard]] elf3d::GraphicsBackend backend() const noexcept override {
         return elf3d::GraphicsBackend::opengl;
     }
@@ -152,72 +155,73 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::StaticMesh>> create_static_mesh(
         const elf3d::graphics::StaticMeshDescription& description) noexcept override {
-        ++fake_device_state().upload_count;
+        ++state_.upload_count;
         return std::unique_ptr<elf3d::graphics::StaticMesh>{std::make_unique<FakeMesh>(
             description.vertex_count, static_cast<std::uint32_t>(description.indices.size()))};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::Texture2D>>
     create_texture_2d(const elf3d::graphics::Texture2DDescription& description) noexcept override {
-        ++fake_device_state().texture_upload_count;
-        fake_device_state().texture_descriptions.push_back(
-            FakeDeviceState::TextureDescriptionSnapshot{description.format, description.wrap_u,
-                                                        description.wrap_v, description.min_filter,
-                                                        description.mag_filter});
+        ++state_.texture_upload_count;
+        state_.texture_descriptions.push_back(FakeDeviceState::TextureDescriptionSnapshot{
+            description.format, description.wrap_u, description.wrap_v, description.min_filter,
+            description.mag_filter});
         return std::unique_ptr<elf3d::graphics::Texture2D>{std::make_unique<FakeTexture>()};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::GraphicsPipeline>>
     create_graphics_pipeline(
         const elf3d::graphics::GraphicsPipelineDescription& description) noexcept override {
-        fake_device_state().vertex_shader_source = description.vertex_shader_source;
-        fake_device_state().fragment_shader_source = description.fragment_shader_source;
+        state_.vertex_shader_source = description.vertex_shader_source;
+        state_.fragment_shader_source = description.fragment_shader_source;
         return std::unique_ptr<elf3d::graphics::GraphicsPipeline>{std::make_unique<FakePipeline>()};
     }
     [[nodiscard]] elf3d::Result<void>
     draw_indexed(elf3d::graphics::RenderTarget&, elf3d::graphics::GraphicsPipeline&,
                  elf3d::graphics::StaticMesh&,
                  const elf3d::graphics::DrawIndexedDescription& description) noexcept override {
-        ++fake_device_state().draw_count;
+        ++state_.draw_count;
         std::array<bool, elf3d::graphics::material_texture_count> texture_presence{};
         for (std::size_t index = 0; index < texture_presence.size(); ++index) {
             texture_presence[index] =
                 description.textures.size() > index && description.textures[index] != nullptr;
         }
-        fake_device_state().draw_texture_presence.push_back(texture_presence);
+        state_.draw_texture_presence.push_back(texture_presence);
         elf3d::graphics::DrawIndexedDescription stored_description = description;
         stored_description.textures = {};
-        fake_device_state().draws.push_back(stored_description);
+        state_.draws.push_back(stored_description);
         return {};
     }
     [[nodiscard]] elf3d::Result<void>
     draw_overlay(elf3d::graphics::RenderTarget&,
                  const elf3d::graphics::DrawOverlayDescription& description) noexcept override {
-        ++fake_device_state().overlay_draw_count;
-        fake_device_state().overlay_line_count += static_cast<int>(description.lines.size());
-        fake_device_state().overlay_marker_count += static_cast<int>(description.markers.size());
+        ++state_.overlay_draw_count;
+        state_.overlay_line_count += static_cast<int>(description.lines.size());
+        state_.overlay_marker_count += static_cast<int>(description.markers.size());
         return {};
     }
     [[nodiscard]] elf3d::Result<void> draw_picking_indexed(
         elf3d::graphics::PickingTarget&, elf3d::graphics::StaticMesh&,
         const elf3d::graphics::PickingDrawDescription& description) noexcept override {
-        ++fake_device_state().picking_draw_count;
-        fake_device_state().picking_draws.push_back(description);
+        ++state_.picking_draw_count;
+        state_.picking_draws.push_back(description);
         return {};
     }
     [[nodiscard]] elf3d::Result<std::optional<elf3d::graphics::PickingPixel>>
     read_picking_pixel(elf3d::graphics::PickingTarget&, elf3d::Float2) noexcept override {
-        return fake_device_state().picking_pixel;
+        return state_.picking_pixel;
     }
     [[nodiscard]] elf3d::Result<std::vector<float>>
     read_picking_depths(elf3d::graphics::PickingTarget& target) noexcept override {
-        if (!fake_device_state().picking_depths.empty()) {
-            return fake_device_state().picking_depths;
+        if (!state_.picking_depths.empty()) {
+            return state_.picking_depths;
         }
         const elf3d::Extent2D extent = target.extent();
         return std::vector<float>(
             static_cast<std::size_t>(extent.width) * static_cast<std::size_t>(extent.height),
-            fake_device_state().picking_pixel.has_value() ? fake_device_state().picking_pixel->depth
-                                                          : 1.0F);
+            state_.picking_pixel.has_value() ? state_.picking_pixel->depth : 1.0F);
     }
+
+  private:
+    FakeDeviceState state_;
 };
 
 } // namespace elf3d::renderer::tests

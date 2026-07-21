@@ -185,39 +185,39 @@ void append_float4(std::string& output, Color4 value) {
     output.push_back(']');
 }
 
-std::uint32_t wrap_value(ModelTextureWrap value) noexcept {
+std::uint32_t wrap_value(TextureWrap value) noexcept {
     switch (value) {
-    case ModelTextureWrap::repeat:
+    case TextureWrap::repeat:
         return 10497U;
-    case ModelTextureWrap::mirrored_repeat:
+    case TextureWrap::mirrored_repeat:
         return 33648U;
-    case ModelTextureWrap::clamp_to_edge:
+    case TextureWrap::clamp_to_edge:
         return 33071U;
     }
     ELF3D_ASSERT(false);
     return 10497U;
 }
 
-std::uint32_t filter_value(ModelTextureFilter value) noexcept {
+std::uint32_t filter_value(TextureFilter value) noexcept {
     switch (value) {
-    case ModelTextureFilter::nearest:
+    case TextureFilter::nearest:
         return 9728U;
-    case ModelTextureFilter::linear:
+    case TextureFilter::linear:
         return 9729U;
-    case ModelTextureFilter::nearest_mipmap_nearest:
+    case TextureFilter::nearest_mipmap_nearest:
         return 9984U;
-    case ModelTextureFilter::linear_mipmap_nearest:
+    case TextureFilter::linear_mipmap_nearest:
         return 9985U;
-    case ModelTextureFilter::nearest_mipmap_linear:
+    case TextureFilter::nearest_mipmap_linear:
         return 9986U;
-    case ModelTextureFilter::linear_mipmap_linear:
+    case TextureFilter::linear_mipmap_linear:
         return 9987U;
     }
     ELF3D_ASSERT(false);
     return 9729U;
 }
 
-bool has_nondefault_transform(ModelTextureMapping mapping) noexcept {
+bool has_nondefault_transform(TextureMapping mapping) noexcept {
     return mapping.transform.offset != Float2{} || mapping.transform.scale != Float2{1.0F, 1.0F} ||
            mapping.transform.rotation_radians != 0.0F;
 }
@@ -226,7 +226,7 @@ std::string_view image_mime_text(ModelImageMimeType mime) noexcept {
     return mime == ModelImageMimeType::jpeg ? "image/jpeg" : "image/png";
 }
 
-void append_texture_info(std::string& output, std::uint32_t texture, ModelTextureMapping mapping,
+void append_texture_info(std::string& output, std::uint32_t texture, TextureMapping mapping,
                          std::optional<std::pair<std::string_view, float>> scalar) {
     output.append("{\"index\":");
     append_unsigned(output, texture);

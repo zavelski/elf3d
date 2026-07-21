@@ -24,6 +24,7 @@ enum class SceneLoadDiagnosticCategory {
     camera,
     light,
     animation,
+    metadata,
     scene,
 };
 
@@ -43,6 +44,7 @@ enum class SceneLoadDiagnosticCode {
     skipped_invalid_transform,
     texture_fallback,
     skipped_unsupported_primitive,
+    metadata_not_preserved,
 };
 
 struct SceneLoadDiagnosticView {
@@ -63,10 +65,10 @@ class ELF3D_API SceneLoadReport final {
     SceneLoadReport() noexcept;
     ~SceneLoadReport() noexcept;
 
-    SceneLoadReport(const SceneLoadReport &) = delete;
-    SceneLoadReport &operator=(const SceneLoadReport &) = delete;
-    SceneLoadReport(SceneLoadReport &&) noexcept;
-    SceneLoadReport &operator=(SceneLoadReport &&) noexcept;
+    SceneLoadReport(const SceneLoadReport&) = delete;
+    SceneLoadReport& operator=(const SceneLoadReport&) = delete;
+    SceneLoadReport(SceneLoadReport&&) noexcept;
+    SceneLoadReport& operator=(SceneLoadReport&&) noexcept;
 
     [[nodiscard]] std::size_t diagnostic_count() const noexcept;
     [[nodiscard]] Result<SceneLoadDiagnosticView> diagnostic(std::size_t index) const noexcept;

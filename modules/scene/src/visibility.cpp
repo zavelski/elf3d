@@ -3,13 +3,10 @@ module;
 #include <elf3d/core/assert.h>
 
 #include <algorithm>
-#include <array>
 #include <optional>
 #include <vector>
 
 module elf.scene;
-
-import elf.math;
 
 namespace elf3d::scene {
 
@@ -111,39 +108,7 @@ Storage::visible_world_bounds(const VisibilityFilter& filter) const noexcept {
             !entity_visible_in_filter(*this, filter, record->id)) {
             continue;
         }
-        const Result<Float4x4> world_result = world_matrix(record->id);
-        ELF3D_ASSERT(world_result.has_value());
-        for (std::uint32_t primitive_index = 0; primitive_index < record->model->primitives.size();
-             ++primitive_index) {
-            const Result<RuntimePrimitiveView> primitive =
-                runtime_primitive(record->id, primitive_index);
-            ELF3D_ASSERT(primitive.has_value());
-            const Bounds3& local = primitive.value().bounds;
-            const std::array<Float3, 8> corners{{
-                {local.minimum.x, local.minimum.y, local.minimum.z},
-                {local.maximum.x, local.minimum.y, local.minimum.z},
-                {local.minimum.x, local.maximum.y, local.minimum.z},
-                {local.maximum.x, local.maximum.y, local.minimum.z},
-                {local.minimum.x, local.minimum.y, local.maximum.z},
-                {local.maximum.x, local.minimum.y, local.maximum.z},
-                {local.minimum.x, local.maximum.y, local.maximum.z},
-                {local.maximum.x, local.maximum.y, local.maximum.z},
-            }};
-            for (const Float3 corner : corners) {
-                const Float3 point = math::transform_point(world_result.value(), corner);
-                ELF3D_ASSERT(math::is_finite(point));
-                if (!result.has_value()) {
-                    result = Bounds3{point, point};
-                    continue;
-                }
-                result->minimum.x = std::min(result->minimum.x, point.x);
-                result->minimum.y = std::min(result->minimum.y, point.y);
-                result->minimum.z = std::min(result->minimum.z, point.z);
-                result->maximum.x = std::max(result->maximum.x, point.x);
-                result->maximum.y = std::max(result->maximum.y, point.y);
-                result->maximum.z = std::max(result->maximum.z, point.z);
-            }
-        }
+        expand_world_bounds(result, *record);
     }
     return result;
 }

@@ -29,7 +29,7 @@ void report_load_failure(ViewerState& state, const std::string& path, const elf3
 }
 
 void attempt_model_save(ViewerState& state, ViewerScene& scene, const std::string& target_path) {
-    const elf3d::Result<void> saved = scene.scene->save_model(target_path);
+    const elf3d::Result<void> saved = scene.scene->export_loaded_document(target_path);
     if (!saved) {
         state.save_failure = LoadFailure{target_path, saved.error()};
         state.request_save_error_modal = true;
@@ -391,11 +391,13 @@ void execute_selection_commands(ViewerRuntime& runtime, const ViewerCommands& co
         runtime.viewport->clear_selection();
     }
     if (commands.hide_selected) {
-        apply_hierarchy_error(runtime.state, runtime.viewport->hide_selected(*runtime.scene.scene));
+        apply_hierarchy_error(runtime.state,
+                              runtime.viewport->hide_selected_in_scene(*runtime.scene.scene));
         invalidate_hierarchy_snapshot(runtime.scene);
     }
     if (commands.show_selected) {
-        apply_hierarchy_error(runtime.state, runtime.viewport->show_selected(*runtime.scene.scene));
+        apply_hierarchy_error(runtime.state,
+                              runtime.viewport->show_selected_in_scene(*runtime.scene.scene));
         invalidate_hierarchy_snapshot(runtime.scene);
     }
 }

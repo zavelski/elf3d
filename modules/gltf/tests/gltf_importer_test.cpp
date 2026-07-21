@@ -34,16 +34,10 @@ constexpr std::string_view jpeg_base64 =
     "j/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/"
     "8QAFAEBAAAAAAAAAAAAAAAAAAAABv/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJAB58//2Q==";
 
-[[nodiscard]] std::uint64_t next_suffix() noexcept {
-    static std::uint64_t value = 0;
-    return ++value;
-}
-
 class TemporaryDirectory final {
   public:
     TemporaryDirectory()
-        : path_(std::filesystem::temp_directory_path() /
-                ("elf3d_model_gltf_import_" + std::to_string(next_suffix()))) {
+        : path_(std::filesystem::temp_directory_path() / "elf3d_model_gltf_import_test") {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
         std::filesystem::create_directories(path_);
@@ -232,7 +226,7 @@ supported_resource_statistics_match(const elf3d::DocumentStatistics& statistics)
 
 [[nodiscard]] bool supported_material_matches(const elf3d::Document& document) {
     const auto material = document.material_at(0U);
-    return material && material.value().description.alpha_mode == elf3d::ModelAlphaMode::mask &&
+    return material && material.value().description.alpha_mode == elf3d::AlphaMode::mask &&
            material.value().description.unlit &&
            nearly_equal(material.value().description.ior, 1.33F) &&
            nearly_equal(material.value().description.emissive_strength, 2.0F) &&
@@ -247,8 +241,8 @@ supported_resource_statistics_match(const elf3d::DocumentStatistics& statistics)
     return image && sampler && camera_node &&
            image.value().source_mime_type == elf3d::ModelImageMimeType::png &&
            same_bytes(image.value().source_bytes, std::as_bytes(std::span{asymmetric_png})) &&
-           sampler.value().description.wrap_u == elf3d::ModelTextureWrap::clamp_to_edge &&
-           sampler.value().description.wrap_v == elf3d::ModelTextureWrap::mirrored_repeat &&
+           sampler.value().description.wrap_u == elf3d::TextureWrap::clamp_to_edge &&
+           sampler.value().description.wrap_v == elf3d::TextureWrap::mirrored_repeat &&
            camera_node.value().perspective_camera.has_value();
 }
 

@@ -3,6 +3,7 @@
 
 #include <elf3d/assets.h>
 #include <elf3d/core/error.h>
+#include <elf3d/graphics.h>
 
 #include <cstdint>
 #include <optional>
@@ -30,11 +31,6 @@ enum class LengthDisplayUnit {
     inches,
 };
 
-enum class OverlayDepthMode {
-    depth_tested,
-    always_visible,
-};
-
 struct MeasurementPoint {
     EntityId entity;
     MeshHandle mesh;
@@ -47,7 +43,7 @@ struct MeasurementPoint {
     Float3 world_position;
     Float3 world_normal;
 
-    bool operator==(const MeasurementPoint &) const = default;
+    bool operator==(const MeasurementPoint&) const = default;
 };
 
 struct DistanceMeasurementSettings {
@@ -61,7 +57,7 @@ struct DistanceMeasurementSettings {
     OverlayDepthMode depth_mode = OverlayDepthMode::always_visible;
     LengthDisplayUnit display_unit = LengthDisplayUnit::automatic_metric;
 
-    bool operator==(const DistanceMeasurementSettings &) const = default;
+    bool operator==(const DistanceMeasurementSettings&) const = default;
 };
 
 struct DistanceMeasurementSnapshot {
@@ -88,22 +84,7 @@ struct MeasurementStatistics {
     std::uint64_t overlay_lines = 0;
     std::uint64_t overlay_markers = 0;
 
-    bool operator==(const MeasurementStatistics &) const = default;
-};
-
-struct OverlayLineSegment {
-    Float3 start_world;
-    Float3 end_world;
-    Color4 color{1.0F, 1.0F, 1.0F, 1.0F};
-    float thickness_pixels = 1.0F;
-    OverlayDepthMode depth_mode = OverlayDepthMode::always_visible;
-};
-
-struct OverlayPointMarker {
-    Float3 position_world;
-    Color4 color{1.0F, 1.0F, 1.0F, 1.0F};
-    float radius_pixels = 4.0F;
-    OverlayDepthMode depth_mode = OverlayDepthMode::always_visible;
+    bool operator==(const MeasurementStatistics&) const = default;
 };
 
 struct ProjectedViewportPoint {
@@ -113,7 +94,7 @@ struct ProjectedViewportPoint {
     bool is_in_front = false;
     bool is_inside_viewport = false;
 
-    bool operator==(const ProjectedViewportPoint &) const = default;
+    bool operator==(const ProjectedViewportPoint&) const = default;
 };
 
 } // namespace elf3d

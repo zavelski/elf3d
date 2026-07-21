@@ -3,9 +3,10 @@ module;
 #include <elf3d/clipping.h>
 #include <elf3d/core/assert.h>
 #include <elf3d/core/result.h>
-#include <elf3d/math/detail/glm_helpers.h>
 #include <elf3d/picking.h>
 #include <elf3d/scene.h>
+
+#include "geometry_detail.h"
 
 #include <algorithm>
 #include <array>
@@ -21,37 +22,21 @@ import elf.math;
 import elf.scene;
 
 namespace elf3d::picking {
+using geometry_detail::Double3;
+
 namespace {
 
 constexpr double ray_epsilon = 1.0e-9;
 constexpr double triangle_epsilon = 1.0e-8;
 
 struct BoundsD {
-    glm::dvec3 minimum;
-    glm::dvec3 maximum;
+    Double3 minimum;
+    Double3 maximum;
 };
 
 } // namespace
 
 namespace geometry_detail {
-
-bool finite(double value) noexcept {
-    return std::isfinite(value);
-}
-
-bool finite_vec3(const glm::dvec3& value) noexcept {
-    return finite(value.x) && finite(value.y) && finite(value.z);
-}
-
-glm::dvec3 to_dvec3(Float3 value) noexcept {
-    return glm::dvec3{static_cast<double>(value.x), static_cast<double>(value.y),
-                      static_cast<double>(value.z)};
-}
-
-Float3 to_float3_checked(const glm::dvec3& value) noexcept {
-    return Float3{static_cast<float>(value.x), static_cast<float>(value.y),
-                  static_cast<float>(value.z)};
-}
 
 bool finite_float3(Float3 value) noexcept {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
@@ -65,17 +50,17 @@ bool valid_bounds(Bounds3 bounds) noexcept {
 
 [[nodiscard]] BoundsD to_bounds_d(Bounds3 bounds) noexcept {
     ELF3D_ASSERT(valid_bounds(bounds));
-    return BoundsD{to_dvec3(bounds.minimum), to_dvec3(bounds.maximum)};
+    return BoundsD{to_double3(bounds.minimum), to_double3(bounds.maximum)};
 }
 
-void expand(std::optional<BoundsD>& bounds, const glm::dvec3& point) noexcept {
-    ELF3D_ASSERT(finite_vec3(point));
+void expand(std::optional<BoundsD>& bounds, const Double3& point) noexcept {
+    ELF3D_ASSERT(finite_double3(point));
     if (!bounds.has_value()) {
         bounds = BoundsD{point, point};
         return;
     }
-    bounds->minimum = glm::min(bounds->minimum, point);
-    bounds->maximum = glm::max(bounds->maximum, point);
+    bounds->minimum = component_min(bounds->minimum, point);
+    bounds->maximum = component_max(bounds->maximum, point);
 }
 
 void expand(std::optional<BoundsD>& bounds, Bounds3 other) noexcept {
@@ -85,26 +70,27 @@ void expand(std::optional<BoundsD>& bounds, Bounds3 other) noexcept {
 }
 
 [[nodiscard]] Bounds3 to_bounds3(const BoundsD& bounds) noexcept {
-    ELF3D_ASSERT(finite_vec3(bounds.minimum) && finite_vec3(bounds.maximum));
+    ELF3D_ASSERT(finite_double3(bounds.minimum) && finite_double3(bounds.maximum));
     return Bounds3{to_float3_checked(bounds.minimum), to_float3_checked(bounds.maximum)};
 }
 
 Bounds3 triangle_bounds(Float3 a, Float3 b, Float3 c) noexcept {
     std::optional<BoundsD> bounds;
-    expand(bounds, to_dvec3(a));
-    expand(bounds, to_dvec3(b));
-    expand(bounds, to_dvec3(c));
+    expand(bounds, to_double3(a));
+    expand(bounds, to_double3(b));
+    expand(bounds, to_double3(c));
     ELF3D_ASSERT(bounds.has_value());
     return to_bounds3(*bounds);
 }
 
 Float3 triangle_centroid(Float3 a, Float3 b, Float3 c) noexcept {
-    const glm::dvec3 centroid = (to_dvec3(a) + to_dvec3(b) + to_dvec3(c)) / 3.0;
+    const Double3 centroid =
+        scale(add(add(to_double3(a), to_double3(b)), to_double3(c)), 1.0 / 3.0);
     return to_float3_checked(centroid);
 }
 
 Bounds3 bounds_around_point(Float3 point) noexcept {
-    const glm::dvec3 converted = to_dvec3(point);
+    const Double3 converted = to_double3(point);
     return to_bounds3(BoundsD{converted, converted});
 }
 
@@ -119,7 +105,7 @@ Bounds3 merge_bounds(Bounds3 bounds, Bounds3 other) noexcept {
 Bounds3 merge_bounds(Bounds3 bounds, Float3 point) noexcept {
     std::optional<BoundsD> merged;
     expand(merged, bounds);
-    expand(merged, to_dvec3(point));
+    expand(merged, to_double3(point));
     ELF3D_ASSERT(merged.has_value());
     return to_bounds3(*merged);
 }
@@ -146,18 +132,16 @@ int longest_axis(Bounds3 bounds) noexcept {
     return 2;
 }
 
-bool finite_matrix(const math::Matrix4& matrix) noexcept {
-    for (int column = 0; column < 4; ++column) {
-        for (int row = 0; row < 4; ++row) {
-            if (!std::isfinite(matrix[column][row])) {
-                return false;
-            }
+bool finite_matrix(const Float4x4& matrix) noexcept {
+    for (const float value : matrix.elements) {
+        if (!std::isfinite(value)) {
+            return false;
         }
     }
     return true;
 }
 
-Bounds3 transform_bounds(Bounds3 local_bounds, const math::Matrix4& world) noexcept {
+Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4& world) noexcept {
     ELF3D_ASSERT(valid_bounds(local_bounds) && finite_matrix(world));
     const std::array<Float3, 8> corners{{
         {local_bounds.minimum.x, local_bounds.minimum.y, local_bounds.minimum.z},
@@ -171,28 +155,22 @@ Bounds3 transform_bounds(Bounds3 local_bounds, const math::Matrix4& world) noexc
     }};
     std::optional<BoundsD> result;
     for (const Float3 corner : corners) {
-        const math::Vector4 transformed = world * math::Vector4{corner.x, corner.y, corner.z, 1.0F};
-        expand(result, glm::dvec3{transformed.x, transformed.y, transformed.z});
+        expand(result, to_double3(math::transform_point(world, corner)));
     }
     ELF3D_ASSERT(result.has_value());
     return to_bounds3(*result);
 }
 
-Result<Ray3> transform_ray_to_local(const Ray3& world_ray, const math::Matrix4& inverse_world) {
-    const math::Vector4 origin =
-        inverse_world *
-        math::Vector4{world_ray.origin.x, world_ray.origin.y, world_ray.origin.z, 1.0F};
-    const math::Vector4 direction =
-        inverse_world *
-        math::Vector4{world_ray.direction.x, world_ray.direction.y, world_ray.direction.z, 0.0F};
-    const math::Vector3 local_direction{direction.x, direction.y, direction.z};
-    const float length = glm::length(local_direction);
-    if (!std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z) ||
-        !std::isfinite(length) || length <= static_cast<float>(ray_epsilon)) {
+Result<Ray3> transform_ray_to_local(const Ray3& world_ray, const Float4x4& inverse_world) {
+    const Float3 origin = math::transform_point(inverse_world, world_ray.origin);
+    const Float3 local_direction = math::transform_direction(inverse_world, world_ray.direction);
+    const float length = math::vector_length(local_direction);
+    if (!math::is_finite(origin) || !std::isfinite(length) ||
+        length <= static_cast<float>(ray_epsilon)) {
         return Error{ErrorCode::invalid_picking_ray,
                      "The model transform produced an invalid local picking ray"};
     }
-    return Ray3{Float3{origin.x, origin.y, origin.z}, math::to_float3(local_direction / length)};
+    return Ray3{origin, math::scale(local_direction, 1.0F / length)};
 }
 
 [[nodiscard]] bool valid_hit_identity_and_position(const PickHit& hit) noexcept {
@@ -220,12 +198,12 @@ bool validate_pick_hit(const PickHit& hit) noexcept {
            valid_hit_barycentric(hit);
 }
 
-Result<math::Matrix4> world_matrix(const scene::Storage& scene, EntityId entity) noexcept {
+Result<Float4x4> world_matrix(const scene::Storage& scene, EntityId entity) noexcept {
     const Result<Float4x4> world = scene.world_matrix(entity);
     if (!world) {
         return world.error();
     }
-    return math::to_matrix(world.value());
+    return world.value();
 }
 
 Result<void> validate_refinement_request(const Ray3& ray, const PickCandidate& candidate) noexcept {
@@ -266,19 +244,19 @@ refinement_primitive(const scene::Storage& scene, const scene::VisibilityFilter&
     return std::optional{primitive.value()};
 }
 
-Result<std::optional<std::pair<math::Matrix4, Ray3>>>
+Result<std::optional<std::pair<Float4x4, Ray3>>>
 refinement_transform(const scene::Storage& scene, EntityId entity, const Ray3& world_ray) {
-    const Result<math::Matrix4> world = world_matrix(scene, entity);
+    const Result<Float4x4> world = world_matrix(scene, entity);
     if (!world || !finite_matrix(world.value())) {
-        return std::optional<std::pair<math::Matrix4, Ray3>>{};
+        return std::optional<std::pair<Float4x4, Ray3>>{};
     }
-    const float determinant = glm::determinant(math::Matrix3{world.value()});
-    if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001F) {
-        return std::optional<std::pair<math::Matrix4, Ray3>>{};
+    const Result<Float4x4> inverse_world = math::inverse_affine_matrix(world.value());
+    if (!inverse_world) {
+        return std::optional<std::pair<Float4x4, Ray3>>{};
     }
-    const Result<Ray3> local_ray = transform_ray_to_local(world_ray, glm::inverse(world.value()));
+    const Result<Ray3> local_ray = transform_ray_to_local(world_ray, inverse_world.value());
     if (!local_ray) {
-        return std::optional<std::pair<math::Matrix4, Ray3>>{};
+        return std::optional<std::pair<Float4x4, Ray3>>{};
     }
     return std::optional{std::pair{world.value(), local_ray.value()}};
 }
@@ -330,7 +308,7 @@ bool accept_refined_position(const clipping::ClippingFilter& filter, Float3 worl
 
 struct PickingCameraFrame final {
     PerspectiveCameraDescription description;
-    math::Matrix4 world;
+    Float4x4 world;
     float aspect = 1.0F;
     float ndc_x = 0.0F;
     float ndc_y = 0.0F;
@@ -352,7 +330,7 @@ struct PickingCameraFrame final {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Picking requires a valid perspective camera configuration"};
     }
-    const Result<math::Matrix4> camera_world = world_matrix(scene, camera);
+    const Result<Float4x4> camera_world = world_matrix(scene, camera);
     if (!camera_world) {
         return camera_world.error();
     }
@@ -369,31 +347,31 @@ struct PickingCameraFrame final {
 }
 
 struct CameraBasis final {
-    glm::dvec3 origin;
-    math::Vector3 right;
-    math::Vector3 up;
-    math::Vector3 backward;
+    Double3 origin;
+    Float3 right;
+    Float3 up;
+    Float3 backward;
 };
 
-[[nodiscard]] Result<CameraBasis> camera_basis(const math::Matrix4& camera_world) {
-    const glm::dvec3 origin{camera_world[3].x, camera_world[3].y, camera_world[3].z};
-    math::Vector3 right{camera_world[0]};
-    math::Vector3 up{camera_world[1]};
-    const float right_length = glm::length(right);
+[[nodiscard]] Result<CameraBasis> camera_basis(const Float4x4& camera_world) {
+    const Double3 origin = to_double3(math::matrix_column(camera_world, 3));
+    Float3 right = math::matrix_column(camera_world, 0);
+    Float3 up = math::matrix_column(camera_world, 1);
+    const float right_length = math::vector_length(right);
     if (!std::isfinite(right_length) || right_length <= static_cast<float>(ray_epsilon)) {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Picking requires a non-degenerate camera right axis"};
     }
-    right /= right_length;
-    up -= right * glm::dot(right, up);
-    const float up_length = glm::length(up);
+    right = math::scale(right, 1.0F / right_length);
+    up = math::subtract(up, math::scale(right, math::dot(right, up)));
+    const float up_length = math::vector_length(up);
     if (!std::isfinite(up_length) || up_length <= static_cast<float>(ray_epsilon)) {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Picking requires a non-degenerate camera up axis"};
     }
-    up /= up_length;
-    const math::Vector3 backward = glm::normalize(glm::cross(right, up));
-    if (!finite_vec3(origin) || !std::isfinite(glm::length(backward))) {
+    up = math::scale(up, 1.0F / up_length);
+    const Float3 backward = math::normalized(math::cross(right, up));
+    if (!finite_double3(origin) || !std::isfinite(math::vector_length(backward))) {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Picking requires a finite camera basis"};
     }
@@ -406,17 +384,18 @@ struct CameraBasis final {
         return basis.error();
     }
     const float tan_half_fov = std::tan(frame.description.vertical_field_of_view_radians * 0.5F);
-    const math::Vector3 world_direction =
-        basis.value().right * (frame.ndc_x * frame.aspect * tan_half_fov) +
-        basis.value().up * (frame.ndc_y * tan_half_fov) - basis.value().backward;
-    const float direction_length = glm::length(world_direction);
+    const Float3 world_direction = math::subtract(
+        math::add(math::scale(basis.value().right, frame.ndc_x * frame.aspect * tan_half_fov),
+                  math::scale(basis.value().up, frame.ndc_y * tan_half_fov)),
+        basis.value().backward);
+    const float direction_length = math::vector_length(world_direction);
     if (!std::isfinite(direction_length) || direction_length <= static_cast<float>(ray_epsilon)) {
         return Error{ErrorCode::invalid_picking_ray,
                      "Picking ray construction produced an invalid direction"};
     }
 
-    const math::Vector3 direction = world_direction / direction_length;
-    const Ray3 ray{to_float3_checked(basis.value().origin), math::to_float3(direction)};
+    const Float3 direction = math::scale(world_direction, 1.0F / direction_length);
+    const Ray3 ray{to_float3_checked(basis.value().origin), direction};
     if (!is_valid_ray(ray)) {
         return Error{ErrorCode::invalid_picking_ray,
                      "Picking ray construction produced non-finite values"};
@@ -458,12 +437,12 @@ struct RayInterval final {
 }
 
 struct TriangleFrame final {
-    glm::dvec3 origin;
-    glm::dvec3 direction;
-    glm::dvec3 vertex;
-    glm::dvec3 edge1;
-    glm::dvec3 edge2;
-    glm::dvec3 normal;
+    Double3 origin;
+    Double3 direction;
+    Double3 vertex;
+    Double3 edge1;
+    Double3 edge2;
+    Double3 normal;
     double normal_length = 0.0;
 };
 
@@ -473,16 +452,16 @@ struct TriangleFrame final {
         !geometry_detail::finite_float3(b) || !geometry_detail::finite_float3(c)) {
         return std::nullopt;
     }
-    const glm::dvec3 vertex = geometry_detail::to_dvec3(a);
-    const glm::dvec3 edge1 = geometry_detail::to_dvec3(b) - vertex;
-    const glm::dvec3 edge2 = geometry_detail::to_dvec3(c) - vertex;
-    const glm::dvec3 normal = glm::cross(edge1, edge2);
-    const double normal_length = glm::length(normal);
-    if (!geometry_detail::finite(normal_length) || normal_length <= triangle_epsilon) {
+    const Double3 vertex = geometry_detail::to_double3(a);
+    const Double3 edge1 = geometry_detail::subtract(geometry_detail::to_double3(b), vertex);
+    const Double3 edge2 = geometry_detail::subtract(geometry_detail::to_double3(c), vertex);
+    const Double3 normal = geometry_detail::cross(edge1, edge2);
+    const double normal_length = geometry_detail::length(normal);
+    if (!std::isfinite(normal_length) || normal_length <= triangle_epsilon) {
         return std::nullopt;
     }
-    return TriangleFrame{geometry_detail::to_dvec3(ray.origin),
-                         geometry_detail::to_dvec3(ray.direction),
+    return TriangleFrame{geometry_detail::to_double3(ray.origin),
+                         geometry_detail::to_double3(ray.direction),
                          vertex,
                          edge1,
                          edge2,
@@ -492,7 +471,8 @@ struct TriangleFrame final {
 
 [[nodiscard]] std::optional<double> triangle_determinant(const TriangleFrame& frame,
                                                          bool cull_back_face) noexcept {
-    const double determinant = glm::dot(frame.edge1, glm::cross(frame.direction, frame.edge2));
+    const double determinant =
+        geometry_detail::dot(frame.edge1, geometry_detail::cross(frame.direction, frame.edge2));
     if (cull_back_face) {
         return determinant > triangle_epsilon ? std::optional{determinant} : std::nullopt;
     }
@@ -514,20 +494,21 @@ struct TriangleCoordinates final {
 [[nodiscard]] std::optional<TriangleCoordinates> triangle_coordinates(const TriangleFrame& frame,
                                                                       double determinant) noexcept {
     const double inverse_determinant = 1.0 / determinant;
-    const glm::dvec3 offset = frame.origin - frame.vertex;
-    const glm::dvec3 cross_offset = glm::cross(offset, frame.edge1);
+    const Double3 offset = geometry_detail::subtract(frame.origin, frame.vertex);
+    const Double3 cross_offset = geometry_detail::cross(offset, frame.edge1);
     const double u =
-        inverse_determinant * glm::dot(offset, glm::cross(frame.direction, frame.edge2));
-    const double v = inverse_determinant * glm::dot(frame.direction, cross_offset);
+        inverse_determinant *
+        geometry_detail::dot(offset, geometry_detail::cross(frame.direction, frame.edge2));
+    const double v = inverse_determinant * geometry_detail::dot(frame.direction, cross_offset);
     if (!inside_barycentric_triangle(u, v)) {
         return std::nullopt;
     }
-    const double distance = inverse_determinant * glm::dot(frame.edge2, cross_offset);
-    if (distance < 0.0 || !geometry_detail::finite(distance)) {
+    const double distance = inverse_determinant * geometry_detail::dot(frame.edge2, cross_offset);
+    if (distance < 0.0 || !std::isfinite(distance)) {
         return std::nullopt;
     }
     const double w = 1.0 - u - v;
-    if (!geometry_detail::finite(u) || !geometry_detail::finite(v) || !geometry_detail::finite(w)) {
+    if (!std::isfinite(u) || !std::isfinite(v) || !std::isfinite(w)) {
         return std::nullopt;
     }
     return TriangleCoordinates{w, u, v, distance};
@@ -551,8 +532,8 @@ bool intersect_ray_bounds(const Ray3& ray, Bounds3 bounds, RayBoundsHit& hit) no
         return false;
     }
 
-    const glm::dvec3 origin = geometry_detail::to_dvec3(ray.origin);
-    const glm::dvec3 direction = geometry_detail::to_dvec3(ray.direction);
+    const Double3 origin = geometry_detail::to_double3(ray.origin);
+    const Double3 direction = geometry_detail::to_double3(ray.direction);
     const BoundsD box = geometry_detail::to_bounds_d(bounds);
     RayInterval interval;
 
@@ -563,8 +544,7 @@ bool intersect_ray_bounds(const Ray3& ray, Bounds3 bounds, RayBoundsHit& hit) no
         }
     }
 
-    if (interval.exit < 0.0 || !geometry_detail::finite(interval.entry) ||
-        !geometry_detail::finite(interval.exit)) {
+    if (interval.exit < 0.0 || !std::isfinite(interval.entry) || !std::isfinite(interval.exit)) {
         return false;
     }
     hit.entry_distance = static_cast<float>(std::max(interval.entry, 0.0));
@@ -587,7 +567,8 @@ std::optional<TriangleHit> intersect_ray_triangle(const Ray3& ray, Float3 a, Flo
     if (!coordinates.has_value()) {
         return std::nullopt;
     }
-    const glm::dvec3 normalized_normal = frame->normal / frame->normal_length;
+    const Double3 normalized_normal =
+        geometry_detail::scale(frame->normal, 1.0 / frame->normal_length);
     return TriangleHit{static_cast<float>(coordinates->distance), 0,
                        Float3{static_cast<float>(coordinates->w),
                               static_cast<float>(coordinates->u),

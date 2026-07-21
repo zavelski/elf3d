@@ -16,10 +16,10 @@ namespace elf3d {
 
 namespace {
 
-std::vector<EntityId> collect_hierarchy_roots(const scene::Storage &storage) {
+std::vector<EntityId> collect_hierarchy_roots(const scene::Storage& storage) {
     std::vector<EntityId> roots;
     roots.reserve(storage.entities().size());
-    for (const std::optional<scene::EntityRecord> &record : storage.entities()) {
+    for (const std::optional<scene::EntityRecord>& record : storage.entities()) {
         if (record.has_value() && !record->parent.has_value()) {
             roots.push_back(record->id);
         }
@@ -43,15 +43,15 @@ SceneHierarchySnapshot::SceneHierarchySnapshot(std::unique_ptr<Impl> impl) noexc
     : impl_(std::move(impl)) {}
 
 SceneHierarchySnapshot::~SceneHierarchySnapshot() noexcept = default;
-SceneHierarchySnapshot::SceneHierarchySnapshot(SceneHierarchySnapshot &&) noexcept = default;
-SceneHierarchySnapshot &
-SceneHierarchySnapshot::operator=(SceneHierarchySnapshot &&) noexcept = default;
+SceneHierarchySnapshot::SceneHierarchySnapshot(SceneHierarchySnapshot&&) noexcept = default;
+SceneHierarchySnapshot&
+SceneHierarchySnapshot::operator=(SceneHierarchySnapshot&&) noexcept = default;
 
 std::size_t SceneHierarchySnapshot::size() const noexcept {
     return impl_ != nullptr ? impl_->items.size() : 0;
 }
 
-Result<SceneHierarchyItem> SceneHierarchySnapshot::item(std::size_t index) const noexcept {
+Result<SceneHierarchyItem> SceneHierarchySnapshot::item_at(std::size_t index) const noexcept {
     if (impl_ == nullptr || index >= impl_->items.size()) {
         return Error{ErrorCode::invalid_hierarchy_snapshot_index,
                      "The hierarchy snapshot item index is out of range"};
@@ -59,7 +59,7 @@ Result<SceneHierarchyItem> SceneHierarchySnapshot::item(std::size_t index) const
     return impl_->items[index];
 }
 
-Result<std::string_view> SceneHierarchySnapshot::name(std::size_t index) const noexcept {
+Result<std::string_view> SceneHierarchySnapshot::name_at(std::size_t index) const noexcept {
     if (impl_ == nullptr || index >= impl_->names.size()) {
         return Error{ErrorCode::invalid_hierarchy_snapshot_index,
                      "The hierarchy snapshot name index is out of range"};
@@ -78,12 +78,11 @@ std::uint64_t SceneHierarchySnapshot::visibility_revision() const noexcept {
 Scene::ReleaseContext::ReleaseContext(std::uintptr_t context, ReleaseCallback callback) noexcept
     : context_(context), callback_(callback) {}
 
-Scene::ReleaseContext::ReleaseContext(ReleaseContext &&other) noexcept
+Scene::ReleaseContext::ReleaseContext(ReleaseContext&& other) noexcept
     : context_(std::exchange(other.context_, 0)),
       callback_(std::exchange(other.callback_, nullptr)) {}
 
-Scene::ReleaseContext &
-Scene::ReleaseContext::operator=(ReleaseContext &&other) noexcept {
+Scene::ReleaseContext& Scene::ReleaseContext::operator=(ReleaseContext&& other) noexcept {
     if (this != &other) {
         context_ = std::exchange(other.context_, 0);
         callback_ = std::exchange(other.callback_, nullptr);
@@ -111,9 +110,8 @@ class Scene::Impl final {
     ReleaseContext release_context;
 };
 
-Result<std::unique_ptr<Scene>> Scene::create(std::uintptr_t engine_token, std::uint64_t scene_value,
-                                             ReleaseContext release_context)
-    noexcept {
+Result<std::unique_ptr<Scene>> Scene::create(std::uint64_t engine_token, std::uint64_t scene_value,
+                                             ReleaseContext release_context) noexcept {
     if (engine_token == 0 || scene_value == 0) {
         return Error{ErrorCode::invalid_argument,
                      "Scene creation requires a valid engine identity"};
@@ -151,7 +149,7 @@ Result<void> Scene::clear_parent(EntityId entity) noexcept {
                             : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
-Result<void> Scene::set_local_transform(EntityId entity, const Transform &transform) noexcept {
+Result<void> Scene::set_local_transform(EntityId entity, const Transform& transform) noexcept {
     return impl_ != nullptr ? impl_->storage.set_local_transform(entity, transform)
                             : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
@@ -162,7 +160,7 @@ Result<Transform> Scene::local_transform(EntityId entity) const noexcept {
                : Result<Transform>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
-Result<void> Scene::set_local_matrix(EntityId entity, const Float4x4 &matrix) noexcept {
+Result<void> Scene::set_local_matrix(EntityId entity, const Float4x4& matrix) noexcept {
     return impl_ != nullptr ? impl_->storage.set_local_matrix(entity, matrix)
                             : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
@@ -221,7 +219,7 @@ Result<SceneHierarchySnapshot> Scene::hierarchy_snapshot() const noexcept {
         }
         const Frame frame = stack.back();
         stack.pop_back();
-        const Result<const scene::EntityRecord *> record = impl_->storage.entity(frame.entity);
+        const Result<const scene::EntityRecord*> record = impl_->storage.entity(frame.entity);
         if (!record) {
             return record.error();
         }
@@ -232,15 +230,14 @@ Result<SceneHierarchySnapshot> Scene::hierarchy_snapshot() const noexcept {
         }
         visited.push_back(debug_value);
 
-        const scene::EntityRecord &entity_record = *record.value();
+        const scene::EntityRecord& entity_record = *record.value();
         SceneHierarchyItem item;
         item.entity = entity_record.id;
         item.parent = entity_record.parent;
         item.depth = frame.depth;
-        item.child_count = static_cast<std::uint32_t>(
-            std::min<std::size_t>(entity_record.children.size(),
-                                  static_cast<std::size_t>(
-                                      std::numeric_limits<std::uint32_t>::max())));
+        item.child_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+            entity_record.children.size(),
+            static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
         item.has_model = entity_record.model.has_value();
         item.has_camera = entity_record.camera.has_value();
         item.local_visible = entity_record.local_visible;
@@ -266,13 +263,13 @@ std::uint64_t Scene::hierarchy_revision() const noexcept {
     return impl_ != nullptr ? impl_->storage.hierarchy_revision() : 0;
 }
 
-Result<MeshHandle> Scene::create_mesh(const MeshDataView &data) noexcept {
+Result<MeshHandle> Scene::create_mesh(const MeshDataView& data) noexcept {
     return impl_ != nullptr
                ? impl_->storage.create_mesh(data)
                : Result<MeshHandle>{Error{ErrorCode::invalid_mesh_handle, "The scene is empty"}};
 }
 
-Result<MeshHandle> Scene::create_mesh(const TexturedMeshDataView &data) noexcept {
+Result<MeshHandle> Scene::create_mesh(const TexturedMeshDataView& data) noexcept {
     return impl_ != nullptr
                ? impl_->storage.create_mesh(data)
                : Result<MeshHandle>{Error{ErrorCode::invalid_mesh_handle, "The scene is empty"}};
@@ -284,93 +281,93 @@ Result<Bounds3> Scene::mesh_bounds(MeshHandle mesh) const noexcept {
                : Result<Bounds3>{Error{ErrorCode::invalid_mesh_handle, "The scene is empty"}};
 }
 
-Result<ImageHandle> Scene::create_image(const ImageDescription &description) noexcept {
+Result<ImageHandle> Scene::create_image(const ImageDescription& description) noexcept {
     return impl_ != nullptr
                ? impl_->storage.create_image(description)
                : Result<ImageHandle>{Error{ErrorCode::invalid_image_handle, "The scene is empty"}};
 }
 
-Result<TextureAssetHandle> Scene::create_texture(const TextureDescription &description) noexcept {
+Result<TextureAssetHandle> Scene::create_texture(const TextureDescription& description) noexcept {
     return impl_ != nullptr ? impl_->storage.create_texture(description)
                             : Result<TextureAssetHandle>{Error{
                                   ErrorCode::invalid_texture_asset_handle, "The scene is empty"}};
 }
 
-Result<MaterialHandle> Scene::create_material(const MaterialDescription &description) noexcept {
+Result<MaterialHandle> Scene::create_material(const MaterialDescription& description) noexcept {
     return impl_ != nullptr ? impl_->storage.create_material(description)
                             : Result<MaterialHandle>{
                                   Error{ErrorCode::invalid_material_handle, "The scene is empty"}};
 }
 
-Result<void> Scene::set_material(MaterialHandle material, const MaterialDescription &description) noexcept {
+Result<void> Scene::set_material_description(MaterialHandle material,
+                                             const MaterialDescription& description) noexcept {
     return impl_ != nullptr
                ? impl_->storage.set_material(material, description)
                : Result<void>{Error{ErrorCode::invalid_material_handle, "The scene is empty"}};
 }
 
-Result<MaterialDescription> Scene::material(MaterialHandle material) const noexcept {
+Result<MaterialDescription> Scene::material_description(MaterialHandle material) const noexcept {
     return impl_ != nullptr ? impl_->storage.material(material)
                             : Result<MaterialDescription>{
                                   Error{ErrorCode::invalid_material_handle, "The scene is empty"}};
 }
 
-Result<EntityId> Scene::create_model(MeshHandle mesh, MaterialHandle material) noexcept {
+Result<EntityId> Scene::create_model_entity(MeshHandle mesh, MaterialHandle material) noexcept {
     return impl_ != nullptr
                ? impl_->storage.create_model(mesh, material)
                : Result<EntityId>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
-Result<void> Scene::set_model_primitives(EntityId entity,
-                                         std::span<const ModelPrimitiveBinding> primitives) noexcept {
-    return impl_ != nullptr ? impl_->storage.set_model_primitives(entity, primitives)
+Result<void>
+Scene::set_model_primitives(EntityId model_entity,
+                            std::span<const ModelPrimitiveBinding> primitives) noexcept {
+    return impl_ != nullptr ? impl_->storage.set_model_primitives(model_entity, primitives)
                             : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
-Result<EntityId> Scene::create_perspective_camera(const PerspectiveCameraDescription &description) noexcept {
+Result<EntityId>
+Scene::create_perspective_camera_entity(const PerspectiveCameraDescription& description) noexcept {
     return impl_ != nullptr
                ? impl_->storage.create_perspective_camera(description)
                : Result<EntityId>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
-Result<PerspectiveCameraDescription> Scene::perspective_camera(EntityId entity) const noexcept {
-    return impl_ != nullptr ? impl_->storage.perspective_camera(entity)
+Result<PerspectiveCameraDescription>
+Scene::perspective_camera_description(EntityId camera_entity) const noexcept {
+    return impl_ != nullptr ? impl_->storage.perspective_camera(camera_entity)
                             : Result<PerspectiveCameraDescription>{
                                   Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
-Result<void> Scene::set_perspective_camera(EntityId entity,
-                                           const PerspectiveCameraDescription &description) noexcept {
-    return impl_ != nullptr ? impl_->storage.set_perspective_camera(entity, description)
+Result<void> Scene::set_perspective_camera_description(
+    EntityId camera_entity, const PerspectiveCameraDescription& description) noexcept {
+    return impl_ != nullptr ? impl_->storage.set_perspective_camera(camera_entity, description)
                             : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
-Result<void> Scene::set_entity_visible(EntityId entity, bool visible) noexcept {
+Result<void> Scene::set_entity_local_visibility(EntityId entity, bool visible) noexcept {
     return impl_ != nullptr ? impl_->storage.set_entity_visible(entity, visible)
                             : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
 Result<bool> Scene::entity_local_visibility(EntityId entity) const noexcept {
-    return impl_ != nullptr
-               ? impl_->storage.entity_local_visibility(entity)
-               : Result<bool>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
+    return impl_ != nullptr ? impl_->storage.entity_local_visibility(entity)
+                            : Result<bool>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
 Result<bool> Scene::entity_effective_visibility(EntityId entity) const noexcept {
-    return impl_ != nullptr
-               ? impl_->storage.entity_effective_visibility(entity)
-               : Result<bool>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
+    return impl_ != nullptr ? impl_->storage.entity_effective_visibility(entity)
+                            : Result<bool>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
 Result<void> Scene::show_entity_and_ancestors(EntityId entity) noexcept {
-    return impl_ != nullptr
-               ? impl_->storage.show_entity_and_ancestors(entity)
-               : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
+    return impl_ != nullptr ? impl_->storage.show_entity_and_ancestors(entity)
+                            : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
 Result<void> Scene::show_all_entities() noexcept {
-    return impl_ != nullptr
-               ? impl_->storage.show_all_entities()
-               : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
+    return impl_ != nullptr ? impl_->storage.show_all_entities()
+                            : Result<void>{Error{ErrorCode::invalid_entity, "The scene is empty"}};
 }
 
 std::uint64_t Scene::visibility_revision() const noexcept {
@@ -394,10 +391,10 @@ SceneStatistics Scene::statistics() const noexcept {
     return impl_ != nullptr ? impl_->storage.statistics() : SceneStatistics{};
 }
 
-Result<void> Scene::save_model(std::string_view path_utf8) const noexcept {
+Result<void> Scene::export_loaded_document(std::string_view path_utf8) const noexcept {
     if (impl_ == nullptr || !impl_->storage.has_document()) {
         return Error{ErrorCode::invalid_argument,
-                     "Only a scene loaded from a model document can be saved"};
+                     "Only a scene loaded from a model document can export its loaded document"};
     }
     const Result<ModelWriteReport> saved = save_document(path_utf8, impl_->storage.document());
     if (!saved) {
@@ -406,11 +403,11 @@ Result<void> Scene::save_model(std::string_view path_utf8) const noexcept {
     return {};
 }
 
-const scene::Storage *scene::Access::storage(const Scene &scene) noexcept {
+const scene::Storage* scene::Access::storage(const Scene& scene) noexcept {
     return scene.impl_ != nullptr ? &scene.impl_->storage : nullptr;
 }
 
-scene::Storage *scene::Access::storage(Scene &scene) noexcept {
+scene::Storage* scene::Access::storage(Scene& scene) noexcept {
     return scene.impl_ != nullptr ? &scene.impl_->storage : nullptr;
 }
 

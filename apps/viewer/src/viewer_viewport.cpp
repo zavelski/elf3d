@@ -442,7 +442,7 @@ void apply_demo_cube_color(ViewerState& state, ViewerScene& scene) {
         return;
     }
 
-    const elf3d::Result<void> material_result = scene.scene->set_material(
+    const elf3d::Result<void> material_result = scene.scene->set_material_description(
         *scene.cube_material,
         elf3d::MaterialDescription{elf3d::Color4{state.cube_color[0], state.cube_color[1],
                                                  state.cube_color[2], state.cube_color[3]}});
@@ -674,7 +674,7 @@ void render_3d_view(const ViewPanelContext& context, const ViewportCanvas& canva
         set_viewport_error(*context.state, result.error());
         return;
     }
-    context.state->statistics = context.viewport->statistics();
+    context.state->statistics = context.viewport->render_statistics();
     context.state->framebuffer_valid = context.viewport->framebuffer_valid();
     present_viewport_texture(context, canvas);
 }

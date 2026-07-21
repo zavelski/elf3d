@@ -66,6 +66,16 @@ void main()
     fragment_color = vec4(linear_to_srgb(linear_color.rgb), linear_color.a);
 }
 )glsl";
+
+void configure_framebuffer_clear_state(GLuint framebuffer, Extent2D extent) noexcept {
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
+    glViewport(0, 0, static_cast<GLsizei>(extent.width), static_cast<GLsizei>(extent.height));
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_FRAMEBUFFER_SRGB);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_TRUE);
+}
+
 void delete_render_target_objects(GLuint framebuffer, GLuint linear_color_texture,
                                   GLuint display_framebuffer, GLuint display_texture,
                                   GLuint depth_renderbuffer) noexcept {
@@ -260,12 +270,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         }
 
         RenderStateGuard state_guard;
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_);
-        glViewport(0, 0, static_cast<GLsizei>(extent_.width), static_cast<GLsizei>(extent_.height));
-        glDisable(GL_SCISSOR_TEST);
-        glDisable(GL_FRAMEBUFFER_SRGB);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        glDepthMask(GL_TRUE);
+        configure_framebuffer_clear_state(framebuffer_, extent_);
         glClearColor(color.red, color.green, color.blue, color.alpha);
         glClearDepth(1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -531,12 +536,7 @@ class OpenGLPickingTarget final : public graphics::PickingTarget {
         }
 
         RenderStateGuard state_guard;
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_);
-        glViewport(0, 0, static_cast<GLsizei>(extent_.width), static_cast<GLsizei>(extent_.height));
-        glDisable(GL_SCISSOR_TEST);
-        glDisable(GL_FRAMEBUFFER_SRGB);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        glDepthMask(GL_TRUE);
+        configure_framebuffer_clear_state(framebuffer_, extent_);
         constexpr std::array<GLuint, 4> clear_ids{};
         glClearBufferuiv(GL_COLOR, 0, clear_ids.data());
         const GLfloat clear_depth = 1.0F;

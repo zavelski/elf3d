@@ -312,7 +312,7 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
 
 [[nodiscard]] elf3d::Result<elf3d::EntityId> create_viewer_camera(elf3d::Scene& scene) {
     const elf3d::Result<elf3d::EntityId> camera_result =
-        scene.create_perspective_camera(elf3d::PerspectiveCameraDescription{});
+        scene.create_perspective_camera_entity(elf3d::PerspectiveCameraDescription{});
     if (!camera_result) {
         return camera_result.error();
     }
@@ -365,7 +365,7 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
         return material_result.error();
     }
     const elf3d::Result<elf3d::EntityId> cube_result =
-        scene->create_model(mesh_result.value(), material_result.value());
+        scene->create_model_entity(mesh_result.value(), material_result.value());
     if (!cube_result) {
         return cube_result.error();
     }
@@ -388,8 +388,7 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
 
 [[nodiscard]] elf3d::Result<ViewerScene> load_model_scene(elf3d::Engine& engine,
                                                           const std::filesystem::path& path) {
-    elf3d::Result<elf3d::LoadedScene> loaded_result =
-        engine.load_scene_with_report(path_to_utf8(path));
+    elf3d::Result<elf3d::LoadedScene> loaded_result = engine.load_scene(path_to_utf8(path));
     if (!loaded_result) {
         return loaded_result.error();
     }

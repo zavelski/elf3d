@@ -3,6 +3,21 @@ add_executable(
     public_api_test.cpp
 )
 
+add_library(
+    elf3d_public_api_examples
+    OBJECT
+        ${PROJECT_SOURCE_DIR}/examples/embedded_viewer.cpp
+        ${PROJECT_SOURCE_DIR}/examples/load_and_report.cpp
+        ${PROJECT_SOURCE_DIR}/examples/procedural_scene.cpp
+        ${PROJECT_SOURCE_DIR}/examples/picking_and_selection.cpp
+        ${PROJECT_SOURCE_DIR}/examples/document_roundtrip.cpp
+        ${PROJECT_SOURCE_DIR}/examples/multi_viewport.cpp
+)
+target_compile_features(elf3d_public_api_examples PRIVATE cxx_std_20)
+target_link_libraries(elf3d_public_api_examples PRIVATE elf3d::elf3d)
+set_target_properties(elf3d_public_api_examples PROPERTIES FOLDER "Elf3D/Examples")
+elf3d_enable_warnings(elf3d_public_api_examples)
+
 target_compile_features(elf3d_public_api_test PRIVATE cxx_std_20)
 target_link_libraries(elf3d_public_api_test PRIVATE elf3d::elf3d)
 set_target_properties(elf3d_public_api_test PROPERTIES FOLDER "Elf3D/Tests")

@@ -290,7 +290,7 @@ void apply_hierarchy_error(ViewerState& state, const elf3d::Result<void>& result
 void draw_hierarchy_visibility_commands(ViewerState& state, ViewerScene& scene,
                                         const elf3d::SceneHierarchyItem& item) {
     if (item.local_visible && ImGui::MenuItem("Hide")) {
-        apply_hierarchy_error(state, scene.scene->set_entity_visible(item.entity, false));
+        apply_hierarchy_error(state, scene.scene->set_entity_local_visibility(item.entity, false));
         invalidate_hierarchy_snapshot(scene);
     }
     if ((!item.local_visible || !item.effective_visible) && ImGui::MenuItem("Show")) {
@@ -350,12 +350,12 @@ void draw_hierarchy_selection_actions(ViewerState& state, ViewerScene& scene,
                                       elf3d::Viewport& viewport) {
     ImGui::BeginDisabled(!viewport.has_selection());
     if (ImGui::SmallButton("Hide Selected")) {
-        apply_hierarchy_error(state, viewport.hide_selected(*scene.scene));
+        apply_hierarchy_error(state, viewport.hide_selected_in_scene(*scene.scene));
         invalidate_hierarchy_snapshot(scene);
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Show Selected")) {
-        apply_hierarchy_error(state, viewport.show_selected(*scene.scene));
+        apply_hierarchy_error(state, viewport.show_selected_in_scene(*scene.scene));
         invalidate_hierarchy_snapshot(scene);
     }
     ImGui::SameLine();
@@ -380,8 +380,9 @@ struct HierarchyRows {
     rows.items.reserve(scene.hierarchy_snapshot.size());
     rows.names.reserve(scene.hierarchy_snapshot.size());
     for (std::size_t index = 0; index < scene.hierarchy_snapshot.size(); ++index) {
-        const elf3d::Result<elf3d::SceneHierarchyItem> item = scene.hierarchy_snapshot.item(index);
-        const elf3d::Result<std::string_view> name = scene.hierarchy_snapshot.name(index);
+        const elf3d::Result<elf3d::SceneHierarchyItem> item =
+            scene.hierarchy_snapshot.item_at(index);
+        const elf3d::Result<std::string_view> name = scene.hierarchy_snapshot.name_at(index);
         if (item && name) {
             rows.items.push_back(item.value());
             rows.names.emplace_back(name.value());
@@ -420,8 +421,8 @@ void draw_hierarchy_visibility_state(ViewerState& state, ViewerScene& scene,
                                      std::optional<elf3d::EntityId> isolated) {
     ImGui::SameLine();
     if (ImGui::SmallButton(item.local_visible ? "Hide##visible" : "Show##visible")) {
-        apply_hierarchy_error(state,
-                              scene.scene->set_entity_visible(item.entity, !item.local_visible));
+        apply_hierarchy_error(
+            state, scene.scene->set_entity_local_visibility(item.entity, !item.local_visible));
         invalidate_hierarchy_snapshot(scene);
     }
     if (!item.local_visible) {

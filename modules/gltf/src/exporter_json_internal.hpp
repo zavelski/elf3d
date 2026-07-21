@@ -35,11 +35,11 @@ void append_float2(std::string& output, Float2 value);
 void append_float3(std::string& output, Float3 value);
 void append_float4(std::string& output, Color4 value);
 [[nodiscard]] std::string format_json(std::string_view source);
-[[nodiscard]] std::uint32_t wrap_value(ModelTextureWrap value) noexcept;
-[[nodiscard]] std::uint32_t filter_value(ModelTextureFilter value) noexcept;
-[[nodiscard]] bool has_nondefault_transform(ModelTextureMapping mapping) noexcept;
+[[nodiscard]] std::uint32_t wrap_value(TextureWrap value) noexcept;
+[[nodiscard]] std::uint32_t filter_value(TextureFilter value) noexcept;
+[[nodiscard]] bool has_nondefault_transform(TextureMapping mapping) noexcept;
 [[nodiscard]] std::string_view image_mime_text(ModelImageMimeType mime) noexcept;
-void append_texture_info(std::string& output, std::uint32_t texture, ModelTextureMapping mapping,
+void append_texture_info(std::string& output, std::uint32_t texture, TextureMapping mapping,
                          std::optional<std::pair<std::string_view, float>> scalar = std::nullopt);
 
 } // namespace elf3d::gltf::exporter_detail
