@@ -43,6 +43,7 @@ namespace elf3d::gltf::importer_detail {
 
 struct DocumentLoadState {
     bool is_glb = false;
+    std::size_t repaired_signed_buffer_fields = 0U;
     std::vector<std::byte> source;
     AllocationContext allocation_context;
     BufferLoadContext buffer_context;
@@ -88,6 +89,7 @@ void configure_parser_options(DocumentLoadState& state) noexcept {
         return Error{state.is_glb ? ErrorCode::malformed_glb : ErrorCode::malformed_gltf,
                      "The source contents do not match the file extension"};
     }
+    state.repaired_signed_buffer_fields = repair_signed_glb_buffer_layout(*state.data);
     decode_image_json_strings(*state.data);
     return {};
 }
@@ -196,8 +198,16 @@ void add_feature_diagnostics(ReachableFeatureUse features, ModelLoadReport& repo
 }
 
 [[nodiscard]] ModelLoadReport build_load_report(const cgltf_data& data,
-                                                const std::vector<bool>& reachable) {
+                                                const std::vector<bool>& reachable,
+                                                std::size_t repaired_signed_buffer_fields) {
     ModelLoadReport report;
+    if (repaired_signed_buffer_fields != 0U) {
+        add_diagnostic(report.diagnostics, ModelLoadDiagnosticCategory::scene,
+                       ModelLoadDiagnosticCode::repaired_signed_buffer_layout,
+                       "Recovered signed 32-bit GLB buffer sizes and offsets from the complete "
+                       "sequential BIN layout",
+                       std::to_string(repaired_signed_buffer_fields) + " repaired fields");
+    }
     add_extension_diagnostics(data, report);
     add_feature_diagnostics(inspect_reachable_features(data, reachable), report);
     return report;
@@ -686,7 +696,8 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path,
         if (!reachable) {
             return reachable.error();
         }
-        ModelLoadReport report = build_load_report(*state.data, reachable.value());
+        ModelLoadReport report =
+            build_load_report(*state.data, reachable.value(), state.repaired_signed_buffer_fields);
         Result<ConstructedDocument> constructed =
             construct_document(*state.data, reachable.value(), path, options, report.diagnostics);
         if (!constructed) {

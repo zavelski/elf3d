@@ -26,7 +26,7 @@ namespace {
 } // namespace
 
 int elf3d_scene_runtime_adapter_depth_test() {
-    constexpr std::size_t hierarchy_depth = 1024U;
+    constexpr std::size_t hierarchy_depth = 5120U;
     elf3d::Document document;
     const auto document_scene = document.create_scene("Deep hierarchy");
     const auto root = document.create_node();

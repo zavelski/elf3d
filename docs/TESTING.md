@@ -36,7 +36,7 @@ fidelity, and verifies from generated CMake metadata that Scene/Assets and
 engine/UI targets were not configured.
 
 The named `elf3d.scene_runtime_adapter_depth` regression exercises the
-permanent iterative Document-to-Scene adapter with a 1,024-level hierarchy.
+permanent iterative Document-to-Scene adapter with a 5,120-level hierarchy.
 
 After building, a focused group can be run with a CTest expression:
 

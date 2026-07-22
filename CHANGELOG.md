@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.9
+
+- Raised the bounded glTF hierarchy limit to 8,192 levels and extended the
+  iterative runtime-scene regression to cover deeply nested BIM exports.
+- Raised source and embedded-BIN limits to 3 GiB and added a guarded
+  compatibility repair for signed 32-bit buffer-field overflow in large GLBs.
+- Made imported glTF textures without an explicit minification filter use a
+  complete trilinear mip chain, while preserving author-specified filters and
+  accounting for every generated mip level in texture-residency statistics.
+- Raised the total decoded-image budget to 2 GiB for 64-bit builds while
+  retaining the 512 MiB bound for 32-bit builds.
+
 ## 0.8.7
 
 - Reduced large-scene CPU submission cost through pass-scoped OpenGL state,

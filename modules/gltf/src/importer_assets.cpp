@@ -173,7 +173,7 @@ namespace elf3d::gltf::importer_detail {
     if (!checked_add(decoded_total, static_cast<std::uint64_t>(decoded.value().pixels.size()),
                      maximum_total_decoded_image_bytes)) {
         return Error{ErrorCode::image_resource_limit_exceeded,
-                     "Imported scene images exceed the 512 MiB decoded-image limit"};
+                     maximum_total_decoded_image_error_message};
     }
     const Result<ImageId> created = builder.create_image(ModelImageDescription{
         decoded.value().width, decoded.value().height, PixelFormat::rgba8_unorm,
@@ -204,6 +204,7 @@ namespace elf3d::gltf::importer_detail {
 [[nodiscard]] Result<TextureFilter> min_filter(cgltf_filter_type filter) {
     switch (filter) {
     case cgltf_filter_type_undefined:
+        return TextureFilter::linear_mipmap_linear;
     case cgltf_filter_type_linear:
         return TextureFilter::linear;
     case cgltf_filter_type_nearest:
@@ -222,6 +223,11 @@ namespace elf3d::gltf::importer_detail {
     }
 }
 
+[[nodiscard]] constexpr SamplerDescription automatic_sampler_description() noexcept {
+    return SamplerDescription{TextureWrap::repeat, TextureWrap::repeat,
+                              TextureFilter::linear_mipmap_linear, TextureFilter::linear};
+}
+
 [[nodiscard]] Result<TextureFilter> mag_filter(cgltf_filter_type filter) {
     switch (filter) {
     case cgltf_filter_type_undefined:
@@ -237,7 +243,7 @@ namespace elf3d::gltf::importer_detail {
 
 [[nodiscard]] Result<SamplerDescription> sampler_description(const cgltf_sampler* sampler) {
     if (sampler == nullptr) {
-        return SamplerDescription{};
+        return automatic_sampler_description();
     }
     Result<TextureWrap> wrap_u = texture_wrap(sampler->wrap_s);
     Result<TextureWrap> wrap_v = texture_wrap(sampler->wrap_t);
@@ -265,7 +271,8 @@ namespace elf3d::gltf::importer_detail {
                                             std::optional<SamplerId>& default_sampler) {
     if (source == nullptr) {
         if (!default_sampler.has_value()) {
-            const Result<SamplerId> created = builder.create_sampler(SamplerDescription{});
+            const Result<SamplerId> created =
+                builder.create_sampler(automatic_sampler_description());
             if (!created) {
                 return created.error();
             }

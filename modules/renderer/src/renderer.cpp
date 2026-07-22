@@ -84,6 +84,41 @@ namespace {
     return extent.width == 0 || extent.height == 0;
 }
 
+[[nodiscard]] bool uses_mipmaps(graphics::TextureFilterMode filter) noexcept {
+    return filter != graphics::TextureFilterMode::nearest &&
+           filter != graphics::TextureFilterMode::linear;
+}
+
+[[nodiscard]] Result<std::uint64_t>
+estimated_texture_resident_bytes(Extent2D extent, graphics::TextureFilterMode min_filter) {
+    if (has_zero_component(extent)) {
+        return std::uint64_t{0};
+    }
+
+    std::uint32_t width = extent.width;
+    std::uint32_t height = extent.height;
+    std::uint64_t bytes = 0;
+    while (true) {
+        const std::uint64_t pixels =
+            static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
+        if (pixels > std::numeric_limits<std::uint64_t>::max() / 4U) {
+            return Error{ErrorCode::size_overflow,
+                         "Texture mip residency exceeds the statistics range"};
+        }
+        const std::uint64_t level_bytes = pixels * 4U;
+        if (bytes > std::numeric_limits<std::uint64_t>::max() - level_bytes) {
+            return Error{ErrorCode::size_overflow,
+                         "Texture mip residency exceeds the statistics range"};
+        }
+        bytes += level_bytes;
+        if (!uses_mipmaps(min_filter) || (width == 1U && height == 1U)) {
+            return bytes;
+        }
+        width = std::max(width / 2U, 1U);
+        height = std::max(height / 2U, 1U);
+    }
+}
+
 constexpr char vertex_shader_source[] = R"glsl(#version 410 core
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
@@ -723,12 +758,15 @@ Result<graphics::Texture2D*> Renderer::cached_texture(SceneId scene_id,
     if (!gpu_result) {
         return gpu_result.error();
     }
-    const std::uint64_t resident_bytes =
-        static_cast<std::uint64_t>(texture.width) * static_cast<std::uint64_t>(texture.height) * 4;
+    const Result<std::uint64_t> resident_bytes =
+        estimated_texture_resident_bytes(description.extent, description.min_filter);
+    if (!resident_bytes) {
+        return resident_bytes.error();
+    }
     image->variants.push_back(CacheState::TextureVariant{
-        color_space, texture.sampler, std::move(gpu_result).value(), resident_bytes});
-    scene_cache.resident_texture_bytes += resident_bytes;
-    cache_->resident_texture_bytes += resident_bytes;
+        color_space, texture.sampler, std::move(gpu_result).value(), resident_bytes.value()});
+    scene_cache.resident_texture_bytes += resident_bytes.value();
+    cache_->resident_texture_bytes += resident_bytes.value();
     ++scene_cache.texture_count;
     ++cache_->texture_count;
     ++upload_count;

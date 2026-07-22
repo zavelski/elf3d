@@ -1,5 +1,7 @@
 #include <elf3d/model.h>
 
+#include "../src/buffer_layout_repair.hpp"
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -306,6 +308,62 @@ supported_resource_statistics_match(const elf3d::DocumentStatistics& statistics)
                : 5;
 }
 
+[[nodiscard]] bool sampler_matches(const elf3d::Document& document, std::size_t texture_index,
+                                   elf3d::TextureFilter min_filter,
+                                   elf3d::TextureFilter mag_filter) {
+    const auto texture = document.texture_at(texture_index);
+    if (!texture) {
+        return false;
+    }
+    const auto sampler = document.sampler(texture.value().description.sampler);
+    return sampler && sampler.value().description.wrap_u == elf3d::TextureWrap::repeat &&
+           sampler.value().description.wrap_v == elf3d::TextureWrap::repeat &&
+           sampler.value().description.min_filter == min_filter &&
+           sampler.value().description.mag_filter == mag_filter;
+}
+
+[[nodiscard]] int test_sampler_filter_defaults(const TemporaryDirectory& temporary) {
+    const std::filesystem::path path = temporary.path() / "sampler_defaults.gltf";
+    const std::vector<std::byte> geometry = textured_geometry();
+    const std::string json = R"json({
+      "asset":{"version":"2.0"},
+      "buffers":[{"uri":"supported.bin","byteLength":96}],
+      "bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":36},{"buffer":0,"byteOffset":72,"byteLength":24}],
+      "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"}],
+      "images":[{"uri":"asymmetric.png"}],
+      "samplers":[{}, {"minFilter":9729,"magFilter":9728}],
+      "textures":[{"source":0},{"sampler":0,"source":0},{"sampler":1,"source":0}],
+      "materials":[
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}},
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":1}}},
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":2}}}
+      ],
+      "meshes":[{"primitives":[
+        {"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2},"material":0},
+        {"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2},"material":1},
+        {"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2},"material":2}
+      ]}],
+      "nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]
+    })json";
+    if (!write_supported_files(temporary, path, geometry, json)) {
+        return 1;
+    }
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded || loaded.value().document.statistics().textures != 3U ||
+        loaded.value().document.statistics().samplers != 3U) {
+        return 2;
+    }
+    const elf3d::Document& document = loaded.value().document;
+    return sampler_matches(document, 0U, elf3d::TextureFilter::linear_mipmap_linear,
+                           elf3d::TextureFilter::linear) &&
+                   sampler_matches(document, 1U, elf3d::TextureFilter::linear_mipmap_linear,
+                                   elf3d::TextureFilter::linear) &&
+                   sampler_matches(document, 2U, elf3d::TextureFilter::linear,
+                                   elf3d::TextureFilter::nearest)
+               ? 0
+               : 3;
+}
+
 [[nodiscard]] std::string simple_triangle_json(std::string_view buffer_member) {
     return std::string{R"json({"asset":{"version":"2.0"},"buffers":[{)json"} +
            std::string{buffer_member} +
@@ -421,26 +479,39 @@ using ContainerTest = int (*)(const TemporaryDirectory&);
     return 0;
 }
 
-[[nodiscard]] int test_hierarchy_depth_limit(const TemporaryDirectory& temporary) {
+[[nodiscard]] std::string hierarchy_json(std::size_t depth) {
     std::string json = R"json({"asset":{"version":"2.0"},"nodes":[)json";
-    constexpr std::size_t over_limit_depth = 1025U;
-    for (std::size_t index = 0; index < over_limit_depth; ++index) {
+    for (std::size_t index = 0; index < depth; ++index) {
         if (index != 0U) {
             json.push_back(',');
         }
-        if (index + 1U < over_limit_depth) {
+        if (index + 1U < depth) {
             json.append("{\"children\":[" + std::to_string(index + 1U) + "]}");
         } else {
             json.append("{}");
         }
     }
     json.append(R"json(],"scenes":[{"nodes":[0]}]})json");
-    const std::filesystem::path path = temporary.path() / "hierarchy_depth.gltf";
-    if (!write_text(path, json)) {
+    return json;
+}
+
+[[nodiscard]] int test_hierarchy_depth_limit(const TemporaryDirectory& temporary) {
+    constexpr std::size_t supported_depth = 5120U;
+    constexpr std::size_t over_limit_depth = 8193U;
+    const std::filesystem::path supported_path = temporary.path() / "hierarchy_supported.gltf";
+    const std::filesystem::path over_limit_path = temporary.path() / "hierarchy_over_limit.gltf";
+    if (!write_text(supported_path, hierarchy_json(supported_depth)) ||
+        !write_text(over_limit_path, hierarchy_json(over_limit_depth))) {
         return 1;
     }
-    const auto loaded = elf3d::load_document(path.string());
-    return !loaded && loaded.error().code() == elf3d::ErrorCode::resource_limit_exceeded ? 0 : 2;
+    const auto supported = elf3d::load_document(supported_path.string());
+    if (supported || supported.error().code() != elf3d::ErrorCode::empty_scene_geometry) {
+        return 2;
+    }
+    const auto over_limit = elf3d::load_document(over_limit_path.string());
+    return !over_limit && over_limit.error().code() == elf3d::ErrorCode::resource_limit_exceeded
+               ? 0
+               : 3;
 }
 
 [[nodiscard]] std::vector<std::byte> quad_geometry() {
@@ -614,17 +685,39 @@ using GeometryTest = int (*)(const TemporaryDirectory&);
     return !loaded && loaded.error().code() == elf3d::ErrorCode::resource_limit_exceeded ? 0 : 9;
 }
 
+[[nodiscard]] int test_signed_glb_buffer_layout_repair(const TemporaryDirectory&) {
+    using elf3d::gltf::importer_detail::GlbBufferViewLayout;
+    constexpr std::size_t overflow_offset = 2147483648ULL;
+    constexpr std::size_t bin_size = overflow_offset + 16U;
+    std::array<GlbBufferViewLayout, 2> views{{{0U, overflow_offset}, {0U, 16U}}};
+    const auto repaired =
+        elf3d::gltf::importer_detail::recover_signed_glb_buffer_layout(bin_size, views);
+    if (repaired.repaired_fields != 2U || repaired.buffer_size != bin_size ||
+        views[1].offset != overflow_offset) {
+        return 10;
+    }
+
+    std::array<GlbBufferViewLayout, 2> invalid_views{{{4U, overflow_offset}, {0U, 12U}}};
+    const auto invalid = elf3d::gltf::importer_detail::recover_signed_glb_buffer_layout(
+        overflow_offset + 16U, invalid_views);
+    return invalid.repaired_fields == 0U && invalid.buffer_size == 0U &&
+                   invalid_views[0].offset == 4U
+               ? 0
+               : 11;
+}
+
 using DiagnosticTest = int (*)(const TemporaryDirectory&);
 
 [[nodiscard]] int test_diagnostics_and_errors(const TemporaryDirectory& temporary) {
     if (!write_bytes(temporary.path() / "plain.bin", triangle_positions())) {
         return 1;
     }
-    constexpr std::array<DiagnosticTest, 4> tests{{
+    constexpr std::array<DiagnosticTest, 5> tests{{
         test_optional_diagnostics,
         test_required_extension_error,
         test_malformed_and_missing_normals,
         test_node_limit,
+        test_signed_glb_buffer_layout_repair,
     }};
     for (const DiagnosticTest test : tests) {
         const int result = test(temporary);
@@ -641,6 +734,9 @@ int elf3d_gltf_import_test() {
     TemporaryDirectory temporary;
     if (const int result = test_supported_document(temporary); result != 0) {
         return result;
+    }
+    if (const int result = test_sampler_filter_defaults(temporary); result != 0) {
+        return 50 + result;
     }
     if (const int result = test_containers_and_images(temporary); result != 0) {
         return 100 + result;

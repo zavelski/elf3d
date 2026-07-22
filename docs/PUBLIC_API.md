@@ -79,7 +79,9 @@ for (std::size_t index = 0; index < loaded.report.diagnostic_count(); ++index) {
 
 Loading paths are UTF-8 strings. `load_scene()` is the single scene-loading
 operation and always returns the structured compatibility report with the
-loaded Scene.
+loaded Scene. The `repaired_signed_buffer_layout` diagnostic identifies GLB
+files whose overflowed signed buffer fields were recovered from an
+unambiguous embedded BIN layout.
 
 ## Exporting a Loaded Document
 

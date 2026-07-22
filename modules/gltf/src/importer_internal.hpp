@@ -73,7 +73,20 @@ namespace elf3d::gltf::importer_encoding {
 namespace elf3d::gltf::importer_detail {
 
 inline constexpr std::uint64_t maximum_total_encoded_image_bytes = 512ULL * 1024ULL * 1024ULL;
-inline constexpr std::uint64_t maximum_total_decoded_image_bytes = 512ULL * 1024ULL * 1024ULL;
+
+[[nodiscard]] constexpr std::uint64_t
+maximum_total_decoded_image_bytes_for(std::size_t pointer_size) noexcept {
+    return pointer_size >= 8U ? 2ULL * 1024ULL * 1024ULL * 1024ULL : 512ULL * 1024ULL * 1024ULL;
+}
+
+inline constexpr std::uint64_t maximum_total_decoded_image_bytes =
+    maximum_total_decoded_image_bytes_for(sizeof(void*));
+inline constexpr std::string_view maximum_total_decoded_image_error_message =
+    sizeof(void*) >= 8U ? "Imported scene images exceed the 2 GiB decoded-image limit"
+                        : "Imported scene images exceed the 512 MiB decoded-image limit";
+
+static_assert(maximum_total_decoded_image_bytes_for(4U) == 512ULL * 1024ULL * 1024ULL);
+static_assert(maximum_total_decoded_image_bytes_for(8U) == 2ULL * 1024ULL * 1024ULL * 1024ULL);
 
 using importer_geometry::import_indices;
 using importer_input::BufferLoadContext;
@@ -94,6 +107,8 @@ using CgltfData = std::unique_ptr<cgltf_data, CgltfDeleter>;
 struct AllocationContext {
     std::size_t live_bytes = 0;
 };
+
+[[nodiscard]] std::size_t repair_signed_glb_buffer_layout(cgltf_data& data);
 
 struct EncodedImage {
     ModelImageMimeType mime = ModelImageMimeType::png;

@@ -18,13 +18,22 @@ If replacement fails, pre-existing primary and sidecar files are restored; if
 restoration itself fails, the recovery backup is retained and reported.
 The exporter does not use runtime Scene, renderer, GPU, or viewer state.
 Import bounds each encoded image to 64 MiB and the total retained encoded/source
-image data to 512 MiB per document.
+image data to 512 MiB per document. Total decoded RGBA8 image data is bounded
+to 2 GiB in 64-bit builds and 512 MiB in 32-bit builds.
+Source files and embedded GLB BIN chunks are bounded to 3 GiB; individual
+external buffers remain bounded to 1 GiB. Signed 32-bit size/offset overflow
+from affected GLB exporters is repaired only for an unambiguous sequential,
+4-byte-aligned BIN layout and is reported as a compatibility diagnostic.
+
+When a texture has no sampler or its sampler omits `minFilter`, Elf3D uses
+linear filtering with a complete trilinear mip chain down to 1x1. Explicit
+glTF minification and magnification filters are preserved.
 
 All glTF scenes are retained and exported in source order. The authored default
 scene is preserved, including the absence of a top-level `scene` selection.
 For engine loading only, the first scene is the effective runtime selection
 when no default was authored.
-Imported scene hierarchy depth is limited to 1,024.
+Imported scene hierarchy depth is limited to 8,192.
 An empty scene is exported without a `nodes` member. A Document mesh with no
 primitives is rejected with `invalid_mesh_data` before any output is staged or
 published.

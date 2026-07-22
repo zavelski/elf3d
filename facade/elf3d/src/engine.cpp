@@ -146,6 +146,8 @@ extended_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
         return SceneLoadDiagnosticCode::skipped_unsupported_primitive;
     case ModelLoadDiagnosticCode::metadata_not_preserved:
         return SceneLoadDiagnosticCode::metadata_not_preserved;
+    case ModelLoadDiagnosticCode::repaired_signed_buffer_layout:
+        return SceneLoadDiagnosticCode::repaired_signed_buffer_layout;
     default:
         return SceneLoadDiagnosticCode::material_fallback;
     }

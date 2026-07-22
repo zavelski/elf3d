@@ -13,7 +13,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-
 import elf.assets;
 import elf.graphics;
 import elf.math;
@@ -23,7 +22,6 @@ import elf.scene;
 
 #include "renderer_test_support.h"
 namespace {
-
 using elf3d::renderer::tests::FakeDevice;
 using elf3d::renderer::tests::FakeDeviceState;
 using elf3d::renderer::tests::FakePickingTarget;
@@ -55,7 +53,6 @@ constexpr std::array<elf3d::VertexPositionNormal, 3> test_vertices{{
 }};
 constexpr std::array<std::uint32_t, 3> test_indices{{0, 1, 2}};
 constexpr elf3d::RenderStatistics expected_highlighted{3, 3, 9, 9, 9, 0, 3, 0, 0};
-
 [[nodiscard]] bool legacy_statistics_equal(const elf3d::RenderStatistics& actual,
                                            const elf3d::RenderStatistics& expected) noexcept {
     return actual.draw_calls == expected.draw_calls && actual.triangles == expected.triangles &&
@@ -96,16 +93,16 @@ struct RendererContext {
         return static_cast<FakeDevice&>(renderer->device()).state();
     }
 };
-
 [[nodiscard]] int prepare_mesh_and_textures(RendererContext& context) {
     const auto mesh = context.scene.create_mesh({test_vertices, test_indices});
-    const std::array<std::byte, 4> pixel{
-        {std::byte{255}, std::byte{128}, std::byte{64}, std::byte{255}}};
-    const auto image = context.scene.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel});
+    constexpr std::array<std::byte, 3U * 5U * 4U> pixels{};
+    const auto image = context.scene.create_image({3, 5, elf3d::PixelFormat::rgba8_unorm, pixels});
     if (!mesh || !image) {
         return 1;
     }
-    const auto texture = context.scene.create_texture({image.value(), {}});
+    elf3d::SamplerDescription mipmapped_sampler;
+    mipmapped_sampler.min_filter = elf3d::TextureFilter::linear_mipmap_linear;
+    const auto texture = context.scene.create_texture({image.value(), mipmapped_sampler});
     elf3d::SamplerDescription clamp_sampler;
     clamp_sampler.wrap_u = elf3d::TextureWrap::clamp_to_edge;
     const auto clamped_texture = context.scene.create_texture({image.value(), clamp_sampler});
@@ -197,7 +194,6 @@ struct RendererContext {
            device.fragment_shader_source.find("u_alpha_mode") != std::string::npos &&
            device.fragment_shader_source.find("u_emissive_texture") != std::string::npos;
 }
-
 [[nodiscard]] int verify_renderer_creation(RendererContext& context) {
     if (elf3d::renderer::build_render_list(context.scene, context.non_camera, {640, 360})
             .error()
@@ -222,9 +218,11 @@ struct RendererContext {
            first.material_switches == 2 && second.material_switches == 2 &&
            first.gpu_buffer_uploads == 1 && second.gpu_buffer_uploads == 0 &&
            first.draw_packet_rebuilds == 2 && second.draw_packet_rebuilds == 0 &&
-           first.estimated_resident_geometry_bytes != 0 && first.cpu_total_milliseconds >= 0.0;
+           std::array{first.estimated_resident_geometry_bytes,
+                      first.estimated_resident_texture_bytes} ==
+               std::array<std::uint64_t, 2>{84U, 204U} &&
+           first.cpu_total_milliseconds >= 0.0;
 }
-
 [[nodiscard]] bool has_expected_compact_upload(const FakeDeviceState& device) {
     return device.upload_count == 1 && !device.mesh_layouts.empty() &&
            !device.mesh_uploaded_bytes.empty() &&
@@ -250,6 +248,8 @@ struct RendererContext {
 [[nodiscard]] bool has_expected_texture_uploads(const FakeDeviceState& device) {
     return device.texture_upload_count == 3 && device.texture_descriptions.size() == 3 &&
            device.texture_descriptions[0].format == elf3d::graphics::TextureFormat::rgba8_srgb &&
+           device.texture_descriptions[0].min_filter ==
+               elf3d::graphics::TextureFilterMode::linear_mipmap_linear &&
            device.texture_descriptions[1].format == elf3d::graphics::TextureFormat::rgba8_unorm &&
            device.texture_descriptions[2].wrap_u ==
                elf3d::graphics::TextureAddressMode::clamp_to_edge;

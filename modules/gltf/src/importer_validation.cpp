@@ -5,6 +5,7 @@ module;
 #include <elf3d/core/result.h>
 #include <elf3d/model.h>
 
+#include "buffer_layout_repair.hpp"
 #include "importer_internal.hpp"
 
 #include <cgltf.h>
@@ -34,24 +35,143 @@ import elf.model;
 
 namespace elf3d::gltf::importer_detail {
 
-constexpr std::uintmax_t maximum_source_file_size = 512ULL * 1024ULL * 1024ULL;
+constexpr std::uintmax_t maximum_source_file_size = 3ULL * 1024ULL * 1024ULL * 1024ULL;
 constexpr std::uintmax_t maximum_buffer_file_size = 1024ULL * 1024ULL * 1024ULL;
-constexpr std::uint64_t maximum_total_buffer_bytes = 2ULL * 1024ULL * 1024ULL * 1024ULL;
+constexpr std::uint64_t maximum_glb_buffer_bytes = 3ULL * 1024ULL * 1024ULL * 1024ULL;
+constexpr std::uint64_t maximum_total_buffer_bytes = 3ULL * 1024ULL * 1024ULL * 1024ULL;
 constexpr std::size_t maximum_cgltf_allocation_bytes =
     static_cast<std::size_t>(2ULL * 1024ULL * 1024ULL * 1024ULL);
 constexpr cgltf_size maximum_node_count = 131072;
-constexpr std::size_t maximum_node_hierarchy_depth = 1024;
+constexpr std::size_t maximum_node_hierarchy_depth = 8192;
 constexpr cgltf_size maximum_mesh_count = 65536;
 constexpr cgltf_size maximum_primitive_count = 262144;
 constexpr cgltf_size maximum_accessor_count = 262144;
 constexpr std::uint64_t maximum_total_vertices = 50000000;
 constexpr std::uint64_t maximum_total_indices = 150000000;
+constexpr std::size_t signed_32_bit_maximum = 2147483647ULL;
+constexpr std::size_t glb_buffer_alignment = 4U;
 [[noreturn]] void fatal_gltf_allocation_failure() noexcept {
     fatal_error("Elf3D glTF importer memory allocation failed");
 }
 
 [[noreturn]] void fatal_unexpected_gltf_boundary_exception() noexcept {
     fatal_error("Elf3D glTF importer encountered an unexpected exception");
+}
+
+[[nodiscard]] std::optional<std::size_t>
+next_aligned_buffer_offset(std::size_t offset, std::size_t size, std::size_t bin_size) noexcept {
+    if (offset > bin_size || size > bin_size - offset) {
+        return std::nullopt;
+    }
+    const std::size_t end = offset + size;
+    const std::size_t padding =
+        (glb_buffer_alignment - end % glb_buffer_alignment) % glb_buffer_alignment;
+    if (padding > bin_size - end) {
+        return std::nullopt;
+    }
+    return end + padding;
+}
+
+struct LayoutStep {
+    std::size_t next_offset = 0U;
+    std::size_t end = 0U;
+    bool repairs_offset = false;
+};
+
+[[nodiscard]] std::optional<LayoutStep> inspect_layout_step(const GlbBufferViewLayout& view,
+                                                            std::size_t expected_offset,
+                                                            std::size_t bin_size) noexcept {
+    const bool repairs_offset = view.offset != expected_offset;
+    if (repairs_offset && (view.offset != 0U || expected_offset <= signed_32_bit_maximum)) {
+        return std::nullopt;
+    }
+    const std::optional<std::size_t> next =
+        next_aligned_buffer_offset(expected_offset, view.size, bin_size);
+    if (!next.has_value()) {
+        return std::nullopt;
+    }
+    return LayoutStep{*next, expected_offset + view.size, repairs_offset};
+}
+
+[[nodiscard]] std::optional<std::size_t>
+count_repaired_offsets(std::size_t bin_size, std::span<const GlbBufferViewLayout> views) noexcept {
+    std::size_t expected_offset = 0U;
+    std::size_t final_end = 0U;
+    std::size_t repaired_offsets = 0U;
+    for (const GlbBufferViewLayout& view : views) {
+        const std::optional<LayoutStep> step = inspect_layout_step(view, expected_offset, bin_size);
+        if (!step.has_value()) {
+            return std::nullopt;
+        }
+        if (step->repairs_offset) {
+            ++repaired_offsets;
+        }
+        expected_offset = step->next_offset;
+        final_end = step->end;
+    }
+    if (repaired_offsets == 0U || final_end > bin_size || bin_size - final_end > 3U) {
+        return std::nullopt;
+    }
+    return repaired_offsets;
+}
+
+void apply_recovered_offsets(std::size_t bin_size, std::span<GlbBufferViewLayout> views) noexcept {
+    std::size_t expected_offset = 0U;
+    for (GlbBufferViewLayout& view : views) {
+        if (view.offset == 0U && expected_offset > signed_32_bit_maximum) {
+            view.offset = expected_offset;
+        }
+        const std::optional<std::size_t> next =
+            next_aligned_buffer_offset(expected_offset, view.size, bin_size);
+        ELF3D_ASSERT(next.has_value());
+        expected_offset = *next;
+    }
+}
+
+[[nodiscard]] bool can_inspect_signed_glb_layout(const cgltf_data& data) noexcept {
+    return data.file_type == cgltf_file_type_glb && data.bin_size > signed_32_bit_maximum &&
+           data.buffers_count == 1U && data.buffers != nullptr && data.buffer_views_count != 0U &&
+           data.buffer_views != nullptr && data.buffers[0].uri == nullptr &&
+           data.buffers[0].size == 0U;
+}
+
+GlbBufferLayoutRepair
+recover_signed_glb_buffer_layout(std::size_t bin_size,
+                                 std::span<GlbBufferViewLayout> views) noexcept {
+    if (bin_size <= signed_32_bit_maximum || views.empty()) {
+        return {};
+    }
+    const std::optional<std::size_t> repaired_offsets = count_repaired_offsets(bin_size, views);
+    if (!repaired_offsets.has_value()) {
+        return {};
+    }
+    apply_recovered_offsets(bin_size, views);
+    return GlbBufferLayoutRepair{bin_size, *repaired_offsets + 1U};
+}
+
+std::size_t repair_signed_glb_buffer_layout(cgltf_data& data) {
+    if (!can_inspect_signed_glb_layout(data)) {
+        return 0U;
+    }
+    cgltf_buffer& buffer = data.buffers[0];
+    std::vector<GlbBufferViewLayout> views;
+    views.reserve(data.buffer_views_count);
+    for (cgltf_size index = 0U; index < data.buffer_views_count; ++index) {
+        const cgltf_buffer_view& view = data.buffer_views[index];
+        if (view.buffer != &buffer) {
+            return 0U;
+        }
+        views.push_back(GlbBufferViewLayout{view.offset, view.size});
+    }
+    const GlbBufferLayoutRepair repair = recover_signed_glb_buffer_layout(data.bin_size, views);
+    if (repair.repaired_fields == 0U) {
+        return 0U;
+    }
+    for (cgltf_size index = 0U; index < data.buffer_views_count; ++index) {
+        data.buffer_views[index].offset = views[index].offset;
+    }
+    buffer.size = repair.buffer_size;
+    return repair.repaired_fields;
 }
 
 void add_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
@@ -208,7 +328,7 @@ struct FileReadMessages {
         file_size > static_cast<std::uintmax_t>(std::numeric_limits<std::size_t>::max()) ||
         file_size > static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max())) {
         return Error{ErrorCode::resource_limit_exceeded,
-                     "The glTF source file exceeds the 512 MiB source limit"};
+                     "The glTF source file exceeds the 3 GiB source limit"};
     }
     return file_size;
 }
@@ -331,7 +451,7 @@ expanded_triangle_index_count(const cgltf_primitive& primitive,
         path.pop_back();
         if (++parent_depth > maximum_node_hierarchy_depth) {
             return Error{ErrorCode::resource_limit_exceeded,
-                         "The glTF node hierarchy exceeds the depth limit of 1024"};
+                         "The glTF node hierarchy exceeds the depth limit of 8192"};
         }
         depths[index] = parent_depth;
         states[index] = 2U;
@@ -371,8 +491,13 @@ struct ResourceTotals {
 
 [[nodiscard]] Result<void> validate_buffer_limits(const cgltf_data& data, ResourceTotals& totals) {
     for (cgltf_size index = 0; index < data.buffers_count; ++index) {
-        if (data.buffers[index].size > maximum_buffer_file_size ||
-            !checked_add(totals.buffer_bytes, static_cast<std::uint64_t>(data.buffers[index].size),
+        const cgltf_buffer& buffer = data.buffers[index];
+        const bool embedded_glb_buffer =
+            data.file_type == cgltf_file_type_glb && index == 0U && buffer.uri == nullptr;
+        const std::uint64_t maximum_buffer_bytes =
+            embedded_glb_buffer ? maximum_glb_buffer_bytes : maximum_buffer_file_size;
+        if (buffer.size > maximum_buffer_bytes ||
+            !checked_add(totals.buffer_bytes, static_cast<std::uint64_t>(buffer.size),
                          maximum_total_buffer_bytes)) {
             return Error{ErrorCode::resource_limit_exceeded,
                          "Declared glTF buffers exceed the importer byte limits"};

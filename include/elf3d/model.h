@@ -300,6 +300,7 @@ enum class ModelLoadDiagnosticCode {
     texture_fallback,
     skipped_unsupported_primitive,
     metadata_not_preserved,
+    repaired_signed_buffer_layout,
 };
 
 struct ModelLoadDiagnostic {
