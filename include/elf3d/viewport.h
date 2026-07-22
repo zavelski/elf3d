@@ -53,6 +53,11 @@ class ELF3D_API Viewport final {
     void set_basic_lighting(const BasicLighting& lighting) noexcept;
     [[nodiscard]] BasicLighting basic_lighting() const noexcept;
 
+    void set_render_shading_mode(RenderShadingMode mode) noexcept;
+    [[nodiscard]] RenderShadingMode render_shading_mode() const noexcept;
+    // Monotonically increases when viewport-owned state changes the next 3D frame.
+    [[nodiscard]] std::uint64_t render_revision() const noexcept;
+
     // Navigation mutates the supplied camera entity and retains only
     // viewport-local interaction state. The camera entity must belong to the
     // supplied Scene and contain a perspective-camera component.

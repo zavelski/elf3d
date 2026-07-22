@@ -58,6 +58,9 @@ struct OrbitNavigationSettings {
 
     // When false, orbit drags make the visible model follow vertical mouse movement.
     bool invert_vertical_orbit = false;
+    // When enabled, orbit initiation performs one reduced depth query so the
+    // surface under the pointer remains stable during the drag.
+    bool focus_depth_anchor_enabled = true;
 };
 
 enum class NavigationInteractionMode {

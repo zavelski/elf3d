@@ -100,13 +100,15 @@ struct OpenGLMeshObjects {
 class OpenGLStaticMesh final : public graphics::StaticMesh {
   public:
     OpenGLStaticMesh(std::shared_ptr<OpenGLDeviceState> state, OpenGLMeshObjects objects,
-                     std::uint32_t vertex_count, std::uint32_t index_count) noexcept {
+                     std::uint32_t vertex_count, std::uint32_t index_count,
+                     graphics::VertexLayout vertex_layout) noexcept {
         state_ = std::move(state);
         vertex_array_ = objects.vertex_array;
         vertex_buffer_ = objects.vertex_buffer;
         index_buffer_ = objects.index_buffer;
         vertex_count_ = vertex_count;
         index_count_ = index_count;
+        vertex_layout_ = vertex_layout;
     }
 
     ~OpenGLStaticMesh() override {
@@ -126,6 +128,10 @@ class OpenGLStaticMesh final : public graphics::StaticMesh {
         return index_count_;
     }
 
+    [[nodiscard]] graphics::VertexLayout vertex_layout() const noexcept override {
+        return vertex_layout_;
+    }
+
     [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
         return opengl_resource_token();
     }
@@ -141,6 +147,7 @@ class OpenGLStaticMesh final : public graphics::StaticMesh {
     GLuint index_buffer_ = 0;
     std::uint32_t vertex_count_ = 0;
     std::uint32_t index_count_ = 0;
+    graphics::VertexLayout vertex_layout_ = graphics::VertexLayout::position_normal_float3;
 };
 
 class OpenGLGraphicsPipeline final : public graphics::GraphicsPipeline {
@@ -334,6 +341,7 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
                             glGetUniformLocation(program, "u_view"),
                             glGetUniformLocation(program, "u_projection"),
                             glGetUniformLocation(program, "u_normal_matrix"),
+                            glGetUniformLocation(program, "u_vertex_layout"),
                             glGetUniformLocation(program, "u_base_color"),
                             glGetUniformLocation(program, "u_camera_world_position"),
                             glGetUniformLocation(program, "u_light_direction"),
@@ -375,7 +383,7 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
 
 [[nodiscard]] bool transform_locations_valid(const UniformLocations& locations) noexcept {
     return locations.model >= 0 && locations.view >= 0 && locations.projection >= 0 &&
-           locations.normal >= 0 && locations.base_color >= 0;
+           locations.normal >= 0 && locations.vertex_layout >= 0 && locations.base_color >= 0;
 }
 
 [[nodiscard]] bool lighting_locations_valid(const UniformLocations& locations) noexcept {
@@ -452,7 +460,7 @@ create_static_mesh(std::shared_ptr<OpenGLDeviceState> state,
 
         return std::unique_ptr<graphics::StaticMesh>{std::make_unique<OpenGLStaticMesh>(
             std::move(state), objects, description.vertex_count,
-            static_cast<std::uint32_t>(description.indices.size()))};
+            static_cast<std::uint32_t>(description.indices.size()), description.vertex_layout)};
     } catch (const std::bad_alloc&) {
         fatal_opengl_allocation_failure();
     } catch (...) {
@@ -521,7 +529,8 @@ Result<MeshView> mesh_view(graphics::StaticMesh& mesh) noexcept {
         return Error{ErrorCode::backend_mismatch, "The static mesh does not belong to OpenGL"};
     }
     auto& opengl_mesh = static_cast<OpenGLStaticMesh&>(mesh);
-    return MeshView{opengl_mesh.vertex_array(), opengl_mesh.index_count()};
+    return MeshView{opengl_mesh.vertex_array(), opengl_mesh.index_count(),
+                    static_cast<std::uint8_t>(opengl_mesh.vertex_layout())};
 }
 
 Result<PipelineView> pipeline_view(graphics::GraphicsPipeline& pipeline) noexcept {

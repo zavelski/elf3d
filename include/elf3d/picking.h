@@ -14,13 +14,13 @@ struct Ray3 {
     Float3 origin;
     Float3 direction{0.0F, 0.0F, -1.0F};
 
-    bool operator==(const Ray3 &) const = default;
+    bool operator==(const Ray3&) const = default;
 };
 
 struct PickOptions {
     bool respect_material_sidedness = true;
 
-    bool operator==(const PickOptions &) const = default;
+    bool operator==(const PickOptions&) const = default;
 };
 
 struct PickHit {
@@ -36,7 +36,7 @@ struct PickHit {
 
     float world_distance = 0.0F;
 
-    bool operator==(const PickHit &) const = default;
+    bool operator==(const PickHit&) const = default;
 };
 
 struct PickingStatistics {
@@ -55,6 +55,14 @@ struct PickingStatistics {
     std::uint64_t latest_gpu_pixels_read = 0;
     std::uint64_t latest_cpu_refinements = 0;
     std::uint64_t latest_cpu_fallbacks = 0;
+    std::uint64_t latest_target_allocations = 0;
+
+    double latest_pass_milliseconds = 0.0;
+    double latest_readback_milliseconds = 0.0;
+    double latest_allocation_milliseconds = 0.0;
+    double latest_cpu_milliseconds = 0.0;
+    double latest_gpu_milliseconds = 0.0;
+    bool latest_gpu_timing_available = false;
 
     std::uint64_t lifetime_bvh_builds = 0;
     std::uint64_t lifetime_gpu_requests = 0;
@@ -62,9 +70,10 @@ struct PickingStatistics {
     std::uint64_t lifetime_gpu_misses = 0;
     std::uint64_t lifetime_cpu_refinements = 0;
     std::uint64_t lifetime_cpu_fallbacks = 0;
+    std::uint64_t lifetime_target_allocations = 0;
     std::uint64_t cached_mesh_bvhs = 0;
 
-    bool operator==(const PickingStatistics &) const = default;
+    bool operator==(const PickingStatistics&) const = default;
 };
 
 } // namespace elf3d

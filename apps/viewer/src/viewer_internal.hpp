@@ -80,6 +80,26 @@ struct ExternalEditorPaths {
     std::optional<std::filesystem::path> notepad_plus_plus;
 };
 
+struct RetainedViewportFrameKey {
+    SceneId scene;
+    EntityId camera;
+    Extent2D target_extent;
+    std::uint64_t scene_revision = 0;
+    std::uint64_t viewport_revision = 0;
+    int diagnostic_render_scale_percent = 100;
+    RenderShadingMode shading_mode = RenderShadingMode::standard;
+    SelectionSnapshot selection;
+    SelectionSettings selection_settings;
+    std::optional<EntityId> isolated_entity;
+    std::uint64_t clipping_revision = 0;
+    DistanceMeasurementState measurement_state = DistanceMeasurementState::empty;
+    std::optional<MeasurementPoint> first_measurement_point;
+    std::optional<MeasurementPoint> second_measurement_point;
+    std::optional<MeasurementPoint> preview_measurement_point;
+    DistanceMeasurementSettings measurement_settings;
+    bool operator==(const RetainedViewportFrameKey&) const = default;
+};
+
 enum class FileDialogAction {
     open,
     save,
@@ -161,6 +181,7 @@ struct ViewerState {
     std::optional<std::string> dropped_path;
     bool drop_copy_failed = false;
     Extent2D view_dimensions;
+    Extent2D render_target_dimensions;
     bool framebuffer_valid = false;
     std::array<float, 4> clear_color{1.0F, 1.0F, 1.0F, 1.0F};
     std::array<float, 4> cube_color{0.72F, 0.32F, 0.12F, 1.0F};
@@ -169,6 +190,56 @@ struct ViewerState {
     float rotation_speed = 0.8F;
     float rotation_angle = 0.0F;
     RenderStatistics statistics;
+    RenderShadingMode shading_mode = RenderShadingMode::standard;
+    int diagnostic_render_scale_percent = 100;
+    bool vsync_enabled = true;
+    bool vsync_applied = true;
+    bool capture_performance_csv = false;
+    std::filesystem::path performance_csv_path =
+        std::filesystem::path{"out"} / "perf" / "lwapp-comparison" / "viewer-frame-capture.csv";
+    struct FrameSample {
+        double frame_milliseconds = 0.0;
+        double event_input_milliseconds = 0.0;
+        double navigation_scene_milliseconds = 0.0;
+        double render_milliseconds = 0.0;
+        double ui_composition_milliseconds = 0.0;
+        double swap_wait_milliseconds = 0.0;
+        double input_to_present_proxy_milliseconds = 0.0;
+        RenderStatistics render;
+        PickingStatistics picking;
+        Extent2D window_dimensions;
+        Extent2D framebuffer_dimensions;
+        Extent2D view_dimensions;
+        Extent2D target_dimensions;
+        int render_scale_percent = 100;
+        bool vsync_enabled = true;
+        bool standard_shading = true;
+        bool rendered_3d = false;
+    };
+    std::vector<FrameSample> frame_samples;
+    std::uint64_t captured_frame_count = 0;
+    std::uint64_t rendered_3d_frame_count = 0;
+    std::uint64_t reused_3d_frame_count = 0;
+    std::uint64_t sampled_picking_gpu_requests = 0;
+    std::uint64_t sampled_picking_cpu_fallbacks = 0;
+    std::optional<RetainedViewportFrameKey> retained_viewport_frame;
+    bool viewport_rendered_this_frame = false;
+    std::string performance_capture_error;
+    std::string gl_vendor;
+    std::string gl_renderer;
+    std::string gl_version;
+    std::string glsl_version_report;
+    int gl_context_flags = 0;
+    int gl_context_profile_mask = 0;
+    int default_red_bits = 0;
+    int default_green_bits = 0;
+    int default_blue_bits = 0;
+    int default_alpha_bits = 0;
+    int default_depth_bits = 0;
+    int default_stencil_bits = 0;
+    int default_samples = 0;
+    int default_srgb_capable = 0;
+    int maximum_texture_size = 0;
     std::string viewport_error;
     std::optional<LoadFailure> load_failure;
     std::optional<LoadFailure> save_failure;
@@ -352,6 +423,16 @@ void set_viewport_error(ViewerState& state, const Error& error);
 void reset_demo_cube_transform(ViewerState& state, ViewerScene& scene);
 void update_demo_cube_animation(ViewerState& state, ViewerScene& scene);
 void apply_demo_cube_color(ViewerState& state, ViewerScene& scene);
+[[nodiscard]] bool write_performance_csv(ViewerState& state);
+[[nodiscard]] RetainedViewportFrameKey
+viewport_frame_key(const ViewerState& state, const ViewerScene& scene, const Viewport& viewport);
+[[nodiscard]] bool viewport_frame_render_required(const ViewerState& state,
+                                                  const RetainedViewportFrameKey& key,
+                                                  const Viewport& viewport) noexcept;
+[[nodiscard]] bool
+viewport_frame_render_required(const std::optional<RetainedViewportFrameKey>& previous_frame,
+                               const RetainedViewportFrameKey& key, bool framebuffer_valid,
+                               bool pointer_navigation_captured) noexcept;
 bool color_control(const char* label, std::array<float, 4>& rgba);
 [[nodiscard]] std::string clipping_status(const ClippingSnapshot& snapshot,
                                           bool has_visible_bounds);

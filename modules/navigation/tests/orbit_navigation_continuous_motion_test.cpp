@@ -110,97 +110,89 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
     return 0;
 }
 
+struct FrameRateLane {
+    SceneFixture fixture;
+    elf3d::navigation::OrbitNavigationController navigation;
+    elf3d::ViewportInput input;
+};
+
 struct FrameRateContext {
-    SceneFixture low_fixture;
-    SceneFixture high_fixture;
-    elf3d::navigation::OrbitNavigationController low_navigation;
-    elf3d::navigation::OrbitNavigationController high_navigation;
-    elf3d::ViewportInput low_input;
-    elf3d::ViewportInput high_input;
+    FrameRateLane hz30;
+    FrameRateLane hz60;
+    FrameRateLane hz144;
+};
+
+struct FrameRateSequence {
+    std::uint32_t frames = 0;
+    float delta_seconds = 0.0F;
+    float pointer_delta_x = 0.0F;
 };
 
 [[nodiscard]] FrameRateContext make_frame_rate_context() {
     return FrameRateContext{
-        make_scene(5, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F}),
-        make_scene(8, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F}),
+        {make_scene(5, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F})},
+        {make_scene(8, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F})},
+        {make_scene(9, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F})},
     };
 }
 
-[[nodiscard]] int prepare_frame_rate_context(FrameRateContext& context) {
-    if (!context.low_navigation.reset_view(context.low_fixture.scene, context.low_fixture.camera,
-                                           {800, 600}) ||
-        !context.high_navigation.reset_view(context.high_fixture.scene, context.high_fixture.camera,
-                                            {800, 600})) {
-        return 132;
+[[nodiscard]] bool prepare_frame_rate_lane(FrameRateLane& lane) {
+    if (!lane.navigation.reset_view(lane.fixture.scene, lane.fixture.camera, {800, 600})) {
+        return false;
     }
-    context.low_input = hovered_input();
-    context.low_input.left_button_down = true;
-    context.low_input.pointer_position_pixels = {10.0F, 10.0F};
-    context.high_input = context.low_input;
-    if (!context.low_navigation.update(context.low_fixture.scene, context.low_fixture.camera,
-                                       {800, 600}, context.low_input, click_threshold) ||
-        !context.high_navigation.update(context.high_fixture.scene, context.high_fixture.camera,
-                                        {800, 600}, context.high_input, click_threshold)) {
-        return 133;
+    lane.input = hovered_input();
+    lane.input.left_button_down = true;
+    lane.input.pointer_position_pixels = {10.0F, 10.0F};
+    if (!lane.navigation.update(lane.fixture.scene, lane.fixture.camera, {800, 600}, lane.input,
+                                click_threshold)) {
+        return false;
     }
-    context.low_input.pointer_position_pixels = {80.0F, 10.0F};
-    context.low_input.pointer_delta_pixels = {70.0F, 0.0F};
-    context.high_input = context.low_input;
-    if (!context.low_navigation.update(context.low_fixture.scene, context.low_fixture.camera,
-                                       {800, 600}, context.low_input, click_threshold) ||
-        !context.high_navigation.update(context.high_fixture.scene, context.high_fixture.camera,
-                                        {800, 600}, context.high_input, click_threshold) ||
-        !context.low_navigation.set_screen_anchor(context.low_fixture.scene,
-                                                  context.low_fixture.camera,
-                                                  context.low_navigation.snapshot().pivot) ||
-        !context.high_navigation.set_screen_anchor(context.high_fixture.scene,
-                                                   context.high_fixture.camera,
-                                                   context.high_navigation.snapshot().pivot)) {
-        return 134;
-    }
-    return 0;
+    lane.input.pointer_position_pixels = {80.0F, 10.0F};
+    lane.input.pointer_delta_pixels = {70.0F, 0.0F};
+    return lane.navigation.update(lane.fixture.scene, lane.fixture.camera, {800, 600}, lane.input,
+                                  click_threshold) &&
+           lane.navigation.set_screen_anchor(lane.fixture.scene, lane.fixture.camera,
+                                             lane.navigation.snapshot().pivot);
 }
 
-[[nodiscard]] bool frame_rates_match(const FrameRateContext& context) {
-    const elf3d::NavigationSnapshot low = context.low_navigation.snapshot();
-    const elf3d::NavigationSnapshot high = context.high_navigation.snapshot();
-    return nearly_equal(low.yaw_radians, high.yaw_radians) &&
-           nearly_equal(low.pitch_radians, high.pitch_radians) &&
-           nearly_equal(low.distance, high.distance, 0.002F) &&
-           nearly_equal(low.pivot, high.pivot, 0.002F) &&
-           nearly_equal(camera_position(context.low_fixture.scene, context.low_fixture.camera),
-                        camera_position(context.high_fixture.scene, context.high_fixture.camera),
-                        0.002F) &&
-           context.low_navigation.has_screen_anchor() &&
-           context.high_navigation.has_screen_anchor();
+[[nodiscard]] bool advance_frame_rate_lane(FrameRateLane& lane, FrameRateSequence sequence) {
+    lane.input.frame_delta_seconds = sequence.delta_seconds;
+    lane.input.pointer_delta_pixels = {sequence.pointer_delta_x, 0.0F};
+    lane.input.w_pressed = true;
+    for (std::uint32_t frame = 0; frame < sequence.frames; ++frame) {
+        lane.input.pointer_position_pixels.x += sequence.pointer_delta_x;
+        if (!lane.navigation.update(lane.fixture.scene, lane.fixture.camera, {800, 600}, lane.input,
+                                    click_threshold)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool frame_rate_lanes_match(const FrameRateLane& left, const FrameRateLane& right) {
+    const elf3d::NavigationSnapshot a = left.navigation.snapshot();
+    const elf3d::NavigationSnapshot b = right.navigation.snapshot();
+    return nearly_equal(a.yaw_radians, b.yaw_radians) &&
+           nearly_equal(a.pitch_radians, b.pitch_radians) &&
+           nearly_equal(a.distance, b.distance, 0.002F) && nearly_equal(a.pivot, b.pivot, 0.002F) &&
+           nearly_equal(camera_position(left.fixture.scene, left.fixture.camera),
+                        camera_position(right.fixture.scene, right.fixture.camera), 0.002F) &&
+           left.navigation.has_screen_anchor() && right.navigation.has_screen_anchor();
 }
 
 [[nodiscard]] int verify_frame_rate_invariance() {
     FrameRateContext context = make_frame_rate_context();
-    const int prepared = prepare_frame_rate_context(context);
-    if (prepared != 0) {
-        return prepared;
+    if (!prepare_frame_rate_lane(context.hz30) || !prepare_frame_rate_lane(context.hz60) ||
+        !prepare_frame_rate_lane(context.hz144)) {
+        return 132;
     }
-    context.low_input.frame_delta_seconds = 1.0F / 30.0F;
-    context.low_input.pointer_position_pixels = {120.0F, 10.0F};
-    context.low_input.pointer_delta_pixels = {40.0F, 0.0F};
-    context.low_input.w_pressed = true;
-    context.high_input.frame_delta_seconds = 1.0F / 60.0F;
-    context.high_input.pointer_position_pixels = {100.0F, 10.0F};
-    context.high_input.pointer_delta_pixels = {20.0F, 0.0F};
-    context.high_input.w_pressed = true;
-    if (!context.low_navigation.update(context.low_fixture.scene, context.low_fixture.camera,
-                                       {800, 600}, context.low_input, click_threshold) ||
-        !context.high_navigation.update(context.high_fixture.scene, context.high_fixture.camera,
-                                        {800, 600}, context.high_input, click_threshold)) {
+    if (!advance_frame_rate_lane(context.hz30, {5, 1.0F / 30.0F, 24.0F}) ||
+        !advance_frame_rate_lane(context.hz60, {10, 1.0F / 60.0F, 12.0F}) ||
+        !advance_frame_rate_lane(context.hz144, {24, 1.0F / 144.0F, 5.0F})) {
         return 135;
     }
-    context.high_input.pointer_position_pixels = {120.0F, 10.0F};
-    if (!context.high_navigation.update(context.high_fixture.scene, context.high_fixture.camera,
-                                        {800, 600}, context.high_input, click_threshold)) {
-        return 136;
-    }
-    if (!frame_rates_match(context)) {
+    if (!frame_rate_lanes_match(context.hz30, context.hz60) ||
+        !frame_rate_lanes_match(context.hz60, context.hz144)) {
         return 137;
     }
     return 0;

@@ -47,8 +47,8 @@ enum class TextureFilterMode {
     linear_mipmap_linear,
 };
 
+class StaticMesh;
 class Texture2D;
-
 inline constexpr std::size_t material_texture_count = 4;
 
 struct Texture2DDescription {
@@ -126,6 +126,14 @@ struct PickingDrawDescription {
     std::uint32_t clipping_box_count = 0;
 };
 
+struct IndexedDrawBatchItem {
+    StaticMesh* mesh = nullptr;
+    DrawIndexedDescription description;
+};
+struct PickingDrawBatchItem {
+    StaticMesh* mesh = nullptr;
+    PickingDrawDescription description;
+};
 struct PickingPixel {
     std::uint32_t object_id = 0;
     std::uint32_t primitive_index = 0;
@@ -143,12 +151,10 @@ struct DrawOverlayDescription {
 class Texture2D {
   public:
     virtual ~Texture2D() noexcept;
-
     Texture2D(const Texture2D&) = delete;
     Texture2D& operator=(const Texture2D&) = delete;
     Texture2D(Texture2D&&) = delete;
     Texture2D& operator=(Texture2D&&) = delete;
-
     [[nodiscard]] virtual Extent2D extent() const noexcept = 0;
     [[nodiscard]] virtual std::uintptr_t backend_resource_token() const noexcept = 0;
 
@@ -159,14 +165,13 @@ class Texture2D {
 class StaticMesh {
   public:
     virtual ~StaticMesh() noexcept;
-
     StaticMesh(const StaticMesh&) = delete;
     StaticMesh& operator=(const StaticMesh&) = delete;
     StaticMesh(StaticMesh&&) = delete;
     StaticMesh& operator=(StaticMesh&&) = delete;
-
     [[nodiscard]] virtual std::uint32_t vertex_count() const noexcept = 0;
     [[nodiscard]] virtual std::uint32_t index_count() const noexcept = 0;
+    [[nodiscard]] virtual VertexLayout vertex_layout() const noexcept = 0;
     [[nodiscard]] virtual std::uintptr_t backend_resource_token() const noexcept = 0;
 
   protected:
@@ -176,7 +181,6 @@ class StaticMesh {
 class GraphicsPipeline {
   public:
     virtual ~GraphicsPipeline() noexcept;
-
     GraphicsPipeline(const GraphicsPipeline&) = delete;
     GraphicsPipeline& operator=(const GraphicsPipeline&) = delete;
     GraphicsPipeline(GraphicsPipeline&&) = delete;
@@ -190,12 +194,10 @@ class GraphicsPipeline {
 class RenderTarget {
   public:
     virtual ~RenderTarget() noexcept;
-
     RenderTarget(const RenderTarget&) = delete;
     RenderTarget& operator=(const RenderTarget&) = delete;
     RenderTarget(RenderTarget&&) = delete;
     RenderTarget& operator=(RenderTarget&&) = delete;
-
     [[nodiscard]] virtual Extent2D extent() const noexcept = 0;
     [[nodiscard]] virtual Result<void> resize(Extent2D extent) noexcept = 0;
     [[nodiscard]] virtual Result<void> clear(Color4 color) noexcept = 0;
@@ -210,12 +212,10 @@ class RenderTarget {
 class PickingTarget {
   public:
     virtual ~PickingTarget() noexcept;
-
     PickingTarget(const PickingTarget&) = delete;
     PickingTarget& operator=(const PickingTarget&) = delete;
     PickingTarget(PickingTarget&&) = delete;
     PickingTarget& operator=(PickingTarget&&) = delete;
-
     [[nodiscard]] virtual Extent2D extent() const noexcept = 0;
     [[nodiscard]] virtual Result<void> resize(Extent2D extent) noexcept = 0;
     [[nodiscard]] virtual Result<void> clear() noexcept = 0;
@@ -224,6 +224,13 @@ class PickingTarget {
 
   protected:
     PickingTarget() = default;
+};
+
+enum class GpuTimingPass : std::uint8_t { main, picking, resolve };
+
+struct GpuTimingSample {
+    double milliseconds = 0.0;
+    bool available = false;
 };
 
 class Device {
@@ -235,6 +242,10 @@ class Device {
     Device(Device&&) = delete;
     Device& operator=(Device&&) = delete;
 
+    // Backend-owned monotonic clock used only for diagnostic phase timing.
+    [[nodiscard]] virtual double monotonic_time_milliseconds() const noexcept = 0;
+    // Returns only completed query results and never waits for the GPU.
+    [[nodiscard]] virtual GpuTimingSample delayed_gpu_timing(GpuTimingPass pass) noexcept = 0;
     [[nodiscard]] virtual GraphicsBackend backend() const noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<RenderTarget>>
     create_render_target(Extent2D initial_extent) noexcept = 0;
@@ -252,10 +263,16 @@ class Device {
     draw_indexed(RenderTarget& target, GraphicsPipeline& pipeline, StaticMesh& mesh,
                  const DrawIndexedDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void>
+    draw_indexed_batch(RenderTarget& target, GraphicsPipeline& pipeline,
+                       std::span<const IndexedDrawBatchItem> items) noexcept = 0;
+    [[nodiscard]] virtual Result<void>
     draw_overlay(RenderTarget& target, const DrawOverlayDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void>
     draw_picking_indexed(PickingTarget& target, StaticMesh& mesh,
                          const PickingDrawDescription& description) noexcept = 0;
+    [[nodiscard]] virtual Result<void>
+    draw_picking_batch(PickingTarget& target,
+                       std::span<const PickingDrawBatchItem> items) noexcept = 0;
     [[nodiscard]] virtual Result<std::optional<PickingPixel>>
     read_picking_pixel(PickingTarget& target, Float2 position_pixels) noexcept = 0;
     [[nodiscard]] virtual Result<std::vector<float>>

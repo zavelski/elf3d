@@ -100,6 +100,14 @@ struct ViewportContext {
                                                context.scene, context.camera, input);
 }
 
+[[nodiscard]] bool has_initial_picking_targets(const FakeDeviceState& state) {
+    return state.picking_targets.size() == 2 &&
+           state.picking_targets[0]->extent() == elf3d::Extent2D{320, 180} &&
+           state.picking_targets[1]->extent() == elf3d::Extent2D{256, 144} &&
+           state.picking_targets[0]->resize_count == 1 &&
+           state.picking_targets[1]->resize_count == 1;
+}
+
 [[nodiscard]] int verify_empty_and_resize(ViewportContext& context) {
     if (context.viewport->framebuffer_valid() || context.viewport->color_texture().is_valid()) {
         return 4;
@@ -112,10 +120,14 @@ struct ViewportContext {
         context.viewport->extent() != elf3d::Extent2D{640, 360}) {
         return 6;
     }
+    if (!has_initial_picking_targets(context.device_state())) {
+        return 61;
+    }
     return 0;
 }
 
 [[nodiscard]] int verify_viewport_settings(ViewportContext& context) {
+    const std::uint64_t initial_revision = context.viewport->render_revision();
     context.viewport->set_clear_color({-1.0F, 2.0F, std::numeric_limits<float>::quiet_NaN(),
                                        std::numeric_limits<float>::infinity()});
     const elf3d::Color4 expected{0.0F, 1.0F, 0.0F, 1.0F};
@@ -133,6 +145,12 @@ struct ViewportContext {
         sanitized.ambient_intensity != 2.0F || sanitized.diffuse_intensity != 10.0F) {
         return 8;
     }
+    context.viewport->set_render_shading_mode(elf3d::RenderShadingMode::unlit);
+    if (context.viewport->render_shading_mode() != elf3d::RenderShadingMode::unlit ||
+        context.viewport->render_revision() <= initial_revision) {
+        return 81;
+    }
+    context.viewport->set_render_shading_mode(elf3d::RenderShadingMode::standard);
     return 0;
 }
 
@@ -150,7 +168,10 @@ struct DynamicAnchorContext {
                                                  elf3d::Extent2D expected_extent) {
     return state.picking_depths_read_count == 1 && state.picking_pixel_read_count == 0 &&
            state.last_picking_read_extent == expected_extent &&
-           statistics.latest_gpu_pixels_read <= 65536U;
+           statistics.latest_gpu_pixels_read <= 65536U &&
+           statistics.latest_target_allocations == 0 && statistics.latest_pass_milliseconds > 0.0 &&
+           statistics.latest_readback_milliseconds > 0.0 &&
+           statistics.latest_cpu_milliseconds > 0.0;
 }
 
 [[nodiscard]] bool same_screen_position(const elf3d::ProjectedViewportPoint& left,
@@ -212,6 +233,10 @@ struct DynamicAnchorContext {
     if (!has_expected_focus_statistics(state, statistics, anchor_context.target_extent)) {
         return 845;
     }
+    if (state.picking_targets.size() != 2 || state.picking_targets[0]->resize_count != 1 ||
+        state.picking_targets[1]->resize_count != 1) {
+        return 847;
+    }
     return 0;
 }
 
@@ -219,7 +244,8 @@ struct DynamicAnchorContext {
                                        DynamicAnchorContext& anchor_context) {
     anchor_context.input.pointer_position_pixels = {48.0F, 16.0F};
     anchor_context.input.pointer_delta_pixels = {16.0F, 0.0F};
-    if (!update_navigation(context, anchor_context.input)) {
+    if (!update_navigation(context, anchor_context.input) ||
+        context.device_state().picking_depths_read_count != 1) {
         return 846;
     }
     const auto projected_after = context.viewport->project_world_to_viewport(
@@ -307,6 +333,33 @@ struct DynamicAnchorContext {
         return 873;
     }
     return 0;
+}
+
+[[nodiscard]] int verify_disabled_focus_depth(ViewportContext& context) {
+    if (!context.viewport->reset_view(context.scene, context.camera)) {
+        return 877;
+    }
+    elf3d::OrbitNavigationSettings settings = context.viewport->navigation_settings();
+    settings.focus_depth_anchor_enabled = false;
+    if (!context.viewport->set_navigation_settings(settings)) {
+        return 878;
+    }
+    FakeDeviceState& state = context.device_state();
+    state.picking_depths_read_count = 0;
+    elf3d::ViewportInput input;
+    input.is_focused = true;
+    input.is_hovered = true;
+    input.left_button_down = true;
+    input.pointer_position_pixels = {16.0F, 16.0F};
+    if (!update_navigation(context, input) || state.picking_depths_read_count != 0) {
+        return 879;
+    }
+    input.left_button_down = false;
+    if (!update_navigation(context, input)) {
+        return 880;
+    }
+    settings.focus_depth_anchor_enabled = true;
+    return context.viewport->set_navigation_settings(settings) ? 0 : 881;
 }
 
 [[nodiscard]] bool has_pick_hit(const elf3d::Result<std::optional<elf3d::PickHit>>& pick) {
@@ -618,8 +671,10 @@ has_independent_box_configuration(const elf3d::Result<std::uint32_t>& added_box,
     if (!update_navigation(context, input)) {
         return 87;
     }
+    context.device_state().picking_pixel_read_count = 0;
     input.left_button_down = false;
-    if (!update_navigation(context, input) || context.viewport->has_selection()) {
+    if (!update_navigation(context, input) || context.viewport->has_selection() ||
+        context.device_state().picking_pixel_read_count != 1) {
         return 88;
     }
     const elf3d::DistanceMeasurementSnapshot measurement =
@@ -686,17 +741,24 @@ has_independent_box_configuration(const elf3d::Result<std::uint32_t>& added_box,
         context.viewport->color_texture().is_valid()) {
         return 10;
     }
+    const auto& targets = context.device_state().picking_targets;
+    if (targets.size() != 2 || targets[0]->extent() != elf3d::Extent2D{0, 180} ||
+        targets[1]->extent() != elf3d::Extent2D{} || targets[0]->resize_count != 2 ||
+        targets[1]->resize_count != 2) {
+        return 101;
+    }
     return 0;
 }
 
 using ViewportStep = int (*)(ViewportContext&);
 
 [[nodiscard]] int run_viewport_steps(ViewportContext& context) {
-    constexpr std::array<ViewportStep, 16> steps{{
+    constexpr std::array<ViewportStep, 17> steps{{
         verify_empty_and_resize,
         verify_viewport_settings,
         verify_dynamic_anchor_navigation,
         verify_eye_orbit,
+        verify_disabled_focus_depth,
         verify_quick_click_anchor,
         verify_missed_click,
         verify_outside_release_cancels_click,

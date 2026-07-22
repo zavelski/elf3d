@@ -138,6 +138,8 @@ class ELF3D_API Scene final {
     Scene& operator=(Scene&&) = delete;
 
     [[nodiscard]] SceneId id() const noexcept;
+    // Monotonically increases after any scene mutation, including camera changes.
+    [[nodiscard]] std::uint64_t revision() const noexcept;
 
     [[nodiscard]] Result<EntityId> create_entity() noexcept;
     // Destruction recursively destroys every descendant of the entity.

@@ -15,6 +15,7 @@ module;
 #include <limits>
 #include <new>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -107,6 +108,15 @@ struct PickingDrawViews {
     MeshView mesh;
 };
 
+struct PickingBatchStateCache {
+    bool culling_valid{false};
+    bool culling{false};
+    bool front_face_valid{false};
+    bool front_face_clockwise{false};
+    bool vertex_array_valid{false};
+    GLuint vertex_array{0};
+};
+
 [[nodiscard]] Result<PickingDrawViews> picking_draw_views(graphics::PickingTarget& target,
                                                           graphics::StaticMesh& mesh) noexcept {
     Result<PickingTargetView> target_result = picking_target_view(target);
@@ -120,12 +130,10 @@ struct PickingDrawViews {
     return PickingDrawViews{target_result.value(), mesh_result.value()};
 }
 
-void configure_picking_draw_state(const PickingDrawViews& views,
-                                  const graphics::PickingDrawDescription& description,
-                                  GLuint program) noexcept {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, views.target.framebuffer);
-    glViewport(0, 0, static_cast<GLsizei>(views.target.extent.width),
-               static_cast<GLsizei>(views.target.extent.height));
+void configure_picking_pass_state(const PickingTargetView& target, GLuint program) noexcept {
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target.framebuffer);
+    glViewport(0, 0, static_cast<GLsizei>(target.extent.width),
+               static_cast<GLsizei>(target.extent.height));
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_FRAMEBUFFER_SRGB);
     glDisable(GL_BLEND);
@@ -138,26 +146,16 @@ void configure_picking_draw_state(const PickingDrawViews& views,
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_LESS);
     glDepthRange(0.0, 1.0);
-    if (description.double_sided) {
-        glDisable(GL_CULL_FACE);
-    } else {
-        glEnable(GL_CULL_FACE);
-    }
     glCullFace(GL_BACK);
-    glFrontFace(description.front_face_clockwise ? GL_CW : GL_CCW);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glUseProgram(program);
-    glBindVertexArray(views.mesh.vertex_array);
 }
 
-void upload_picking_uniforms(const PickingResources& uniforms,
-                             const graphics::PickingDrawDescription& description) noexcept {
-    glUniformMatrix4fv(uniforms.model, 1, GL_FALSE, description.model_matrix.data());
+void upload_picking_frame_uniforms(const PickingResources& uniforms,
+                                   const graphics::PickingDrawDescription& description) noexcept {
     glUniformMatrix4fv(uniforms.view, 1, GL_FALSE, description.view_matrix.data());
     glUniformMatrix4fv(uniforms.projection, 1, GL_FALSE, description.projection_matrix.data());
-    glUniform1ui(uniforms.object_id, description.object_id);
-    glUniform1ui(uniforms.primitive_index, description.primitive_index);
     glUniform1i(uniforms.clipping_section_plane_enabled,
                 description.clipping_section_plane_enabled ? 1 : 0);
     glUniform3f(uniforms.clipping_section_plane_normal, description.clipping_section_plane_normal.x,
@@ -185,6 +183,53 @@ void upload_picking_uniforms(const PickingResources& uniforms,
                  minimums.data());
     glUniform3fv(uniforms.clipping_box_maximums, static_cast<GLsizei>(maximum_clipping_boxes),
                  maximums.data());
+}
+
+void upload_picking_item_uniforms(const PickingResources& uniforms,
+                                  const graphics::PickingDrawDescription& description) noexcept {
+    glUniformMatrix4fv(uniforms.model, 1, GL_FALSE, description.model_matrix.data());
+    glUniform1ui(uniforms.object_id, description.object_id);
+    glUniform1ui(uniforms.primitive_index, description.primitive_index);
+}
+
+void set_picking_capability(GLenum capability, bool enabled) noexcept {
+    if (enabled) {
+        glEnable(capability);
+    } else {
+        glDisable(capability);
+    }
+}
+
+void configure_picking_culling(bool culling, PickingBatchStateCache& cache) noexcept {
+    if (!cache.culling_valid || cache.culling != culling) {
+        set_picking_capability(GL_CULL_FACE, culling);
+        cache.culling_valid = true;
+        cache.culling = culling;
+    }
+}
+
+void configure_picking_front_face(bool clockwise, PickingBatchStateCache& cache) noexcept {
+    if (!cache.front_face_valid || cache.front_face_clockwise != clockwise) {
+        glFrontFace(clockwise ? GL_CW : GL_CCW);
+        cache.front_face_valid = true;
+        cache.front_face_clockwise = clockwise;
+    }
+}
+
+void configure_picking_vertex_array(GLuint vertex_array, PickingBatchStateCache& cache) noexcept {
+    if (!cache.vertex_array_valid || cache.vertex_array != vertex_array) {
+        glBindVertexArray(vertex_array);
+        cache.vertex_array_valid = true;
+        cache.vertex_array = vertex_array;
+    }
+}
+
+void configure_picking_item_state(const PickingDrawViews& views,
+                                  const graphics::PickingDrawDescription& description,
+                                  PickingBatchStateCache& cache) noexcept {
+    configure_picking_culling(!description.double_sided, cache);
+    configure_picking_front_face(description.front_face_clockwise, cache);
+    configure_picking_vertex_array(views.mesh.vertex_array, cache);
 }
 
 [[nodiscard]] bool picking_position_in_bounds(Float2 position, Extent2D extent) noexcept {
@@ -256,6 +301,36 @@ void upload_picking_uniforms(const PickingResources& uniforms,
            resources.clipping_box_maximums >= 0;
 }
 
+void submit_picking_draw(const PickingResources& resources, const PickingDrawViews& views,
+                         const graphics::PickingDrawDescription& description,
+                         PickingBatchStateCache& cache) noexcept {
+    configure_picking_item_state(views, description, cache);
+    upload_picking_item_uniforms(resources, description);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(views.mesh.index_count), GL_UNSIGNED_INT,
+                   nullptr);
+}
+
+[[nodiscard]] Result<void>
+submit_picking_batch_items(const PickingResources& resources, const PickingTargetView& target,
+                           std::span<const graphics::PickingDrawBatchItem> items,
+                           PickingBatchStateCache& cache) noexcept {
+    for (const graphics::PickingDrawBatchItem& item : items) {
+        if (item.mesh == nullptr) {
+            return Error{ErrorCode::invalid_argument,
+                         "Picking draw batches require a mesh for every item"};
+        }
+        Result<MeshView> mesh_result = mesh_view(*item.mesh);
+        if (!mesh_result) {
+            return mesh_result.error();
+        }
+        const PickingDrawViews views{target, mesh_result.value()};
+        if (views.mesh.index_count != 0 && item.description.object_id != 0) {
+            submit_picking_draw(resources, views, item.description, cache);
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 bool PickingResources::valid() const noexcept {
@@ -280,13 +355,43 @@ Result<void> draw_picking_indexed(PickingResources& resources, graphics::Picking
     }
 
     RenderStateGuard state_guard;
-    configure_picking_draw_state(views, description, resources.program);
-    upload_picking_uniforms(resources, description);
-    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(views.mesh.index_count), GL_UNSIGNED_INT,
-                   nullptr);
+    configure_picking_pass_state(views.target, resources.program);
+    upload_picking_frame_uniforms(resources, description);
+    PickingBatchStateCache cache;
+    submit_picking_draw(resources, views, description, cache);
     if (glGetError() != GL_NO_ERROR) {
         return Error{ErrorCode::draw_submission_failed,
                      "OpenGL reported an error while submitting a picking draw"};
+    }
+    return {};
+}
+
+Result<void> draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
+                                std::span<const graphics::PickingDrawBatchItem> items) noexcept {
+    Result<PickingTargetView> target_result = picking_target_view(target);
+    if (!target_result) {
+        return target_result.error();
+    }
+    if (!target_result.value().valid || items.empty()) {
+        return {};
+    }
+    const Result<void> resource_result = ensure_picking_resources(resources);
+    if (!resource_result) {
+        return resource_result.error();
+    }
+
+    RenderStateGuard state_guard;
+    configure_picking_pass_state(target_result.value(), resources.program);
+    upload_picking_frame_uniforms(resources, items.front().description);
+    PickingBatchStateCache cache;
+    const Result<void> submission =
+        submit_picking_batch_items(resources, target_result.value(), items, cache);
+    if (!submission) {
+        return submission.error();
+    }
+    if (glGetError() != GL_NO_ERROR) {
+        return Error{ErrorCode::draw_submission_failed,
+                     "OpenGL reported an error while submitting a picking draw batch"};
     }
     return {};
 }

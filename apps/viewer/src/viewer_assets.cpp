@@ -1,3 +1,4 @@
+#include "viewer_input_math.hpp"
 #include "viewer_internal.hpp"
 
 #if defined(_WIN32)
@@ -436,8 +437,13 @@ void glfw_drop_callback(GLFWwindow* window, int path_count, const char** paths) 
 
 void glfw_navigation_scroll_callback(GLFWwindow* window, double, double y_offset) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
-    const float delta = static_cast<float>(y_offset);
-    if (state == nullptr || !std::isfinite(delta) || delta == 0.0F) {
+    if (state == nullptr) {
+        return;
+    }
+
+    const std::optional<float> accumulated_delta =
+        accumulated_wheel_delta(state->navigation_wheel_delta, y_offset);
+    if (!accumulated_delta.has_value()) {
         return;
     }
 
@@ -445,13 +451,11 @@ void glfw_navigation_scroll_callback(GLFWwindow* window, double, double y_offset
     double y = 0.0;
     glfwGetCursorPos(window, &x, &y);
     const ImVec2 position{static_cast<float>(x), static_cast<float>(y)};
-    const float accumulated_delta = state->navigation_wheel_delta + delta;
-    if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
-        !std::isfinite(accumulated_delta)) {
+    if (!std::isfinite(position.x) || !std::isfinite(position.y)) {
         return;
     }
 
-    state->navigation_wheel_delta = accumulated_delta;
+    state->navigation_wheel_delta = *accumulated_delta;
     state->navigation_wheel_position = position;
 }
 

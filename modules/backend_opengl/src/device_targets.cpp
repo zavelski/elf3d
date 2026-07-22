@@ -334,7 +334,10 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, linear_color_texture_);
         glUniform1i(resolve_texture_uniform_, 0);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        {
+            const GpuTimingScope timing{*state_, GpuTimingKind::resolve};
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
         if (glGetError() != GL_NO_ERROR) {
             return Error{ErrorCode::draw_submission_failed,
                          "OpenGL reported an error while resolving the viewport display texture"};

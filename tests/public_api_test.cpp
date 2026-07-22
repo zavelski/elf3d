@@ -232,8 +232,10 @@ struct PublicSceneFixture {
 [[nodiscard]] int verify_scene_transform(PublicSceneFixture& fixture) {
     elf3d::Float4x4 matrix;
     matrix.elements[12] = 2.0F;
+    const std::uint64_t revision = fixture.scene->revision();
     if (!fixture.scene->set_local_matrix(fixture.model, matrix) ||
         fixture.scene->local_matrix(fixture.model).value() != matrix ||
+        fixture.scene->revision() == revision ||
         !fixture.scene->set_entity_name(fixture.model, "Public model") ||
         fixture.scene->entity_name(fixture.model).value() != "Public model" ||
         !fixture.scene->world_bounds().has_value() ||

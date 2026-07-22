@@ -171,12 +171,23 @@ struct RuntimeSceneFixture {
     return 0;
 }
 
-[[nodiscard]] int verify_visibility_revisions(RuntimeSceneFixture& fixture) {
+[[nodiscard]] bool parent_change_invalidates_spatial_cache(RuntimeSceneFixture& fixture) {
     const std::uint64_t hierarchy_before_visibility = fixture.scene.hierarchy_revision();
+    const std::uint64_t spatial_before_parent = fixture.scene.model_spatial_revision();
     if (!fixture.scene.set_parent(fixture.model, fixture.root)) {
-        return 13;
+        return false;
     }
-    if (fixture.scene.hierarchy_revision() == hierarchy_before_visibility) {
+    const auto moved_bounds = fixture.scene.primitive_world_bounds(fixture.model, 0);
+    const bool hierarchy_changed =
+        fixture.scene.hierarchy_revision() != hierarchy_before_visibility;
+    const bool spatial_changed = fixture.scene.model_spatial_revision() != spatial_before_parent;
+    const bool bounds_moved = moved_bounds && moved_bounds.value().minimum.x == 12.0F &&
+                              moved_bounds.value().maximum.x == 13.0F;
+    return hierarchy_changed && spatial_changed && bounds_moved;
+}
+
+[[nodiscard]] int verify_visibility_revisions(RuntimeSceneFixture& fixture) {
+    if (!parent_change_invalidates_spatial_cache(fixture)) {
         return 14;
     }
     const std::uint64_t visibility_before = fixture.scene.visibility_revision();
@@ -191,6 +202,51 @@ struct RuntimeSceneFixture {
         !fixture.scene.set_entity_visible(fixture.root, false) ||
         fixture.scene.visibility_revision() != visibility_after_hide) {
         return 16;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool camera_motion_preserves_model_spatial_revision(RuntimeSceneFixture& fixture,
+                                                                  std::uint64_t revision) {
+    const auto camera = fixture.scene.create_perspective_camera({});
+    if (!camera) {
+        return false;
+    }
+    elf3d::Transform camera_transform;
+    camera_transform.translation = {0.0F, 0.0F, 5.0F};
+    return fixture.scene.set_local_transform(camera.value(), camera_transform) &&
+           fixture.scene.model_spatial_revision() == revision;
+}
+
+[[nodiscard]] bool cached_primitive_bounds_are_stable(RuntimeSceneFixture& fixture) {
+    const auto initial = fixture.scene.primitive_world_bounds(fixture.model, 0);
+    const auto reused = fixture.scene.primitive_world_bounds(fixture.model, 0);
+    return initial && reused && initial.value() == reused.value();
+}
+
+[[nodiscard]] bool moved_model_bounds_are_current(RuntimeSceneFixture& fixture) {
+    const auto moved = fixture.scene.primitive_world_bounds(fixture.model, 1);
+    const auto scene_bounds = fixture.scene.world_bounds();
+    return moved && scene_bounds && moved.value().minimum.x == 2.0F &&
+           moved.value().maximum.x == 3.0F && scene_bounds.value() == moved.value();
+}
+
+[[nodiscard]] int verify_spatial_cache(RuntimeSceneFixture& fixture) {
+    const std::uint64_t initial_spatial_revision = fixture.scene.model_spatial_revision();
+    if (!camera_motion_preserves_model_spatial_revision(fixture, initial_spatial_revision)) {
+        return 25;
+    }
+    if (!cached_primitive_bounds_are_stable(fixture)) {
+        return 26;
+    }
+    elf3d::Transform model_transform;
+    model_transform.translation = {2.0F, 0.0F, 0.0F};
+    if (!fixture.scene.set_local_transform(fixture.model, model_transform) ||
+        fixture.scene.model_spatial_revision() == initial_spatial_revision) {
+        return 27;
+    }
+    if (!moved_model_bounds_are_current(fixture)) {
+        return 28;
     }
     return 0;
 }
@@ -238,6 +294,10 @@ struct RuntimeSceneFixture {
     const int camera = verify_camera_and_statistics(*fixture);
     if (camera != 0) {
         return camera;
+    }
+    const int spatial = verify_spatial_cache(*fixture);
+    if (spatial != 0) {
+        return spatial;
     }
     const int revisions = verify_visibility_revisions(*fixture);
     if (revisions != 0) {

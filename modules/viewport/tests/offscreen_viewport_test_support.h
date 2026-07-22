@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -107,6 +108,7 @@ class FakePickingTarget final : public elf3d::graphics::PickingTarget {
 struct FakeDeviceState {
     elf3d::Extent2D latest_render_target_extent;
     elf3d::Extent2D last_picking_read_extent;
+    std::vector<FakePickingTarget*> picking_targets;
     std::optional<elf3d::graphics::PickingPixel> picking_pixel;
     std::vector<float> picking_depths;
     elf3d::Float2 last_picking_read_position;
@@ -118,6 +120,16 @@ struct FakeDeviceState {
 
 class FakeDevice final : public elf3d::graphics::Device {
   public:
+    [[nodiscard]] double monotonic_time_milliseconds() const noexcept override {
+        const double result = clock_milliseconds_;
+        clock_milliseconds_ += 0.125;
+        return result;
+    }
+    [[nodiscard]] elf3d::graphics::GpuTimingSample
+    delayed_gpu_timing(elf3d::graphics::GpuTimingPass) noexcept override {
+        return {};
+    }
+
     [[nodiscard]] FakeDeviceState& state() noexcept {
         return state_;
     }
@@ -140,6 +152,7 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::PickingTarget>>
     create_picking_target(elf3d::Extent2D initial_extent) noexcept override {
         auto target = std::make_unique<FakePickingTarget>(initial_extent);
+        state_.picking_targets.push_back(target.get());
         return std::unique_ptr<elf3d::graphics::PickingTarget>{std::move(target)};
     }
 
@@ -160,6 +173,9 @@ class FakeDevice final : public elf3d::graphics::Device {
         }
         [[nodiscard]] std::uint32_t index_count() const noexcept override {
             return 0;
+        }
+        [[nodiscard]] elf3d::graphics::VertexLayout vertex_layout() const noexcept override {
+            return elf3d::graphics::VertexLayout::position_normal_float3;
         }
         [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
             return fake_resource_token;
@@ -204,6 +220,22 @@ class FakeDevice final : public elf3d::graphics::Device {
                  const elf3d::graphics::DrawIndexedDescription&) noexcept override {
         return {};
     }
+    [[nodiscard]] elf3d::Result<void> draw_indexed_batch(
+        elf3d::graphics::RenderTarget& target, elf3d::graphics::GraphicsPipeline& pipeline,
+        std::span<const elf3d::graphics::IndexedDrawBatchItem> items) noexcept override {
+        for (const elf3d::graphics::IndexedDrawBatchItem& item : items) {
+            if (item.mesh == nullptr) {
+                return elf3d::Error{elf3d::ErrorCode::invalid_argument,
+                                    "Fake batch item requires a mesh"};
+            }
+            const elf3d::Result<void> result =
+                draw_indexed(target, pipeline, *item.mesh, item.description);
+            if (!result) {
+                return result.error();
+            }
+        }
+        return {};
+    }
     [[nodiscard]] elf3d::Result<void>
     draw_overlay(elf3d::graphics::RenderTarget&,
                  const elf3d::graphics::DrawOverlayDescription& description) noexcept override {
@@ -214,6 +246,22 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<void>
     draw_picking_indexed(elf3d::graphics::PickingTarget&, elf3d::graphics::StaticMesh&,
                          const elf3d::graphics::PickingDrawDescription&) noexcept override {
+        return {};
+    }
+    [[nodiscard]] elf3d::Result<void> draw_picking_batch(
+        elf3d::graphics::PickingTarget& target,
+        std::span<const elf3d::graphics::PickingDrawBatchItem> items) noexcept override {
+        for (const elf3d::graphics::PickingDrawBatchItem& item : items) {
+            if (item.mesh == nullptr) {
+                return elf3d::Error{elf3d::ErrorCode::invalid_argument,
+                                    "Fake picking batch item requires a mesh"};
+            }
+            const elf3d::Result<void> result =
+                draw_picking_indexed(target, *item.mesh, item.description);
+            if (!result) {
+                return result.error();
+            }
+        }
         return {};
     }
     [[nodiscard]] elf3d::Result<std::optional<elf3d::graphics::PickingPixel>>
@@ -238,6 +286,7 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
 
   private:
+    mutable double clock_milliseconds_ = 0.0;
     FakeDeviceState state_;
 };
 

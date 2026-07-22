@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.7
+
+- Reduced large-scene CPU submission cost through pass-scoped OpenGL state,
+  indexed renderer caches, reusable draw packets, cached scene spatial data,
+  and camera-frustum culling.
+- Added compact static vertex layouts that retain source attributes while
+  avoiding unused UV and color storage for position/normal-only geometry.
+- Added nonblocking CPU/GPU rendering and picking diagnostics, a repeatable
+  hidden-context benchmark, configurable VSync, diagnostic shading and render
+  scale, and retained idle viewport frames.
+- Stabilized orbit-entry and picking work with separate focus-depth and ID
+  targets, bounded request arbitration, floating-point input processing, and
+  deterministic frame-rate, wheel, and DPI regression coverage.
+
 ## 0.8.6
 
 - Made `Engine::load_scene()` the single scene-loading operation, returning the

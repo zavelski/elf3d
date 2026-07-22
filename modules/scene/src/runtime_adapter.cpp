@@ -312,6 +312,10 @@ Color4 RuntimePrimitiveView::color(std::size_t index) const noexcept {
     return compatibility_vertices_.first(index + 1U).back().color;
 }
 
+RuntimeVertexLayout RuntimePrimitiveView::vertex_layout() const noexcept {
+    return vertex_layout_;
+}
+
 bool RuntimeMaterialView::has_texture(RuntimeMaterialTextureSlot slot) const noexcept {
     switch (slot) {
     case RuntimeMaterialTextureSlot::base_color:
@@ -347,6 +351,7 @@ Storage::document_runtime_primitive(const ModelPrimitiveBinding& binding,
     RuntimePrimitiveView result;
     result.mesh = binding.mesh;
     result.document_primitive = document_primitive;
+    result.material_identity = primitive_result.value().material.debug_value() << 1U;
     result.bounds = primitive_result.value().bounds;
     result.material_view = runtime_material(material_result.value().description);
     result.document_positions_ = primitive_result.value().data.positions;
@@ -354,6 +359,11 @@ Storage::document_runtime_primitive(const ModelPrimitiveBinding& binding,
     result.document_texcoord0_ = primitive_result.value().data.texcoord0;
     result.document_texcoord1_ = primitive_result.value().data.texcoord1;
     result.document_colors_ = primitive_result.value().data.colors;
+    if (!result.document_texcoord1_.empty() || !result.document_colors_.empty()) {
+        result.vertex_layout_ = RuntimeVertexLayout::full;
+    } else if (!result.document_texcoord0_.empty()) {
+        result.vertex_layout_ = RuntimeVertexLayout::position_normal_texcoord;
+    }
     result.indices_ = primitive_result.value().data.indices;
     result.document_textures_ = {
         material_result.value().description.base_color_texture,
@@ -377,9 +387,13 @@ Storage::compatibility_runtime_primitive(const ModelPrimitiveBinding& binding) c
     }
     RuntimePrimitiveView result;
     result.mesh = binding.mesh;
+    result.material_identity = (binding.material.debug_value() << 1U) | 1U;
     result.bounds = mesh_result.value()->bounds;
     result.material_view = runtime_material(material_result.value()->description);
     result.compatibility_vertices_ = mesh_result.value()->vertices;
+    result.vertex_layout_ = mesh_result.value()->has_full_vertex_attributes
+                                ? RuntimeVertexLayout::full
+                                : RuntimeVertexLayout::position_normal;
     result.indices_ = mesh_result.value()->indices;
     result.compatibility_textures_ = {
         material_result.value()->description.base_color_texture,

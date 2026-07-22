@@ -370,23 +370,22 @@ Result<ClippingBox> ClippingController::box_from_visible_bounds(
 std::optional<Bounds3> visible_bounds(const scene::Storage& scene,
                                       const scene::VisibilityFilter& visibility,
                                       const elf3d::clipping::ClippingFilter& filter) noexcept {
+    if (!filter.has_clipping()) {
+        return scene.visible_world_bounds(visibility);
+    }
     std::optional<Bounds3> result;
     for (const std::optional<scene::EntityRecord>& record : scene.entities()) {
         if (!record.has_value() || !record->model.has_value() ||
             !scene::entity_visible_in_filter(scene, visibility, record->id)) {
             continue;
         }
-        const Result<Float4x4> world = scene.world_matrix(record->id);
-        ELF3D_ASSERT(world.has_value());
         for (std::uint32_t primitive_index = 0; primitive_index < record->model->primitives.size();
              ++primitive_index) {
-            const Result<scene::RuntimePrimitiveView> primitive =
-                scene.runtime_primitive(record->id, primitive_index);
-            ELF3D_ASSERT(primitive.has_value());
-            const Bounds3 world_bounds =
-                elf3d::clipping::transform_bounds(primitive.value().bounds, world.value());
+            const Result<Bounds3> world_bounds =
+                scene.primitive_world_bounds(record->id, primitive_index);
+            ELF3D_ASSERT(world_bounds.has_value());
             const std::optional<Bounds3> clipped =
-                elf3d::clipping::clipped_bounds(filter, world_bounds);
+                elf3d::clipping::clipped_bounds(filter, world_bounds.value());
             if (!clipped.has_value()) {
                 continue;
             }

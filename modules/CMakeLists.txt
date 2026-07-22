@@ -77,6 +77,7 @@ if(ELF3D_BUILD_ENGINE)
             assets/src/storage.cpp
             clipping/src/filter.cpp
             scene/src/runtime_adapter.cpp
+            scene/src/spatial.cpp
             scene/src/storage.cpp
             scene/src/visibility.cpp
     )
@@ -313,6 +314,7 @@ add_library(
         renderer/src/renderer.cpp
         viewport/src/offscreen_viewport.cpp
         viewport/src/offscreen_viewport_picking.cpp
+        viewport/src/offscreen_viewport_render_settings.cpp
 )
 add_library(elf3d::view_modules ALIAS elf3d_view_modules)
 elf3d_configure_module_group(elf3d_view_modules)

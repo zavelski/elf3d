@@ -189,7 +189,8 @@ Renderer::draw_picking_items(const scene::Storage& scene_storage, graphics::Pick
     if (!clear_result) {
         return clear_result.error();
     }
-    std::uint64_t draw_calls = 0;
+    std::vector<graphics::PickingDrawBatchItem> batch;
+    batch.reserve(list.items.size());
     for (std::size_t item_index = 0; item_index < list.items.size(); ++item_index) {
         const RenderItem& item = list.items[item_index];
         const Result<scene::RuntimePrimitiveView> primitive =
@@ -197,20 +198,20 @@ Renderer::draw_picking_items(const scene::Storage& scene_storage, graphics::Pick
         if (!primitive) {
             return primitive.error();
         }
-        Result<graphics::StaticMesh*> gpu_mesh = cached_mesh(scene_storage.id(), primitive.value());
+        RenderStatistics ignored_statistics;
+        Result<graphics::StaticMesh*> gpu_mesh =
+            cached_mesh(scene_storage.id(), primitive.value(), ignored_statistics);
         if (!gpu_mesh) {
             return gpu_mesh.error();
         }
         const graphics::PickingDrawDescription draw =
             picking_draw_description(list, item, primitive.value(),
                                      static_cast<std::uint32_t>(item_index + 1U), clipping_filter);
-        const Result<void> drawn = device_->draw_picking_indexed(target, *gpu_mesh.value(), draw);
-        if (!drawn) {
-            return drawn.error();
-        }
-        ++draw_calls;
+        batch.push_back(graphics::PickingDrawBatchItem{gpu_mesh.value(), draw});
     }
-    return draw_calls;
+    const Result<void> drawn = device_->draw_picking_batch(target, batch);
+    return drawn ? Result<std::uint64_t>{static_cast<std::uint64_t>(batch.size())}
+                 : Result<std::uint64_t>{drawn.error()};
 }
 
 Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage,
@@ -230,6 +231,7 @@ Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage,
         return Error{ErrorCode::invalid_viewport_position,
                      "Picking coordinates are outside the viewport extent"};
     }
+    const double pass_begin = device_->monotonic_time_milliseconds();
     Result<RenderList> list_result = build_render_list(
         scene_storage, request.camera, request.viewport_extent, visibility, clipping_filter);
     if (!list_result) {
@@ -248,7 +250,9 @@ Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage,
     if (!draw_calls) {
         return draw_calls.error();
     }
+    const double pass_end = device_->monotonic_time_milliseconds();
 
+    const double readback_begin = device_->monotonic_time_milliseconds();
     Result<std::optional<graphics::PickingPixel>> pixel =
         device_->read_picking_pixel(target, request.target_position_pixels);
     if (!pixel) {
@@ -257,6 +261,8 @@ Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage,
     GpuPickResult result;
     result.draw_calls = draw_calls.value();
     result.pixels_read = 1;
+    result.pass_milliseconds = pass_end - pass_begin;
+    result.readback_milliseconds = device_->monotonic_time_milliseconds() - readback_begin;
     return resolve_gpu_pick(list, pixel.value(), request, result);
 }
 
@@ -272,6 +278,7 @@ Result<GpuFocusDepthAnchorResult> Renderer::gpu_focus_depth_anchor(
     if (!valid_focus_extents(target_extent, request)) {
         return GpuFocusDepthAnchorResult{};
     }
+    const double pass_begin = device_->monotonic_time_milliseconds();
     Result<RenderList> list_result = build_render_list(
         scene_storage, request.camera, request.viewport_extent, visibility, clipping_filter);
     if (!list_result) {
@@ -290,6 +297,8 @@ Result<GpuFocusDepthAnchorResult> Renderer::gpu_focus_depth_anchor(
     if (!draw_calls) {
         return draw_calls.error();
     }
+    const double pass_end = device_->monotonic_time_milliseconds();
+    const double readback_begin = device_->monotonic_time_milliseconds();
     Result<std::vector<float>> depths = device_->read_picking_depths(target);
     if (!depths) {
         return depths.error();
@@ -304,6 +313,8 @@ Result<GpuFocusDepthAnchorResult> Renderer::gpu_focus_depth_anchor(
     GpuFocusDepthAnchorResult result;
     result.draw_calls = draw_calls.value();
     result.pixels_read = static_cast<std::uint64_t>(depths.value().size());
+    result.pass_milliseconds = pass_end - pass_begin;
+    result.readback_milliseconds = device_->monotonic_time_milliseconds() - readback_begin;
     result.world_position = focus_world_position(
         list, request.viewport_extent, weighted_focus_depth(depths.value(), target_extent));
     return result;

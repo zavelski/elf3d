@@ -52,6 +52,10 @@ std::uint64_t Storage::revision() const noexcept {
     return revision_;
 }
 
+std::uint64_t Storage::render_content_revision() const noexcept {
+    return render_content_revision_;
+}
+
 std::uint64_t Storage::hierarchy_revision() const noexcept {
     return hierarchy_revision_;
 }
@@ -80,7 +84,10 @@ Result<void> Storage::set_document(Document&& document) {
     auto replacement = std::make_unique<Document>(std::move(document));
     document_mesh_primitives_.clear();
     document_ = std::move(replacement);
+    invalidate_all_model_bounds();
     increment_revision();
+    increment_render_content_revision();
+    increment_model_spatial_revision();
     return {};
 }
 
@@ -103,12 +110,17 @@ Result<void> Storage::destroy_entity(EntityId entity_id) {
         return record.error();
     }
     EntityRecord& target = *record.value();
+    const bool destroyed_model_spatial = invalidate_spatial_subtree(entity_id);
     if (target.parent.has_value()) {
         remove_child(*target.parent, entity_id);
     }
     destroy_subtree(entity_id);
     increment_revision();
+    increment_render_content_revision();
     increment_hierarchy_revision();
+    if (destroyed_model_spatial) {
+        increment_model_spatial_revision();
+    }
     return {};
 }
 
@@ -151,8 +163,12 @@ Result<void> Storage::set_parent(EntityId entity_id, EntityId parent_id) {
     }
     child_record.parent = parent_id;
     update_effective_visibility_from(entity_id);
+    const bool moved_model_spatial = invalidate_spatial_subtree(entity_id);
     increment_revision();
     increment_hierarchy_revision();
+    if (moved_model_spatial) {
+        increment_model_spatial_revision();
+    }
     return {};
 }
 
@@ -167,8 +183,12 @@ Result<void> Storage::clear_parent(EntityId entity_id) {
     remove_child(*child.value()->parent, entity_id);
     child.value()->parent.reset();
     update_effective_visibility_from(entity_id);
+    const bool moved_model_spatial = invalidate_spatial_subtree(entity_id);
     increment_revision();
     increment_hierarchy_revision();
+    if (moved_model_spatial) {
+        increment_model_spatial_revision();
+    }
     return {};
 }
 
@@ -186,7 +206,11 @@ Result<void> Storage::set_local_transform(EntityId entity_id, const Transform& t
     target.local_transform = math::normalized_transform(transform);
     ELF3D_ASSERT(target.local_transform.has_value());
     target.local_matrix = math::transform_matrix(*target.local_transform);
+    const bool moved_model_spatial = invalidate_spatial_subtree(entity_id);
     increment_revision();
+    if (moved_model_spatial) {
+        increment_model_spatial_revision();
+    }
     return {};
 }
 
@@ -214,7 +238,11 @@ Result<void> Storage::set_local_matrix(EntityId entity_id, const Float4x4& matri
     }
     record.value()->local_transform.reset();
     record.value()->local_matrix = matrix;
+    const bool moved_model_spatial = invalidate_spatial_subtree(entity_id);
     increment_revision();
+    if (moved_model_spatial) {
+        increment_model_spatial_revision();
+    }
     return {};
 }
 
@@ -224,27 +252,6 @@ Result<Float4x4> Storage::local_matrix(EntityId entity_id) const noexcept {
         return record.error();
     }
     return record.value()->local_matrix;
-}
-
-Result<Float4x4> Storage::world_matrix(EntityId entity_id) const noexcept {
-    const Result<const EntityRecord*> record = entity(entity_id);
-    if (!record) {
-        return record.error();
-    }
-    const EntityRecord& target = *record.value();
-    Float4x4 result = target.local_matrix;
-    std::optional<EntityId> parent = target.parent;
-    std::size_t visited = 0;
-    while (parent.has_value()) {
-        ELF3D_ASSERT(++visited <= entities_.size());
-        const Result<const EntityRecord*> parent_record = entity(*parent);
-        if (!parent_record) {
-            return parent_record.error();
-        }
-        result = math::compose_world(parent_record.value()->local_matrix, result);
-        parent = parent_record.value()->parent;
-    }
-    return result;
 }
 
 Result<void> Storage::set_entity_name(EntityId entity_id, std::string_view name) {
@@ -289,6 +296,7 @@ Result<MeshHandle> Storage::create_mesh(const MeshDataView& data) {
     Result<MeshHandle> result = assets_.create_mesh(data);
     if (result) {
         increment_revision();
+        increment_render_content_revision();
     }
     return result;
 }
@@ -297,6 +305,7 @@ Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView& data) {
     Result<MeshHandle> result = assets_.create_mesh(data);
     if (result) {
         increment_revision();
+        increment_render_content_revision();
     }
     return result;
 }
@@ -316,6 +325,7 @@ Result<ImageHandle> Storage::create_image(const ImageDescription& description) {
     Result<ImageHandle> result = assets_.create_image(description);
     if (result) {
         increment_revision();
+        increment_render_content_revision();
     }
     return result;
 }
@@ -324,6 +334,7 @@ Result<TextureAssetHandle> Storage::create_texture(const TextureDescription& des
     Result<TextureAssetHandle> result = assets_.create_texture(description);
     if (result) {
         increment_revision();
+        increment_render_content_revision();
     }
     return result;
 }
@@ -332,6 +343,7 @@ Result<MaterialHandle> Storage::create_material(const MaterialDescription& descr
     Result<MaterialHandle> result = assets_.create_material(description);
     if (result) {
         increment_revision();
+        increment_render_content_revision();
     }
     return result;
 }
@@ -341,6 +353,7 @@ Result<void> Storage::set_material(MaterialHandle material_handle,
     Result<void> result = assets_.set_material(material_handle, description);
     if (result) {
         increment_revision();
+        increment_render_content_revision();
     }
     return result;
 }
@@ -393,8 +406,11 @@ Result<void> Storage::set_model_primitives(EntityId entity_id,
     ModelComponent model;
     model.primitives.assign(primitives.begin(), primitives.end());
     record.value()->model = std::move(model);
+    record.value()->world_bounds_dirty = true;
     increment_revision();
+    increment_render_content_revision();
     increment_hierarchy_revision();
+    increment_model_spatial_revision();
     return {};
 }
 
@@ -425,8 +441,11 @@ Storage::set_model_document_primitives(EntityId entity_id,
         model.document_primitives.push_back(primitive);
     }
     record.value()->model = std::move(model);
+    record.value()->world_bounds_dirty = true;
     increment_revision();
+    increment_render_content_revision();
     increment_hierarchy_revision();
+    increment_model_spatial_revision();
     return {};
 }
 
@@ -591,55 +610,6 @@ Result<const EntityRecord*> Storage::entity(EntityId entity_id) const noexcept {
     return &*entities_[index];
 }
 
-std::optional<Bounds3> Storage::world_bounds() const noexcept {
-    std::optional<Bounds3> result;
-    for (const std::optional<EntityRecord>& record : entities_) {
-        if (!record.has_value() || !record->model.has_value()) {
-            continue;
-        }
-        expand_world_bounds(result, *record);
-    }
-    return result;
-}
-
-void Storage::expand_world_bounds(std::optional<Bounds3>& bounds,
-                                  const EntityRecord& entity) const noexcept {
-    ELF3D_ASSERT(entity.model.has_value());
-    const Result<Float4x4> world_result = world_matrix(entity.id);
-    ELF3D_ASSERT(world_result.has_value());
-    for (std::uint32_t primitive_index = 0; primitive_index < entity.model->primitives.size();
-         ++primitive_index) {
-        const Result<RuntimePrimitiveView> primitive =
-            runtime_primitive(entity.id, primitive_index);
-        ELF3D_ASSERT(primitive.has_value());
-        const Bounds3& local = primitive.value().bounds;
-        const std::array<Float3, 8> corners{{
-            {local.minimum.x, local.minimum.y, local.minimum.z},
-            {local.maximum.x, local.minimum.y, local.minimum.z},
-            {local.minimum.x, local.maximum.y, local.minimum.z},
-            {local.maximum.x, local.maximum.y, local.minimum.z},
-            {local.minimum.x, local.minimum.y, local.maximum.z},
-            {local.maximum.x, local.minimum.y, local.maximum.z},
-            {local.minimum.x, local.maximum.y, local.maximum.z},
-            {local.maximum.x, local.maximum.y, local.maximum.z},
-        }};
-        for (const Float3 corner : corners) {
-            const Float3 point = math::transform_point(world_result.value(), corner);
-            ELF3D_ASSERT(math::is_finite(point));
-            if (!bounds.has_value()) {
-                bounds = Bounds3{point, point};
-                continue;
-            }
-            bounds->minimum.x = std::min(bounds->minimum.x, point.x);
-            bounds->minimum.y = std::min(bounds->minimum.y, point.y);
-            bounds->minimum.z = std::min(bounds->minimum.z, point.z);
-            bounds->maximum.x = std::max(bounds->maximum.x, point.x);
-            bounds->maximum.y = std::max(bounds->maximum.y, point.y);
-            bounds->maximum.z = std::max(bounds->maximum.z, point.z);
-        }
-    }
-}
-
 SceneHierarchyStatistics Storage::hierarchy_statistics() const noexcept {
     SceneHierarchyStatistics result;
     for (const std::optional<EntityRecord>& record : entities_) {
@@ -725,6 +695,13 @@ void Storage::increment_revision() noexcept {
     ++revision_;
     if (revision_ == 0) {
         ++revision_;
+    }
+}
+
+void Storage::increment_render_content_revision() noexcept {
+    ++render_content_revision_;
+    if (render_content_revision_ == 0) {
+        ++render_content_revision_;
     }
 }
 

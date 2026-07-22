@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -24,9 +25,11 @@ class RenderTarget;
 class StaticMesh;
 class Texture2D;
 struct DrawIndexedDescription;
+struct IndexedDrawBatchItem;
 struct DrawOverlayDescription;
 struct GraphicsPipelineDescription;
 struct PickingDrawDescription;
+struct PickingDrawBatchItem;
 struct StaticMeshDescription;
 struct Texture2DDescription;
 } // namespace elf3d::graphics
@@ -60,6 +63,38 @@ struct TextureRecord {
     ColorTextureResolver* resolver = nullptr;
 };
 
+enum class GpuTimingKind : std::uint8_t {
+    main,
+    picking,
+    resolve,
+};
+
+struct GpuTimingResult {
+    double milliseconds = 0.0;
+    bool available = false;
+};
+
+class GpuTimerQueryRing final {
+  public:
+    [[nodiscard]] bool begin() noexcept;
+    void end() noexcept;
+    [[nodiscard]] GpuTimingResult latest() noexcept;
+    void release() noexcept;
+
+  private:
+    void poll() noexcept;
+
+    static constexpr std::size_t slot_count = 4;
+    std::array<GLuint, slot_count> queries_{};
+    std::array<bool, slot_count> pending_{};
+    std::array<std::uint64_t, slot_count> submission_ids_{};
+    std::size_t next_slot_ = 0;
+    std::optional<std::size_t> active_slot_;
+    std::uint64_t next_submission_id_ = 1;
+    std::uint64_t latest_submission_id_ = 0;
+    GpuTimingResult latest_;
+};
+
 class OpenGLDeviceState final {
   public:
     explicit OpenGLDeviceState(GLint maximum_texture_size) noexcept;
@@ -71,6 +106,9 @@ class OpenGLDeviceState final {
                                                          ColorTextureResolver* resolver = nullptr);
     void unregister_texture(TextureHandle handle) noexcept;
     [[nodiscard]] Result<NativeTextureView> native_texture_view(TextureHandle handle) const;
+    [[nodiscard]] bool begin_gpu_timing(GpuTimingKind kind) noexcept;
+    void end_gpu_timing(GpuTimingKind kind) noexcept;
+    [[nodiscard]] GpuTimingResult latest_gpu_timing(GpuTimingKind kind) noexcept;
     void shut_down() noexcept;
 
   private:
@@ -79,6 +117,20 @@ class OpenGLDeviceState final {
     bool operational_ = true;
     std::uint64_t next_texture_handle_ = 1;
     std::unordered_map<std::uint64_t, TextureRecord> texture_records_;
+    std::array<GpuTimerQueryRing, 3> gpu_timing_rings_;
+};
+
+class GpuTimingScope final {
+  public:
+    GpuTimingScope(OpenGLDeviceState& state, GpuTimingKind kind) noexcept;
+    ~GpuTimingScope();
+    GpuTimingScope(const GpuTimingScope&) = delete;
+    GpuTimingScope& operator=(const GpuTimingScope&) = delete;
+
+  private:
+    OpenGLDeviceState& state_;
+    GpuTimingKind kind_;
+    bool active_ = false;
 };
 
 class AllocationStateGuard final {
@@ -155,6 +207,7 @@ struct UniformLocations {
     GLint view = -1;
     GLint projection = -1;
     GLint normal = -1;
+    GLint vertex_layout = -1;
     GLint base_color = -1;
     GLint camera_world_position = -1;
     GLint light_direction = -1;
@@ -211,6 +264,7 @@ struct PickingTargetView {
 struct MeshView {
     GLuint vertex_array = 0;
     std::uint32_t index_count = 0;
+    std::uint8_t vertex_layout = 0;
 };
 
 struct PipelineView {
@@ -244,6 +298,9 @@ create_graphics_pipeline(std::shared_ptr<OpenGLDeviceState> state,
 draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
              graphics::StaticMesh& mesh,
              const graphics::DrawIndexedDescription& description) noexcept;
+[[nodiscard]] Result<void>
+draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
+                   std::span<const graphics::IndexedDrawBatchItem> items) noexcept;
 
 struct OverlayResources {
     GLuint program = 0;
@@ -286,6 +343,9 @@ struct PickingReadback {
 draw_picking_indexed(PickingResources& resources, graphics::PickingTarget& target,
                      graphics::StaticMesh& mesh,
                      const graphics::PickingDrawDescription& description) noexcept;
+[[nodiscard]] Result<void>
+draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
+                   std::span<const graphics::PickingDrawBatchItem> items) noexcept;
 [[nodiscard]] Result<std::optional<PickingReadback>>
 read_picking_pixel(graphics::PickingTarget& target, Float2 position_pixels) noexcept;
 [[nodiscard]] Result<std::vector<float>>

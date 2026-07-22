@@ -9,6 +9,22 @@ module;
 module elf.scene;
 
 namespace elf3d::scene {
+namespace {
+
+void expand_bounds(std::optional<Bounds3>& target, Bounds3 bounds) noexcept {
+    if (!target.has_value()) {
+        target = bounds;
+        return;
+    }
+    target->minimum.x = std::min(target->minimum.x, bounds.minimum.x);
+    target->minimum.y = std::min(target->minimum.y, bounds.minimum.y);
+    target->minimum.z = std::min(target->minimum.z, bounds.minimum.z);
+    target->maximum.x = std::max(target->maximum.x, bounds.maximum.x);
+    target->maximum.y = std::max(target->maximum.y, bounds.maximum.y);
+    target->maximum.z = std::max(target->maximum.z, bounds.maximum.z);
+}
+
+} // namespace
 
 Result<void> Storage::set_entity_visible(EntityId entity_id, bool visible) {
     Result<EntityRecord*> record = mutable_entity(entity_id);
@@ -100,16 +116,48 @@ Result<void> Storage::show_all_entities() {
     return {};
 }
 
+bool Storage::visible_bounds_cache_matches(const VisibilityFilter& filter) const noexcept {
+    const bool cacheable = filter.hierarchy_revision == hierarchy_revision_ &&
+                           filter.visibility_revision == visibility_revision_;
+    return cacheable && cached_visible_world_bounds_valid_ &&
+           cached_visible_spatial_revision_ == model_spatial_revision_ &&
+           cached_visible_hierarchy_revision_ == hierarchy_revision_ &&
+           cached_visible_visibility_revision_ == visibility_revision_ &&
+           cached_visible_isolated_root_ == filter.isolated_root;
+}
+
+void Storage::cache_visible_bounds(const VisibilityFilter& filter,
+                                   std::optional<Bounds3> bounds) const noexcept {
+    if (filter.hierarchy_revision != hierarchy_revision_ ||
+        filter.visibility_revision != visibility_revision_) {
+        return;
+    }
+    cached_visible_world_bounds_ = bounds;
+    cached_visible_spatial_revision_ = model_spatial_revision_;
+    cached_visible_hierarchy_revision_ = hierarchy_revision_;
+    cached_visible_visibility_revision_ = visibility_revision_;
+    cached_visible_isolated_root_ = filter.isolated_root;
+    cached_visible_world_bounds_valid_ = true;
+}
+
 std::optional<Bounds3>
 Storage::visible_world_bounds(const VisibilityFilter& filter) const noexcept {
+    if (visible_bounds_cache_matches(filter)) {
+        return cached_visible_world_bounds_;
+    }
     std::optional<Bounds3> result;
     for (const std::optional<EntityRecord>& record : entities_) {
         if (!record.has_value() || !record->model.has_value() ||
             !entity_visible_in_filter(*this, filter, record->id)) {
             continue;
         }
-        expand_world_bounds(result, *record);
+        const std::optional<Bounds3> bounds = entity_world_bounds(*record);
+        if (!bounds.has_value()) {
+            continue;
+        }
+        expand_bounds(result, *bounds);
     }
+    cache_visible_bounds(filter, result);
     return result;
 }
 

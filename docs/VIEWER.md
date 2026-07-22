@@ -39,6 +39,19 @@ installed EmEditor, Notepad, or Notepad++. Missing editors are shown disabled.
 Use **View** to show or hide panels. **View > Reset Layout** restores the default
 docking arrangement.
 
+## Performance Diagnostics
+
+The **Rendering** panel includes a diagnostic section with VSync, standard PBR
+or unlit shading, 100%, 50%, and 25% render scales, rolling average, median,
+p95, p99, maximum frame time, CPU/GPU phase timings, context details, resource
+and residency counters, and CSV capture. VSync, standard PBR, and 100% scale
+are the defaults. Idle 3D content reuses its last resolved texture while event
+processing, the interface, and window presentation continue normally.
+
+**Navigation Settings** includes the default-on focus-depth orbit anchor. Turn
+it off only to compare orbit-entry behavior; ordinary navigation retains the
+anchored behavior.
+
 ## Navigation Controls
 
 Keep the pointer over **3D View**.

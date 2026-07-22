@@ -27,6 +27,7 @@ struct RenderItem {
     Float4x4 model_matrix{};
     math::Matrix3x3 normal_matrix{};
     bool orientation_reversed = false;
+    std::uint64_t material_identity = 0;
     AlphaMode alpha_mode = AlphaMode::opaque;
     float camera_distance_squared = 0.0F;
 };
@@ -36,6 +37,8 @@ struct RenderList {
     Float4x4 projection_matrix{};
     Float3 camera_world_position;
     std::vector<RenderItem> items;
+    std::uint64_t candidate_primitives = 0;
+    std::uint64_t frustum_culled_primitives = 0;
     std::uint64_t clipping_bounds_tested = 0;
     std::uint64_t clipping_bounds_rejected = 0;
     std::uint64_t clipping_bounds_intersecting = 0;
@@ -55,12 +58,16 @@ struct GpuPickResult {
     std::optional<GpuPickHit> hit;
     std::uint64_t draw_calls = 0;
     std::uint64_t pixels_read = 0;
+    double pass_milliseconds = 0.0;
+    double readback_milliseconds = 0.0;
 };
 
 struct GpuFocusDepthAnchorResult {
     std::optional<Float3> world_position;
     std::uint64_t draw_calls = 0;
     std::uint64_t pixels_read = 0;
+    double pass_milliseconds = 0.0;
+    double readback_milliseconds = 0.0;
 };
 
 struct GpuPickRequest {
@@ -95,10 +102,13 @@ struct RenderRequest {
 class Renderer final {
   private:
     struct ConstructionKey final {};
+    struct CacheState;
+    struct DrawPacket;
     struct Resources final {
         std::unique_ptr<graphics::Device> device;
         std::uint64_t engine_token = 0;
         std::unique_ptr<graphics::GraphicsPipeline> pipeline;
+        std::unique_ptr<CacheState> cache;
     };
 
   public:
@@ -107,7 +117,7 @@ class Renderer final {
 
     Renderer(ConstructionKey, Resources resources) noexcept;
 
-    ~Renderer() = default;
+    ~Renderer();
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
@@ -138,37 +148,9 @@ class Renderer final {
     void release_scene(SceneId scene) noexcept;
 
   private:
-    struct MeshCacheKey {
-        std::uint64_t scene = 0;
-        std::uint64_t mesh = 0;
-        bool document_primitive = false;
-
-        bool operator==(const MeshCacheKey&) const = default;
-    };
-
-    struct MeshCacheEntry {
-        MeshCacheKey key;
-        std::unique_ptr<graphics::StaticMesh> mesh;
-    };
-
     enum class TextureColorSpace : std::uint8_t {
         linear,
         srgb,
-    };
-
-    struct TextureCacheKey {
-        std::uint64_t scene = 0;
-        std::uint64_t image = 0;
-        bool document_image = false;
-        TextureColorSpace color_space = TextureColorSpace::linear;
-        scene::RuntimeSamplerDescription sampler;
-
-        bool operator==(const TextureCacheKey&) const = default;
-    };
-
-    struct TextureCacheEntry {
-        TextureCacheKey key;
-        std::unique_ptr<graphics::Texture2D> texture;
     };
 
     struct RenderPass final {
@@ -178,11 +160,24 @@ class Renderer final {
         RenderStatistics statistics;
     };
 
+    struct PreparedDraw final {
+        graphics::StaticMesh* mesh = nullptr;
+        std::array<graphics::Texture2D*, graphics::material_texture_count> textures{};
+        std::uint64_t material_identity = 0;
+        graphics::DrawIndexedDescription description;
+    };
+
     [[nodiscard]] Result<void> draw_render_items(const scene::Storage& scene,
                                                  graphics::RenderTarget& target, RenderPass& pass);
-    [[nodiscard]] Result<void> draw_render_item(const scene::Storage& scene,
-                                                graphics::RenderTarget& target,
-                                                const RenderItem& item, RenderPass& pass);
+    [[nodiscard]] Result<void> prepare_render_item(const scene::Storage& scene,
+                                                   const RenderItem& item, RenderPass& pass,
+                                                   std::vector<PreparedDraw>& prepared);
+    [[nodiscard]] std::uint64_t
+    count_material_switches(const std::vector<PreparedDraw>& prepared) const noexcept;
+    [[nodiscard]] Result<const DrawPacket*> cached_draw_packet(const scene::Storage& scene,
+                                                               const RenderItem& item,
+                                                               RenderStatistics& statistics);
+    void synchronize_draw_packet_cache(const scene::Storage& scene);
     [[nodiscard]] Result<void> draw_render_overlay(graphics::RenderTarget& target,
                                                    RenderPass& pass);
     [[nodiscard]] Result<void> prepare_draw_textures(
@@ -190,7 +185,8 @@ class Renderer final {
         std::array<graphics::Texture2D*, graphics::material_texture_count>& textures,
         std::uint64_t& upload_count, std::uint64_t& texture_bindings);
     [[nodiscard]] Result<graphics::StaticMesh*>
-    cached_mesh(SceneId scene_id, const scene::RuntimePrimitiveView& primitive);
+    cached_mesh(SceneId scene_id, const scene::RuntimePrimitiveView& primitive,
+                RenderStatistics& statistics);
     [[nodiscard]] Result<graphics::Texture2D*>
     cached_texture(SceneId scene_id, const scene::RuntimeTextureView& texture,
                    TextureColorSpace color_space, std::uint64_t& upload_count);
@@ -203,8 +199,7 @@ class Renderer final {
     std::unique_ptr<graphics::Device> device_;
     std::uint64_t engine_token_ = 0;
     std::unique_ptr<graphics::GraphicsPipeline> pipeline_;
-    std::vector<MeshCacheEntry> mesh_cache_;
-    std::vector<TextureCacheEntry> texture_cache_;
+    std::unique_ptr<CacheState> cache_;
 };
 
 } // namespace elf3d::renderer
@@ -217,7 +212,12 @@ runtime_address_mode(scene::RuntimeTextureWrap wrap) noexcept;
 runtime_filter_mode(scene::RuntimeTextureFilter filter) noexcept;
 [[nodiscard]] MaterialDescription
 runtime_material_description(const scene::RuntimeMaterialView& source) noexcept;
-[[nodiscard]] std::vector<VertexPositionNormalTexCoord>
-vertices_from_runtime_primitive(const scene::RuntimePrimitiveView& primitive);
+struct RuntimeVertexBuffer {
+    std::vector<float> values;
+    std::uint32_t vertex_count = 0;
+    graphics::VertexLayout layout = graphics::VertexLayout::position_normal_float3;
+};
+[[nodiscard]] RuntimeVertexBuffer
+runtime_vertex_buffer(const scene::RuntimePrimitiveView& primitive);
 
 } // namespace elf3d::renderer

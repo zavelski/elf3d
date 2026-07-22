@@ -140,6 +140,15 @@ while (host_running()) {
 The host owns the native window, OpenGL context, event loop, input translation,
 and texture presentation.
 
+`RenderStatistics` reports primitive visibility, passes, draw/resource work,
+resident-byte estimates, CPU phases, and delayed nonblocking GPU main/resolve
+timings. `PickingStatistics` reports the corresponding picking pass, readback,
+allocation, CPU, and delayed GPU timing. A GPU value remains unavailable until
+an older timer query completes; rendering never waits for the current query.
+Hosts may select diagnostic `RenderShadingMode::unlit`, retain a rendered
+texture until `Scene::revision()` or `Viewport::render_revision()` changes,
+and keep the default standard PBR path unchanged.
+
 ## Main API Areas
 
 - `Document`: CPU-side ownership of all imported scenes, the optional authored

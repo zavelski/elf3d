@@ -70,6 +70,21 @@ BasicLighting Viewport::basic_lighting() const noexcept {
                                                           : BasicLighting{};
 }
 
+void Viewport::set_render_shading_mode(RenderShadingMode mode) noexcept {
+    if (impl_ != nullptr && impl_->viewport != nullptr) {
+        impl_->viewport->set_render_shading_mode(mode);
+    }
+}
+
+RenderShadingMode Viewport::render_shading_mode() const noexcept {
+    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->render_shading_mode()
+                                                          : RenderShadingMode::standard;
+}
+
+std::uint64_t Viewport::render_revision() const noexcept {
+    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->render_revision() : 0;
+}
+
 Result<void> Viewport::update_navigation(Scene& scene, EntityId camera_entity,
                                          const ViewportInput& input) noexcept {
     if (impl_ == nullptr || impl_->viewport == nullptr) {

@@ -69,10 +69,12 @@ out/build/windows-model-debug/lib/Debug/elf3d_model.lib
 | `elf3d` | Shared C++ engine library |
 | `elf3d_imgui` | Dear ImGui presentation integration |
 | `elf3d_viewer` | Desktop reference viewer |
+| `elf3d_render_benchmark` | Optional hidden-context rendering benchmark |
 
 Set `ELF3D_BUILD_VIEWER=OFF` when only the engine library is required. Set
 `ELF3D_BUILD_ENGINE=OFF` for the model-only configuration. Standard CMake
-testing can be controlled with `BUILD_TESTING`.
+testing can be controlled with `BUILD_TESTING`. Set
+`ELF3D_BUILD_PERFORMANCE_BENCHMARK=OFF` to omit the non-CTest benchmark.
 
 ## Common Problems
 

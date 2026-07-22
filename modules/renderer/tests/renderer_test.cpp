@@ -22,7 +22,6 @@ import elf.renderer;
 import elf.scene;
 
 #include "renderer_test_support.h"
-
 namespace {
 
 using elf3d::renderer::tests::FakeDevice;
@@ -38,7 +37,6 @@ using elf3d::renderer::tests::FakeRenderTarget;
     return nearly_equal(left.x, right.x, tolerance) && nearly_equal(left.y, right.y, tolerance) &&
            nearly_equal(left.z, right.z, tolerance);
 }
-
 [[nodiscard]] double test_focus_depth_weight(elf3d::Extent2D extent, std::uint32_t x,
                                              std::uint32_t y) noexcept {
     const double sample_x =
@@ -49,7 +47,6 @@ using elf3d::renderer::tests::FakeRenderTarget;
     const double mass = 1.0 - std::min(radius_squared, 1.0);
     return mass * mass;
 }
-
 constexpr std::uint64_t engine_token = 11;
 constexpr std::array<elf3d::VertexPositionNormal, 3> test_vertices{{
     {{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
@@ -59,11 +56,25 @@ constexpr std::array<elf3d::VertexPositionNormal, 3> test_vertices{{
 constexpr std::array<std::uint32_t, 3> test_indices{{0, 1, 2}};
 constexpr elf3d::RenderStatistics expected_highlighted{3, 3, 9, 9, 9, 0, 3, 0, 0};
 
+[[nodiscard]] bool legacy_statistics_equal(const elf3d::RenderStatistics& actual,
+                                           const elf3d::RenderStatistics& expected) noexcept {
+    return actual.draw_calls == expected.draw_calls && actual.triangles == expected.triangles &&
+           actual.vertices == expected.vertices && actual.indices == expected.indices &&
+           actual.texture_bindings == expected.texture_bindings &&
+           actual.gpu_texture_uploads == expected.gpu_texture_uploads &&
+           actual.unique_gpu_textures == expected.unique_gpu_textures &&
+           actual.overlay_lines == expected.overlay_lines &&
+           actual.overlay_markers == expected.overlay_markers;
+}
 [[nodiscard]] elf3d::renderer::RenderRequest
 render_request(elf3d::EntityId camera, elf3d::ViewportRenderOptions options = {}) {
     return {camera, {}, {}, options};
 }
-
+[[nodiscard]] bool position_test_camera(elf3d::scene::Storage& scene, elf3d::EntityId camera) {
+    elf3d::Transform transform;
+    transform.translation = {0.0F, 0.0F, 3.0F};
+    return static_cast<bool>(scene.set_local_transform(camera, transform));
+}
 struct RendererContext {
     RendererContext()
         : id(elf3d::detail::SceneHandleAccess::create_scene(engine_token, 1)), scene(id) {}
@@ -106,7 +117,6 @@ struct RendererContext {
     context.clamped_texture = clamped_texture.value();
     return 0;
 }
-
 [[nodiscard]] int prepare_materials(RendererContext& context) {
     elf3d::MaterialDescription textured_description;
     textured_description.base_color = {0.5F, 0.5F, 0.5F, 1.0F};
@@ -143,12 +153,11 @@ struct RendererContext {
     context.double_sided = double_sided.value();
     return 0;
 }
-
 [[nodiscard]] int prepare_entities(RendererContext& context) {
     const auto model = context.scene.create_model(context.mesh, context.material);
     const auto camera =
         context.scene.create_perspective_camera(elf3d::PerspectiveCameraDescription{});
-    if (!model || !camera) {
+    if (!model || !camera || !position_test_camera(context.scene, camera.value())) {
         return 1;
     }
     const std::array<elf3d::ModelPrimitiveBinding, 2> primitives{{
@@ -170,7 +179,6 @@ struct RendererContext {
     context.non_camera = non_camera.value();
     return 0;
 }
-
 [[nodiscard]] int prepare_context(RendererContext& context) {
     const int resources = prepare_mesh_and_textures(context);
     if (resources != 0) {
@@ -182,7 +190,6 @@ struct RendererContext {
     }
     return prepare_entities(context);
 }
-
 [[nodiscard]] bool has_expected_shader_sources(const FakeDeviceState& device) {
     return device.vertex_shader_source.find("a_texcoord1") != std::string::npos &&
            device.vertex_shader_source.find("a_color") != std::string::npos &&
@@ -209,14 +216,35 @@ struct RendererContext {
     return 0;
 }
 
+[[nodiscard]] bool has_expected_diagnostic_counts(const elf3d::RenderStatistics& first,
+                                                  const elf3d::RenderStatistics& second) noexcept {
+    return first.candidate_primitives == 2 && first.visible_primitives == 2 &&
+           first.material_switches == 2 && second.material_switches == 2 &&
+           first.gpu_buffer_uploads == 1 && second.gpu_buffer_uploads == 0 &&
+           first.draw_packet_rebuilds == 2 && second.draw_packet_rebuilds == 0 &&
+           first.estimated_resident_geometry_bytes != 0 && first.cpu_total_milliseconds >= 0.0;
+}
+
+[[nodiscard]] bool has_expected_compact_upload(const FakeDeviceState& device) {
+    return device.upload_count == 1 && !device.mesh_layouts.empty() &&
+           !device.mesh_uploaded_bytes.empty() &&
+           device.mesh_layouts.front() == elf3d::graphics::VertexLayout::position_normal_float3 &&
+           device.mesh_uploaded_bytes.front() == test_vertices.size() * 6U * sizeof(float);
+}
+
 [[nodiscard]] bool has_expected_render_counts(const elf3d::Result<elf3d::RenderStatistics>& first,
                                               const elf3d::Result<elf3d::RenderStatistics>& second,
                                               const FakeDeviceState& device) {
     const elf3d::RenderStatistics expected_first{2, 2, 6, 6, 5, 3, 3, 0, 0};
     const elf3d::RenderStatistics expected_second{2, 2, 6, 6, 5, 0, 3, 0, 0};
-    return first && second && first.value() == expected_first &&
-           second.value() == expected_second && device.upload_count == 1 &&
-           device.draw_count == 4 && device.draws.size() == 4;
+    if (!first || !second) {
+        return false;
+    }
+    const bool legacy_counts = legacy_statistics_equal(first.value(), expected_first) &&
+                               legacy_statistics_equal(second.value(), expected_second);
+    const bool diagnostic_counts = has_expected_diagnostic_counts(first.value(), second.value());
+    return legacy_counts && diagnostic_counts && has_expected_compact_upload(device) &&
+           device.indexed_batch_count == 2 && device.draw_count == 4 && device.draws.size() == 4;
 }
 
 [[nodiscard]] bool has_expected_texture_uploads(const FakeDeviceState& device) {
@@ -228,15 +256,15 @@ struct RendererContext {
 }
 
 [[nodiscard]] bool has_expected_texture_mapping(const FakeDeviceState& device) {
-    return device.draws[0].texture_mappings[0].texcoord_set == 1U &&
+    return !device.draws.empty() && device.draws[0].texture_mappings[0].texcoord_set == 1U &&
            device.draws[0].texture_mappings[0].transform.offset == elf3d::Float2{0.25F, 0.5F} &&
            device.draws[0].texture_mappings[0].transform.scale == elf3d::Float2{2.0F, 3.0F} &&
            nearly_equal(device.draws[0].texture_mappings[0].transform.rotation_radians, 0.5F);
 }
 
 [[nodiscard]] bool has_expected_material_parameters(const FakeDeviceState& device) {
-    return device.draw_texture_presence.size() >= 1 && device.draw_texture_presence[0][2] &&
-           device.draw_texture_presence[0][3] &&
+    return !device.draws.empty() && !device.draw_texture_presence.empty() &&
+           device.draw_texture_presence[0][2] && device.draw_texture_presence[0][3] &&
            device.draws[0].emissive_factor == elf3d::Float3{0.2F, 0.3F, 0.4F} &&
            nearly_equal(device.draws[0].ior, 1.33F) &&
            nearly_equal(device.draws[0].specular_factor, 0.75F) && device.draws[0].unlit &&
@@ -245,9 +273,9 @@ struct RendererContext {
 }
 
 [[nodiscard]] bool has_expected_raster_state(const FakeDeviceState& device) {
-    return device.draws[0].front_face_clockwise && !device.draws[0].double_sided &&
-           device.draws[1].front_face_clockwise && device.draws[1].double_sided &&
-           device.draws[1].alpha_mode == elf3d::AlphaMode::blend;
+    return device.draws.size() >= 2 && device.draws[0].front_face_clockwise &&
+           !device.draws[0].double_sided && device.draws[1].front_face_clockwise &&
+           device.draws[1].double_sided && device.draws[1].alpha_mode == elf3d::AlphaMode::blend;
 }
 
 [[nodiscard]] int verify_material_render(RendererContext& context) {
@@ -265,16 +293,96 @@ struct RendererContext {
     return 0;
 }
 
+[[nodiscard]] int verify_camera_draw_packet_reuse(RendererContext& context) {
+    context.target.extent_value = {640, 360};
+    const auto warm_render =
+        context.renderer->render(context.scene, context.target, render_request(context.camera));
+    if (!warm_render) {
+        return 57;
+    }
+    const std::uint64_t content_revision = context.scene.render_content_revision();
+    elf3d::Transform camera_transform;
+    camera_transform.translation = {0.25F, 0.0F, 3.0F};
+    if (!context.scene.set_local_transform(context.camera, camera_transform) ||
+        context.scene.render_content_revision() != content_revision) {
+        return 58;
+    }
+    const auto camera_render =
+        context.renderer->render(context.scene, context.target, render_request(context.camera));
+    if (!camera_render || camera_render.value().draw_packet_rebuilds != 0 ||
+        camera_render.value().gpu_buffer_uploads != 0) {
+        return 59;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool material_cache_reused(RendererContext& context,
+                                         const elf3d::RenderStatistics& statistics,
+                                         int mesh_uploads, int texture_uploads) {
+    return statistics.gpu_buffer_uploads == 0 &&
+           context.device_state().upload_count == mesh_uploads &&
+           context.device_state().texture_upload_count == texture_uploads;
+}
+
+[[nodiscard]] bool latest_material_draw_matches(RendererContext& context,
+                                                const elf3d::RenderStatistics& statistics,
+                                                elf3d::Color4 base_color) {
+    if (statistics.draw_calls == 0 || context.device_state().draws.size() < statistics.draw_calls) {
+        return false;
+    }
+    const std::size_t first_draw =
+        context.device_state().draws.size() - static_cast<std::size_t>(statistics.draw_calls);
+    return context.device_state().draws[first_draw].base_color == base_color;
+}
+
+[[nodiscard]] int verify_material_draw_packet_invalidation(RendererContext& context) {
+    const auto original = context.scene.material(context.material);
+    if (!original) {
+        return 60;
+    }
+    elf3d::MaterialDescription changed = original.value();
+    changed.base_color = {0.1F, 0.2F, 0.3F, 1.0F};
+    const int mesh_uploads = context.device_state().upload_count;
+    const int texture_uploads = context.device_state().texture_upload_count;
+    if (!context.scene.set_material(context.material, changed)) {
+        return 61;
+    }
+    const auto material_render =
+        context.renderer->render(context.scene, context.target, render_request(context.camera));
+    if (!material_render) {
+        return 62;
+    }
+    if (material_render.value().draw_packet_rebuilds != material_render.value().draw_calls) {
+        return 63;
+    }
+    if (!material_cache_reused(context, material_render.value(), mesh_uploads, texture_uploads)) {
+        return 64;
+    }
+    if (!latest_material_draw_matches(context, material_render.value(), changed.base_color)) {
+        return 65;
+    }
+    if (!context.scene.set_material(context.material, original.value())) {
+        return 66;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_draw_packet_invalidation(RendererContext& context) {
+    const int camera_reuse = verify_camera_draw_packet_reuse(context);
+    return camera_reuse == 0 ? verify_material_draw_packet_invalidation(context) : camera_reuse;
+}
+
 [[nodiscard]] bool
 has_expected_gpu_pick_summary(const elf3d::Result<elf3d::renderer::GpuPickResult>& pick,
                               const FakePickingTarget& target, const FakeDeviceState& device) {
     return pick && pick.value().hit.has_value() && pick.value().draw_calls == 2 &&
            pick.value().pixels_read == 1 && target.clear_count == 1 &&
-           device.picking_draw_count == 2 && device.picking_draws.size() == 2;
+           device.picking_batch_count == 1 && device.picking_draw_count == 2 &&
+           device.picking_draws.size() == 2;
 }
 
 [[nodiscard]] bool has_expected_gpu_pick_draws(const FakeDeviceState& device) {
-    return device.picking_draws[0].object_id == 1U &&
+    return device.picking_draws.size() >= 2 && device.picking_draws[0].object_id == 1U &&
            device.picking_draws[0].primitive_index == 0U &&
            device.picking_draws[1].object_id == 2U && device.picking_draws[1].primitive_index == 1U;
 }
@@ -357,7 +465,8 @@ has_expected_gpu_pick_summary(const elf3d::Result<elf3d::renderer::GpuPickResult
 has_expected_highlighted_render(const elf3d::Result<elf3d::EntityId>& shared_model,
                                 const elf3d::Result<elf3d::RenderStatistics>& render,
                                 const FakeDeviceState& device) {
-    return shared_model && render && render.value() == expected_highlighted &&
+    return shared_model && render &&
+           legacy_statistics_equal(render.value(), expected_highlighted) &&
            device.draws.size() == 7 && device.draws[4].highlight_strength == 0.6F &&
            device.draws[5].highlight_strength == 0.0F && device.draws[6].highlight_strength == 0.6F;
 }
@@ -366,8 +475,8 @@ has_expected_highlighted_render(const elf3d::Result<elf3d::EntityId>& shared_mod
                                               const elf3d::Result<elf3d::RenderStatistics>& render,
                                               const FakeDeviceState& device) {
     const elf3d::RenderStatistics expected_hidden{1, 1, 3, 3, 4, 0, 3, 0, 0};
-    return hidden && render && render.value() == expected_hidden && device.draws.size() == 8 &&
-           device.draws.back().highlight_strength == 0.0F;
+    return hidden && render && legacy_statistics_equal(render.value(), expected_hidden) &&
+           device.draws.size() == 8 && device.draws.back().highlight_strength == 0.0F;
 }
 
 [[nodiscard]] int verify_highlight_visibility(RendererContext& context) {
@@ -389,7 +498,8 @@ has_expected_highlighted_render(const elf3d::Result<elf3d::EntityId>& shared_mod
     const auto restored = context.scene.show_all_entities();
     const auto restored_render = context.renderer->render(context.scene, context.target,
                                                           render_request(context.camera, options));
-    if (!restored || !restored_render || restored_render.value() != expected_highlighted) {
+    if (!restored || !restored_render ||
+        !legacy_statistics_equal(restored_render.value(), expected_highlighted)) {
         return 43;
     }
     return 0;
@@ -523,7 +633,7 @@ has_expected_clipped_list(const elf3d::Result<elf3d::renderer::RenderList>& list
     const auto model = second_scene.create_model(mesh.value(), material.value());
     const auto camera =
         second_scene.create_perspective_camera(elf3d::PerspectiveCameraDescription{});
-    if (!model || !camera) {
+    if (!model || !camera || !position_test_camera(second_scene, camera.value())) {
         return 5;
     }
     const auto initial_render =
@@ -596,7 +706,7 @@ struct PreviousDrawCounts {
     const auto model = context.scene.create_entity();
     const auto camera =
         context.scene.create_perspective_camera(elf3d::PerspectiveCameraDescription{});
-    if (!model || !camera) {
+    if (!model || !camera || !position_test_camera(context.scene, camera.value())) {
         return 49;
     }
     const std::array<elf3d::PrimitiveId, 1> primitives{{primitive.value()}};
@@ -616,7 +726,8 @@ has_expected_document_render(const DocumentContext& document,
     const elf3d::SceneStatistics expected_scene{2, 1, 1, 1, 1, 4, 6, 2};
     const elf3d::RenderStatistics expected_render{1, 2, 4, 6, 0, 0, 0, 0, 0};
     return list && list.value().items.size() == 1 && render &&
-           document.scene.statistics() == expected_scene && render.value() == expected_render &&
+           document.scene.statistics() == expected_scene &&
+           legacy_statistics_equal(render.value(), expected_render) &&
            device.upload_count == previous.uploads + 1 &&
            device.draws.size() == previous.draws + 1 && device.draws.back().double_sided &&
            device.draws.back().alpha_mode == elf3d::AlphaMode::blend;
@@ -653,7 +764,7 @@ has_expected_document_render(const DocumentContext& document,
 using RendererStep = int (*)(RendererContext&);
 
 [[nodiscard]] int run_renderer_steps(RendererContext& context) {
-    constexpr std::array<RendererStep, 12> steps{{
+    constexpr std::array<RendererStep, 13> steps{{
         verify_renderer_creation,
         verify_material_render,
         verify_gpu_pick,
@@ -666,6 +777,7 @@ using RendererStep = int (*)(RendererContext&);
         verify_cache_lifecycle,
         verify_document_render,
         verify_zero_extent,
+        verify_draw_packet_invalidation,
     }};
     for (const RendererStep step : steps) {
         const int result = step(context);

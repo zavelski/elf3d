@@ -28,6 +28,11 @@ class OffscreenViewport final {
   private:
     struct ConstructionKey final {};
     class State;
+    struct Resources final {
+        std::unique_ptr<graphics::RenderTarget> render_target;
+        std::unique_ptr<graphics::PickingTarget> picking_target;
+        std::unique_ptr<graphics::PickingTarget> focus_depth_target;
+    };
 
   public:
     [[nodiscard]] static Result<std::unique_ptr<OffscreenViewport>> create(graphics::Device& device,
@@ -48,6 +53,10 @@ class OffscreenViewport final {
 
     void set_basic_lighting(const BasicLighting& lighting) noexcept;
     [[nodiscard]] BasicLighting basic_lighting() const noexcept;
+
+    void set_render_shading_mode(RenderShadingMode mode) noexcept;
+    [[nodiscard]] RenderShadingMode render_shading_mode() const noexcept;
+    [[nodiscard]] std::uint64_t render_revision() const noexcept;
 
     [[nodiscard]] Result<void> update_navigation(renderer::Renderer& renderer,
                                                  picking::PickingService& picking,
@@ -140,8 +149,7 @@ class OffscreenViewport final {
     [[nodiscard]] TextureHandle color_texture() const noexcept;
     [[nodiscard]] bool framebuffer_valid() const noexcept;
 
-    OffscreenViewport(ConstructionKey, std::unique_ptr<graphics::RenderTarget> render_target,
-                      std::unique_ptr<graphics::PickingTarget> picking_target) noexcept;
+    OffscreenViewport(ConstructionKey, Resources resources) noexcept;
 
   private:
     struct InteractionFrame {
@@ -204,6 +212,7 @@ class OffscreenViewport final {
 
     std::unique_ptr<graphics::RenderTarget> render_target_;
     std::unique_ptr<graphics::PickingTarget> picking_target_;
+    std::unique_ptr<graphics::PickingTarget> focus_depth_target_;
     std::unique_ptr<State> state_;
     ViewportTool active_tool_ = ViewportTool::selection;
     std::array<OverlayLineSegment, 2 + 4 + maximum_clipping_boxes * 12> overlay_lines_;
@@ -212,6 +221,8 @@ class OffscreenViewport final {
     std::size_t overlay_marker_count_ = 0;
     Color4 clear_color_{0.08F, 0.16F, 0.28F, 1.0F};
     BasicLighting lighting_;
+    RenderShadingMode shading_mode_ = RenderShadingMode::standard;
+    std::uint64_t render_revision_ = 1;
     RenderStatistics statistics_;
     PickingStatistics gpu_picking_statistics_;
 };

@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -99,6 +100,129 @@ struct SmokeAssets {
     elf3d::MaterialHandle red;
     elf3d::MaterialHandle green;
 };
+
+struct ForeignGlState {
+    GLint draw_framebuffer = 0;
+    GLint read_framebuffer = 0;
+    std::array<GLint, 4> viewport{};
+    GLint program = 0;
+    GLint vertex_array = 0;
+    GLint active_texture = 0;
+    GLint texture = 0;
+    GLboolean blend = GL_FALSE;
+    GLboolean depth_test = GL_FALSE;
+    GLboolean cull_face = GL_FALSE;
+    std::array<GLboolean, 4> color_mask{};
+    GLboolean depth_mask = GL_FALSE;
+
+    bool operator==(const ForeignGlState&) const = default;
+};
+
+class ForeignGlObjects final {
+  public:
+    ~ForeignGlObjects() {
+        glUseProgram(0);
+        glBindVertexArray(0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteTextures(1, &texture);
+        glDeleteVertexArrays(1, &vertex_array);
+        glDeleteFramebuffers(1, &framebuffer);
+        glDeleteProgram(program);
+    }
+
+    ForeignGlObjects(const ForeignGlObjects&) = delete;
+    ForeignGlObjects& operator=(const ForeignGlObjects&) = delete;
+
+    GLuint framebuffer = 0;
+    GLuint vertex_array = 0;
+    GLuint texture = 0;
+    GLuint program = 0;
+
+    ForeignGlObjects() = default;
+};
+
+[[nodiscard]] GLuint compile_foreign_shader(GLenum type, const char* source) noexcept {
+    const GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, nullptr);
+    glCompileShader(shader);
+    GLint compiled = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled != GL_TRUE) {
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+[[nodiscard]] GLuint create_foreign_program() noexcept {
+    constexpr const char* vertex_source =
+        "#version 410 core\nvoid main(){gl_Position=vec4(0.0,0.0,0.0,1.0);}";
+    constexpr const char* fragment_source =
+        "#version 410 core\nout vec4 color;void main(){color=vec4(1.0);}";
+    const GLuint vertex = compile_foreign_shader(GL_VERTEX_SHADER, vertex_source);
+    const GLuint fragment = compile_foreign_shader(GL_FRAGMENT_SHADER, fragment_source);
+    if (vertex == 0 || fragment == 0) {
+        glDeleteShader(vertex);
+        glDeleteShader(fragment);
+        return 0;
+    }
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        glDeleteProgram(program);
+        return 0;
+    }
+    return program;
+}
+
+[[nodiscard]] ForeignGlState capture_foreign_state() noexcept {
+    ForeignGlState state;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &state.draw_framebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &state.read_framebuffer);
+    glGetIntegerv(GL_VIEWPORT, state.viewport.data());
+    glGetIntegerv(GL_CURRENT_PROGRAM, &state.program);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &state.vertex_array);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &state.active_texture);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &state.texture);
+    state.blend = glIsEnabled(GL_BLEND);
+    state.depth_test = glIsEnabled(GL_DEPTH_TEST);
+    state.cull_face = glIsEnabled(GL_CULL_FACE);
+    glGetBooleanv(GL_COLOR_WRITEMASK, state.color_mask.data());
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &state.depth_mask);
+    return state;
+}
+
+[[nodiscard]] bool configure_foreign_state(ForeignGlObjects& objects) noexcept {
+    glGenFramebuffers(1, &objects.framebuffer);
+    glGenVertexArrays(1, &objects.vertex_array);
+    glGenTextures(1, &objects.texture);
+    objects.program = create_foreign_program();
+    if (objects.framebuffer == 0 || objects.vertex_array == 0 || objects.texture == 0 ||
+        objects.program == 0) {
+        return false;
+    }
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, objects.framebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, objects.framebuffer);
+    glViewport(3, 4, 17, 19);
+    glUseProgram(objects.program);
+    glBindVertexArray(objects.vertex_array);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, objects.texture);
+    glEnable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glColorMask(GL_FALSE, GL_TRUE, GL_FALSE, GL_TRUE);
+    glDepthMask(GL_FALSE);
+    return glGetError() == GL_NO_ERROR;
+}
 
 [[nodiscard]] int create_public_objects(elf3d::Engine& engine, SmokeFixture& fixture) {
     elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.create_scene();
@@ -196,6 +320,32 @@ struct SmokeAssets {
     return 0;
 }
 
+[[nodiscard]] int verify_foreign_state_preserved(elf3d::Engine& engine, SmokeFixture& fixture) {
+    ForeignGlObjects objects;
+    if (!configure_foreign_state(objects)) {
+        return fail(24, "OpenGL smoke test failed to configure foreign host state");
+    }
+    const ForeignGlState expected = capture_foreign_state();
+
+    const elf3d::Result<void> render = fixture.viewport->render(*fixture.scene, fixture.camera);
+    if (!render || capture_foreign_state() != expected) {
+        return fail(25, "Viewport rendering did not preserve foreign OpenGL state");
+    }
+
+    const elf3d::Result<std::optional<elf3d::PickHit>> pick =
+        fixture.viewport->pick(*fixture.scene, fixture.camera, {32.0F, 32.0F});
+    if (!pick || capture_foreign_state() != expected) {
+        return fail(26, "Viewport picking did not preserve foreign OpenGL state");
+    }
+
+    const elf3d::Result<elf3d::NativeTextureView> texture =
+        engine.native_texture_view(fixture.viewport->color_texture());
+    if (!texture || capture_foreign_state() != expected) {
+        return fail(27, "Viewport display resolve did not preserve foreign OpenGL state");
+    }
+    return 0;
+}
+
 [[nodiscard]] int verify_rendered_pixel(elf3d::Engine& engine, const SmokeFixture& fixture) {
     const elf3d::Result<elf3d::NativeTextureView> texture_result =
         engine.native_texture_view(fixture.viewport->color_texture());
@@ -229,6 +379,66 @@ struct SmokeAssets {
     return 0;
 }
 
+[[nodiscard]] bool has_render_gpu_timings(const elf3d::RenderStatistics& statistics) noexcept {
+    return statistics.gpu_main_pass_timing_available && statistics.gpu_resolve_timing_available &&
+           statistics.gpu_main_pass_milliseconds >= 0.0 &&
+           statistics.gpu_resolve_milliseconds >= 0.0;
+}
+
+[[nodiscard]] int verify_delayed_render_gpu_timings(elf3d::Engine& engine, SmokeFixture& fixture) {
+    bool render_timings_available = false;
+    for (int attempt = 0; attempt < 16 && !render_timings_available; ++attempt) {
+        if (!fixture.viewport->render(*fixture.scene, fixture.camera) ||
+            !engine.native_texture_view(fixture.viewport->color_texture())) {
+            return fail(28, "GPU timing test could not render and resolve a frame");
+        }
+        glfwSwapBuffers(glfwGetCurrentContext());
+        const elf3d::RenderStatistics statistics = fixture.viewport->render_statistics();
+        render_timings_available = has_render_gpu_timings(statistics);
+    }
+    if (!render_timings_available) {
+        return fail(29, "Nonblocking GPU render timings did not become available");
+    }
+
+    return 0;
+}
+
+[[nodiscard]] int verify_delayed_picking_gpu_timing(SmokeFixture& fixture) {
+    bool timing_available = false;
+    for (int attempt = 0; attempt < 8 && !timing_available; ++attempt) {
+        if (!fixture.viewport->pick(*fixture.scene, fixture.camera, {32.0F, 32.0F})) {
+            return fail(30, "GPU timing test could not perform a pick");
+        }
+        const elf3d::Result<elf3d::PickingStatistics> statistics =
+            fixture.viewport->picking_statistics();
+        timing_available = statistics && statistics.value().latest_gpu_timing_available &&
+                           statistics.value().latest_gpu_milliseconds >= 0.0;
+    }
+    if (!timing_available) {
+        return fail(31, "Nonblocking GPU picking timing did not become available");
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_delayed_gpu_timings(elf3d::Engine& engine, SmokeFixture& fixture) {
+    const int render = verify_delayed_render_gpu_timings(engine, fixture);
+    return render != 0 ? render : verify_delayed_picking_gpu_timing(fixture);
+}
+
+[[nodiscard]] int verify_foreign_timer_query_preserved(SmokeFixture& fixture) {
+    GLuint query = 0;
+    glGenQueries(1, &query);
+    glBeginQuery(GL_TIME_ELAPSED, query);
+    const elf3d::Result<void> render = fixture.viewport->render(*fixture.scene, fixture.camera);
+    GLint current_query = 0;
+    glGetQueryiv(GL_TIME_ELAPSED, GL_CURRENT_QUERY, &current_query);
+    glEndQuery(GL_TIME_ELAPSED);
+    glDeleteQueries(1, &query);
+    return render && current_query == static_cast<GLint>(query)
+               ? 0
+               : fail(32, "Viewport rendering disturbed a foreign timer query");
+}
+
 [[nodiscard]] int run_render_smoke(elf3d::Engine& engine) {
     SmokeFixture fixture;
     const int objects = create_public_objects(engine, fixture);
@@ -251,6 +461,18 @@ struct SmokeAssets {
     const int rendered = render_scene(fixture);
     if (rendered != 0) {
         return rendered;
+    }
+    const int state_preservation = verify_foreign_state_preserved(engine, fixture);
+    if (state_preservation != 0) {
+        return state_preservation;
+    }
+    const int timings = verify_delayed_gpu_timings(engine, fixture);
+    if (timings != 0) {
+        return timings;
+    }
+    const int foreign_timer = verify_foreign_timer_query_preserved(fixture);
+    if (foreign_timer != 0) {
+        return foreign_timer;
     }
     return verify_rendered_pixel(engine, fixture);
 }
@@ -293,6 +515,7 @@ int main() {
     if (glfwGetCurrentContext() != window.get()) {
         return fail(1, "GLFW did not make the smoke-test context current");
     }
+    glfwSwapInterval(0);
 
     const int loaded_version = gladLoadGL(load_opengl_procedure);
     if (loaded_version == 0 || GLAD_GL_VERSION_4_1 == 0) {

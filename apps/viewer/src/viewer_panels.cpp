@@ -11,6 +11,139 @@
 #include <string_view>
 
 namespace elf3d::viewer {
+namespace {
+
+struct FrameDistribution final {
+    double average = 0.0;
+    double median = 0.0;
+    double p95 = 0.0;
+    double p99 = 0.0;
+    double maximum = 0.0;
+    std::size_t twice_median_count = 0;
+};
+
+[[nodiscard]] double percentile(const std::vector<double>& sorted, double fraction) noexcept {
+    if (sorted.empty()) {
+        return 0.0;
+    }
+    const std::size_t index =
+        static_cast<std::size_t>(std::ceil(fraction * static_cast<double>(sorted.size() - 1)));
+    const std::size_t selected = std::min(index, sorted.size() - 1);
+    return *(sorted.begin() + static_cast<std::ptrdiff_t>(selected));
+}
+
+[[nodiscard]] FrameDistribution frame_distribution(const ViewerState& state) {
+    FrameDistribution result;
+    if (state.frame_samples.empty()) {
+        return result;
+    }
+    std::vector<double> values;
+    values.reserve(state.frame_samples.size());
+    for (const ViewerState::FrameSample& sample : state.frame_samples) {
+        values.push_back(sample.frame_milliseconds);
+        result.average += sample.frame_milliseconds;
+    }
+    result.average /= static_cast<double>(values.size());
+    std::sort(values.begin(), values.end());
+    result.median = percentile(values, 0.50);
+    result.p95 = percentile(values, 0.95);
+    result.p99 = percentile(values, 0.99);
+    result.maximum = values.back();
+    result.twice_median_count = static_cast<std::size_t>(std::count_if(
+        values.begin(), values.end(),
+        [threshold = result.median * 2.0](double value) noexcept { return value > threshold; }));
+    return result;
+}
+
+void draw_diagnostic_modes(ViewerState& state) {
+    ImGui::Checkbox("VSync", &state.vsync_enabled);
+    constexpr std::array<const char*, 2> shading_modes{{"Standard PBR", "Unlit"}};
+    int shading = state.shading_mode == RenderShadingMode::unlit ? 1 : 0;
+    if (ImGui::Combo("Shading", &shading, shading_modes.data(),
+                     static_cast<int>(shading_modes.size()))) {
+        state.shading_mode = shading == 1 ? RenderShadingMode::unlit : RenderShadingMode::standard;
+    }
+    constexpr std::array<const char*, 3> scales{{"100%", "50%", "25%"}};
+    int scale = state.diagnostic_render_scale_percent == 50
+                    ? 1
+                    : (state.diagnostic_render_scale_percent == 25 ? 2 : 0);
+    if (ImGui::Combo("Render scale", &scale, scales.data(), static_cast<int>(scales.size()))) {
+        state.diagnostic_render_scale_percent = scale == 1 ? 50 : (scale == 2 ? 25 : 100);
+    }
+}
+
+void draw_capture_controls(ViewerState& state) {
+    if (ImGui::Checkbox("Capture frame samples", &state.capture_performance_csv) &&
+        state.capture_performance_csv) {
+        state.frame_samples.clear();
+        state.captured_frame_count = 0;
+        state.performance_capture_error.clear();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Write CSV")) {
+        (void)write_performance_csv(state);
+    }
+    ImGui::TextWrapped("CSV: %s", path_to_utf8(state.performance_csv_path).c_str());
+    if (!state.performance_capture_error.empty()) {
+        ImGui::TextWrapped("Capture error: %s", state.performance_capture_error.c_str());
+    }
+}
+
+void draw_frame_distribution(const ViewerState& state) {
+    const FrameDistribution distribution = frame_distribution(state);
+    ImGui::Text("Frames: %llu (retained %llu)",
+                static_cast<unsigned long long>(state.captured_frame_count),
+                static_cast<unsigned long long>(state.frame_samples.size()));
+    ImGui::Text("Frame ms avg / median: %.3f / %.3f", distribution.average, distribution.median);
+    ImGui::Text("Frame ms p95 / p99 / max: %.3f / %.3f / %.3f", distribution.p95, distribution.p99,
+                distribution.maximum);
+    ImGui::Text("Frames > 2x median: %llu",
+                static_cast<unsigned long long>(distribution.twice_median_count));
+    ImGui::Text("3D frames rendered / reused: %llu / %llu",
+                static_cast<unsigned long long>(state.rendered_3d_frame_count),
+                static_cast<unsigned long long>(state.reused_3d_frame_count));
+    if (!state.frame_samples.empty()) {
+        const ViewerState::FrameSample& latest = state.frame_samples.back();
+        ImGui::Text("Latest event/input: %.3f ms", latest.event_input_milliseconds);
+        ImGui::Text("Latest navigation/scene: %.3f ms", latest.navigation_scene_milliseconds);
+        ImGui::Text("Latest render: %.3f ms", latest.render_milliseconds);
+        ImGui::Text("Latest UI/composition: %.3f ms", latest.ui_composition_milliseconds);
+        ImGui::Text("Latest swap wait: %.3f ms", latest.swap_wait_milliseconds);
+        ImGui::Text("Input-to-present proxy: %.3f ms", latest.input_to_present_proxy_milliseconds);
+    }
+}
+
+void draw_performance_diagnostics(ViewerState& state) {
+    if (!ImGui::CollapsingHeader("Performance Diagnostics", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+    draw_diagnostic_modes(state);
+    draw_capture_controls(state);
+    draw_frame_distribution(state);
+}
+
+void draw_context_diagnostics(const ViewerState& state) {
+    if (!ImGui::CollapsingHeader("OpenGL Context")) {
+        return;
+    }
+    ImGui::TextWrapped("Vendor: %s", state.gl_vendor.c_str());
+    ImGui::TextWrapped("Renderer: %s", state.gl_renderer.c_str());
+    ImGui::TextWrapped("OpenGL: %s", state.gl_version.c_str());
+    ImGui::TextWrapped("GLSL: %s", state.glsl_version_report.c_str());
+    ImGui::Text("Context flags/profile: 0x%X / 0x%X", state.gl_context_flags,
+                state.gl_context_profile_mask);
+    ImGui::Text("Default RGBA: %d/%d/%d/%d", state.default_red_bits, state.default_green_bits,
+                state.default_blue_bits, state.default_alpha_bits);
+    ImGui::Text("Depth/stencil/samples/sRGB: %d/%d/%d/%d", state.default_depth_bits,
+                state.default_stencil_bits, state.default_samples, state.default_srgb_capable);
+    ImGui::Text("Maximum texture size: %d", state.maximum_texture_size);
+    ImGui::Text("Window content: %u x %u", state.view_dimensions.width,
+                state.view_dimensions.height);
+    ImGui::Text("3D target: %u x %u", state.render_target_dimensions.width,
+                state.render_target_dimensions.height);
+}
+
+} // namespace
 
 void draw_model_source_information(const ViewerScene& scene) {
     const std::string source =
@@ -90,6 +223,33 @@ void draw_model_render_statistics(const ViewerState& state) {
                 static_cast<unsigned long long>(state.statistics.clipping_bounds_rejected));
     ImGui::Text("Clipping bounds intersecting: %llu",
                 static_cast<unsigned long long>(state.statistics.clipping_bounds_intersecting));
+    ImGui::Text("Candidate / visible / culled: %llu / %llu / %llu",
+                static_cast<unsigned long long>(state.statistics.candidate_primitives),
+                static_cast<unsigned long long>(state.statistics.visible_primitives),
+                static_cast<unsigned long long>(state.statistics.frustum_culled_primitives));
+    ImGui::Text("Buffer uploads: %llu (%llu bytes)",
+                static_cast<unsigned long long>(state.statistics.gpu_buffer_uploads),
+                static_cast<unsigned long long>(state.statistics.gpu_buffer_uploaded_bytes));
+    ImGui::Text("Draw packet rebuilds: %llu",
+                static_cast<unsigned long long>(state.statistics.draw_packet_rebuilds));
+    ImGui::Text("Resident geometry / textures: %llu / %llu bytes",
+                static_cast<unsigned long long>(state.statistics.estimated_resident_geometry_bytes),
+                static_cast<unsigned long long>(state.statistics.estimated_resident_texture_bytes));
+    ImGui::Text("CPU list / resources / GL / total: %.3f / %.3f / %.3f / %.3f ms",
+                state.statistics.cpu_render_list_milliseconds,
+                state.statistics.cpu_resource_preparation_milliseconds,
+                state.statistics.cpu_gl_submission_milliseconds,
+                state.statistics.cpu_total_milliseconds);
+    if (state.statistics.gpu_main_pass_timing_available) {
+        ImGui::Text("Delayed GPU main: %.3f ms", state.statistics.gpu_main_pass_milliseconds);
+    } else {
+        ImGui::TextUnformatted("Delayed GPU main: unavailable");
+    }
+    if (state.statistics.gpu_resolve_timing_available) {
+        ImGui::Text("Delayed GPU resolve: %.3f ms", state.statistics.gpu_resolve_milliseconds);
+    } else {
+        ImGui::TextUnformatted("Delayed GPU resolve: unavailable");
+    }
     ImGui::TextUnformatted("Image formats: PNG, JPEG");
     ImGui::TextWrapped("PBR: one directional light with vertex color, UV0/UV1 texture "
                        "mapping, texture transforms, emissive, occlusion, unlit, alpha mask, "
@@ -187,6 +347,8 @@ void build_rendering_panel(ImGuiID dockspace_id, ViewerState& state, ViewerScene
         color_control("Clear color", state.clear_color);
         build_demo_cube_rendering_controls(state, scene);
         build_lighting_controls(state);
+        draw_performance_diagnostics(state);
+        draw_context_diagnostics(state);
     }
     ImGui::End();
 }
@@ -234,6 +396,8 @@ void build_navigation_settings_window(ImGuiID dockspace_id, ViewerState& state,
                                              0.0F, 1.0F, "%.3f");
         settings_changed |=
             ImGui::Checkbox("Invert vertical orbit", &settings.invert_vertical_orbit);
+        settings_changed |=
+            ImGui::Checkbox("Focus-depth orbit anchor", &settings.focus_depth_anchor_enabled);
         if (settings_changed) {
             const elf3d::Result<void> settings_result =
                 engine_viewport.set_navigation_settings(settings);
@@ -351,6 +515,18 @@ void draw_picking_statistics(ViewerState& state, elf3d::Viewport& viewport) {
     ImGui::Text("CPU refinements / fallbacks: %llu / %llu",
                 static_cast<unsigned long long>(picking.latest_cpu_refinements),
                 static_cast<unsigned long long>(picking.latest_cpu_fallbacks));
+    ImGui::Text("Pick pass / readback: %.3f / %.3f ms", picking.latest_pass_milliseconds,
+                picking.latest_readback_milliseconds);
+    ImGui::Text("Pick allocation / total CPU: %.3f / %.3f ms",
+                picking.latest_allocation_milliseconds, picking.latest_cpu_milliseconds);
+    ImGui::Text("Pick target allocations latest / lifetime: %llu / %llu",
+                static_cast<unsigned long long>(picking.latest_target_allocations),
+                static_cast<unsigned long long>(picking.lifetime_target_allocations));
+    if (picking.latest_gpu_timing_available) {
+        ImGui::Text("Delayed GPU pick: %.3f ms", picking.latest_gpu_milliseconds);
+    } else {
+        ImGui::TextUnformatted("Delayed GPU pick: unavailable");
+    }
     ImGui::Separator();
     ImGui::Text("Instance bounds tests: %llu",
                 static_cast<unsigned long long>(picking.latest_instance_bounds_tests));

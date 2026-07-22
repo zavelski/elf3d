@@ -1,47 +1,39 @@
 module;
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <elf3d/assets.h>
 #include <elf3d/core/result.h>
 #include <elf3d/math/value_types.h>
 #include <elf3d/model.h>
 #include <elf3d/scene.h>
-
-#include <array>
-#include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
-
 export module elf.scene;
-
 import elf.assets;
 import elf.core;
 import elf.math;
 import elf.model;
-
 export namespace elf3d::scene {
-
 struct ModelComponent {
     std::vector<ModelPrimitiveBinding> primitives;
     std::vector<PrimitiveId> document_primitives;
 };
-
 enum class RuntimeAlphaMode : std::uint8_t {
     opaque,
     mask,
     blend,
 };
-
 enum class RuntimeTextureWrap : std::uint8_t {
     repeat,
     mirrored_repeat,
     clamp_to_edge,
 };
-
 enum class RuntimeTextureFilter : std::uint8_t {
     nearest,
     linear,
@@ -50,7 +42,6 @@ enum class RuntimeTextureFilter : std::uint8_t {
     nearest_mipmap_linear,
     linear_mipmap_linear,
 };
-
 enum class RuntimeMaterialTextureSlot : std::uint8_t {
     base_color,
     metallic_roughness,
@@ -58,31 +49,25 @@ enum class RuntimeMaterialTextureSlot : std::uint8_t {
     occlusion,
     emissive,
 };
-
+enum class RuntimeVertexLayout : std::uint8_t { position_normal, position_normal_texcoord, full };
 struct RuntimeTextureTransform {
     Float2 offset;
     Float2 scale{1.0F, 1.0F};
     float rotation_radians = 0.0F;
-
     bool operator==(const RuntimeTextureTransform&) const = default;
 };
-
 struct RuntimeTextureMapping {
     std::uint32_t texcoord_set = 0;
     RuntimeTextureTransform transform;
-
     bool operator==(const RuntimeTextureMapping&) const = default;
 };
-
 struct RuntimeSamplerDescription {
     RuntimeTextureWrap wrap_u = RuntimeTextureWrap::repeat;
     RuntimeTextureWrap wrap_v = RuntimeTextureWrap::repeat;
     RuntimeTextureFilter min_filter = RuntimeTextureFilter::linear;
     RuntimeTextureFilter mag_filter = RuntimeTextureFilter::linear;
-
     bool operator==(const RuntimeSamplerDescription&) const = default;
 };
-
 struct RuntimeMaterialView {
     Color4 base_color{1.0F, 1.0F, 1.0F, 1.0F};
     bool double_sided = false;
@@ -107,10 +92,8 @@ struct RuntimeMaterialView {
     bool has_normal_texture = false;
     bool has_occlusion_texture = false;
     bool has_emissive_texture = false;
-
     [[nodiscard]] bool has_texture(RuntimeMaterialTextureSlot slot) const noexcept;
 };
-
 struct RuntimeTextureView {
     std::uint64_t texture_identity = 0;
     std::uint64_t image_identity = 0;
@@ -120,18 +103,13 @@ struct RuntimeTextureView {
     std::span<const std::byte> pixels;
     RuntimeSamplerDescription sampler;
 };
-
-// A borrowed geometry/material view for one runtime model primitive. It
-// resolves document data when available and otherwise exposes the legacy
-// scene-created asset through the same geometry accessors. The view remains
-// valid until its Storage is mutated or destroyed.
 class RuntimePrimitiveView final {
   public:
     MeshHandle mesh;
     PrimitiveId document_primitive;
+    std::uint64_t material_identity = 0;
     Bounds3 bounds;
     RuntimeMaterialView material_view;
-
     [[nodiscard]] std::size_t vertex_count() const noexcept;
     [[nodiscard]] std::span<const std::uint32_t> indices() const noexcept;
     [[nodiscard]] Float3 position(std::size_t index) const noexcept;
@@ -139,10 +117,9 @@ class RuntimePrimitiveView final {
     [[nodiscard]] Float2 texcoord0(std::size_t index) const noexcept;
     [[nodiscard]] Float2 texcoord1(std::size_t index) const noexcept;
     [[nodiscard]] Color4 color(std::size_t index) const noexcept;
-
+    [[nodiscard]] RuntimeVertexLayout vertex_layout() const noexcept;
   private:
     friend class Storage;
-
     std::span<const VertexPositionNormalTexCoord> compatibility_vertices_;
     std::span<const Float3> document_positions_;
     std::span<const Float3> document_normals_;
@@ -152,8 +129,8 @@ class RuntimePrimitiveView final {
     std::span<const std::uint32_t> indices_;
     std::array<TextureAssetHandle, 5> compatibility_textures_;
     std::array<TextureId, 5> document_textures_;
+    RuntimeVertexLayout vertex_layout_ = RuntimeVertexLayout::position_normal;
 };
-
 struct EntityRecord {
     EntityId id;
     std::optional<EntityId> parent;
@@ -165,35 +142,40 @@ struct EntityRecord {
     std::optional<PerspectiveCameraDescription> camera;
     bool local_visible = true;
     bool effective_visible = true;
+    mutable Float4x4 cached_world_matrix{};
+    mutable math::Matrix3x3 cached_normal_matrix{};
+    mutable bool cached_orientation_reversed = false;
+    mutable bool cached_render_transform_valid = false;
+    mutable std::optional<Bounds3> cached_world_bounds;
+    mutable std::vector<Bounds3> cached_primitive_world_bounds;
+    mutable bool world_matrix_dirty = true;
+    mutable bool world_bounds_dirty = true;
 };
-
 struct VisibilityFilter {
     SceneId scene;
     std::optional<EntityId> isolated_root;
     std::uint64_t hierarchy_revision = 0;
     std::uint64_t visibility_revision = 0;
     std::vector<std::uint64_t> isolated_entity_values;
-
     [[nodiscard]] bool has_isolation() const noexcept {
         return isolated_root.has_value();
     }
 };
-
 class Storage final {
   public:
     explicit Storage(SceneId id) noexcept;
-
     [[nodiscard]] SceneId id() const noexcept;
     [[nodiscard]] bool belongs_to_engine(std::uint64_t engine_token) const noexcept;
     [[nodiscard]] std::uint64_t revision() const noexcept;
+    [[nodiscard]] std::uint64_t render_content_revision() const noexcept;
     [[nodiscard]] std::uint64_t hierarchy_revision() const noexcept;
     [[nodiscard]] std::uint64_t visibility_revision() const noexcept;
+    [[nodiscard]] std::uint64_t model_spatial_revision() const noexcept;
     [[nodiscard]] std::span<const std::optional<EntityRecord>> entities() const noexcept;
     [[nodiscard]] const assets::Storage& assets() const noexcept;
     [[nodiscard]] DocumentView document() const noexcept;
     [[nodiscard]] bool has_document() const noexcept;
     [[nodiscard]] Result<void> set_document(Document&& document);
-
     [[nodiscard]] Result<EntityId> create_entity();
     [[nodiscard]] Result<void> destroy_entity(EntityId entity);
     [[nodiscard]] Result<void> set_parent(EntityId entity, EntityId parent);
@@ -203,10 +185,13 @@ class Storage final {
     [[nodiscard]] Result<void> set_local_matrix(EntityId entity, const Float4x4& matrix);
     [[nodiscard]] Result<Float4x4> local_matrix(EntityId entity) const noexcept;
     [[nodiscard]] Result<Float4x4> world_matrix(EntityId entity) const noexcept;
+    [[nodiscard]] Result<math::Matrix3x3> world_normal_matrix(EntityId entity) const noexcept;
+    [[nodiscard]] Result<bool> world_orientation_reversed(EntityId entity) const noexcept;
+    [[nodiscard]] Result<Bounds3> primitive_world_bounds(EntityId entity,
+                                                         std::uint32_t primitive) const noexcept;
     [[nodiscard]] Result<void> set_entity_name(EntityId entity, std::string_view name);
     [[nodiscard]] Result<std::string_view> entity_name(EntityId entity) const noexcept;
     [[nodiscard]] Result<EntityInfo> entity_info(EntityId entity) const noexcept;
-
     [[nodiscard]] Result<MeshHandle> create_mesh(const MeshDataView& data);
     [[nodiscard]] Result<MeshHandle> create_mesh(const TexturedMeshDataView& data);
     [[nodiscard]] Result<Bounds3> mesh_bounds(MeshHandle mesh) const noexcept;
@@ -216,7 +201,6 @@ class Storage final {
     [[nodiscard]] Result<void> set_material(MaterialHandle material,
                                             const MaterialDescription& description);
     [[nodiscard]] Result<MaterialDescription> material(MaterialHandle material) const noexcept;
-
     [[nodiscard]] Result<EntityId> create_model(MeshHandle mesh, MaterialHandle material);
     [[nodiscard]] Result<void>
     set_model_primitives(EntityId entity, std::span<const ModelPrimitiveBinding> primitives);
@@ -242,7 +226,6 @@ class Storage final {
     [[nodiscard]] Result<bool> entity_effective_visibility(EntityId entity) const noexcept;
     [[nodiscard]] Result<void> show_entity_and_ancestors(EntityId entity);
     [[nodiscard]] Result<void> show_all_entities();
-
     [[nodiscard]] Result<const EntityRecord*> entity(EntityId entity) const noexcept;
     [[nodiscard]] std::optional<Bounds3> world_bounds() const noexcept;
     [[nodiscard]] std::optional<Bounds3>
@@ -255,8 +238,9 @@ class Storage final {
     [[nodiscard]] Result<MeshHandle> document_mesh_handle(PrimitiveId primitive);
     [[nodiscard]] bool is_document_mesh_handle(MeshHandle mesh) const noexcept;
     [[nodiscard]] Result<Bounds3> document_mesh_bounds(MeshHandle mesh) const noexcept;
-    void expand_world_bounds(std::optional<Bounds3>& bounds,
-                             const EntityRecord& entity) const noexcept;
+    [[nodiscard]] std::optional<Bounds3>
+    entity_world_bounds(const EntityRecord& entity) const noexcept;
+    void update_entity_world_bounds(const EntityRecord& entity) const noexcept;
     [[nodiscard]] Result<RuntimePrimitiveView>
     document_runtime_primitive(const ModelPrimitiveBinding& binding,
                                PrimitiveId document_primitive) const noexcept;
@@ -267,9 +251,16 @@ class Storage final {
     void update_all_effective_visibility() noexcept;
     void destroy_subtree(EntityId entity) noexcept;
     void remove_child(EntityId parent, EntityId child) noexcept;
+    [[nodiscard]] bool invalidate_spatial_subtree(EntityId entity) noexcept;
+    void invalidate_all_model_bounds() noexcept;
+    [[nodiscard]] bool visible_bounds_cache_matches(const VisibilityFilter& filter) const noexcept;
+    void cache_visible_bounds(const VisibilityFilter& filter,
+                              std::optional<Bounds3> bounds) const noexcept;
     void increment_revision() noexcept;
+    void increment_render_content_revision() noexcept;
     void increment_hierarchy_revision() noexcept;
     void increment_visibility_revision() noexcept;
+    void increment_model_spatial_revision() noexcept;
 
     SceneId id_;
     assets::Storage assets_;
@@ -277,8 +268,19 @@ class Storage final {
     std::vector<std::optional<PrimitiveId>> document_mesh_primitives_;
     std::vector<std::optional<EntityRecord>> entities_;
     std::uint64_t revision_ = 0;
+    std::uint64_t render_content_revision_ = 0;
     std::uint64_t hierarchy_revision_ = 0;
     std::uint64_t visibility_revision_ = 0;
+    std::uint64_t model_spatial_revision_ = 0;
+    mutable std::optional<Bounds3> cached_world_bounds_;
+    mutable std::optional<Bounds3> cached_visible_world_bounds_;
+    mutable std::optional<EntityId> cached_visible_isolated_root_;
+    mutable std::uint64_t cached_world_bounds_spatial_revision_ = 0;
+    mutable std::uint64_t cached_visible_spatial_revision_ = 0;
+    mutable std::uint64_t cached_visible_hierarchy_revision_ = 0;
+    mutable std::uint64_t cached_visible_visibility_revision_ = 0;
+    mutable bool cached_world_bounds_valid_ = false;
+    mutable bool cached_visible_world_bounds_valid_ = false;
 };
 
 class Access final {
@@ -286,14 +288,12 @@ class Access final {
     [[nodiscard]] static Storage* storage(Scene& scene) noexcept;
     [[nodiscard]] static const Storage* storage(const Scene& scene) noexcept;
 };
-
 [[nodiscard]] bool
 valid_camera_description(const PerspectiveCameraDescription& description) noexcept;
 [[nodiscard]] Result<VisibilityFilter>
 make_visibility_filter(const Storage& scene, std::optional<EntityId> isolated_root);
 [[nodiscard]] bool entity_visible_in_filter(const Storage& scene, const VisibilityFilter& filter,
                                             EntityId entity) noexcept;
-
 [[nodiscard]] Result<void> populate_from_document(Document&& document,
                                                   DocumentSceneId default_scene, Storage& storage);
 

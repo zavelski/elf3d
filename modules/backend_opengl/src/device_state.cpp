@@ -11,6 +11,7 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <new>
@@ -67,6 +68,97 @@ std::uintptr_t opengl_resource_token() noexcept {
 
 bool is_opengl_texture(const graphics::Texture2D* texture) noexcept {
     return texture == nullptr || texture->backend_resource_token() == opengl_resource_token();
+}
+
+[[nodiscard]] GpuTimerQueryRing& gpu_timing_ring(std::array<GpuTimerQueryRing, 3>& rings,
+                                                 GpuTimingKind kind) noexcept {
+    auto ring = rings.begin();
+    switch (kind) {
+    case GpuTimingKind::main:
+        return *ring;
+    case GpuTimingKind::picking:
+        return *std::next(ring);
+    case GpuTimingKind::resolve:
+        return *std::next(ring, 2);
+    }
+    return *ring;
+}
+
+bool GpuTimerQueryRing::begin() noexcept {
+    poll();
+    GLint current_query = 0;
+    glGetQueryiv(GL_TIME_ELAPSED, GL_CURRENT_QUERY, &current_query);
+    if (current_query != 0 || active_slot_.has_value()) {
+        return false;
+    }
+    for (std::size_t offset = 0; offset < slot_count; ++offset) {
+        const std::size_t slot = (next_slot_ + offset) % slot_count;
+        if (pending_[slot]) {
+            continue;
+        }
+        if (queries_[slot] == 0) {
+            glGenQueries(1, &queries_[slot]);
+        }
+        if (queries_[slot] == 0) {
+            return false;
+        }
+        glBeginQuery(GL_TIME_ELAPSED, queries_[slot]);
+        pending_[slot] = true;
+        submission_ids_[slot] = next_submission_id_++;
+        active_slot_ = slot;
+        next_slot_ = (slot + 1U) % slot_count;
+        return true;
+    }
+    return false;
+}
+
+void GpuTimerQueryRing::end() noexcept {
+    if (!active_slot_.has_value()) {
+        return;
+    }
+    glEndQuery(GL_TIME_ELAPSED);
+    active_slot_.reset();
+}
+
+GpuTimingResult GpuTimerQueryRing::latest() noexcept {
+    poll();
+    return latest_;
+}
+
+void GpuTimerQueryRing::release() noexcept {
+    if (active_slot_.has_value()) {
+        glEndQuery(GL_TIME_ELAPSED);
+        active_slot_.reset();
+    }
+    glDeleteQueries(static_cast<GLsizei>(queries_.size()), queries_.data());
+    queries_ = {};
+    pending_ = {};
+    submission_ids_ = {};
+    next_slot_ = 0;
+    next_submission_id_ = 1;
+    latest_submission_id_ = 0;
+    latest_ = {};
+}
+
+void GpuTimerQueryRing::poll() noexcept {
+    for (std::size_t slot = 0; slot < slot_count; ++slot) {
+        if (!pending_[slot] || active_slot_ == slot) {
+            continue;
+        }
+        GLint available = GL_FALSE;
+        glGetQueryObjectiv(queries_[slot], GL_QUERY_RESULT_AVAILABLE, &available);
+        if (available == GL_FALSE) {
+            continue;
+        }
+        GLuint64 nanoseconds = 0;
+        glGetQueryObjectui64v(queries_[slot], GL_QUERY_RESULT, &nanoseconds);
+        if (submission_ids_[slot] > latest_submission_id_) {
+            latest_.milliseconds = static_cast<double>(nanoseconds) / 1'000'000.0;
+            latest_.available = true;
+            latest_submission_id_ = submission_ids_[slot];
+        }
+        pending_[slot] = false;
+    }
 }
 
 OpenGLDeviceState::OpenGLDeviceState(GLint maximum_texture_size) noexcept
@@ -143,8 +235,34 @@ Result<NativeTextureView> OpenGLDeviceState::native_texture_view(TextureHandle h
                              record->second.extent};
 }
 
+bool OpenGLDeviceState::begin_gpu_timing(GpuTimingKind kind) noexcept {
+    return gpu_timing_ring(gpu_timing_rings_, kind).begin();
+}
+
+void OpenGLDeviceState::end_gpu_timing(GpuTimingKind kind) noexcept {
+    gpu_timing_ring(gpu_timing_rings_, kind).end();
+}
+
+GpuTimingResult OpenGLDeviceState::latest_gpu_timing(GpuTimingKind kind) noexcept {
+    return gpu_timing_ring(gpu_timing_rings_, kind).latest();
+}
+
 void OpenGLDeviceState::shut_down() noexcept {
+    if (can_destroy_objects()) {
+        for (GpuTimerQueryRing& ring : gpu_timing_rings_) {
+            ring.release();
+        }
+    }
     operational_ = false;
+}
+
+GpuTimingScope::GpuTimingScope(OpenGLDeviceState& state, GpuTimingKind kind) noexcept
+    : state_(state), kind_(kind), active_(state.begin_gpu_timing(kind)) {}
+
+GpuTimingScope::~GpuTimingScope() {
+    if (active_) {
+        state_.end_gpu_timing(kind_);
+    }
 }
 
 AllocationStateGuard::AllocationStateGuard() noexcept {

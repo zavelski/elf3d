@@ -17,6 +17,7 @@ struct MeshAsset {
     std::vector<VertexPositionNormalTexCoord> vertices;
     std::vector<std::uint32_t> indices;
     Bounds3 bounds;
+    bool has_full_vertex_attributes = false;
 };
 
 struct ImageAsset {

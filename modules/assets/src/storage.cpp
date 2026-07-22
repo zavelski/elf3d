@@ -139,7 +139,11 @@ Result<MeshHandle> Storage::create_mesh(const MeshDataView &data) {
     for (const VertexPositionNormal &vertex : data.vertices) {
         vertices.push_back(VertexPositionNormalTexCoord{vertex.position, vertex.normal});
     }
-    return create_mesh(TexturedMeshDataView{vertices, data.indices});
+    Result<MeshHandle> result = create_mesh(TexturedMeshDataView{vertices, data.indices});
+    if (result) {
+        meshes_.back().has_full_vertex_attributes = false;
+    }
+    return result;
 }
 
 Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView &data) {
@@ -181,6 +185,7 @@ Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView &data) {
     asset.vertices.assign(data.vertices.begin(), data.vertices.end());
     asset.indices.assign(data.indices.begin(), data.indices.end());
     asset.bounds = Bounds3{minimum, maximum};
+    asset.has_full_vertex_attributes = true;
     meshes_.push_back(std::move(asset));
     return detail::SceneHandleAccess::create_mesh(scene_, meshes_.size());
 }

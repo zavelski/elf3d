@@ -7,11 +7,13 @@ module;
 #include "device_internal.hpp"
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <new>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -39,6 +41,28 @@ class OpenGLDevice final : public graphics::Device {
             release_overlay_resources(overlay_resources_);
         }
         state_->shut_down();
+    }
+
+    [[nodiscard]] double monotonic_time_milliseconds() const noexcept override {
+        const auto elapsed = std::chrono::steady_clock::now().time_since_epoch();
+        return std::chrono::duration<double, std::milli>(elapsed).count();
+    }
+
+    [[nodiscard]] graphics::GpuTimingSample
+    delayed_gpu_timing(graphics::GpuTimingPass pass) noexcept override {
+        GpuTimingKind kind = GpuTimingKind::main;
+        switch (pass) {
+        case graphics::GpuTimingPass::main:
+            break;
+        case graphics::GpuTimingPass::picking:
+            kind = GpuTimingKind::picking;
+            break;
+        case graphics::GpuTimingPass::resolve:
+            kind = GpuTimingKind::resolve;
+            break;
+        }
+        const GpuTimingResult timing = state_->latest_gpu_timing(kind);
+        return graphics::GpuTimingSample{timing.milliseconds, timing.available};
     }
 
     [[nodiscard]] GraphicsBackend backend() const noexcept override {
@@ -99,6 +123,17 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     [[nodiscard]] Result<void>
+    draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
+                       std::span<const graphics::IndexedDrawBatchItem> items) noexcept override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+        const GpuTimingScope timing{*state_, GpuTimingKind::main};
+        return device_detail::draw_indexed_batch(target, pipeline, items);
+    }
+
+    [[nodiscard]] Result<void>
     draw_overlay(graphics::RenderTarget& target,
                  const graphics::DrawOverlayDescription& description) noexcept override {
         const Result<void> validation = state_->validate_operation();
@@ -116,6 +151,17 @@ class OpenGLDevice final : public graphics::Device {
             return validation.error();
         }
         return device_detail::draw_picking_indexed(picking_resources_, target, mesh, description);
+    }
+
+    [[nodiscard]] Result<void>
+    draw_picking_batch(graphics::PickingTarget& target,
+                       std::span<const graphics::PickingDrawBatchItem> items) noexcept override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+        const GpuTimingScope timing{*state_, GpuTimingKind::picking};
+        return device_detail::draw_picking_batch(picking_resources_, target, items);
     }
 
     [[nodiscard]] Result<std::optional<graphics::PickingPixel>>

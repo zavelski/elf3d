@@ -119,17 +119,46 @@ runtime_material_description(const scene::RuntimeMaterialView& source) noexcept 
     return target;
 }
 
-std::vector<VertexPositionNormalTexCoord>
-vertices_from_runtime_primitive(const scene::RuntimePrimitiveView& primitive) {
-    std::vector<VertexPositionNormalTexCoord> vertices(primitive.vertex_count());
-    for (std::size_t index = 0; index < vertices.size(); ++index) {
-        vertices[index].position = primitive.position(index);
-        vertices[index].normal = primitive.normal(index);
-        vertices[index].texcoord0 = primitive.texcoord0(index);
-        vertices[index].texcoord1 = primitive.texcoord1(index);
-        vertices[index].color = primitive.color(index);
+RuntimeVertexBuffer runtime_vertex_buffer(const scene::RuntimePrimitiveView& primitive) {
+    RuntimeVertexBuffer buffer;
+    std::size_t stride = 6U;
+    if (primitive.vertex_layout() == scene::RuntimeVertexLayout::position_normal_texcoord) {
+        buffer.layout = graphics::VertexLayout::position_normal_float3_texcoord_float2;
+        stride = 8U;
+    } else if (primitive.vertex_layout() == scene::RuntimeVertexLayout::full) {
+        buffer.layout =
+            graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4;
+        stride = 14U;
     }
-    return vertices;
+    buffer.vertex_count = static_cast<std::uint32_t>(primitive.vertex_count());
+    buffer.values.resize(primitive.vertex_count() * stride);
+    for (std::size_t index = 0; index < primitive.vertex_count(); ++index) {
+        const Float3 position = primitive.position(index);
+        const Float3 normal = primitive.normal(index);
+        const std::size_t base = index * stride;
+        buffer.values[base] = position.x;
+        buffer.values[base + 1U] = position.y;
+        buffer.values[base + 2U] = position.z;
+        buffer.values[base + 3U] = normal.x;
+        buffer.values[base + 4U] = normal.y;
+        buffer.values[base + 5U] = normal.z;
+        if (stride >= 8U) {
+            const Float2 texcoord = primitive.texcoord0(index);
+            buffer.values[base + 6U] = texcoord.x;
+            buffer.values[base + 7U] = texcoord.y;
+        }
+        if (stride == 14U) {
+            const Float2 texcoord = primitive.texcoord1(index);
+            const Color4 color = primitive.color(index);
+            buffer.values[base + 8U] = texcoord.x;
+            buffer.values[base + 9U] = texcoord.y;
+            buffer.values[base + 10U] = color.red;
+            buffer.values[base + 11U] = color.green;
+            buffer.values[base + 12U] = color.blue;
+            buffer.values[base + 13U] = color.alpha;
+        }
+    }
+    return buffer;
 }
 
 } // namespace elf3d::renderer

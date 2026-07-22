@@ -128,6 +128,10 @@ SceneId Scene::id() const noexcept {
     return impl_ != nullptr ? impl_->storage.id() : SceneId{};
 }
 
+std::uint64_t Scene::revision() const noexcept {
+    return impl_ != nullptr ? impl_->storage.revision() : 0;
+}
+
 Result<EntityId> Scene::create_entity() noexcept {
     return impl_ != nullptr
                ? impl_->storage.create_entity()

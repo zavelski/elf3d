@@ -1,3 +1,4 @@
+#include "viewer_input_math.hpp"
 #include "viewer_internal.hpp"
 
 #include <elf3d/imgui/texture.h>
@@ -19,24 +20,10 @@ elf3d::GraphicsProcedure load_opengl_procedure(const char* name) noexcept {
     return glfwGetProcAddress(name);
 }
 
-std::uint32_t to_pixel_dimension(float logical_size, float framebuffer_scale) noexcept {
-    if (!std::isfinite(logical_size) || !std::isfinite(framebuffer_scale) || logical_size <= 0.0F ||
-        framebuffer_scale <= 0.0F) {
-        return 0;
-    }
-    const double pixel_size =
-        static_cast<double>(logical_size) * static_cast<double>(framebuffer_scale);
-    const double maximum = static_cast<double>(std::numeric_limits<std::uint32_t>::max());
-    if (pixel_size >= maximum) {
-        return std::numeric_limits<std::uint32_t>::max();
-    }
-    return static_cast<std::uint32_t>(std::floor(pixel_size + 0.5));
-}
-
 elf3d::Extent2D content_extent_in_pixels(ImVec2 logical_size) noexcept {
     const ImVec2 scale = ImGui::GetIO().DisplayFramebufferScale;
-    return elf3d::Extent2D{to_pixel_dimension(logical_size.x, scale.x),
-                           to_pixel_dimension(logical_size.y, scale.y)};
+    return content_extent_in_pixels(Float2{logical_size.x, logical_size.y},
+                                    Float2{scale.x, scale.y});
 }
 
 [[nodiscard]] bool has_nonzero_extent(elf3d::Extent2D extent) noexcept {
@@ -358,6 +345,7 @@ struct ViewportInputRegion {
 viewport_input_from_imgui(GLFWwindow* window, ViewerState& state,
                           const ViewportInputRegion& region) noexcept {
     const ImGuiIO& io = ImGui::GetIO();
+    const Float2 logical_size{region.size.x, region.size.y};
     const float x_scale = region.size.x > 0.0F
                               ? static_cast<float>(region.render_extent.width) / region.size.x
                               : 0.0F;
@@ -371,13 +359,16 @@ viewport_input_from_imgui(GLFWwindow* window, ViewerState& state,
         region, left_button_down, middle_button_down, right_button_down);
     const NavigationCursorSample cursor_sample =
         navigation_cursor_sample(window, state, tracking_enabled);
+    const Float2 logical_delta{cursor_sample.delta.x, cursor_sample.delta.y};
+    const Float2 pointer_delta =
+        pointer_delta_in_target_pixels(logical_delta, logical_size, region.render_extent);
     elf3d::ViewportInput input;
     input.frame_delta_seconds = io.DeltaTime;
     input.pointer_position_pixels = {
         (cursor_sample.position.x - region.minimum.x) * x_scale,
         (cursor_sample.position.y - region.minimum.y) * y_scale,
     };
-    input.pointer_delta_pixels = {cursor_sample.delta.x * x_scale, cursor_sample.delta.y * y_scale};
+    input.pointer_delta_pixels = pointer_delta;
     input.wheel_delta = navigation_wheel_delta_for_view(state, region.minimum, region.size,
                                                         state.application_focused &&
                                                             !navigation_blocked_by_modal());
@@ -538,8 +529,10 @@ struct ViewportCanvas {
 
 void deactivate_3d_view(const ViewPanelContext& context) {
     context.state->view_dimensions = {};
+    context.state->render_target_dimensions = {};
     context.state->framebuffer_valid = false;
     context.state->statistics = {};
+    context.state->retained_viewport_frame.reset();
     context.viewport->cancel_interaction();
     release_navigation_cursor(context.window, *context.state);
     const elf3d::Result<void> result = context.viewport->resize({});
@@ -570,8 +563,17 @@ void deactivate_3d_view(const ViewPanelContext& context) {
 }
 
 [[nodiscard]] bool resize_3d_view(const ViewPanelContext& context, const ViewportCanvas& canvas) {
-    const elf3d::Result<void> result = context.viewport->resize(
-        canvas.has_area ? context.state->view_dimensions : elf3d::Extent2D{});
+    elf3d::Extent2D target_extent;
+    if (canvas.has_area) {
+        const std::uint32_t scale =
+            static_cast<std::uint32_t>(context.state->diagnostic_render_scale_percent);
+        target_extent.width =
+            std::max(std::uint32_t{1}, (context.state->view_dimensions.width * scale + 99U) / 100U);
+        target_extent.height = std::max(
+            std::uint32_t{1}, (context.state->view_dimensions.height * scale + 99U) / 100U);
+    }
+    context.state->render_target_dimensions = target_extent;
+    const elf3d::Result<void> result = context.viewport->resize(target_extent);
     if (!result) {
         set_viewport_error(*context.state, result.error());
         return false;
@@ -628,7 +630,7 @@ void update_viewport_input(const ViewPanelContext& context, const ViewportCanvas
     }
     const ViewportInputRegion region{canvas.image_min,
                                      canvas.area_size,
-                                     context.state->view_dimensions,
+                                     context.state->render_target_dimensions,
                                      canvas.hovered,
                                      viewport_input_focused(context),
                                      viewport_pointer_captured(context, snapshot)};
@@ -668,14 +670,24 @@ void render_3d_view(const ViewPanelContext& context, const ViewportCanvas& canva
         elf3d::Color4{context.state->clear_color[0], context.state->clear_color[1],
                       context.state->clear_color[2], context.state->clear_color[3]});
     context.viewport->set_basic_lighting(context.state->lighting);
-    const elf3d::Result<void> result =
-        context.viewport->render(*context.scene->scene, context.scene->camera);
-    if (!result) {
-        set_viewport_error(*context.state, result.error());
-        return;
+    context.viewport->set_render_shading_mode(context.state->shading_mode);
+    const RetainedViewportFrameKey key =
+        viewport_frame_key(*context.state, *context.scene, *context.viewport);
+    if (viewport_frame_render_required(*context.state, key, *context.viewport)) {
+        const elf3d::Result<void> result =
+            context.viewport->render(*context.scene->scene, context.scene->camera);
+        if (!result) {
+            set_viewport_error(*context.state, result.error());
+            return;
+        }
+        context.state->statistics = context.viewport->render_statistics();
+        context.state->framebuffer_valid = context.viewport->framebuffer_valid();
+        context.state->retained_viewport_frame = key;
+        context.state->viewport_rendered_this_frame = true;
+        ++context.state->rendered_3d_frame_count;
+    } else {
+        ++context.state->reused_3d_frame_count;
     }
-    context.state->statistics = context.viewport->render_statistics();
-    context.state->framebuffer_valid = context.viewport->framebuffer_valid();
     present_viewport_texture(context, canvas);
 }
 

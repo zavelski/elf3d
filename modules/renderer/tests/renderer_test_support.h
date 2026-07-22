@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -68,13 +69,17 @@ class FakePickingTarget final : public elf3d::graphics::PickingTarget {
 
 class FakeMesh final : public elf3d::graphics::StaticMesh {
   public:
-    FakeMesh(std::uint32_t vertices, std::uint32_t indices) noexcept
-        : vertices_(vertices), indices_(indices) {}
+    FakeMesh(std::uint32_t vertices, std::uint32_t indices,
+             elf3d::graphics::VertexLayout layout) noexcept
+        : vertices_(vertices), indices_(indices), layout_(layout) {}
     [[nodiscard]] std::uint32_t vertex_count() const noexcept override {
         return vertices_;
     }
     [[nodiscard]] std::uint32_t index_count() const noexcept override {
         return indices_;
+    }
+    [[nodiscard]] elf3d::graphics::VertexLayout vertex_layout() const noexcept override {
+        return layout_;
     }
     [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
         return fake_resource_token;
@@ -83,6 +88,7 @@ class FakeMesh final : public elf3d::graphics::StaticMesh {
   private:
     std::uint32_t vertices_ = 0;
     std::uint32_t indices_ = 0;
+    elf3d::graphics::VertexLayout layout_ = elf3d::graphics::VertexLayout::position_normal_float3;
 };
 
 class FakePipeline final : public elf3d::graphics::GraphicsPipeline {
@@ -104,8 +110,10 @@ class FakeTexture final : public elf3d::graphics::Texture2D {
 struct FakeDeviceState {
     int upload_count = 0;
     int draw_count = 0;
+    int indexed_batch_count = 0;
     int overlay_draw_count = 0;
     int picking_draw_count = 0;
+    int picking_batch_count = 0;
     int overlay_line_count = 0;
     int overlay_marker_count = 0;
     int texture_upload_count = 0;
@@ -122,12 +130,24 @@ struct FakeDeviceState {
     std::vector<elf3d::graphics::DrawIndexedDescription> draws;
     std::vector<std::array<bool, elf3d::graphics::material_texture_count>> draw_texture_presence;
     std::vector<elf3d::graphics::PickingDrawDescription> picking_draws;
+    std::vector<elf3d::graphics::VertexLayout> mesh_layouts;
+    std::vector<std::size_t> mesh_uploaded_bytes;
     std::string vertex_shader_source;
     std::string fragment_shader_source;
 };
 
 class FakeDevice final : public elf3d::graphics::Device {
   public:
+    [[nodiscard]] double monotonic_time_milliseconds() const noexcept override {
+        const double result = clock_milliseconds_;
+        clock_milliseconds_ += 0.125;
+        return result;
+    }
+    [[nodiscard]] elf3d::graphics::GpuTimingSample
+    delayed_gpu_timing(elf3d::graphics::GpuTimingPass) noexcept override {
+        return {};
+    }
+
     [[nodiscard]] FakeDeviceState& state() noexcept {
         return state_;
     }
@@ -156,8 +176,11 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::StaticMesh>> create_static_mesh(
         const elf3d::graphics::StaticMeshDescription& description) noexcept override {
         ++state_.upload_count;
+        state_.mesh_layouts.push_back(description.vertex_layout);
+        state_.mesh_uploaded_bytes.push_back(description.vertex_bytes.size());
         return std::unique_ptr<elf3d::graphics::StaticMesh>{std::make_unique<FakeMesh>(
-            description.vertex_count, static_cast<std::uint32_t>(description.indices.size()))};
+            description.vertex_count, static_cast<std::uint32_t>(description.indices.size()),
+            description.vertex_layout)};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::Texture2D>>
     create_texture_2d(const elf3d::graphics::Texture2DDescription& description) noexcept override {
@@ -190,6 +213,23 @@ class FakeDevice final : public elf3d::graphics::Device {
         state_.draws.push_back(stored_description);
         return {};
     }
+    [[nodiscard]] elf3d::Result<void> draw_indexed_batch(
+        elf3d::graphics::RenderTarget& target, elf3d::graphics::GraphicsPipeline& pipeline,
+        std::span<const elf3d::graphics::IndexedDrawBatchItem> items) noexcept override {
+        ++state_.indexed_batch_count;
+        for (const elf3d::graphics::IndexedDrawBatchItem& item : items) {
+            if (item.mesh == nullptr) {
+                return elf3d::Error{elf3d::ErrorCode::invalid_argument,
+                                    "Fake batch item requires a mesh"};
+            }
+            const elf3d::Result<void> result =
+                draw_indexed(target, pipeline, *item.mesh, item.description);
+            if (!result) {
+                return result.error();
+            }
+        }
+        return {};
+    }
     [[nodiscard]] elf3d::Result<void>
     draw_overlay(elf3d::graphics::RenderTarget&,
                  const elf3d::graphics::DrawOverlayDescription& description) noexcept override {
@@ -203,6 +243,23 @@ class FakeDevice final : public elf3d::graphics::Device {
         const elf3d::graphics::PickingDrawDescription& description) noexcept override {
         ++state_.picking_draw_count;
         state_.picking_draws.push_back(description);
+        return {};
+    }
+    [[nodiscard]] elf3d::Result<void> draw_picking_batch(
+        elf3d::graphics::PickingTarget& target,
+        std::span<const elf3d::graphics::PickingDrawBatchItem> items) noexcept override {
+        ++state_.picking_batch_count;
+        for (const elf3d::graphics::PickingDrawBatchItem& item : items) {
+            if (item.mesh == nullptr) {
+                return elf3d::Error{elf3d::ErrorCode::invalid_argument,
+                                    "Fake picking batch item requires a mesh"};
+            }
+            const elf3d::Result<void> result =
+                draw_picking_indexed(target, *item.mesh, item.description);
+            if (!result) {
+                return result.error();
+            }
+        }
         return {};
     }
     [[nodiscard]] elf3d::Result<std::optional<elf3d::graphics::PickingPixel>>
@@ -221,6 +278,7 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
 
   private:
+    mutable double clock_milliseconds_ = 0.0;
     FakeDeviceState state_;
 };
 

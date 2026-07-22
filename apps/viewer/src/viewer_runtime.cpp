@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -12,6 +14,63 @@
 #include <utility>
 
 namespace elf3d::viewer {
+namespace {
+
+inline constexpr unsigned int gl_shading_language_version = 0x8B8CU;
+inline constexpr unsigned int gl_context_flags = 0x821EU;
+inline constexpr unsigned int gl_context_profile_mask = 0x9126U;
+inline constexpr unsigned int gl_samples = 0x80A9U;
+inline constexpr unsigned int gl_framebuffer_srgb = 0x8DB9U;
+
+[[nodiscard]] std::string gl_string(unsigned int name) {
+    const unsigned char* value = glGetString(name);
+    if (value == nullptr) {
+        return "unavailable";
+    }
+    std::string result;
+    for (std::size_t index = 0; value[index] != 0; ++index) {
+        result.push_back(static_cast<char>(value[index]));
+    }
+    return result;
+}
+
+void capture_context_diagnostics(GLFWwindow* window, ViewerState& state) {
+    (void)window;
+    state.gl_vendor = gl_string(GL_VENDOR);
+    state.gl_renderer = gl_string(GL_RENDERER);
+    state.gl_version = gl_string(GL_VERSION);
+    state.glsl_version_report = gl_string(gl_shading_language_version);
+    glGetIntegerv(gl_context_flags, &state.gl_context_flags);
+    glGetIntegerv(gl_context_profile_mask, &state.gl_context_profile_mask);
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &state.maximum_texture_size);
+    glGetIntegerv(GL_RED_BITS, &state.default_red_bits);
+    glGetIntegerv(GL_GREEN_BITS, &state.default_green_bits);
+    glGetIntegerv(GL_BLUE_BITS, &state.default_blue_bits);
+    glGetIntegerv(GL_ALPHA_BITS, &state.default_alpha_bits);
+    glGetIntegerv(GL_DEPTH_BITS, &state.default_depth_bits);
+    glGetIntegerv(GL_STENCIL_BITS, &state.default_stencil_bits);
+    glGetIntegerv(gl_samples, &state.default_samples);
+    state.default_srgb_capable = glIsEnabled(gl_framebuffer_srgb) == GL_TRUE ? 1 : 0;
+}
+
+[[nodiscard]] double elapsed_milliseconds(std::chrono::steady_clock::time_point begin,
+                                          std::chrono::steady_clock::time_point end) noexcept {
+    return std::chrono::duration<double, std::milli>(end - begin).count();
+}
+
+void retain_frame_sample(ViewerState& state, const ViewerState::FrameSample& sample) {
+    ++state.captured_frame_count;
+    state.frame_samples.push_back(sample);
+    const std::size_t maximum_samples = state.capture_performance_csv ? 10000U : 600U;
+    if (state.frame_samples.size() > maximum_samples) {
+        state.frame_samples.erase(
+            state.frame_samples.begin(),
+            state.frame_samples.begin() +
+                static_cast<std::ptrdiff_t>(state.frame_samples.size() - maximum_samples));
+    }
+}
+
+} // namespace
 
 [[noreturn]] void fatal_viewer_allocation_failure() noexcept {
     fatal_error("Elf3D viewer memory allocation failed");
@@ -112,6 +171,7 @@ struct ViewerRuntime {
         return false;
     }
     glfwSwapInterval(1);
+    capture_context_diagnostics(runtime.window.get(), runtime.state);
     return true;
 }
 
@@ -182,6 +242,7 @@ struct ViewerRuntime {
 }
 
 void begin_viewer_frame(ViewerRuntime& runtime) {
+    runtime.state.viewport_rendered_this_frame = false;
     runtime.state.navigation_wheel_delta = 0.0F;
     runtime.state.navigation_wheel_position.reset();
     glfwPollEvents();
@@ -425,72 +486,93 @@ void execute_viewer_commands(ViewerRuntime& runtime, const ViewerCommands& comma
     execute_visibility_commands(runtime, commands);
 }
 
+void handle_pending_model_files(ViewerRuntime& runtime) {
+    if (runtime.state.dropped_path.has_value()) {
+        std::string path = std::move(*runtime.state.dropped_path);
+        runtime.state.dropped_path.reset();
+        attempt_model_load(*runtime.engine, *runtime.viewport, runtime.state, runtime.scene, path);
+    }
+    if (runtime.state.drop_copy_failed) {
+        runtime.state.drop_copy_failed = false;
+        report_load_failure(runtime.state, "Dropped file",
+                            elf3d::Error{elf3d::ErrorCode::invalid_argument,
+                                         "The viewer could not copy the dropped UTF-8 path"});
+    }
+    const std::optional<FileDialogResult> open_result =
+        build_open_modal(runtime.state, runtime.scene);
+    if (open_result.has_value()) {
+        attempt_model_load(*runtime.engine, *runtime.viewport, runtime.state, runtime.scene,
+                           open_result->path);
+    }
+    const std::optional<FileDialogResult> save_result =
+        build_save_modal(runtime.state, runtime.scene);
+    if (!save_result.has_value()) {
+        return;
+    }
+    if (save_result->action == FileDialogAction::open) {
+        attempt_model_load(*runtime.engine, *runtime.viewport, runtime.state, runtime.scene,
+                           save_result->path);
+    } else {
+        attempt_model_save(runtime.state, runtime.scene, save_result->path);
+    }
+}
+
+void build_viewer_panels(ViewerRuntime& runtime, ImGuiID dockspace_id) {
+    ViewerState& state = runtime.state;
+    ViewerScene& scene = runtime.scene;
+    build_rendering_panel(dockspace_id, state, scene);
+    update_demo_cube_animation(state, scene);
+    build_3d_view(ViewPanelContext{runtime.window.get(), dockspace_id, &state, runtime.engine.get(),
+                                   runtime.viewport.get(), &scene});
+    build_scene_hierarchy_panel(dockspace_id, state, scene, *runtime.viewport);
+    build_model_information(dockspace_id, state, scene);
+    build_navigation_settings_window(dockspace_id, state, *runtime.viewport);
+    build_selection_panel(dockspace_id, state, scene, *runtime.viewport);
+    build_measurement_panel(dockspace_id, state, scene, *runtime.viewport);
+    build_clipping_panel(dockspace_id, state, scene, *runtime.viewport);
+    build_status_bar(state, *runtime.engine, scene, *runtime.viewport);
+    build_about_window(state);
+    build_error_modal(state);
+    build_save_error_modal(state);
+    if (state.show_imgui_demo) {
+        ImGui::ShowDemoWindow(&state.show_imgui_demo);
+    }
+    state.apply_dock_layout = false;
+}
+
+void build_viewer_frame_ui(ViewerRuntime& runtime) {
+    ViewerCommands commands;
+    build_main_menu(runtime.window.get(), runtime.state, runtime.scene, *runtime.viewport,
+                    commands);
+    build_toolbar(runtime.state, runtime.toolbar_icons, runtime.scene, *runtime.viewport, commands);
+    const ImGuiID dockspace_id = build_main_dockspace(runtime.state);
+    collect_viewer_shortcuts(runtime, commands);
+    execute_viewer_commands(runtime, commands);
+    handle_pending_model_files(runtime);
+    build_viewer_panels(runtime, dockspace_id);
+}
+
 int run_viewer(int argument_count, char** arguments) {
     ViewerRuntime runtime;
     if (!initialize_viewer_runtime(runtime, argument_count, arguments)) {
         return 1;
     }
     ViewerState& state = runtime.state;
-    ViewerScene& active_scene = runtime.scene;
     Window& window = runtime.window;
-    std::unique_ptr<elf3d::Engine>& engine = runtime.engine;
-    std::unique_ptr<elf3d::Viewport>& engine_viewport = runtime.viewport;
     std::unique_ptr<elf3d::imgui::Context>& imgui = runtime.imgui;
-    ToolbarIcons& toolbar_icons = runtime.toolbar_icons;
 
     while (glfwWindowShouldClose(window.get()) == GLFW_FALSE) {
+        const auto frame_begin = std::chrono::steady_clock::now();
         begin_viewer_frame(runtime);
-        ViewerCommands commands;
-        build_main_menu(window.get(), state, active_scene, *engine_viewport, commands);
-        build_toolbar(state, toolbar_icons, active_scene, *engine_viewport, commands);
-        const ImGuiID dockspace_id = build_main_dockspace(state);
-        collect_viewer_shortcuts(runtime, commands);
-        execute_viewer_commands(runtime, commands);
+        const auto event_input_end = std::chrono::steady_clock::now();
+        build_viewer_frame_ui(runtime);
 
-        if (state.dropped_path.has_value()) {
-            std::string path = std::move(*state.dropped_path);
-            state.dropped_path.reset();
-            attempt_model_load(*engine, *engine_viewport, state, active_scene, path);
-        }
-        if (state.drop_copy_failed) {
-            state.drop_copy_failed = false;
-            report_load_failure(state, "Dropped file",
-                                elf3d::Error{elf3d::ErrorCode::invalid_argument,
-                                             "The viewer could not copy the dropped UTF-8 path"});
-        }
-        const std::optional<FileDialogResult> open_result = build_open_modal(state, active_scene);
-        if (open_result.has_value()) {
-            attempt_model_load(*engine, *engine_viewport, state, active_scene, open_result->path);
-        }
-        const std::optional<FileDialogResult> save_result = build_save_modal(state, active_scene);
-        if (save_result.has_value()) {
-            if (save_result->action == FileDialogAction::open) {
-                attempt_model_load(*engine, *engine_viewport, state, active_scene,
-                                   save_result->path);
-            } else {
-                attempt_model_save(state, active_scene, save_result->path);
-            }
+        if (state.vsync_enabled != state.vsync_applied) {
+            glfwSwapInterval(state.vsync_enabled ? 1 : 0);
+            state.vsync_applied = state.vsync_enabled;
         }
 
-        build_rendering_panel(dockspace_id, state, active_scene);
-        update_demo_cube_animation(state, active_scene);
-        build_3d_view(ViewPanelContext{window.get(), dockspace_id, &state, engine.get(),
-                                       engine_viewport.get(), &active_scene});
-        build_scene_hierarchy_panel(dockspace_id, state, active_scene, *engine_viewport);
-        build_model_information(dockspace_id, state, active_scene);
-        build_navigation_settings_window(dockspace_id, state, *engine_viewport);
-        build_selection_panel(dockspace_id, state, active_scene, *engine_viewport);
-        build_measurement_panel(dockspace_id, state, active_scene, *engine_viewport);
-        build_clipping_panel(dockspace_id, state, active_scene, *engine_viewport);
-        build_status_bar(state, *engine, active_scene, *engine_viewport);
-        build_about_window(state);
-        build_error_modal(state);
-        build_save_error_modal(state);
-        if (state.show_imgui_demo) {
-            ImGui::ShowDemoWindow(&state.show_imgui_demo);
-        }
-        state.apply_dock_layout = false;
-
+        const auto ui_build_end = std::chrono::steady_clock::now();
         int framebuffer_width = 0;
         int framebuffer_height = 0;
         glfwGetFramebufferSize(window.get(), &framebuffer_width, &framebuffer_height);
@@ -498,7 +580,45 @@ int run_viewer(int argument_count, char** arguments) {
         glClearColor(0.035F, 0.04F, 0.05F, 1.0F);
         glClear(GL_COLOR_BUFFER_BIT);
         imgui->render();
+        const auto composition_end = std::chrono::steady_clock::now();
         glfwSwapBuffers(window.get());
+        const auto frame_end = std::chrono::steady_clock::now();
+        const double work_milliseconds = elapsed_milliseconds(event_input_end, ui_build_end);
+        const double render_milliseconds =
+            state.viewport_rendered_this_frame ? state.statistics.cpu_total_milliseconds : 0.0;
+        ViewerState::FrameSample sample{elapsed_milliseconds(frame_begin, frame_end),
+                                        elapsed_milliseconds(frame_begin, event_input_end),
+                                        std::max(0.0, work_milliseconds - render_milliseconds),
+                                        render_milliseconds,
+                                        elapsed_milliseconds(ui_build_end, composition_end),
+                                        elapsed_milliseconds(composition_end, frame_end),
+                                        elapsed_milliseconds(event_input_end, frame_end)};
+        int window_width = 0;
+        int window_height = 0;
+        glfwGetWindowSize(window.get(), &window_width, &window_height);
+        if (state.viewport_rendered_this_frame) {
+            sample.render = state.statistics;
+        }
+        const Result<PickingStatistics> picking = runtime.viewport->picking_statistics();
+        if (picking &&
+            (picking.value().lifetime_gpu_requests != state.sampled_picking_gpu_requests ||
+             picking.value().lifetime_cpu_fallbacks != state.sampled_picking_cpu_fallbacks)) {
+            sample.picking = picking.value();
+            state.sampled_picking_gpu_requests = picking.value().lifetime_gpu_requests;
+            state.sampled_picking_cpu_fallbacks = picking.value().lifetime_cpu_fallbacks;
+        }
+        sample.window_dimensions = Extent2D{static_cast<std::uint32_t>(std::max(window_width, 0)),
+                                            static_cast<std::uint32_t>(std::max(window_height, 0))};
+        sample.framebuffer_dimensions =
+            Extent2D{static_cast<std::uint32_t>(std::max(framebuffer_width, 0)),
+                     static_cast<std::uint32_t>(std::max(framebuffer_height, 0))};
+        sample.view_dimensions = state.view_dimensions;
+        sample.target_dimensions = state.render_target_dimensions;
+        sample.render_scale_percent = state.diagnostic_render_scale_percent;
+        sample.vsync_enabled = state.vsync_enabled;
+        sample.standard_shading = state.shading_mode == RenderShadingMode::standard;
+        sample.rendered_3d = state.viewport_rendered_this_frame;
+        retain_frame_sample(state, sample);
     }
     release_navigation_cursor(window.get(), state);
     return 0;
