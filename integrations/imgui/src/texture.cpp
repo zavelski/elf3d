@@ -18,7 +18,7 @@ template <typename TextureId> TextureId to_imgui_texture_id(std::uintptr_t value
 
 } // namespace
 
-Result<void> image(const NativeTextureView &texture, Float2 display_size) noexcept {
+Result<void> image(const NativeTextureView& texture, Float2 display_size) noexcept {
     if (texture.api != NativeGraphicsApi::opengl) {
         return Error{ErrorCode::backend_mismatch,
                      "The Dear ImGui integration requires an OpenGL native texture"};
@@ -37,7 +37,7 @@ Result<void> image(const NativeTextureView &texture, Float2 display_size) noexce
     return {};
 }
 
-Result<void> draw_image(const NativeTextureView &texture, Float2 top_left_screen_position,
+Result<void> draw_image(const NativeTextureView& texture, Float2 top_left_screen_position,
                         Float2 display_size) noexcept {
     if (texture.api != NativeGraphicsApi::opengl) {
         return Error{ErrorCode::backend_mismatch,

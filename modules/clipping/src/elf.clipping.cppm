@@ -38,19 +38,19 @@ struct ClippingFilter {
     }
 };
 
-[[nodiscard]] Result<SectionPlane> normalized_section_plane(const SectionPlane &plane) noexcept;
-[[nodiscard]] Result<ClippingBox> validated_clipping_box(const ClippingBox &box) noexcept;
-[[nodiscard]] Result<ClippingFilter>
-make_filter(const SectionPlane &section_plane, std::span<const ClippingBox> boxes,
-            std::uint64_t revision);
+[[nodiscard]] Result<SectionPlane> normalized_section_plane(const SectionPlane& plane) noexcept;
+[[nodiscard]] Result<ClippingBox> validated_clipping_box(const ClippingBox& box) noexcept;
+[[nodiscard]] Result<ClippingFilter> make_filter(const SectionPlane& section_plane,
+                                                 std::span<const ClippingBox> boxes,
+                                                 std::uint64_t revision);
 [[nodiscard]] ClippingFilter disabled_filter() noexcept;
 
 [[nodiscard]] bool is_valid_bounds(Bounds3 bounds) noexcept;
-[[nodiscard]] Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4 &world) noexcept;
-[[nodiscard]] bool contains_point(const ClippingFilter &filter, Float3 world_position) noexcept;
-[[nodiscard]] BoundsClassification classify_bounds(const ClippingFilter &filter,
+[[nodiscard]] Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4& world) noexcept;
+[[nodiscard]] bool contains_point(const ClippingFilter& filter, Float3 world_position) noexcept;
+[[nodiscard]] BoundsClassification classify_bounds(const ClippingFilter& filter,
                                                    Bounds3 world_bounds) noexcept;
-[[nodiscard]] std::optional<Bounds3> clipped_bounds(const ClippingFilter &filter,
+[[nodiscard]] std::optional<Bounds3> clipped_bounds(const ClippingFilter& filter,
                                                     Bounds3 world_bounds) noexcept;
 
 } // namespace elf3d::clipping

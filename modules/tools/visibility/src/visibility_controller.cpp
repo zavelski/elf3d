@@ -8,8 +8,8 @@ import elf.scene;
 
 namespace elf3d::tools::visibility {
 
-Result<void> VisibilityController::isolate_entity(const scene::Storage &scene, EntityId entity) {
-    const Result<const scene::EntityRecord *> record = scene.entity(entity);
+Result<void> VisibilityController::isolate_entity(const scene::Storage& scene, EntityId entity) {
+    const Result<const scene::EntityRecord*> record = scene.entity(entity);
     if (!record) {
         return record.error();
     }
@@ -33,7 +33,7 @@ void VisibilityController::clear_scene(SceneId scene) noexcept {
     }
 }
 
-void VisibilityController::validate_against(const scene::Storage &scene) noexcept {
+void VisibilityController::validate_against(const scene::Storage& scene) noexcept {
     if (!isolated_entity_.has_value()) {
         return;
     }
@@ -41,7 +41,7 @@ void VisibilityController::validate_against(const scene::Storage &scene) noexcep
         clear_isolation();
         return;
     }
-    const Result<const scene::EntityRecord *> record = scene.entity(*isolated_entity_);
+    const Result<const scene::EntityRecord*> record = scene.entity(*isolated_entity_);
     if (!record) {
         clear_isolation();
     }
@@ -55,7 +55,7 @@ std::optional<EntityId> VisibilityController::isolated_entity() const noexcept {
     return isolated_entity_;
 }
 
-Result<scene::VisibilityFilter> VisibilityController::filter_for(const scene::Storage &scene) {
+Result<scene::VisibilityFilter> VisibilityController::filter_for(const scene::Storage& scene) {
     validate_against(scene);
     if (!isolated_entity_.has_value()) {
         return scene::make_visibility_filter(scene, std::nullopt);

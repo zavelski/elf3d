@@ -1,5 +1,18 @@
 # Testing Elf3D
 
+## Preset Contracts
+
+After changing CMake options, presets, or product composition, validate all
+four checked-in configure and target contracts:
+
+```powershell
+.\cmake\check-preset-contracts.ps1
+```
+
+The check configures isolated full and model-only Debug/Release trees below
+`out/`, verifies required and forbidden targets, and removes those trees after
+completion.
+
 ## Automated Tests
 
 Configure, build, and run the Debug suite:
@@ -37,6 +50,15 @@ engine/UI targets were not configured.
 
 The named `elf3d.scene_runtime_adapter_depth` regression exercises the
 permanent iterative Document-to-Scene adapter with a 5,120-level hierarchy.
+
+CI runs the full Debug suite and an independent model-only Debug suite for
+every push and pull request. A weekly schedule and manual dispatch additionally
+run both Release suites. All jobs use the project's current pinned CMake 4.3.4
+baseline rather than testing older CMake compatibility. The standard hosted
+Windows environment does not guarantee an OpenGL 4.1 runtime, so the two
+hidden-context graphics tests may report `Skipped`; that result is not evidence
+of real rendering. A hard graphics gate requires a runner that guarantees a
+compatible context.
 
 After building, a focused group can be run with a CTest expression:
 

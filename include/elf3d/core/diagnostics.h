@@ -28,12 +28,12 @@ class LogSink {
   public:
     virtual ~LogSink() noexcept = default;
 
-    LogSink(const LogSink &) = delete;
-    LogSink &operator=(const LogSink &) = delete;
-    LogSink(LogSink &&) = delete;
-    LogSink &operator=(LogSink &&) = delete;
+    LogSink(const LogSink&) = delete;
+    LogSink& operator=(const LogSink&) = delete;
+    LogSink(LogSink&&) = delete;
+    LogSink& operator=(LogSink&&) = delete;
 
-    virtual void write(const LogRecord &record) noexcept = 0;
+    virtual void write(const LogRecord& record) noexcept = 0;
 
   protected:
     LogSink() = default;

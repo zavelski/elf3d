@@ -6,7 +6,7 @@ body:
     id: version
     attributes:
       label: Elf3D version
-      placeholder: 0.7.6 or source revision
+      placeholder: Release tag or source commit
     validations:
       required: true
   - type: input

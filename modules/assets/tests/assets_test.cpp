@@ -29,7 +29,7 @@ namespace {
     }};
 }
 
-int verify_mesh_storage(elf3d::assets::Storage &storage) {
+int verify_mesh_storage(elf3d::assets::Storage& storage) {
     const std::array<elf3d::VertexPositionNormal, 8> vertices = cube_vertices();
     const std::array<std::uint32_t, 36> indices = cube_indices();
 
@@ -38,7 +38,7 @@ int verify_mesh_storage(elf3d::assets::Storage &storage) {
     if (!mesh) {
         return 10;
     }
-    const elf3d::Result<const elf3d::assets::MeshAsset *> asset = storage.mesh(mesh.value());
+    const elf3d::Result<const elf3d::assets::MeshAsset*> asset = storage.mesh(mesh.value());
     if (!asset || asset.value()->bounds.minimum != elf3d::Float3{-1.0F, -1.0F, -1.0F} ||
         asset.value()->bounds.maximum != elf3d::Float3{1.0F, 1.0F, 1.0F}) {
         return 11;
@@ -61,7 +61,7 @@ int verify_mesh_storage(elf3d::assets::Storage &storage) {
     return 0;
 }
 
-int verify_material_storage(elf3d::assets::Storage &storage) {
+int verify_material_storage(elf3d::assets::Storage& storage) {
     const elf3d::MaterialDescription description{elf3d::Color4{0.2F, 0.4F, 0.6F, 1.0F}};
     const elf3d::Result<elf3d::MaterialHandle> material = storage.create_material(description);
     if (!material || !storage.material(material.value()) ||
@@ -78,25 +78,24 @@ int verify_material_storage(elf3d::assets::Storage &storage) {
     return 0;
 }
 
-int verify_image_storage(elf3d::assets::Storage &storage) {
+int verify_image_storage(elf3d::assets::Storage& storage) {
     const std::array<std::byte, 8> caller_pixels{{std::byte{1}, std::byte{2}, std::byte{3},
                                                   std::byte{4}, std::byte{5}, std::byte{6},
                                                   std::byte{7}, std::byte{8}}};
-    if (storage.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, caller_pixels}).error().code() !=
-        elf3d::ErrorCode::invalid_argument) {
+    if (storage.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, caller_pixels})
+            .error()
+            .code() != elf3d::ErrorCode::invalid_argument) {
         return 30;
     }
-    const std::array<std::byte, 4> pixel{{std::byte{1}, std::byte{2}, std::byte{3},
-                                         std::byte{4}}};
-    const auto image =
-        storage.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel});
-    const elf3d::SamplerDescription sampler{elf3d::TextureWrap::clamp_to_edge,
-                                             elf3d::TextureWrap::mirrored_repeat,
-                                             elf3d::TextureFilter::linear_mipmap_linear,
-                                             elf3d::TextureFilter::nearest};
+    const std::array<std::byte, 4> pixel{{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}}};
+    const auto image = storage.create_image({1, 1, elf3d::PixelFormat::rgba8_unorm, pixel});
+    const elf3d::SamplerDescription sampler{
+        elf3d::TextureWrap::clamp_to_edge, elf3d::TextureWrap::mirrored_repeat,
+        elf3d::TextureFilter::linear_mipmap_linear, elf3d::TextureFilter::nearest};
     const auto texture = storage.create_texture({image.value(), sampler});
     if (!image || !texture || storage.images().size() != 1 || storage.textures().size() != 1 ||
-        storage.image(image.value()).value()->pixels != std::vector<std::byte>(pixel.begin(), pixel.end()) ||
+        storage.image(image.value()).value()->pixels !=
+            std::vector<std::byte>(pixel.begin(), pixel.end()) ||
         storage.texture(texture.value()).value()->description.sampler != sampler) {
         return 31;
     }

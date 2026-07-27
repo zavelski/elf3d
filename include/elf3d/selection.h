@@ -14,14 +14,14 @@ struct SelectionSettings {
     Color4 highlight_color{1.0F, 0.55F, 0.05F, 1.0F};
     float highlight_strength = 0.45F;
 
-    bool operator==(const SelectionSettings &) const = default;
+    bool operator==(const SelectionSettings&) const = default;
 };
 
 struct SelectionSnapshot {
     std::optional<EntityId> entity;
     std::optional<PickHit> pick_hit;
 
-    bool operator==(const SelectionSnapshot &) const = default;
+    bool operator==(const SelectionSnapshot&) const = default;
 };
 
 } // namespace elf3d

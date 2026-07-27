@@ -25,14 +25,14 @@ class Context final {
   public:
     ~Context() noexcept;
 
-    Context(const Context &) = delete;
-    Context &operator=(const Context &) = delete;
-    Context(Context &&) = delete;
-    Context &operator=(Context &&) = delete;
+    Context(const Context&) = delete;
+    Context& operator=(const Context&) = delete;
+    Context(Context&&) = delete;
+    Context& operator=(Context&&) = delete;
 
     [[nodiscard]] static Result<std::unique_ptr<Context>>
-    create(GLFWwindow *window, std::string_view glsl_version,
-           const ContextOptions &options = {}) noexcept;
+    create(GLFWwindow* window, std::string_view glsl_version,
+           const ContextOptions& options = {}) noexcept;
 
     void begin_frame() noexcept;
     void render() noexcept;
@@ -40,10 +40,10 @@ class Context final {
     explicit Context(ConstructionKey) noexcept {}
 
   private:
-    [[nodiscard]] Result<void> initialize(GLFWwindow *window, const char *glsl_version,
-                                          const ContextOptions &options);
+    [[nodiscard]] Result<void> initialize(GLFWwindow* window, const char* glsl_version,
+                                          const ContextOptions& options);
 
-    ImGuiContext *context_ = nullptr;
+    ImGuiContext* context_ = nullptr;
     bool glfw_backend_initialized_ = false;
     bool opengl_backend_initialized_ = false;
 };

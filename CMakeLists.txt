@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 4.3.4)
 
 project(
     Elf3D
-    VERSION 0.8.9
+    VERSION 0.9.0
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
@@ -22,7 +22,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 option(ELF3D_BUILD_ENGINE "Build the full Elf3D engine and rendering stack" ON)
 option(ELF3D_BUILD_VIEWER "Build the Elf3D reference viewer" ON)
-option(ELF3D_BUILD_PERFORMANCE_BENCHMARK "Build the non-CTest render benchmark" ON)
+option(ELF3D_BUILD_PERFORMANCE_BENCHMARK "Build the non-CTest render benchmark" OFF)
 if(ELF3D_BUILD_VIEWER AND NOT ELF3D_BUILD_ENGINE)
     message(FATAL_ERROR "ELF3D_BUILD_VIEWER requires ELF3D_BUILD_ENGINE")
 endif()

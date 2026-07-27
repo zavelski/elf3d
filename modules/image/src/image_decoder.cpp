@@ -161,19 +161,22 @@ struct JpegContext final {
 #pragma warning(push)
 #pragma warning(disable : 4611)
 #endif
-void copy_jpeg_scanline(JpegContext &context, std::size_t row_index) {
-    const std::size_t destination_row = row_index * static_cast<std::size_t>(context.image.width) * 4;
+void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
+    const std::size_t destination_row =
+        row_index * static_cast<std::size_t>(context.image.width) * 4;
     for (std::size_t column = 0; column < context.image.width; ++column) {
         const std::size_t source = column * 3;
         const std::size_t destination = destination_row + column * 4;
         context.image.pixels[destination] = static_cast<std::byte>(context.scanline[source]);
-        context.image.pixels[destination + 1] = static_cast<std::byte>(context.scanline[source + 1]);
-        context.image.pixels[destination + 2] = static_cast<std::byte>(context.scanline[source + 2]);
+        context.image.pixels[destination + 1] =
+            static_cast<std::byte>(context.scanline[source + 1]);
+        context.image.pixels[destination + 2] =
+            static_cast<std::byte>(context.scanline[source + 2]);
         context.image.pixels[destination + 3] = static_cast<std::byte>(0xffU);
     }
 }
 
-[[nodiscard]] Result<void> decode_jpeg_scanlines(JpegContext &context) {
+[[nodiscard]] Result<void> decode_jpeg_scanlines(JpegContext& context) {
     while (context.decoder.output_scanline < context.decoder.output_height) {
         JSAMPROW row = context.scanline.data();
         if (jpeg_read_scanlines(&context.decoder, &row, 1) != 1) {
@@ -184,12 +187,12 @@ void copy_jpeg_scanline(JpegContext &context, std::size_t row_index) {
     return {};
 }
 
-[[nodiscard]] Result<void> read_jpeg_header(JpegContext &context,
-                                             std::span<const std::byte> encoded) {
+[[nodiscard]] Result<void> read_jpeg_header(JpegContext& context,
+                                            std::span<const std::byte> encoded) {
     context.decoder_created = true;
     jpeg_create_decompress(&context.decoder);
     context.decoder.mem->max_memory_to_use = static_cast<long>(maximum_decoded_bytes);
-    jpeg_mem_src(&context.decoder, reinterpret_cast<const unsigned char *>(encoded.data()),
+    jpeg_mem_src(&context.decoder, reinterpret_cast<const unsigned char*>(encoded.data()),
                  encoded.size());
     if (jpeg_read_header(&context.decoder, TRUE) != JPEG_HEADER_OK) {
         return Error{ErrorCode::image_decode_failed, "JPEG header decoding did not complete"};
@@ -197,7 +200,7 @@ void copy_jpeg_scanline(JpegContext &context, std::size_t row_index) {
     return {};
 }
 
-[[nodiscard]] Result<void> allocate_jpeg_output(JpegContext &context) {
+[[nodiscard]] Result<void> allocate_jpeg_output(JpegContext& context) {
     const Result<std::size_t> decoded_size =
         rgba8_size(context.decoder.image_width, context.decoder.image_height);
     if (!decoded_size) {
@@ -212,7 +215,7 @@ void copy_jpeg_scanline(JpegContext &context, std::size_t row_index) {
     return {};
 }
 
-[[nodiscard]] Result<void> start_jpeg_rgb_output(JpegContext &context) {
+[[nodiscard]] Result<void> start_jpeg_rgb_output(JpegContext& context) {
     if (jpeg_start_decompress(&context.decoder) == FALSE ||
         context.decoder.output_width != context.image.width ||
         context.decoder.output_height != context.image.height ||

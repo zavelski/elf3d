@@ -4,8 +4,8 @@
 #include <elf3d/core/assert.h>
 #include <elf3d/core/error.h>
 
-#include <type_traits>
 #include <optional>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -22,10 +22,10 @@ template <typename T> class [[nodiscard]] Result final {
 
     Result(Error error) noexcept : storage_(std::in_place_type<Error>, error) {}
 
-    Result(const Result &) = delete;
-    Result &operator=(const Result &) = delete;
-    Result(Result &&) noexcept = default;
-    Result &operator=(Result &&) noexcept = default;
+    Result(const Result&) = delete;
+    Result& operator=(const Result&) = delete;
+    Result(Result&&) noexcept = default;
+    Result& operator=(Result&&) noexcept = default;
 
     [[nodiscard]] bool has_value() const noexcept {
         return std::holds_alternative<T>(storage_);
@@ -35,32 +35,32 @@ template <typename T> class [[nodiscard]] Result final {
         return has_value();
     }
 
-    [[nodiscard]] T &value() & noexcept {
-        T *stored = std::get_if<T>(&storage_);
+    [[nodiscard]] T& value() & noexcept {
+        T* stored = std::get_if<T>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return *stored;
     }
 
-    [[nodiscard]] const T &value() const & noexcept {
-        const T *stored = std::get_if<T>(&storage_);
+    [[nodiscard]] const T& value() const& noexcept {
+        const T* stored = std::get_if<T>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return *stored;
     }
 
-    [[nodiscard]] T &&value() && noexcept {
-        T *stored = std::get_if<T>(&storage_);
+    [[nodiscard]] T&& value() && noexcept {
+        T* stored = std::get_if<T>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return std::move(*stored);
     }
 
-    [[nodiscard]] Error &error() & noexcept {
-        Error *stored = std::get_if<Error>(&storage_);
+    [[nodiscard]] Error& error() & noexcept {
+        Error* stored = std::get_if<Error>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return *stored;
     }
 
-    [[nodiscard]] const Error &error() const & noexcept {
-        const Error *stored = std::get_if<Error>(&storage_);
+    [[nodiscard]] const Error& error() const& noexcept {
+        const Error* stored = std::get_if<Error>(&storage_);
         ELF3D_ASSERT(stored != nullptr);
         return *stored;
     }
@@ -75,10 +75,10 @@ template <> class [[nodiscard]] Result<void> final {
 
     Result(Error error) noexcept : error_(error) {}
 
-    Result(const Result &) = delete;
-    Result &operator=(const Result &) = delete;
-    Result(Result &&) noexcept = default;
-    Result &operator=(Result &&) noexcept = default;
+    Result(const Result&) = delete;
+    Result& operator=(const Result&) = delete;
+    Result(Result&&) noexcept = default;
+    Result& operator=(Result&&) noexcept = default;
 
     [[nodiscard]] bool has_value() const noexcept {
         return !error_.has_value();
@@ -88,7 +88,7 @@ template <> class [[nodiscard]] Result<void> final {
         return has_value();
     }
 
-    [[nodiscard]] const Error &error() const noexcept {
+    [[nodiscard]] const Error& error() const noexcept {
         ELF3D_ASSERT(error_.has_value());
         return *error_;
     }

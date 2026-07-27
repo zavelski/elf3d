@@ -129,8 +129,7 @@ class BinaryBuilder final {
         return range.value();
     }
 
-    [[nodiscard]] Result<EncodedIndexRange>
-    append_indices(std::span<const std::uint32_t> values) {
+    [[nodiscard]] Result<EncodedIndexRange> append_indices(std::span<const std::uint32_t> values) {
         std::uint32_t maximum = 0U;
         for (const std::uint32_t value : values) {
             if (value > maximum) {
@@ -141,7 +140,8 @@ class BinaryBuilder final {
             maximum <= std::numeric_limits<std::uint8_t>::max()
                 ? 5121U
                 : (maximum <= std::numeric_limits<std::uint16_t>::max() ? 5123U : 5125U);
-        const std::size_t stride = component_type == 5121U ? 1U : (component_type == 5123U ? 2U : 4U);
+        const std::size_t stride =
+            component_type == 5121U ? 1U : (component_type == 5123U ? 2U : 4U);
         const Result<ByteRange> range = reserve(values.size(), stride);
         if (!range) {
             return range.error();

@@ -17,7 +17,7 @@ namespace {
 constexpr std::uint64_t maximum_compatibility_mesh_handle_value =
     std::numeric_limits<std::uint64_t>::max() >> 1U;
 
-bool finite_vertex(const VertexPositionNormalTexCoord &vertex) noexcept {
+bool finite_vertex(const VertexPositionNormalTexCoord& vertex) noexcept {
     return math::is_finite(vertex.position) && math::is_finite(vertex.normal) &&
            std::isfinite(vertex.texcoord0.x) && std::isfinite(vertex.texcoord0.y) &&
            std::isfinite(vertex.texcoord1.x) && std::isfinite(vertex.texcoord1.y) &&
@@ -25,7 +25,7 @@ bool finite_vertex(const VertexPositionNormalTexCoord &vertex) noexcept {
            std::isfinite(vertex.color.blue) && std::isfinite(vertex.color.alpha);
 }
 
-bool finite_mapping(const TextureMapping &mapping) noexcept {
+bool finite_mapping(const TextureMapping& mapping) noexcept {
     return mapping.texcoord_set < 2U && std::isfinite(mapping.transform.offset.x) &&
            std::isfinite(mapping.transform.offset.y) && std::isfinite(mapping.transform.scale.x) &&
            std::isfinite(mapping.transform.scale.y) &&
@@ -53,13 +53,13 @@ bool valid_magnification_filter(TextureFilter filter) noexcept {
     return filter == TextureFilter::nearest || filter == TextureFilter::linear;
 }
 
-bool valid_sampler(const SamplerDescription &sampler) noexcept {
+bool valid_sampler(const SamplerDescription& sampler) noexcept {
     return valid_texture_wrap(sampler.wrap_u) && valid_texture_wrap(sampler.wrap_v) &&
            valid_minification_filter(sampler.min_filter) &&
            valid_magnification_filter(sampler.mag_filter);
 }
 
-MaterialDescription sanitized_material(const MaterialDescription &description) noexcept {
+MaterialDescription sanitized_material(const MaterialDescription& description) noexcept {
     MaterialDescription result = description;
     result.base_color = math::clamp_color(description.base_color);
     result.metallic_factor = std::clamp(description.metallic_factor, 0.0F, 1.0F);
@@ -76,8 +76,8 @@ MaterialDescription sanitized_material(const MaterialDescription &description) n
     return result;
 }
 
-bool has_valid_texture_handles(const MaterialDescription &description,
-                               const Storage &storage) noexcept {
+bool has_valid_texture_handles(const MaterialDescription& description,
+                               const Storage& storage) noexcept {
     const auto valid_texture = [&storage](TextureAssetHandle texture) {
         return !texture.is_valid() || static_cast<bool>(storage.texture(texture));
     };
@@ -88,7 +88,7 @@ bool has_valid_texture_handles(const MaterialDescription &description,
            valid_texture(description.emissive_texture);
 }
 
-bool has_valid_texture_mappings(const MaterialDescription &description) noexcept {
+bool has_valid_texture_mappings(const MaterialDescription& description) noexcept {
     return finite_mapping(description.base_color_texture_mapping) &&
            finite_mapping(description.metallic_roughness_texture_mapping) &&
            finite_mapping(description.normal_texture_mapping) &&
@@ -96,20 +96,21 @@ bool has_valid_texture_mappings(const MaterialDescription &description) noexcept
            finite_mapping(description.emissive_texture_mapping);
 }
 
-bool has_valid_material_scalars(const MaterialDescription &description) noexcept {
+bool has_valid_material_scalars(const MaterialDescription& description) noexcept {
     return valid_alpha_mode(description.alpha_mode) && std::isfinite(description.alpha_cutoff) &&
-           std::isfinite(description.metallic_factor) && std::isfinite(description.roughness_factor) &&
-           std::isfinite(description.normal_scale) && std::isfinite(description.occlusion_strength) &&
-           std::isfinite(description.ior) && std::isfinite(description.specular_factor);
+           std::isfinite(description.metallic_factor) &&
+           std::isfinite(description.roughness_factor) && std::isfinite(description.normal_scale) &&
+           std::isfinite(description.occlusion_strength) && std::isfinite(description.ior) &&
+           std::isfinite(description.specular_factor);
 }
 
-bool has_valid_material_colors(const MaterialDescription &description) noexcept {
+bool has_valid_material_colors(const MaterialDescription& description) noexcept {
     return math::is_finite(description.emissive_factor) &&
            math::is_finite(description.specular_color_factor);
 }
 
-Result<void> validate_material(const MaterialDescription &description,
-                               const Storage &storage) noexcept {
+Result<void> validate_material(const MaterialDescription& description,
+                               const Storage& storage) noexcept {
     if (!has_valid_texture_handles(description, storage)) {
         return Error{ErrorCode::invalid_texture_asset_handle,
                      "Material textures must belong to the same scene asset storage"};
@@ -133,10 +134,10 @@ SceneId Storage::scene_id() const noexcept {
     return scene_;
 }
 
-Result<MeshHandle> Storage::create_mesh(const MeshDataView &data) {
+Result<MeshHandle> Storage::create_mesh(const MeshDataView& data) {
     std::vector<VertexPositionNormalTexCoord> vertices;
     vertices.reserve(data.vertices.size());
-    for (const VertexPositionNormal &vertex : data.vertices) {
+    for (const VertexPositionNormal& vertex : data.vertices) {
         vertices.push_back(VertexPositionNormalTexCoord{vertex.position, vertex.normal});
     }
     Result<MeshHandle> result = create_mesh(TexturedMeshDataView{vertices, data.indices});
@@ -146,7 +147,7 @@ Result<MeshHandle> Storage::create_mesh(const MeshDataView &data) {
     return result;
 }
 
-Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView &data) {
+Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView& data) {
     if (data.vertices.empty()) {
         return Error{ErrorCode::invalid_mesh_data, "A mesh requires at least one vertex"};
     }
@@ -158,7 +159,7 @@ Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView &data) {
 
     Float3 minimum = data.vertices.front().position;
     Float3 maximum = minimum;
-    for (const VertexPositionNormalTexCoord &vertex : data.vertices) {
+    for (const VertexPositionNormalTexCoord& vertex : data.vertices) {
         if (!finite_vertex(vertex)) {
             return Error{ErrorCode::invalid_mesh_data,
                          "Mesh vertex positions, normals, UVs, and colors must be finite"};
@@ -190,7 +191,7 @@ Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView &data) {
     return detail::SceneHandleAccess::create_mesh(scene_, meshes_.size());
 }
 
-Result<ImageHandle> Storage::create_image(const ImageDescription &description) {
+Result<ImageHandle> Storage::create_image(const ImageDescription& description) {
     if (description.width == 0 || description.height == 0) {
         return Error{ErrorCode::zero_image_dimensions,
                      "Image assets require positive width and height"};
@@ -224,8 +225,8 @@ Result<ImageHandle> Storage::create_image(const ImageDescription &description) {
     return detail::SceneHandleAccess::create_image(scene_, images_.size());
 }
 
-Result<TextureAssetHandle> Storage::create_texture(const TextureDescription &description) {
-    const Result<const ImageAsset *> image_result = image(description.image);
+Result<TextureAssetHandle> Storage::create_texture(const TextureDescription& description) {
+    const Result<const ImageAsset*> image_result = image(description.image);
     if (!image_result) {
         return image_result.error();
     }
@@ -242,7 +243,7 @@ Result<TextureAssetHandle> Storage::create_texture(const TextureDescription &des
     return detail::SceneHandleAccess::create_texture(scene_, textures_.size());
 }
 
-Result<MaterialHandle> Storage::create_material(const MaterialDescription &description) {
+Result<MaterialHandle> Storage::create_material(const MaterialDescription& description) {
     if (materials_.size() >=
         static_cast<std::size_t>(std::numeric_limits<std::uint64_t>::max() - 1)) {
         return Error{ErrorCode::invalid_material_handle,
@@ -257,8 +258,8 @@ Result<MaterialHandle> Storage::create_material(const MaterialDescription &descr
 }
 
 Result<void> Storage::set_material(MaterialHandle material,
-                                   const MaterialDescription &description) {
-    const Result<const MaterialAsset *> existing = this->material(material);
+                                   const MaterialDescription& description) {
+    const Result<const MaterialAsset*> existing = this->material(material);
     if (!existing) {
         return existing.error();
     }
@@ -272,7 +273,7 @@ Result<void> Storage::set_material(MaterialHandle material,
     return {};
 }
 
-Result<const MeshAsset *> Storage::mesh(MeshHandle mesh) const noexcept {
+Result<const MeshAsset*> Storage::mesh(MeshHandle mesh) const noexcept {
     if (!owns(mesh)) {
         return Error{ErrorCode::invalid_mesh_handle,
                      "The mesh handle is invalid, stale, or belongs to another scene"};
@@ -284,7 +285,7 @@ Result<const MeshAsset *> Storage::mesh(MeshHandle mesh) const noexcept {
     return &meshes_[index];
 }
 
-Result<const MaterialAsset *> Storage::material(MaterialHandle material) const noexcept {
+Result<const MaterialAsset*> Storage::material(MaterialHandle material) const noexcept {
     if (!owns(material)) {
         return Error{ErrorCode::invalid_material_handle,
                      "The material handle is invalid, stale, or belongs to another scene"};
@@ -297,7 +298,7 @@ Result<const MaterialAsset *> Storage::material(MaterialHandle material) const n
     return &materials_[index];
 }
 
-Result<const ImageAsset *> Storage::image(ImageHandle image_handle) const noexcept {
+Result<const ImageAsset*> Storage::image(ImageHandle image_handle) const noexcept {
     if (!owns(image_handle)) {
         return Error{ErrorCode::invalid_image_handle,
                      "The image handle is invalid, stale, or belongs to another scene"};
@@ -310,7 +311,7 @@ Result<const ImageAsset *> Storage::image(ImageHandle image_handle) const noexce
     return &images_[index];
 }
 
-Result<const TextureAsset *> Storage::texture(TextureAssetHandle texture_handle) const noexcept {
+Result<const TextureAsset*> Storage::texture(TextureAssetHandle texture_handle) const noexcept {
     if (!owns(texture_handle)) {
         return Error{ErrorCode::invalid_texture_asset_handle,
                      "The texture handle is invalid, stale, or belongs to another scene"};

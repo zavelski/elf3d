@@ -1,5 +1,4 @@
 module;
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -118,6 +117,7 @@ class RuntimePrimitiveView final {
     [[nodiscard]] Float2 texcoord1(std::size_t index) const noexcept;
     [[nodiscard]] Color4 color(std::size_t index) const noexcept;
     [[nodiscard]] RuntimeVertexLayout vertex_layout() const noexcept;
+
   private:
     friend class Storage;
     std::span<const VertexPositionNormalTexCoord> compatibility_vertices_;

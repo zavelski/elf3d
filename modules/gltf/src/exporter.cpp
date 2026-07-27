@@ -373,8 +373,7 @@ void clear_preserved_metadata(ExportData& result) noexcept {
     if (!index_bytes) {
         return index_bytes.error();
     }
-    const Result<std::uint32_t> index_view =
-        append_buffer_view(views, index_bytes.value().bytes);
+    const Result<std::uint32_t> index_view = append_buffer_view(views, index_bytes.value().bytes);
     if (!index_view) {
         return index_view.error();
     }

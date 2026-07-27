@@ -21,7 +21,7 @@ struct SectionPlane {
     PlaneHalfSpace retained_half_space = PlaneHalfSpace::positive;
     bool enabled = false;
 
-    bool operator==(const SectionPlane &) const = default;
+    bool operator==(const SectionPlane&) const = default;
 };
 
 struct ClippingBox {
@@ -29,7 +29,7 @@ struct ClippingBox {
     Float3 maximum{0.5F, 0.5F, 0.5F};
     bool enabled = true;
 
-    bool operator==(const ClippingBox &) const = default;
+    bool operator==(const ClippingBox&) const = default;
 };
 
 struct ClippingHelperSettings {
@@ -38,7 +38,7 @@ struct ClippingHelperSettings {
     Color4 box_color{1.0F, 0.8F, 0.15F, 1.0F};
     float line_thickness_pixels = 2.0F;
 
-    bool operator==(const ClippingHelperSettings &) const = default;
+    bool operator==(const ClippingHelperSettings&) const = default;
 };
 
 struct ClippingSnapshot {
@@ -48,7 +48,7 @@ struct ClippingSnapshot {
     ClippingHelperSettings helpers;
     std::uint64_t revision = 0;
 
-    bool operator==(const ClippingSnapshot &) const = default;
+    bool operator==(const ClippingSnapshot&) const = default;
 };
 
 } // namespace elf3d

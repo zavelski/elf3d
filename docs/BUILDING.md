@@ -5,8 +5,8 @@
 The supported build configuration is:
 
 - Windows x64;
-- Visual Studio 2022 with the Desktop development with C++ workload;
-- CMake 3.28 or newer;
+- Visual Studio 2022 with the v143 Desktop development with C++ toolset;
+- CMake 4.3.4;
 - an OpenGL 4.1-capable graphics driver for viewer and graphics tests.
 
 All required third-party source is included in the repository. A normal
@@ -40,6 +40,9 @@ The Release viewer is written to:
 out/build/windows-release/bin/Release/elf3d_viewer.exe
 ```
 
+Both checked-in full presets explicitly enable the optional
+`elf3d_render_benchmark` target.
+
 Keep the generated `assets` directory beside the viewer executable when
 copying it to another location.
 
@@ -47,7 +50,8 @@ copying it to another location.
 
 Use the model-only presets for `elf3d_model` and model/import/export tests. They
 do not configure Scene/Assets, renderer, OpenGL, GLFW, ImGui, viewport, or
-viewer targets, and include a configured-target dependency check:
+viewer targets. They explicitly disable the optional performance benchmark and
+include a configured-target dependency check:
 
 ```powershell
 cmake --preset windows-model-debug
@@ -73,8 +77,28 @@ out/build/windows-model-debug/lib/Debug/elf3d_model.lib
 
 Set `ELF3D_BUILD_VIEWER=OFF` when only the engine library is required. Set
 `ELF3D_BUILD_ENGINE=OFF` for the model-only configuration. Standard CMake
-testing can be controlled with `BUILD_TESTING`. Set
-`ELF3D_BUILD_PERFORMANCE_BENCHMARK=OFF` to omit the non-CTest benchmark.
+testing can be controlled with `BUILD_TESTING`. The performance benchmark
+defaults to `OFF`; set `ELF3D_BUILD_PERFORMANCE_BENCHMARK=ON` to include it in
+a custom engine build. The checked-in full presets already do so.
+
+Validate all four checked-in preset option and target contracts without
+compiling them:
+
+```powershell
+.\cmake\check-preset-contracts.ps1
+```
+
+The public CI runs the full and model-only Debug profiles independently.
+Scheduled and manually dispatched workflows also run both Release profiles.
+Every CI job pins CMake 4.3.4; older CMake releases are not a supported
+compatibility target. CI limits builds to four parallel jobs for predictable
+resource use on hosted runners.
+
+Check project-owned C++ formatting with pinned `clang-format` 22.1.8:
+
+```powershell
+.\cmake\check-format.ps1
+```
 
 ## Common Problems
 

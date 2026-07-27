@@ -1,5 +1,5 @@
-#include <elf3d/imgui/context.h>
 #include <elf3d/core/assert.h>
+#include <elf3d/imgui/context.h>
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -23,27 +23,26 @@ namespace {
     fatal_error("Elf3D Dear ImGui integration encountered an unexpected exception");
 }
 
-void apply_elf3d_style(GLFWwindow *window, const ContextOptions &options) noexcept {
+void apply_elf3d_style(GLFWwindow* window, const ContextOptions& options) noexcept {
     float x_scale = 1.0F;
     float y_scale = 1.0F;
     glfwGetWindowContentScale(window, &x_scale, &y_scale);
     const float scale = std::max(1.0F, std::min(std::max(x_scale, y_scale), 3.0F));
 
-    ImGuiIO &io = ImGui::GetIO();
+    ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     const float requested_font_size = std::max(1.0F, options.font_size_pixels) * scale;
-    const bool loaded_font = options.font_path_utf8.has_value() &&
-                             !options.font_path_utf8->empty() &&
-                             io.Fonts->AddFontFromFileTTF(
-                                 options.font_path_utf8->c_str(), requested_font_size, nullptr,
-                                 io.Fonts->GetGlyphRangesCyrillic()) != nullptr;
+    const bool loaded_font =
+        options.font_path_utf8.has_value() && !options.font_path_utf8->empty() &&
+        io.Fonts->AddFontFromFileTTF(options.font_path_utf8->c_str(), requested_font_size, nullptr,
+                                     io.Fonts->GetGlyphRangesCyrillic()) != nullptr;
     if (!loaded_font) {
         ImFontConfig font_config;
         font_config.SizePixels = requested_font_size;
         io.Fonts->AddFontDefault(&font_config);
     }
 
-    ImGuiStyle &style = ImGui::GetStyle();
+    ImGuiStyle& style = ImGui::GetStyle();
     ImGui::StyleColorsLight(&style);
     style.WindowRounding = 0.0F;
     style.ChildRounding = 0.0F;
@@ -61,7 +60,7 @@ void apply_elf3d_style(GLFWwindow *window, const ContextOptions &options) noexce
     style.TabBorderSize = 0.0F;
     style.ScaleAllSizes(scale);
 
-    ImVec4 *colors = style.Colors;
+    ImVec4* colors = style.Colors;
     colors[ImGuiCol_Text] = ImVec4{0.00F, 0.00F, 0.00F, 1.00F};
     colors[ImGuiCol_TextDisabled] = ImVec4{0.60F, 0.60F, 0.60F, 1.00F};
     colors[ImGuiCol_WindowBg] = ImVec4{0.74F, 0.81F, 0.81F, 1.00F};
@@ -125,9 +124,8 @@ Context::~Context() noexcept {
     ImGui::DestroyContext(context_);
 }
 
-Result<std::unique_ptr<Context>> Context::create(GLFWwindow *window,
-                                                 std::string_view glsl_version,
-                                                 const ContextOptions &options) noexcept {
+Result<std::unique_ptr<Context>> Context::create(GLFWwindow* window, std::string_view glsl_version,
+                                                 const ContextOptions& options) noexcept {
     try {
         if (glsl_version.empty()) {
             return Error{ErrorCode::invalid_argument,
@@ -148,8 +146,8 @@ Result<std::unique_ptr<Context>> Context::create(GLFWwindow *window,
     }
 }
 
-Result<void> Context::initialize(GLFWwindow *window, const char *glsl_version,
-                                 const ContextOptions &options) {
+Result<void> Context::initialize(GLFWwindow* window, const char* glsl_version,
+                                 const ContextOptions& options) {
     if (window == nullptr) {
         return Error{ErrorCode::invalid_argument,
                      "Dear ImGui initialization requires a valid GLFW window"};
@@ -162,7 +160,7 @@ Result<void> Context::initialize(GLFWwindow *window, const char *glsl_version,
                      "Dear ImGui context creation failed"};
     }
 
-    ImGuiIO &io = ImGui::GetIO();
+    ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     apply_elf3d_style(window, options);

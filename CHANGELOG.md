@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0
+
+- Added checked-in full-engine and model-only CMake preset contracts for Debug
+  and Release builds, including automated target-composition validation.
+- Expanded Windows CI with independent full-engine and CPU-only model
+  validation, scheduled and manually dispatched Release coverage, and pinned
+  CMake 4.3.4 and clang-format 22.1.8 tool versions.
+- Added repository-wide clang-format enforcement and normalized all
+  project-owned C++ sources without changing runtime behavior or public APIs.
+- Made the render benchmark explicitly opt-in and aligned build, testing, and
+  contributor documentation with the enforced preset and CI contracts.
+
 ## 0.8.9
 
 - Raised the bounded glTF hierarchy limit to 8,192 levels and extended the

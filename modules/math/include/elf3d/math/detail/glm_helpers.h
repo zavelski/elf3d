@@ -21,7 +21,7 @@ using Rotation = glm::quat;
     return Vector2{value.x, value.y};
 }
 
-[[nodiscard]] inline Float2 to_float2(const Vector2 &value) noexcept {
+[[nodiscard]] inline Float2 to_float2(const Vector2& value) noexcept {
     return Float2{value.x, value.y};
 }
 
@@ -29,7 +29,7 @@ using Rotation = glm::quat;
     return Vector3{value.x, value.y, value.z};
 }
 
-[[nodiscard]] inline Float3 to_float3(const Vector3 &value) noexcept {
+[[nodiscard]] inline Float3 to_float3(const Vector3& value) noexcept {
     return Float3{value.x, value.y, value.z};
 }
 
@@ -37,15 +37,15 @@ using Rotation = glm::quat;
     return Rotation{value.w, value.x, value.y, value.z};
 }
 
-[[nodiscard]] inline Quaternion to_quaternion(const Rotation &value) noexcept {
+[[nodiscard]] inline Quaternion to_quaternion(const Rotation& value) noexcept {
     return Quaternion{value.x, value.y, value.z, value.w};
 }
 
-[[nodiscard]] inline Matrix4 to_matrix(const Float4x4 &value) noexcept {
+[[nodiscard]] inline Matrix4 to_matrix(const Float4x4& value) noexcept {
     return glm::make_mat4(value.elements.data());
 }
 
-[[nodiscard]] inline Float4x4 to_float4x4(const Matrix4 &value) noexcept {
+[[nodiscard]] inline Float4x4 to_float4x4(const Matrix4& value) noexcept {
     Float4x4 result;
     std::copy_n(glm::value_ptr(value), result.elements.size(), result.elements.begin());
     return result;
@@ -55,7 +55,7 @@ using Rotation = glm::quat;
     return Vector4{value.red, value.green, value.blue, value.alpha};
 }
 
-[[nodiscard]] inline Color4 to_color4(const Vector4 &value) noexcept {
+[[nodiscard]] inline Color4 to_color4(const Vector4& value) noexcept {
     return Color4{value.r, value.g, value.b, value.a};
 }
 

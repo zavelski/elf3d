@@ -11,13 +11,13 @@ import elf.scene;
 
 namespace {
 
-[[nodiscard]] bool has_document_root(elf3d::Document &document,
-                                     const elf3d::Result<elf3d::DocumentSceneId> &scene,
-                                     const elf3d::Result<elf3d::NodeId> &root) {
+[[nodiscard]] bool has_document_root(elf3d::Document& document,
+                                     const elf3d::Result<elf3d::DocumentSceneId>& scene,
+                                     const elf3d::Result<elf3d::NodeId>& root) {
     return scene && root && document.add_scene_root(scene.value(), root.value());
 }
 
-[[nodiscard]] bool has_expected_depth(const elf3d::SceneHierarchyStatistics &statistics,
+[[nodiscard]] bool has_expected_depth(const elf3d::SceneHierarchyStatistics& statistics,
                                       std::size_t depth) noexcept {
     return statistics.entities == depth && statistics.root_entities == 1U &&
            statistics.maximum_depth == depth - 1U;

@@ -1,9 +1,9 @@
 {
   "version": 6,
   "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 28,
-    "patch": 0
+    "major": 4,
+    "minor": 3,
+    "patch": 4
   },
   "configurePresets": [
     {
@@ -16,7 +16,8 @@
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "ELF3D_BUILD_ENGINE": "ON",
-        "ELF3D_BUILD_VIEWER": "ON"
+        "ELF3D_BUILD_VIEWER": "ON",
+        "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "ON"
       }
     },
     {
@@ -29,7 +30,8 @@
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "ELF3D_BUILD_ENGINE": "ON",
-        "ELF3D_BUILD_VIEWER": "ON"
+        "ELF3D_BUILD_VIEWER": "ON",
+        "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "ON"
       }
     },
     {
@@ -42,7 +44,8 @@
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "ELF3D_BUILD_ENGINE": "OFF",
-        "ELF3D_BUILD_VIEWER": "OFF"
+        "ELF3D_BUILD_VIEWER": "OFF",
+        "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "OFF"
       }
     },
     {
@@ -55,7 +58,8 @@
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "ELF3D_BUILD_ENGINE": "OFF",
-        "ELF3D_BUILD_VIEWER": "OFF"
+        "ELF3D_BUILD_VIEWER": "OFF",
+        "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "OFF"
       }
     }
   ],

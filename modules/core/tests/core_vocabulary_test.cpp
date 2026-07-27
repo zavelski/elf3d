@@ -9,7 +9,7 @@ namespace {
 
 class CapturingSink final : public elf3d::LogSink {
   public:
-    void write(const elf3d::LogRecord &record) noexcept override {
+    void write(const elf3d::LogRecord& record) noexcept override {
         latest = record;
         ++count;
     }
@@ -22,7 +22,7 @@ class CapturingSink final : public elf3d::LogSink {
 
 namespace {
 
-int verify_error_value(const elf3d::Error &error) {
+int verify_error_value(const elf3d::Error& error) {
     if (error.code() != elf3d::ErrorCode::invalid_argument ||
         std::string{error.message()} != "invalid value") {
         return 1;
@@ -30,7 +30,7 @@ int verify_error_value(const elf3d::Error &error) {
     return 0;
 }
 
-int verify_results(const elf3d::Error &error) {
+int verify_results(const elf3d::Error& error) {
     elf3d::Result<int> value{7};
     if (!value || value.value() != 7) {
         return 2;
@@ -48,7 +48,7 @@ int verify_results(const elf3d::Error &error) {
     return 0;
 }
 
-int verify_log_sink(const elf3d::Error &error) {
+int verify_log_sink(const elf3d::Error& error) {
     CapturingSink sink;
     sink.write(elf3d::LogRecord{elf3d::LogLevel::warning, error.code(), "captured"});
     if (sink.count != 1 || sink.latest.level != elf3d::LogLevel::warning ||

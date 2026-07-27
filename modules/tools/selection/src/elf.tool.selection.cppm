@@ -24,23 +24,23 @@ struct SelectionTarget {
 
 class SelectionController final {
   public:
-    [[nodiscard]] Result<std::optional<PickHit>> select_at(picking::PickingService &picking,
-                                                           const scene::Storage &scene,
+    [[nodiscard]] Result<std::optional<PickHit>> select_at(picking::PickingService& picking,
+                                                           const scene::Storage& scene,
                                                            SelectionTarget target);
     [[nodiscard]] Result<std::optional<PickHit>>
-    select_at(picking::PickingService &picking, const scene::Storage &scene, SelectionTarget target,
-              const scene::VisibilityFilter &visibility);
+    select_at(picking::PickingService& picking, const scene::Storage& scene, SelectionTarget target,
+              const scene::VisibilityFilter& visibility);
     [[nodiscard]] Result<std::optional<PickHit>>
-    select_at(picking::PickingService &picking, const scene::Storage &scene, SelectionTarget target,
-              const scene::VisibilityFilter &visibility,
-              const clipping::ClippingFilter &clipping_filter);
-    [[nodiscard]] Result<std::optional<PickHit>>
-    select_hit(const scene::Storage &scene, const std::optional<PickHit> &hit);
-    [[nodiscard]] Result<void> set_selected_entity(const scene::Storage &scene, EntityId entity);
+    select_at(picking::PickingService& picking, const scene::Storage& scene, SelectionTarget target,
+              const scene::VisibilityFilter& visibility,
+              const clipping::ClippingFilter& clipping_filter);
+    [[nodiscard]] Result<std::optional<PickHit>> select_hit(const scene::Storage& scene,
+                                                            const std::optional<PickHit>& hit);
+    [[nodiscard]] Result<void> set_selected_entity(const scene::Storage& scene, EntityId entity);
 
     void clear() noexcept;
     void clear_scene(SceneId scene) noexcept;
-    void validate_against(const scene::Storage &scene) noexcept;
+    void validate_against(const scene::Storage& scene) noexcept;
 
     [[nodiscard]] bool has_selection() const noexcept;
     [[nodiscard]] std::optional<EntityId> selected_entity() const noexcept;
@@ -50,7 +50,7 @@ class SelectionController final {
     void set_enabled(bool enabled) noexcept;
     [[nodiscard]] bool enabled() const noexcept;
 
-    [[nodiscard]] Result<void> set_settings(const SelectionSettings &settings) noexcept;
+    [[nodiscard]] Result<void> set_settings(const SelectionSettings& settings) noexcept;
     [[nodiscard]] SelectionSettings settings() const noexcept;
 
   private:

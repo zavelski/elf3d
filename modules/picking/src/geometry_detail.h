@@ -47,13 +47,11 @@ struct Double3 final {
 }
 
 [[nodiscard]] inline Double3 component_min(Double3 left, Double3 right) noexcept {
-    return Double3{std::min(left.x, right.x), std::min(left.y, right.y),
-                   std::min(left.z, right.z)};
+    return Double3{std::min(left.x, right.x), std::min(left.y, right.y), std::min(left.z, right.z)};
 }
 
 [[nodiscard]] inline Double3 component_max(Double3 left, Double3 right) noexcept {
-    return Double3{std::max(left.x, right.x), std::max(left.y, right.y),
-                   std::max(left.z, right.z)};
+    return Double3{std::max(left.x, right.x), std::max(left.y, right.y), std::max(left.z, right.z)};
 }
 
 [[nodiscard]] inline double dot(Double3 left, Double3 right) noexcept {
@@ -61,8 +59,7 @@ struct Double3 final {
 }
 
 [[nodiscard]] inline Double3 cross(Double3 left, Double3 right) noexcept {
-    return Double3{left.y * right.z - left.z * right.y,
-                   left.z * right.x - left.x * right.z,
+    return Double3{left.y * right.z - left.z * right.y, left.z * right.x - left.x * right.z,
                    left.x * right.y - left.y * right.x};
 }
 
