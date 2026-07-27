@@ -92,7 +92,7 @@ jobs:
         run: ctest --preset windows-model-debug --output-on-failure
 
   windows-release:
-    name: Windows ${{ matrix.profile }} Release
+    name: Windows Release profiles
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-2022
     timeout-minutes: 60

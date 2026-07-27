@@ -113,7 +113,7 @@ if(NOT ELF3D_BUILD_ENGINE)
             "-DELF3D_MODEL_ONLY_BINARY_DIR=${CMAKE_BINARY_DIR}"
             "-DELF3D_MODEL_ONLY_OPENGL_TARGET_EXISTS=$<TARGET_EXISTS:OpenGL::GL>"
             -P
-            "${PROJECT_SOURCE_DIR}/.internal/tests/check-model-only-dependencies.cmake"
+            "${PROJECT_SOURCE_DIR}/cmake/check-model-only-dependencies.cmake"
     )
 endif()
 

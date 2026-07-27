@@ -70,7 +70,7 @@ final presentation; Elf3D owns scene inspection, rendering, and viewport tools.
 ## Download the viewer
 
 Download the current
-[Elf3D 0.9.0 Windows x64 package](https://github.com/zavelski/elf3d/releases/tag/v0.9.0),
+[Elf3D 0.9.1 Windows x64 package](https://github.com/zavelski/elf3d/releases/tag/v0.9.1),
 extract it, and run `elf3d_viewer.exe`.
 
 Requirements:

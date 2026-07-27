@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.3.4)
 
 project(
     Elf3D
-    VERSION 0.9.0
+    VERSION 0.9.1
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )

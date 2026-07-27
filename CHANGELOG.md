@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.1
+
+- Kept the model-only dependency checker in the public source projection so
+  the independent CPU-only CTest suite can validate published snapshots.
+- Made GitHub publication configure, build, and test both full-engine and
+  model-only Release presets before changing remote state, with build
+  parallelism capped at four jobs.
+- Gave the conditional Release matrix a stable job name when it is skipped on
+  ordinary push and pull-request workflows.
+
 ## 0.9.0
 
 - Added checked-in full-engine and model-only CMake preset contracts for Debug
