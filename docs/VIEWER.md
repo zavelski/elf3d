@@ -72,6 +72,10 @@ Keep the pointer over **3D View**.
 | `F` | Fit visible content |
 | `Home` | Reset the camera |
 
+Forward and backward movement with `W`/`S` uses twice the previous keyboard
+dolly rate. Sideways movement with `A`/`D` and vertical movement with `Q`/`E`
+use half the previous keyboard pan rate.
+
 During a drag the pointer is captured, so movement can continue beyond the edge
 of the 3D panel. Open **Camera > Navigation Settings...** to change orbit, pan,
 zoom, and vertical-orbit behavior.

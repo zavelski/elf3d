@@ -26,7 +26,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install pinned build tools
         run: |
           python -m venv out/ci-tools
@@ -50,7 +50,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install pinned CMake
         run: |
           python -m venv out/ci-cmake
@@ -73,7 +73,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install pinned CMake
         run: |
           python -m venv out/ci-cmake
@@ -105,7 +105,7 @@ jobs:
           - profile: model-only
             preset: windows-model-release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install pinned CMake
         run: |
           python -m venv out/ci-cmake

@@ -6,7 +6,9 @@ module;
 #include <elf3d/core/result.h>
 #include <elf3d/math/value_types.h>
 #include <elf3d/model.h>
+#include <elf3d/picking.h>
 #include <elf3d/scene.h>
+#include <elf3d/surface_anchor.h>
 #include <memory>
 #include <optional>
 #include <span>
@@ -23,16 +25,8 @@ struct ModelComponent {
     std::vector<ModelPrimitiveBinding> primitives;
     std::vector<PrimitiveId> document_primitives;
 };
-enum class RuntimeAlphaMode : std::uint8_t {
-    opaque,
-    mask,
-    blend,
-};
-enum class RuntimeTextureWrap : std::uint8_t {
-    repeat,
-    mirrored_repeat,
-    clamp_to_edge,
-};
+enum class RuntimeAlphaMode : std::uint8_t { opaque, mask, blend };
+enum class RuntimeTextureWrap : std::uint8_t { repeat, mirrored_repeat, clamp_to_edge };
 enum class RuntimeTextureFilter : std::uint8_t {
     nearest,
     linear,
@@ -209,6 +203,9 @@ class Storage final {
                                   std::span<const PrimitiveId> document_primitives);
     [[nodiscard]] Result<RuntimePrimitiveView>
     runtime_primitive(EntityId entity, std::uint32_t primitive_index) const noexcept;
+    [[nodiscard]] Result<SurfaceAnchor> create_surface_anchor(const PickHit& hit) const noexcept;
+    [[nodiscard]] Result<ResolvedSurfaceAnchor>
+    resolve_surface_anchor(const SurfaceAnchor& anchor) const noexcept;
     [[nodiscard]] Result<RuntimeTextureView>
     runtime_texture(const RuntimePrimitiveView& primitive,
                     RuntimeMaterialTextureSlot slot) const noexcept;

@@ -211,10 +211,10 @@ inline void set_camera_position(elf3d::scene::Storage& scene, elf3d::EntityId ca
     return maximum_extent;
 }
 
-[[nodiscard]] inline elf3d::ViewportInput hovered_input() noexcept {
-    elf3d::ViewportInput input;
-    input.is_hovered = true;
-    input.is_focused = true;
+[[nodiscard]] inline elf3d::NavigationInput hovered_input() noexcept {
+    elf3d::NavigationInput input;
+    input.pointer_hovered = true;
+    input.region_focused = true;
     return input;
 }
 
@@ -229,7 +229,7 @@ struct NavigationTestContext {
 };
 
 [[nodiscard]] inline elf3d::Result<elf3d::navigation::NavigationUpdate>
-update_navigation(NavigationTestContext& context, const elf3d::ViewportInput& input) {
+update_navigation(NavigationTestContext& context, const elf3d::NavigationInput& input) {
     return context.navigation.update(context.fixture.scene, context.fixture.camera, {800, 600},
                                      input, navigation_test_click_threshold);
 }

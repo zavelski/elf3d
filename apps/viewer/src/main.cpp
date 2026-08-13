@@ -8,7 +8,9 @@
 #include <windows.h>
 #endif
 
-#include "viewer_internal.hpp"
+#include "viewer_application.hpp"
+
+#include <cstdlib>
 
 #if defined(_WIN32)
 int APIENTRY WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {

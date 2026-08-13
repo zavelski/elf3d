@@ -7,6 +7,7 @@ add_executable(
     src/viewer_browser_context.cpp
     src/viewer_browser_platform.cpp
     src/viewer_chrome.cpp
+    src/viewer_commands.cpp
     src/viewer_input_math.cpp
     src/viewer_panels.cpp
     src/viewer_performance_csv.cpp
@@ -15,7 +16,10 @@ add_executable(
     src/viewer_runtime.cpp
     src/viewer_scene_panels.cpp
     src/viewer_status.cpp
+    src/viewer_tools.cpp
     src/viewer_viewport.cpp
+    src/viewer_workflows.cpp
+    src/viewer_workflow_execution.cpp
 )
 
 target_compile_features(elf3d_viewer PRIVATE cxx_std_20)
@@ -29,6 +33,7 @@ target_compile_definitions(
 target_link_libraries(
     elf3d_viewer
     PRIVATE
+        elf3d::app
         elf3d::elf3d
         elf3d::imgui
 )
@@ -59,18 +64,48 @@ if(BUILD_TESTING)
     add_executable(
         elf3d_viewer_behavior_tests
         tests/viewer_behavior_test.cpp
+        src/viewer_browser_platform.cpp
+        src/viewer_commands.cpp
         src/viewer_input_math.cpp
+        src/viewer_preferences.cpp
         src/viewer_retained_frame.cpp
+        src/viewer_tools.cpp
+        src/viewer_workflows.cpp
     )
     target_compile_features(elf3d_viewer_behavior_tests PRIVATE cxx_std_20)
+    target_compile_definitions(
+        elf3d_viewer_behavior_tests
+        PRIVATE
+            ELF3D_VIEWER_TEST_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
+    )
     target_include_directories(elf3d_viewer_behavior_tests PRIVATE src)
     target_link_libraries(
         elf3d_viewer_behavior_tests
         PRIVATE
+            elf3d::app
             elf3d::elf3d
             elf3d::imgui
     )
+    if(WIN32)
+        target_link_libraries(elf3d_viewer_behavior_tests PRIVATE advapi32 shell32)
+    endif()
     set_target_properties(elf3d_viewer_behavior_tests PROPERTIES FOLDER "Elf3D/Tests")
     elf3d_enable_warnings(elf3d_viewer_behavior_tests)
     add_test(NAME elf3d.viewer_behavior COMMAND elf3d_viewer_behavior_tests)
+
+    add_executable(
+        elf3d_viewer_tools_tests
+        tests/viewer_tools_test.cpp
+        src/viewer_tools.cpp
+    )
+    target_compile_features(elf3d_viewer_tools_tests PRIVATE cxx_std_20)
+    target_include_directories(elf3d_viewer_tools_tests PRIVATE src)
+    target_link_libraries(elf3d_viewer_tools_tests PRIVATE elf3d::app elf3d::elf3d)
+    set_target_properties(elf3d_viewer_tools_tests PROPERTIES FOLDER "Elf3D/Tests")
+    elf3d_enable_warnings(elf3d_viewer_tools_tests)
+    add_test(NAME elf3d.viewer_tools COMMAND elf3d_viewer_tools_tests)
+    set_tests_properties(elf3d.viewer_tools PROPERTIES SKIP_RETURN_CODE 77)
+
+    add_test(NAME elf3d.viewer_smoke COMMAND elf3d_viewer --smoke)
+    set_tests_properties(elf3d.viewer_smoke PROPERTIES SKIP_RETURN_CODE 77)
 endif()

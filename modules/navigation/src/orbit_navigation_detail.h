@@ -18,8 +18,8 @@ inline constexpr float fit_margin = 1.05F;
 inline constexpr float maximum_pointer_delta_pixels = 10000.0F;
 inline constexpr float wheel_dolly_speed_scale = 0.5F;
 inline constexpr float right_button_pan_speed_scale = 0.5F;
-inline constexpr float keyboard_forward_to_wheel_speed_scale = 0.0125F;
-inline constexpr float keyboard_pan_step_width_divisor = 800.0F;
+inline constexpr float keyboard_to_wheel_speed_scale = 0.025F;
+inline constexpr float keyboard_pan_step_width_divisor = 1600.0F;
 inline constexpr float keyboard_reference_updates_per_second = 60.0F;
 inline constexpr float maximum_keyboard_frame_delta_seconds = 0.25F;
 

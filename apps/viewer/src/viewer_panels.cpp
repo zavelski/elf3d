@@ -1,4 +1,9 @@
-#include "viewer_internal.hpp"
+#include "viewer_components.hpp"
+
+#include "viewer_browser.hpp"
+#include "viewer_performance.hpp"
+#include "viewer_ui.hpp"
+#include "viewer_viewport.hpp"
 
 #include <imgui.h>
 
@@ -32,14 +37,14 @@ struct FrameDistribution final {
     return *(sorted.begin() + static_cast<std::ptrdiff_t>(selected));
 }
 
-[[nodiscard]] FrameDistribution frame_distribution(const ViewerState& state) {
+[[nodiscard]] FrameDistribution frame_distribution(const ViewerFrameContext& state) {
     FrameDistribution result;
-    if (state.frame_samples.empty()) {
+    if (state.performance.frame_samples.empty()) {
         return result;
     }
     std::vector<double> values;
-    values.reserve(state.frame_samples.size());
-    for (const ViewerState::FrameSample& sample : state.frame_samples) {
+    values.reserve(state.performance.frame_samples.size());
+    for (const ViewerFrameSample& sample : state.performance.frame_samples) {
         values.push_back(sample.frame_milliseconds);
         result.average += sample.frame_milliseconds;
     }
@@ -55,55 +60,56 @@ struct FrameDistribution final {
     return result;
 }
 
-void draw_diagnostic_modes(ViewerState& state) {
-    ImGui::Checkbox("VSync", &state.vsync_enabled);
+void draw_diagnostic_modes(ViewerFrameContext& state) {
+    ImGui::Checkbox("VSync", &state.rendering.vsync_enabled);
     constexpr std::array<const char*, 2> shading_modes{{"Standard PBR", "Unlit"}};
-    int shading = state.shading_mode == RenderShadingMode::unlit ? 1 : 0;
+    int shading = state.rendering.shading_mode == RenderShadingMode::unlit ? 1 : 0;
     if (ImGui::Combo("Shading", &shading, shading_modes.data(),
                      static_cast<int>(shading_modes.size()))) {
-        state.shading_mode = shading == 1 ? RenderShadingMode::unlit : RenderShadingMode::standard;
+        state.rendering.shading_mode =
+            shading == 1 ? RenderShadingMode::unlit : RenderShadingMode::standard;
     }
     constexpr std::array<const char*, 3> scales{{"100%", "50%", "25%"}};
-    int scale = state.diagnostic_render_scale_percent == 50
+    int scale = state.rendering.diagnostic_render_scale_percent == 50
                     ? 1
-                    : (state.diagnostic_render_scale_percent == 25 ? 2 : 0);
+                    : (state.rendering.diagnostic_render_scale_percent == 25 ? 2 : 0);
     if (ImGui::Combo("Render scale", &scale, scales.data(), static_cast<int>(scales.size()))) {
-        state.diagnostic_render_scale_percent = scale == 1 ? 50 : (scale == 2 ? 25 : 100);
+        state.rendering.diagnostic_render_scale_percent = scale == 1 ? 50 : (scale == 2 ? 25 : 100);
     }
 }
 
-void draw_capture_controls(ViewerState& state) {
-    if (ImGui::Checkbox("Capture frame samples", &state.capture_performance_csv) &&
-        state.capture_performance_csv) {
-        state.frame_samples.clear();
-        state.captured_frame_count = 0;
-        state.performance_capture_error.clear();
+void draw_capture_controls(ViewerFrameContext& state) {
+    if (ImGui::Checkbox("Capture frame samples", &state.performance.capture_csv) &&
+        state.performance.capture_csv) {
+        state.performance.frame_samples.clear();
+        state.performance.captured_frame_count = 0;
+        state.performance.capture_error.clear();
     }
     ImGui::SameLine();
     if (ImGui::Button("Write CSV")) {
         (void)write_performance_csv(state);
     }
-    ImGui::TextWrapped("CSV: %s", path_to_utf8(state.performance_csv_path).c_str());
-    if (!state.performance_capture_error.empty()) {
-        ImGui::TextWrapped("Capture error: %s", state.performance_capture_error.c_str());
+    ImGui::TextWrapped("CSV: %s", path_to_utf8(state.performance.csv_path).c_str());
+    if (!state.performance.capture_error.empty()) {
+        ImGui::TextWrapped("Capture error: %s", state.performance.capture_error.c_str());
     }
 }
 
-void draw_frame_distribution(const ViewerState& state) {
+void draw_frame_distribution(const ViewerFrameContext& state) {
     const FrameDistribution distribution = frame_distribution(state);
     ImGui::Text("Frames: %llu (retained %llu)",
-                static_cast<unsigned long long>(state.captured_frame_count),
-                static_cast<unsigned long long>(state.frame_samples.size()));
+                static_cast<unsigned long long>(state.performance.captured_frame_count),
+                static_cast<unsigned long long>(state.performance.frame_samples.size()));
     ImGui::Text("Frame ms avg / median: %.3f / %.3f", distribution.average, distribution.median);
     ImGui::Text("Frame ms p95 / p99 / max: %.3f / %.3f / %.3f", distribution.p95, distribution.p99,
                 distribution.maximum);
     ImGui::Text("Frames > 2x median: %llu",
                 static_cast<unsigned long long>(distribution.twice_median_count));
     ImGui::Text("3D frames rendered / reused: %llu / %llu",
-                static_cast<unsigned long long>(state.rendered_3d_frame_count),
-                static_cast<unsigned long long>(state.reused_3d_frame_count));
-    if (!state.frame_samples.empty()) {
-        const ViewerState::FrameSample& latest = state.frame_samples.back();
+                static_cast<unsigned long long>(state.performance.rendered_3d_frame_count),
+                static_cast<unsigned long long>(state.performance.reused_3d_frame_count));
+    if (!state.performance.frame_samples.empty()) {
+        const ViewerFrameSample& latest = state.performance.frame_samples.back();
         ImGui::Text("Latest event/input: %.3f ms", latest.event_input_milliseconds);
         ImGui::Text("Latest navigation/scene: %.3f ms", latest.navigation_scene_milliseconds);
         ImGui::Text("Latest render: %.3f ms", latest.render_milliseconds);
@@ -113,7 +119,7 @@ void draw_frame_distribution(const ViewerState& state) {
     }
 }
 
-void draw_performance_diagnostics(ViewerState& state) {
+void draw_performance_diagnostics(ViewerFrameContext& state) {
     if (!ImGui::CollapsingHeader("Performance Diagnostics", ImGuiTreeNodeFlags_DefaultOpen)) {
         return;
     }
@@ -122,30 +128,32 @@ void draw_performance_diagnostics(ViewerState& state) {
     draw_frame_distribution(state);
 }
 
-void draw_context_diagnostics(const ViewerState& state) {
+void draw_context_diagnostics(const ViewerFrameContext& state) {
     if (!ImGui::CollapsingHeader("OpenGL Context")) {
         return;
     }
-    ImGui::TextWrapped("Vendor: %s", state.gl_vendor.c_str());
-    ImGui::TextWrapped("Renderer: %s", state.gl_renderer.c_str());
-    ImGui::TextWrapped("OpenGL: %s", state.gl_version.c_str());
-    ImGui::TextWrapped("GLSL: %s", state.glsl_version_report.c_str());
-    ImGui::Text("Context flags/profile: 0x%X / 0x%X", state.gl_context_flags,
-                state.gl_context_profile_mask);
-    ImGui::Text("Default RGBA: %d/%d/%d/%d", state.default_red_bits, state.default_green_bits,
-                state.default_blue_bits, state.default_alpha_bits);
-    ImGui::Text("Depth/stencil/samples/sRGB: %d/%d/%d/%d", state.default_depth_bits,
-                state.default_stencil_bits, state.default_samples, state.default_srgb_capable);
-    ImGui::Text("Maximum texture size: %d", state.maximum_texture_size);
-    ImGui::Text("Window content: %u x %u", state.view_dimensions.width,
-                state.view_dimensions.height);
-    ImGui::Text("3D target: %u x %u", state.render_target_dimensions.width,
-                state.render_target_dimensions.height);
+    ImGui::TextWrapped("Vendor: %s", state.diagnostics.gl_vendor.c_str());
+    ImGui::TextWrapped("Renderer: %s", state.diagnostics.gl_renderer.c_str());
+    ImGui::TextWrapped("OpenGL: %s", state.diagnostics.gl_version.c_str());
+    ImGui::TextWrapped("GLSL: %s", state.diagnostics.glsl_version_report.c_str());
+    ImGui::Text("Context flags/profile: 0x%X / 0x%X", state.diagnostics.gl_context_flags,
+                state.diagnostics.gl_context_profile_mask);
+    ImGui::Text("Default RGBA: %d/%d/%d/%d", state.diagnostics.default_red_bits,
+                state.diagnostics.default_green_bits, state.diagnostics.default_blue_bits,
+                state.diagnostics.default_alpha_bits);
+    ImGui::Text("Depth/stencil/samples/sRGB: %d/%d/%d/%d", state.diagnostics.default_depth_bits,
+                state.diagnostics.default_stencil_bits, state.diagnostics.default_samples,
+                state.diagnostics.default_srgb_capable);
+    ImGui::Text("Maximum texture size: %d", state.diagnostics.maximum_texture_size);
+    ImGui::Text("Window content: %u x %u", state.rendering.view_dimensions.width,
+                state.rendering.view_dimensions.height);
+    ImGui::Text("3D target: %u x %u", state.rendering.render_target_dimensions.width,
+                state.rendering.render_target_dimensions.height);
 }
 
 } // namespace
 
-void draw_model_source_information(const ViewerScene& scene) {
+void draw_model_source_information(const SceneSession& scene) {
     const std::string source =
         scene.is_imported() ? path_to_utf8(scene.source_path) : "Procedural cube demo";
     const std::string extension = scene.source_path.extension().string();
@@ -201,52 +209,60 @@ void draw_model_source_information(const ViewerScene& scene) {
     }
 }
 
-void draw_model_render_statistics(const ViewerState& state) {
+void draw_model_render_statistics(const ViewerFrameContext& state) {
     ImGui::Separator();
     ImGui::Text("Latest draw calls: %llu",
-                static_cast<unsigned long long>(state.statistics.draw_calls));
+                static_cast<unsigned long long>(state.rendering.statistics.draw_calls));
     ImGui::Text("Latest rendered triangles: %llu",
-                static_cast<unsigned long long>(state.statistics.triangles));
+                static_cast<unsigned long long>(state.rendering.statistics.triangles));
     ImGui::Text("Latest texture bindings: %llu",
-                static_cast<unsigned long long>(state.statistics.texture_bindings));
+                static_cast<unsigned long long>(state.rendering.statistics.texture_bindings));
     ImGui::Text("Latest texture uploads: %llu",
-                static_cast<unsigned long long>(state.statistics.gpu_texture_uploads));
+                static_cast<unsigned long long>(state.rendering.statistics.gpu_texture_uploads));
     ImGui::Text("Current GPU textures: %llu",
-                static_cast<unsigned long long>(state.statistics.unique_gpu_textures));
+                static_cast<unsigned long long>(state.rendering.statistics.unique_gpu_textures));
     ImGui::Text("Overlay lines: %llu",
-                static_cast<unsigned long long>(state.statistics.overlay_lines));
+                static_cast<unsigned long long>(state.rendering.statistics.overlay_lines));
     ImGui::Text("Overlay markers: %llu",
-                static_cast<unsigned long long>(state.statistics.overlay_markers));
+                static_cast<unsigned long long>(state.rendering.statistics.overlay_markers));
     ImGui::Text("Clipping bounds tested: %llu",
-                static_cast<unsigned long long>(state.statistics.clipping_bounds_tested));
-    ImGui::Text("Clipping bounds rejected: %llu",
-                static_cast<unsigned long long>(state.statistics.clipping_bounds_rejected));
-    ImGui::Text("Clipping bounds intersecting: %llu",
-                static_cast<unsigned long long>(state.statistics.clipping_bounds_intersecting));
-    ImGui::Text("Candidate / visible / culled: %llu / %llu / %llu",
-                static_cast<unsigned long long>(state.statistics.candidate_primitives),
-                static_cast<unsigned long long>(state.statistics.visible_primitives),
-                static_cast<unsigned long long>(state.statistics.frustum_culled_primitives));
-    ImGui::Text("Buffer uploads: %llu (%llu bytes)",
-                static_cast<unsigned long long>(state.statistics.gpu_buffer_uploads),
-                static_cast<unsigned long long>(state.statistics.gpu_buffer_uploaded_bytes));
+                static_cast<unsigned long long>(state.rendering.statistics.clipping_bounds_tested));
+    ImGui::Text(
+        "Clipping bounds rejected: %llu",
+        static_cast<unsigned long long>(state.rendering.statistics.clipping_bounds_rejected));
+    ImGui::Text(
+        "Clipping bounds intersecting: %llu",
+        static_cast<unsigned long long>(state.rendering.statistics.clipping_bounds_intersecting));
+    ImGui::Text(
+        "Candidate / visible / culled: %llu / %llu / %llu",
+        static_cast<unsigned long long>(state.rendering.statistics.candidate_primitives),
+        static_cast<unsigned long long>(state.rendering.statistics.visible_primitives),
+        static_cast<unsigned long long>(state.rendering.statistics.frustum_culled_primitives));
+    ImGui::Text(
+        "Buffer uploads: %llu (%llu bytes)",
+        static_cast<unsigned long long>(state.rendering.statistics.gpu_buffer_uploads),
+        static_cast<unsigned long long>(state.rendering.statistics.gpu_buffer_uploaded_bytes));
     ImGui::Text("Draw packet rebuilds: %llu",
-                static_cast<unsigned long long>(state.statistics.draw_packet_rebuilds));
+                static_cast<unsigned long long>(state.rendering.statistics.draw_packet_rebuilds));
     ImGui::Text("Resident geometry / textures: %llu / %llu bytes",
-                static_cast<unsigned long long>(state.statistics.estimated_resident_geometry_bytes),
-                static_cast<unsigned long long>(state.statistics.estimated_resident_texture_bytes));
+                static_cast<unsigned long long>(
+                    state.rendering.statistics.estimated_resident_geometry_bytes),
+                static_cast<unsigned long long>(
+                    state.rendering.statistics.estimated_resident_texture_bytes));
     ImGui::Text("CPU list / resources / GL / total: %.3f / %.3f / %.3f / %.3f ms",
-                state.statistics.cpu_render_list_milliseconds,
-                state.statistics.cpu_resource_preparation_milliseconds,
-                state.statistics.cpu_gl_submission_milliseconds,
-                state.statistics.cpu_total_milliseconds);
-    if (state.statistics.gpu_main_pass_timing_available) {
-        ImGui::Text("Delayed GPU main: %.3f ms", state.statistics.gpu_main_pass_milliseconds);
+                state.rendering.statistics.cpu_render_list_milliseconds,
+                state.rendering.statistics.cpu_resource_preparation_milliseconds,
+                state.rendering.statistics.cpu_gl_submission_milliseconds,
+                state.rendering.statistics.cpu_total_milliseconds);
+    if (state.rendering.statistics.gpu_main_pass_timing_available) {
+        ImGui::Text("Delayed GPU main: %.3f ms",
+                    state.rendering.statistics.gpu_main_pass_milliseconds);
     } else {
         ImGui::TextUnformatted("Delayed GPU main: unavailable");
     }
-    if (state.statistics.gpu_resolve_timing_available) {
-        ImGui::Text("Delayed GPU resolve: %.3f ms", state.statistics.gpu_resolve_milliseconds);
+    if (state.rendering.statistics.gpu_resolve_timing_available) {
+        ImGui::Text("Delayed GPU resolve: %.3f ms",
+                    state.rendering.statistics.gpu_resolve_milliseconds);
     } else {
         ImGui::TextUnformatted("Delayed GPU resolve: unavailable");
     }
@@ -257,7 +273,7 @@ void draw_model_render_statistics(const ViewerState& state) {
                        "documented fallback until tangent-space rendering is available.");
 }
 
-void draw_import_diagnostics(const ViewerScene& scene) {
+void draw_import_diagnostics(const SceneSession& scene) {
     if (!scene.is_imported()) {
         return;
     }
@@ -282,16 +298,17 @@ void draw_import_diagnostics(const ViewerScene& scene) {
     }
 }
 
-void build_model_information(ImGuiID dockspace_id, ViewerState& state, const ViewerScene& scene) {
-    if (!state.show_model_information) {
+void build_model_information(ImGuiID dockspace_id, ViewerFrameContext& state,
+                             const SceneSession& scene) {
+    if (!state.shell.show_model_information) {
         return;
     }
-    set_default_dock(state.dock_center_id != 0 ? state.dock_center_id : dockspace_id,
-                     state.apply_dock_layout);
+    set_default_dock(state.shell.dock_center_id != 0 ? state.shell.dock_center_id : dockspace_id,
+                     state.shell.apply_dock_layout);
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{1.0F, 1.0F, 1.0F, 1.0F});
-    if (begin_panel_window("Model Information", &state.show_model_information,
-                           state.panel_title_font)) {
-        const ScopedFont panel_font{state.panel_content_font};
+    if (begin_panel_window("Model Information", &state.shell.show_model_information,
+                           state.presentation.panel_title_font)) {
+        const ScopedFont panel_font{state.presentation.panel_content_font};
         draw_model_source_information(scene);
         draw_model_render_statistics(state);
         draw_import_diagnostics(scene);
@@ -300,51 +317,57 @@ void build_model_information(ImGuiID dockspace_id, ViewerState& state, const Vie
     ImGui::PopStyleColor();
 }
 
-void build_demo_cube_rendering_controls(ViewerState& state, ViewerScene& scene) {
+void build_demo_cube_rendering_controls(ViewerFrameContext& state, SceneSession& scene) {
     if (scene.is_imported() || !scene.cube.has_value()) {
         return;
     }
     ImGui::Separator();
     ImGui::TextUnformatted("Demo Cube");
-    ImGui::Checkbox("Rotate cube", &state.rotate_cube);
+    ImGui::Checkbox("Rotate cube", &state.rendering.rotate_cube);
     const float speed_label_width =
         ImGui::CalcTextSize("Speed").x + ImGui::GetStyle().ItemInnerSpacing.x;
     ImGui::SetNextItemWidth(std::max(80.0F, ImGui::GetContentRegionAvail().x - speed_label_width));
-    ImGui::SliderFloat("Speed##CubeSpeed", &state.rotation_speed, 0.0F, 3.0F, "%.2f rad/s");
+    ImGui::SliderFloat("Speed##CubeSpeed", &state.rendering.rotation_speed, 0.0F, 3.0F,
+                       "%.2f rad/s");
     if (ImGui::Button("Reset transform")) {
         reset_demo_cube_transform(state, scene);
     }
-    if (color_control("Cube base color", state.cube_color)) {
+    if (color_control("Cube base color", state.rendering.cube_color)) {
         apply_demo_cube_color(state, scene);
     }
 }
 
-void build_lighting_controls(ViewerState& state) {
+void build_lighting_controls(ViewerFrameContext& state) {
     if (!ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
         return;
     }
-    std::array<float, 3> direction{state.lighting.direction.x, state.lighting.direction.y,
-                                   state.lighting.direction.z};
+    std::array<float, 3> direction{state.rendering.lighting.direction.x,
+                                   state.rendering.lighting.direction.y,
+                                   state.rendering.lighting.direction.z};
     if (ImGui::DragFloat3("Light direction", direction.data(), 0.01F, -1.0F, 1.0F)) {
-        state.lighting.direction = {direction[0], direction[1], direction[2]};
+        state.rendering.lighting.direction = {direction[0], direction[1], direction[2]};
     }
-    ImGui::SliderFloat("Light intensity", &state.lighting.diffuse_intensity, 0.0F, 10.0F, "%.2f");
-    ImGui::SliderFloat("Ambient intensity", &state.lighting.ambient_intensity, 0.0F, 2.0F, "%.2f");
+    ImGui::SliderFloat("Light intensity", &state.rendering.lighting.diffuse_intensity, 0.0F, 10.0F,
+                       "%.2f");
+    ImGui::SliderFloat("Ambient intensity", &state.rendering.lighting.ambient_intensity, 0.0F, 2.0F,
+                       "%.2f");
     if (ImGui::Button("Reset Lighting")) {
-        state.lighting = elf3d::BasicLighting{};
+        state.rendering.lighting = elf3d::BasicLighting{};
     }
 }
 
-void build_rendering_panel(ImGuiID dockspace_id, ViewerState& state, ViewerScene& scene) {
-    if (!state.show_rendering_panel) {
+void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, SceneSession& scene) {
+    if (!state.shell.show_rendering_panel) {
         return;
     }
-    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
-                     state.apply_dock_layout);
-    if (begin_panel_window("Rendering", &state.show_rendering_panel, state.panel_title_font)) {
-        const ScopedFont panel_font{state.panel_content_font};
+    set_default_dock(state.shell.dock_right_bottom_id != 0 ? state.shell.dock_right_bottom_id
+                                                           : dockspace_id,
+                     state.shell.apply_dock_layout);
+    if (begin_panel_window("Rendering", &state.shell.show_rendering_panel,
+                           state.presentation.panel_title_font)) {
+        const ScopedFont panel_font{state.presentation.panel_content_font};
         ImGui::TextUnformatted("Viewport");
-        color_control("Clear color", state.clear_color);
+        color_control("Clear color", state.rendering.clear_color);
         build_demo_cube_rendering_controls(state, scene);
         build_lighting_controls(state);
         draw_performance_diagnostics(state);
@@ -371,16 +394,17 @@ void build_rendering_panel(ImGuiID dockspace_id, ViewerState& state, ViewerScene
     return "None";
 }
 
-void build_navigation_settings_window(ImGuiID dockspace_id, ViewerState& state,
+void build_navigation_settings_window(ImGuiID dockspace_id, ViewerFrameContext& state,
                                       elf3d::Viewport& engine_viewport) {
-    if (!state.show_navigation_settings) {
+    if (!state.shell.show_navigation_settings) {
         return;
     }
-    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
-                     state.apply_dock_layout);
-    if (begin_panel_window("Navigation Settings", &state.show_navigation_settings,
-                           state.panel_title_font)) {
-        const ScopedFont panel_font{state.panel_content_font};
+    set_default_dock(state.shell.dock_right_bottom_id != 0 ? state.shell.dock_right_bottom_id
+                                                           : dockspace_id,
+                     state.shell.apply_dock_layout);
+    if (begin_panel_window("Navigation Settings", &state.shell.show_navigation_settings,
+                           state.presentation.panel_title_font)) {
+        const ScopedFont panel_font{state.presentation.panel_content_font};
         bool enabled = engine_viewport.navigation_enabled();
         if (ImGui::Checkbox("Enable Navigation", &enabled)) {
             engine_viewport.set_navigation_enabled(enabled);
@@ -430,7 +454,7 @@ void build_navigation_settings_window(ImGuiID dockspace_id, ViewerState& state,
     ImGui::End();
 }
 
-[[nodiscard]] std::string entity_label(const ViewerScene& scene, elf3d::EntityId entity) {
+[[nodiscard]] std::string entity_label(const SceneSession& scene, elf3d::EntityId entity) {
     const elf3d::Result<std::string_view> name = scene.scene->entity_name(entity);
     if (name && !name.value().empty()) {
         const std::string_view text = name.value();
@@ -439,17 +463,21 @@ void build_navigation_settings_window(ImGuiID dockspace_id, ViewerState& state,
     return std::string{"Entity "} + std::to_string(entity.debug_value());
 }
 
-[[nodiscard]] std::string selected_entity_label(const ViewerScene& scene,
+[[nodiscard]] std::string selected_entity_label(const SceneSession& scene,
                                                 const elf3d::SelectionSnapshot& selection) {
     return selection.entity.has_value() ? entity_label(scene, *selection.entity) : "none";
 }
 
-void build_selection_settings(ViewerState& state, elf3d::Viewport& viewport) {
-    bool enabled = viewport.selection_enabled();
+void build_selection_settings(ViewerFrameContext& state, elf3d::Viewport& viewport,
+                              SelectionTool& selection) {
+    bool enabled = selection.enabled();
     if (ImGui::Checkbox("Enable Selection", &enabled)) {
-        viewport.set_selection_enabled(enabled);
+        selection.set_enabled(enabled);
+        if (!enabled) {
+            viewport.clear_selection();
+        }
     }
-    elf3d::SelectionSettings settings = viewport.selection_settings();
+    SelectionToolSettings settings = selection.settings();
     bool changed = ImGui::DragFloat("Click threshold", &settings.click_drag_threshold_pixels, 0.1F,
                                     0.0F, 32.0F, "%.1f px");
     std::array<float, 4> color{settings.highlight_color.red, settings.highlight_color.green,
@@ -463,13 +491,13 @@ void build_selection_settings(ViewerState& state, elf3d::Viewport& viewport) {
     if (!changed) {
         return;
     }
-    const elf3d::Result<void> result = viewport.set_selection_settings(settings);
+    const elf3d::Result<void> result = selection.set_settings(settings);
     if (!result) {
         set_viewport_error(state, result.error());
     }
 }
 
-void draw_selected_entity(const ViewerScene& scene, const elf3d::SelectionSnapshot& selection) {
+void draw_selected_entity(const SceneSession& scene, const elf3d::SelectionSnapshot& selection) {
     if (!selection.entity.has_value()) {
         ImGui::TextUnformatted("Selected: none");
         return;
@@ -495,7 +523,7 @@ void draw_selected_entity(const ViewerScene& scene, const elf3d::SelectionSnapsh
     ImGui::Text("Distance: %.4g", hit.world_distance);
 }
 
-void draw_picking_statistics(ViewerState& state, elf3d::Viewport& viewport) {
+void draw_picking_statistics(ViewerFrameContext& state, elf3d::Viewport& viewport) {
     const elf3d::Result<elf3d::PickingStatistics> result = viewport.picking_statistics();
     if (!result) {
         set_viewport_error(state, result.error());
@@ -550,16 +578,18 @@ void draw_picking_statistics(ViewerState& state, elf3d::Viewport& viewport) {
                 static_cast<unsigned long long>(picking.cached_mesh_bvhs));
 }
 
-void build_selection_panel(ImGuiID dockspace_id, ViewerState& state, const ViewerScene& scene,
-                           elf3d::Viewport& engine_viewport) {
-    if (!state.show_selection_panel) {
+void build_selection_panel(ImGuiID dockspace_id, ViewerFrameContext& state,
+                           const SceneSession& scene, elf3d::Viewport& engine_viewport,
+                           ToolCoordinator& tools) {
+    if (!state.shell.show_selection_panel) {
         return;
     }
-    set_default_dock(state.dock_right_id != 0 ? state.dock_right_id : dockspace_id,
-                     state.apply_dock_layout);
-    if (begin_panel_window("Selection", &state.show_selection_panel, state.panel_title_font)) {
-        const ScopedFont panel_font{state.panel_content_font};
-        build_selection_settings(state, engine_viewport);
+    set_default_dock(state.shell.dock_right_id != 0 ? state.shell.dock_right_id : dockspace_id,
+                     state.shell.apply_dock_layout);
+    if (begin_panel_window("Selection", &state.shell.show_selection_panel,
+                           state.presentation.panel_title_font)) {
+        const ScopedFont panel_font{state.presentation.panel_content_font};
+        build_selection_settings(state, engine_viewport, tools.selection());
 
         ImGui::Separator();
         const elf3d::SelectionSnapshot selection = engine_viewport.selection_snapshot();
@@ -571,8 +601,8 @@ void build_selection_panel(ImGuiID dockspace_id, ViewerState& state, const Viewe
     ImGui::End();
 }
 
-void draw_measurement_point(const char* label, const ViewerScene& scene,
-                            const std::optional<elf3d::MeasurementPoint>& point) {
+void draw_measurement_point(const char* label, const SceneSession& scene,
+                            const std::optional<MeasurementPoint>& point) {
     if (!point.has_value()) {
         ImGui::Text("%s: none", label);
         return;
@@ -587,32 +617,28 @@ void draw_measurement_point(const char* label, const ViewerScene& scene,
                 point->world_normal.z);
 }
 
-void build_measurement_tool_selector(ViewerState& state, elf3d::Viewport& viewport) {
-    const elf3d::ViewportTool active_tool = viewport.active_tool();
+void build_measurement_tool_selector(ToolCoordinator& tools) {
+    const ViewerTool active_tool = tools.active_tool();
     ImGui::Text("Active tool: %s", tool_name(active_tool));
-    if (ImGui::RadioButton("Select", active_tool == elf3d::ViewportTool::selection)) {
-        viewport.set_active_tool(elf3d::ViewportTool::selection);
+    if (ImGui::RadioButton("Select", active_tool == ViewerTool::selection)) {
+        tools.activate(ViewerTool::selection);
     }
     ImGui::SameLine();
-    if (ImGui::RadioButton("Measure Distance",
-                           active_tool == elf3d::ViewportTool::distance_measurement)) {
-        const elf3d::Result<void> result = viewport.begin_distance_measurement();
-        if (!result) {
-            set_viewport_error(state, result.error());
-        }
+    if (ImGui::RadioButton("Measure Distance", active_tool == ViewerTool::distance_measurement)) {
+        tools.activate(ViewerTool::distance_measurement);
     }
 }
 
-[[nodiscard]] elf3d::DistanceMeasurementSettings
-edit_measurement_settings(ViewerState& state, elf3d::Viewport& viewport) {
-    elf3d::DistanceMeasurementSettings settings = viewport.measurement_settings();
+[[nodiscard]] DistanceMeasurementSettings edit_measurement_settings(ViewerFrameContext& state,
+                                                                    MeasurementTool& measurement) {
+    DistanceMeasurementSettings settings = measurement.settings();
     bool changed = false;
     const char* unit_names[] = {"Automatic metric", "Meters", "Centimeters",
                                 "Millimeters",      "Feet",   "Inches"};
     int unit_index = static_cast<int>(settings.display_unit);
     if (ImGui::Combo("Display unit", &unit_index, unit_names,
                      static_cast<int>(std::size(unit_names)))) {
-        settings.display_unit = static_cast<elf3d::LengthDisplayUnit>(unit_index);
+        settings.display_unit = static_cast<LengthDisplayUnit>(unit_index);
         changed = true;
     }
     const char* depth_names[] = {"Depth tested", "Always visible"};
@@ -646,7 +672,7 @@ edit_measurement_settings(ViewerState& state, elf3d::Viewport& viewport) {
     changed |= ImGui::DragFloat("Marker radius", &settings.marker_radius_pixels, 0.1F, 1.0F, 32.0F,
                                 "%.1f px");
     if (changed) {
-        const elf3d::Result<void> result = viewport.set_measurement_settings(settings);
+        const elf3d::Result<void> result = measurement.set_settings(settings);
         if (!result) {
             set_viewport_error(state, result.error());
         }
@@ -654,25 +680,24 @@ edit_measurement_settings(ViewerState& state, elf3d::Viewport& viewport) {
     return settings;
 }
 
-[[nodiscard]] bool
-measurement_has_points(const elf3d::DistanceMeasurementSnapshot& measurement) noexcept {
+[[nodiscard]] bool measurement_has_points(const DistanceMeasurementSnapshot& measurement) noexcept {
     return measurement.first_point.has_value() || measurement.second_point.has_value() ||
            measurement.preview_point.has_value();
 }
 
-void draw_measurement_snapshot(const ViewerScene& scene, elf3d::Viewport& viewport,
-                               elf3d::LengthDisplayUnit unit) {
-    const elf3d::DistanceMeasurementSnapshot measurement =
-        viewport.distance_measurement_snapshot(*scene.scene);
+void draw_measurement_snapshot(const SceneSession& scene, elf3d::Viewport& viewport,
+                               ToolCoordinator& tools, LengthDisplayUnit unit) {
+    const DistanceMeasurementSnapshot measurement = tools.measurement().snapshot(
+        *scene.scene, viewport, tools.active_tool() == ViewerTool::distance_measurement);
     ImGui::Text("State: %s", measurement_state_name(measurement.state));
-    if (measurement.state == elf3d::DistanceMeasurementState::empty ||
-        measurement.state == elf3d::DistanceMeasurementState::awaiting_first_point) {
+    if (measurement.state == DistanceMeasurementState::empty ||
+        measurement.state == DistanceMeasurementState::awaiting_first_point) {
         ImGui::TextUnformatted("Click a visible surface to set the first point.");
     }
     draw_measurement_point("First point", scene, measurement.first_point);
     draw_measurement_point("Second point", scene, measurement.second_point);
     draw_measurement_point("Preview point", scene, measurement.preview_point);
-    if (measurement.state == elf3d::DistanceMeasurementState::complete) {
+    if (measurement.state == DistanceMeasurementState::complete) {
         ImGui::Text("Distance: %.8g m", measurement.distance_meters);
         ImGui::Text("Display: %s", format_distance(measurement.distance_meters, unit).c_str());
     } else if (measurement.preview_point.has_value()) {
@@ -684,24 +709,23 @@ void draw_measurement_snapshot(const ViewerScene& scene, elf3d::Viewport& viewpo
     if (measurement.diagnostic.has_value()) {
         ImGui::TextWrapped("Diagnostic: %s", measurement.diagnostic->message());
     }
-    const bool incomplete =
-        measurement.state == elf3d::DistanceMeasurementState::awaiting_second_point;
+    const bool incomplete = measurement.state == DistanceMeasurementState::awaiting_second_point;
     const bool present = measurement_has_points(measurement);
     ImGui::BeginDisabled(!incomplete);
     if (ImGui::Button("Cancel Current")) {
-        viewport.cancel_distance_measurement();
+        tools.measurement().cancel_incomplete();
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::BeginDisabled(!present);
     if (ImGui::Button("Clear Measurement")) {
-        viewport.clear_distance_measurement();
+        tools.measurement().clear();
     }
     ImGui::EndDisabled();
 }
 
-void draw_measurement_statistics(const elf3d::Viewport& viewport) {
-    const elf3d::MeasurementStatistics stats = viewport.measurement_statistics();
+void draw_measurement_statistics(const MeasurementTool& measurement) {
+    const MeasurementStatistics stats = measurement.statistics();
     ImGui::Text("Committed points: %llu", static_cast<unsigned long long>(stats.committed_points));
     ImGui::Text("Preview picks: %llu", static_cast<unsigned long long>(stats.preview_picks));
     ImGui::Text("Anchor resolutions: %llu",
@@ -710,23 +734,26 @@ void draw_measurement_statistics(const elf3d::Viewport& viewport) {
     ImGui::Text("Overlay markers: %llu", static_cast<unsigned long long>(stats.overlay_markers));
 }
 
-void build_measurement_panel(ImGuiID dockspace_id, ViewerState& state, const ViewerScene& scene,
-                             elf3d::Viewport& engine_viewport) {
-    if (!state.show_measurement_panel) {
+void build_measurement_panel(ImGuiID dockspace_id, ViewerFrameContext& state,
+                             const SceneSession& scene, elf3d::Viewport& engine_viewport,
+                             ToolCoordinator& tools) {
+    if (!state.shell.show_measurement_panel) {
         return;
     }
-    set_default_dock(state.dock_right_bottom_id != 0 ? state.dock_right_bottom_id : dockspace_id,
-                     state.apply_dock_layout);
-    if (begin_panel_window("Measurement", &state.show_measurement_panel, state.panel_title_font)) {
-        const ScopedFont panel_font{state.panel_content_font};
-        build_measurement_tool_selector(state, engine_viewport);
-        const elf3d::DistanceMeasurementSettings settings =
-            edit_measurement_settings(state, engine_viewport);
+    set_default_dock(state.shell.dock_right_bottom_id != 0 ? state.shell.dock_right_bottom_id
+                                                           : dockspace_id,
+                     state.shell.apply_dock_layout);
+    if (begin_panel_window("Measurement", &state.shell.show_measurement_panel,
+                           state.presentation.panel_title_font)) {
+        const ScopedFont panel_font{state.presentation.panel_content_font};
+        build_measurement_tool_selector(tools);
+        const DistanceMeasurementSettings settings =
+            edit_measurement_settings(state, tools.measurement());
         ImGui::Separator();
-        draw_measurement_snapshot(scene, engine_viewport, settings.display_unit);
+        draw_measurement_snapshot(scene, engine_viewport, tools, settings.display_unit);
 
         ImGui::Separator();
-        draw_measurement_statistics(engine_viewport);
+        draw_measurement_statistics(tools.measurement());
     }
     ImGui::End();
 }

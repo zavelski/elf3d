@@ -1,4 +1,6 @@
-#include "viewer_internal.hpp"
+#include "viewer_browser.hpp"
+
+#include "viewer_scene_session.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -37,35 +39,6 @@ namespace elf3d::viewer {
         result.push_back(static_cast<char>(character));
     }
     return result;
-}
-
-[[nodiscard]] float window_content_scale(GLFWwindow* window) noexcept {
-    if (window == nullptr) {
-        return 1.0F;
-    }
-
-    float x_scale = 1.0F;
-    float y_scale = 1.0F;
-    glfwGetWindowContentScale(window, &x_scale, &y_scale);
-    return std::max(1.0F, std::min(std::max(x_scale, y_scale), 3.0F));
-}
-
-[[nodiscard]] ImFont* load_viewer_font(GLFWwindow* window, const char* font_path_utf8,
-                                       float font_size_pixels) {
-    ImGuiIO& io = ImGui::GetIO();
-    const float requested_font_size = font_size_pixels * window_content_scale(window);
-
-    if (font_path_utf8 != nullptr && font_path_utf8[0] != '\0') {
-        ImFont* font = io.Fonts->AddFontFromFileTTF(font_path_utf8, requested_font_size, nullptr,
-                                                    io.Fonts->GetGlyphRangesCyrillic());
-        if (font != nullptr) {
-            return font;
-        }
-    }
-
-    ImFontConfig font_config;
-    font_config.SizePixels = requested_font_size;
-    return io.Fonts->AddFontDefault(&font_config);
 }
 
 void copy_text_to_buffer(std::string_view value, std::span<char> buffer) {
@@ -199,12 +172,15 @@ void push_unique_directory(std::vector<std::filesystem::path>& directories,
     return std::nullopt;
 }
 
-void load_viewer_preferences(ViewerState& state) {
-    const std::optional<std::filesystem::path> path = viewer_preferences_path();
+void load_viewer_preferences(ViewerPreferencesState& preferences) {
+    std::optional<std::filesystem::path> path = viewer_preferences_path();
+    if (!preferences.storage_path.empty()) {
+        path = preferences.storage_path;
+    }
     if (!path.has_value()) {
         return;
     }
-    state.preferences_path = *path;
+    preferences.storage_path = *path;
     std::ifstream input{*path, std::ios::binary};
     std::string line;
     constexpr std::string_view prefix = "last_model_directory=";
@@ -214,29 +190,30 @@ void load_viewer_preferences(ViewerState& state) {
     const std::filesystem::path directory = path_from_utf8(line.substr(prefix.size()));
     std::error_code error;
     if (std::filesystem::is_directory(directory, error) && !error) {
-        state.last_model_directory = absolute_path_no_throw(directory);
+        preferences.last_model_directory = absolute_path_no_throw(directory);
     }
 }
 
-void remember_model_directory(ViewerState& state, const std::filesystem::path& model_path) {
+void remember_model_directory(ViewerPreferencesState& preferences,
+                              const std::filesystem::path& model_path) {
     if (!model_path.has_parent_path()) {
         return;
     }
-    state.last_model_directory = absolute_path_no_throw(model_path.parent_path());
-    if (state.preferences_path.empty()) {
+    preferences.last_model_directory = absolute_path_no_throw(model_path.parent_path());
+    if (preferences.storage_path.empty()) {
         return;
     }
     std::error_code error;
-    std::filesystem::create_directories(state.preferences_path.parent_path(), error);
+    std::filesystem::create_directories(preferences.storage_path.parent_path(), error);
     if (error) {
         return;
     }
-    std::ofstream output{state.preferences_path, std::ios::binary | std::ios::trunc};
-    output << "last_model_directory=" << path_to_utf8(state.last_model_directory) << '\n';
+    std::ofstream output{preferences.storage_path, std::ios::binary | std::ios::trunc};
+    output << "last_model_directory=" << path_to_utf8(preferences.last_model_directory) << '\n';
 }
 
-void initialize_open_browser_bookmarks(ViewerState& state) {
-    if (!state.open_browser_bookmarks.empty()) {
+void initialize_bookmarks(FileBrowserState& browser) {
+    if (!browser.bookmarks.empty()) {
         return;
     }
 
@@ -249,18 +226,18 @@ void initialize_open_browser_bookmarks(ViewerState& state) {
     defaults.push_back(fallback_open_directory());
 
     for (const std::filesystem::path& path : defaults) {
-        push_unique_directory(state.open_browser_bookmarks, path, 12);
+        push_unique_directory(browser.bookmarks, path, 12);
     }
 }
 
-void set_open_browser_selected_file(ViewerState& state, const std::filesystem::path& path) {
-    state.open_browser_selected_path = path;
-    copy_text_to_buffer(path_to_utf8(path), state.open_file_path);
+void select_file_browser_file(FileBrowserState& browser, const std::filesystem::path& path) {
+    browser.selected_path = path;
+    copy_text_to_buffer(path_to_utf8(path), browser.file_path);
 }
 
-void clear_open_browser_selected_file(ViewerState& state) {
-    state.open_browser_selected_path.clear();
-    copy_text_to_buffer("", state.open_file_path);
+void clear_file_browser_selection(FileBrowserState& browser) {
+    browser.selected_path.clear();
+    copy_text_to_buffer("", browser.file_path);
 }
 
 [[nodiscard]] std::string format_file_size(std::uintmax_t bytes) {
@@ -310,71 +287,67 @@ void clear_open_browser_selected_file(ViewerState& state) {
     return stream.str();
 }
 
-void set_open_browser_directory(ViewerState& state, const std::filesystem::path& directory,
+void set_file_browser_directory(FileBrowserState& browser, const std::filesystem::path& directory,
                                 bool record_history) {
     std::filesystem::path resolved = absolute_path_no_throw(directory);
     std::error_code error;
     if (!std::filesystem::is_directory(resolved, error) || error) {
-        state.open_browser_error = "Folder is not available: " + path_to_utf8(directory);
+        browser.error = "Folder is not available: " + path_to_utf8(directory);
         return;
     }
 
-    state.open_browser_directory = resolved;
-    clear_open_browser_selected_file(state);
-    state.open_browser_error.clear();
-    state.open_browser_needs_refresh = true;
-    copy_text_to_buffer(path_to_utf8(resolved), state.open_folder_path);
-    push_unique_directory(state.open_browser_recents, resolved, 10);
+    browser.directory = resolved;
+    clear_file_browser_selection(browser);
+    browser.error.clear();
+    browser.needs_refresh = true;
+    copy_text_to_buffer(path_to_utf8(resolved), browser.folder_path);
+    push_unique_directory(browser.recents, resolved, 10);
 
     if (record_history) {
-        if (state.open_browser_history.empty() ||
-            !same_path_key(state.open_browser_history[state.open_browser_history_index],
-                           resolved)) {
-            if (state.open_browser_history_index + 1U < state.open_browser_history.size()) {
-                state.open_browser_history.erase(
-                    state.open_browser_history.begin() +
-                        static_cast<std::ptrdiff_t>(state.open_browser_history_index + 1U),
-                    state.open_browser_history.end());
+        if (browser.history.empty() ||
+            !same_path_key(browser.history[browser.history_index], resolved)) {
+            if (browser.history_index + 1U < browser.history.size()) {
+                browser.history.erase(browser.history.begin() +
+                                          static_cast<std::ptrdiff_t>(browser.history_index + 1U),
+                                      browser.history.end());
             }
-            state.open_browser_history.push_back(resolved);
-            state.open_browser_history_index = state.open_browser_history.size() - 1U;
+            browser.history.push_back(resolved);
+            browser.history_index = browser.history.size() - 1U;
         }
     }
 }
 
-void navigate_open_browser_history(ViewerState& state, int offset) {
-    if (state.open_browser_history.empty()) {
+void navigate_file_browser_history(FileBrowserState& browser, int offset) {
+    if (browser.history.empty()) {
         return;
     }
 
-    const int current = static_cast<int>(state.open_browser_history_index);
-    const int maximum = static_cast<int>(state.open_browser_history.size() - 1U);
+    const int current = static_cast<int>(browser.history_index);
+    const int maximum = static_cast<int>(browser.history.size() - 1U);
     const int next = std::clamp(current + offset, 0, maximum);
     if (next == current) {
         return;
     }
 
-    state.open_browser_history_index = static_cast<std::size_t>(next);
-    set_open_browser_directory(state, state.open_browser_history[state.open_browser_history_index],
-                               false);
+    browser.history_index = static_cast<std::size_t>(next);
+    set_file_browser_directory(browser, browser.history[browser.history_index], false);
 }
 
-void refresh_open_browser_entries(ViewerState& state) {
-    if (!state.open_browser_needs_refresh) {
+void refresh_file_browser_entries(FileBrowserState& browser) {
+    if (!browser.needs_refresh) {
         return;
     }
 
-    state.open_browser_needs_refresh = false;
-    state.open_browser_entries.clear();
+    browser.needs_refresh = false;
+    browser.entries.clear();
 
     std::error_code iteration_error;
     constexpr std::filesystem::directory_options options =
         std::filesystem::directory_options::skip_permission_denied;
-    std::filesystem::directory_iterator iterator{state.open_browser_directory, options,
-                                                 iteration_error};
+    std::filesystem::directory_iterator iterator{browser.directory, options, iteration_error};
     const std::filesystem::directory_iterator end;
     if (iteration_error) {
-        state.open_browser_error = "Could not read folder: " + iteration_error.message();
+        browser.error = "Could not read folder: " + iteration_error.message();
         return;
     }
 
@@ -393,17 +366,16 @@ void refresh_open_browser_entries(ViewerState& state) {
                 browser_entry.size_bytes = entry.file_size(size_error);
                 browser_entry.has_size = !size_error;
             }
-            state.open_browser_entries.push_back(std::move(browser_entry));
+            browser.entries.push_back(std::move(browser_entry));
         }
         iterator.increment(iteration_error);
         if (iteration_error) {
-            state.open_browser_error =
-                "Could not finish reading folder: " + iteration_error.message();
+            browser.error = "Could not finish reading folder: " + iteration_error.message();
             break;
         }
     }
 
-    std::sort(state.open_browser_entries.begin(), state.open_browser_entries.end(),
+    std::sort(browser.entries.begin(), browser.entries.end(),
               [](const OpenBrowserEntry& left, const OpenBrowserEntry& right) {
                   if (left.directory != right.directory) {
                       return left.directory;
@@ -412,34 +384,36 @@ void refresh_open_browser_entries(ViewerState& state) {
               });
 }
 
-void initialize_open_browser(ViewerState& state, const ViewerScene& scene) {
-    initialize_open_browser_bookmarks(state);
-    state.external_editors = find_external_editors();
-    state.open_browser_properties.reset();
-    state.request_open_browser_properties = false;
-    state.open_browser_history.clear();
-    state.open_browser_history_index = 0;
-    copy_text_to_buffer("", state.open_search);
+void initialize_open_browser(FileBrowserState& browser, const ViewerPreferencesState& preferences,
+                             const SceneSession& scene) {
+    initialize_bookmarks(browser);
+    browser.external_editors = find_external_editors();
+    browser.properties.reset();
+    browser.request_properties = false;
+    browser.history.clear();
+    browser.history_index = 0;
+    copy_text_to_buffer("", browser.search);
 
     std::filesystem::path directory = fallback_open_directory();
     if (scene.is_imported() && scene.source_path.has_parent_path()) {
         directory = scene.source_path.parent_path();
-    } else if (!state.last_model_directory.empty()) {
-        directory = state.last_model_directory;
+    } else if (!preferences.last_model_directory.empty()) {
+        directory = preferences.last_model_directory;
     }
 
-    state.open_browser_initialized = true;
-    set_open_browser_directory(state, directory);
+    browser.initialized = true;
+    set_file_browser_directory(browser, directory);
     if (scene.is_imported()) {
-        set_open_browser_selected_file(state, scene.source_path);
+        select_file_browser_file(browser, scene.source_path);
     }
 }
 
-void initialize_save_browser(ViewerState& state, const ViewerScene& scene) {
-    initialize_open_browser(state, scene);
-    state.pending_save_path.reset();
+void initialize_save_browser(FileBrowserState& browser, const ViewerPreferencesState& preferences,
+                             const SceneSession& scene) {
+    initialize_open_browser(browser, preferences, scene);
+    browser.pending_save_path.reset();
     if (scene.is_imported()) {
-        copy_text_to_buffer(path_to_utf8(scene.source_path.filename()), state.open_file_path);
+        copy_text_to_buffer(path_to_utf8(scene.source_path.filename()), browser.file_path);
     }
 }
 

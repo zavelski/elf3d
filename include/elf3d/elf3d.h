@@ -5,19 +5,24 @@
 #include <elf3d/core/api.h>
 #include <elf3d/core/result.h>
 #include <elf3d/graphics.h>
-#include <elf3d/measurement.h>
 #include <elf3d/navigation.h>
 #include <elf3d/picking.h>
+#include <elf3d/projection.h>
 #include <elf3d/rendering.h>
 #include <elf3d/scene.h>
 #include <elf3d/scene_load.h>
 #include <elf3d/selection.h>
+#include <elf3d/surface_anchor.h>
 #include <elf3d/viewport.h>
 
 #include <memory>
 #include <string_view>
 
 namespace elf3d {
+
+namespace detail {
+class EngineAccess;
+}
 
 struct LoadedScene {
     std::unique_ptr<Scene> scene;
@@ -31,6 +36,8 @@ struct LoadedScene {
 #endif
 class ELF3D_API Engine {
   private:
+    friend class detail::EngineAccess;
+
     class Impl;
     struct ConstructionKey final {};
 
@@ -43,11 +50,9 @@ class ELF3D_API Engine {
     Engine(Engine&&) = delete;
     Engine& operator=(Engine&&) = delete;
 
-    [[nodiscard]] static Result<std::unique_ptr<Engine>>
-    create(const EngineConfiguration& configuration) noexcept;
+    explicit Engine(ConstructionKey, std::unique_ptr<Impl> impl) noexcept;
 
     [[nodiscard]] GraphicsBackend graphics_backend() const noexcept;
-    [[nodiscard]] bool graphics_initialized() const noexcept;
 
     [[nodiscard]] Result<std::unique_ptr<Viewport>>
     create_viewport(Extent2D initial_extent) noexcept;
@@ -56,13 +61,6 @@ class ELF3D_API Engine {
     // Loading is synchronous. The existing scene, if any, is not modified.
     [[nodiscard]] Result<LoadedScene> load_scene(std::string_view path_utf8,
                                                  const ModelLoadOptions& options = {}) noexcept;
-
-    // Native texture access is non-owning and requires the owning graphics
-    // thread with a compatible host OpenGL context current.
-    [[nodiscard]] Result<NativeTextureView>
-    native_texture_view(TextureHandle texture) const noexcept;
-
-    explicit Engine(ConstructionKey, std::unique_ptr<Impl> impl) noexcept;
 
   private:
     std::unique_ptr<Impl> impl_;

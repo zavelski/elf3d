@@ -36,12 +36,12 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
 
 [[nodiscard]] int prepare_forward_turn(SceneFixture& fixture,
                                        elf3d::navigation::OrbitNavigationController& navigation,
-                                       elf3d::ViewportInput& input) {
+                                       elf3d::NavigationInput& input) {
     if (!navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
         return 116;
     }
     input = hovered_input();
-    input.left_button_down = true;
+    input.orbit_down = true;
     input.pointer_position_pixels = {10.0F, 10.0F};
     if (!navigation.update(fixture.scene, fixture.camera, {800, 600}, input, click_threshold)) {
         return 117;
@@ -59,7 +59,7 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
     SceneFixture forward_turn_fixture = make_scene(4, {99'000'000.0F, -1'000'000.0F, -1'000'000.0F},
                                                    {101'000'000.0F, 1'000'000.0F, 1'000'000.0F});
     elf3d::navigation::OrbitNavigationController forward_turn_navigation;
-    elf3d::ViewportInput forward_turn_input;
+    elf3d::NavigationInput forward_turn_input;
     const int prepared =
         prepare_forward_turn(forward_turn_fixture, forward_turn_navigation, forward_turn_input);
     if (prepared != 0) {
@@ -69,7 +69,7 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
     const elf3d::Float3 fixed_dynamic_center = before_first_forward_turn.pivot;
     forward_turn_input.pointer_position_pixels = {120.0F, 10.0F};
     forward_turn_input.pointer_delta_pixels = {40.0F, 0.0F};
-    forward_turn_input.w_pressed = true;
+    forward_turn_input.move_forward_down = true;
     if (!forward_turn_navigation.update(forward_turn_fixture.scene, forward_turn_fixture.camera,
                                         {800, 600}, forward_turn_input, click_threshold)) {
         return 119;
@@ -93,7 +93,7 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
                                    fixed_dynamic_center)) {
         return 122;
     }
-    forward_turn_input.w_pressed = false;
+    forward_turn_input.move_forward_down = false;
     forward_turn_input.pointer_delta_pixels = {};
     const elf3d::Float3 position_before_forward_release =
         camera_position(forward_turn_fixture.scene, forward_turn_fixture.camera);
@@ -103,7 +103,7 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
                       position_before_forward_release)) {
         return 123;
     }
-    forward_turn_input.left_button_down = false;
+    forward_turn_input.orbit_down = false;
     static_cast<void>(forward_turn_navigation.update(forward_turn_fixture.scene,
                                                      forward_turn_fixture.camera, {800, 600},
                                                      forward_turn_input, click_threshold));
@@ -113,7 +113,7 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
 struct FrameRateLane {
     SceneFixture fixture;
     elf3d::navigation::OrbitNavigationController navigation;
-    elf3d::ViewportInput input;
+    elf3d::NavigationInput input;
 };
 
 struct FrameRateContext {
@@ -141,7 +141,7 @@ struct FrameRateSequence {
         return false;
     }
     lane.input = hovered_input();
-    lane.input.left_button_down = true;
+    lane.input.orbit_down = true;
     lane.input.pointer_position_pixels = {10.0F, 10.0F};
     if (!lane.navigation.update(lane.fixture.scene, lane.fixture.camera, {800, 600}, lane.input,
                                 click_threshold)) {
@@ -158,7 +158,7 @@ struct FrameRateSequence {
 [[nodiscard]] bool advance_frame_rate_lane(FrameRateLane& lane, FrameRateSequence sequence) {
     lane.input.frame_delta_seconds = sequence.delta_seconds;
     lane.input.pointer_delta_pixels = {sequence.pointer_delta_x, 0.0F};
-    lane.input.w_pressed = true;
+    lane.input.move_forward_down = true;
     for (std::uint32_t frame = 0; frame < sequence.frames; ++frame) {
         lane.input.pointer_position_pixels.x += sequence.pointer_delta_x;
         if (!lane.navigation.update(lane.fixture.scene, lane.fixture.camera, {800, 600}, lane.input,
@@ -203,8 +203,8 @@ struct PanContext {
     SceneFixture mouse_fixture;
     elf3d::navigation::OrbitNavigationController combined_navigation;
     elf3d::navigation::OrbitNavigationController mouse_navigation;
-    elf3d::ViewportInput combined_input;
-    elf3d::ViewportInput mouse_input;
+    elf3d::NavigationInput combined_input;
+    elf3d::NavigationInput mouse_input;
 };
 
 [[nodiscard]] PanContext make_pan_context() {
@@ -222,7 +222,7 @@ struct PanContext {
         return 124;
     }
     context.combined_input = hovered_input();
-    context.combined_input.right_button_down = true;
+    context.combined_input.zoom_down = true;
     context.mouse_input = context.combined_input;
     if (!context.combined_navigation.update(context.combined_fixture.scene,
                                             context.combined_fixture.camera, {800, 600},
@@ -232,9 +232,9 @@ struct PanContext {
         return 125;
     }
     context.combined_input.pointer_delta_pixels = {80.0F, 40.0F};
-    context.combined_input.w_pressed = true;
+    context.combined_input.move_forward_down = true;
     context.mouse_input = context.combined_input;
-    context.mouse_input.w_pressed = false;
+    context.mouse_input.move_forward_down = false;
     if (!context.combined_navigation.update(context.combined_fixture.scene,
                                             context.combined_fixture.camera, {800, 600},
                                             context.combined_input, click_threshold) ||
@@ -263,7 +263,7 @@ struct PanContext {
 }
 
 [[nodiscard]] int verify_pan_key_release(PanContext& context) {
-    context.combined_input.w_pressed = false;
+    context.combined_input.move_forward_down = false;
     context.combined_input.pointer_delta_pixels = {};
     context.mouse_input = context.combined_input;
     const elf3d::Float3 position_before_pan_key_release =
@@ -300,7 +300,7 @@ struct PanContext {
 }
 
 void release_pan(PanContext& context) {
-    context.combined_input.right_button_down = false;
+    context.combined_input.zoom_down = false;
     context.combined_input.pointer_delta_pixels = {};
     context.mouse_input = context.combined_input;
     static_cast<void>(context.combined_navigation.update(

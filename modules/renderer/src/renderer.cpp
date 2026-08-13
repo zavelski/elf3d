@@ -23,8 +23,12 @@ import elf.scene;
 namespace elf3d::renderer {
 
 struct Renderer::DrawPacket {
-    graphics::StaticMesh* mesh = nullptr;
-    std::array<graphics::Texture2D*, graphics::material_texture_count> textures{};
+    std::size_t mesh_index = 0;
+    bool document_mesh = false;
+    std::array<std::size_t, graphics::material_texture_count> texture_indices{};
+    std::array<std::size_t, graphics::material_texture_count> image_indices{};
+    std::array<bool, graphics::material_texture_count> document_images{};
+    std::array<bool, graphics::material_texture_count> has_textures{};
     MaterialDescription material;
 };
 
@@ -60,6 +64,10 @@ struct Renderer::CacheState {
         std::uint64_t resident_texture_bytes = 0;
         std::uint64_t texture_count = 0;
     };
+
+    [[nodiscard]] const SceneEntry& scene(SceneId id) const noexcept {
+        return *scenes[static_cast<std::size_t>(id.debug_value())];
+    }
 
     [[nodiscard]] SceneEntry& scene(SceneId id) {
         const std::size_t index = static_cast<std::size_t>(id.debug_value());
@@ -119,209 +127,6 @@ estimated_texture_resident_bytes(Extent2D extent, graphics::TextureFilterMode mi
     }
 }
 
-constexpr char vertex_shader_source[] = R"glsl(#version 410 core
-layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec3 a_normal;
-layout(location = 2) in vec2 a_texcoord0;
-layout(location = 3) in vec2 a_texcoord1;
-layout(location = 4) in vec4 a_color;
-
-uniform mat4 u_model;
-uniform mat4 u_view;
-uniform mat4 u_projection;
-uniform mat3 u_normal_matrix;
-uniform int u_vertex_layout;
-
-out vec3 v_world_normal;
-out vec3 v_world_position;
-out vec2 v_texcoord0;
-out vec2 v_texcoord1;
-out vec4 v_color;
-
-void main()
-{
-    vec4 world_position = u_model * vec4(a_position, 1.0);
-    v_world_normal = normalize(u_normal_matrix * a_normal);
-    v_world_position = world_position.xyz;
-    v_texcoord0 = u_vertex_layout >= 1 ? a_texcoord0 : vec2(0.0);
-    v_texcoord1 = u_vertex_layout >= 2 ? a_texcoord1 : vec2(0.0);
-    v_color = u_vertex_layout >= 2 ? a_color : vec4(1.0);
-    gl_Position = u_projection * u_view * world_position;
-}
-)glsl";
-
-constexpr char fragment_shader_source[] = R"glsl(#version 410 core
-in vec3 v_world_normal;
-in vec3 v_world_position;
-in vec2 v_texcoord0;
-in vec2 v_texcoord1;
-in vec4 v_color;
-
-uniform vec4 u_base_color;
-uniform vec3 u_camera_world_position;
-uniform vec3 u_light_direction;
-uniform vec4 u_light_color;
-uniform float u_ambient_intensity;
-uniform float u_diffuse_intensity;
-uniform float u_metallic_factor;
-uniform float u_roughness_factor;
-uniform vec3 u_emissive_factor;
-uniform float u_occlusion_strength;
-uniform float u_ior;
-uniform float u_specular_factor;
-uniform vec3 u_specular_color_factor;
-uniform vec4 u_highlight_color;
-uniform float u_highlight_strength;
-uniform bool u_has_base_color_texture;
-uniform bool u_has_metallic_roughness_texture;
-uniform bool u_has_occlusion_texture;
-uniform bool u_has_emissive_texture;
-uniform sampler2D u_base_color_texture;
-uniform sampler2D u_metallic_roughness_texture;
-uniform sampler2D u_occlusion_texture;
-uniform sampler2D u_emissive_texture;
-uniform int u_texture_texcoord_sets[4];
-uniform vec2 u_texture_offsets[4];
-uniform vec2 u_texture_scales[4];
-uniform float u_texture_rotations[4];
-uniform int u_alpha_mode;
-uniform float u_alpha_cutoff;
-uniform bool u_unlit;
-uniform bool u_clipping_section_plane_enabled;
-uniform vec3 u_clipping_section_plane_normal;
-uniform float u_clipping_section_plane_offset;
-uniform bool u_clipping_retain_positive_half_space;
-uniform int u_clipping_box_count;
-uniform vec3 u_clipping_box_minimums[3];
-uniform vec3 u_clipping_box_maximums[3];
-
-layout(location = 0) out vec4 fragment_color;
-
-vec3 safe_normalize(vec3 value, vec3 fallback)
-{
-    float length_squared = dot(value, value);
-    return length_squared > 0.00000001 ? value * inversesqrt(length_squared) : fallback;
-}
-
-bool clipping_contains_point(vec3 world_position)
-{
-    const float tolerance = 0.00001;
-    if (u_clipping_section_plane_enabled) {
-        float signed_distance = dot(u_clipping_section_plane_normal, world_position) +
-                                u_clipping_section_plane_offset;
-        if (!u_clipping_retain_positive_half_space) {
-            signed_distance = -signed_distance;
-        }
-        if (signed_distance < -tolerance) {
-            return false;
-        }
-    }
-
-    if (u_clipping_box_count > 0) {
-        bool inside_box = false;
-        for (int index = 0; index < 3; ++index) {
-            if (index >= u_clipping_box_count) {
-                break;
-            }
-            vec3 minimums = u_clipping_box_minimums[index] - vec3(tolerance);
-            vec3 maximums = u_clipping_box_maximums[index] + vec3(tolerance);
-            if (all(greaterThanEqual(world_position, minimums)) &&
-                all(lessThanEqual(world_position, maximums))) {
-                inside_box = true;
-            }
-        }
-        if (!inside_box) {
-            return false;
-        }
-    }
-    return true;
-}
-
-vec2 mapped_uv(int texture_slot)
-{
-    vec2 uv = u_texture_texcoord_sets[texture_slot] == 1 ? v_texcoord1 : v_texcoord0;
-    uv *= u_texture_scales[texture_slot];
-    float sine = sin(u_texture_rotations[texture_slot]);
-    float cosine = cos(u_texture_rotations[texture_slot]);
-    uv = mat2(cosine, sine, -sine, cosine) * uv;
-    return u_texture_offsets[texture_slot] + uv;
-}
-
-void main()
-{
-    if (!clipping_contains_point(v_world_position)) {
-        discard;
-    }
-
-    const float pi = 3.14159265359;
-    vec4 base_sample = u_has_base_color_texture
-        ? texture(u_base_color_texture, mapped_uv(0)) : vec4(1.0);
-    vec4 base_color = u_base_color * base_sample * v_color;
-    if (u_alpha_mode == 0) {
-        base_color.a = 1.0;
-    } else if (u_alpha_mode == 1) {
-        if (base_color.a < u_alpha_cutoff) {
-            discard;
-        }
-        base_color.a = 1.0;
-    }
-    vec4 metallic_roughness = u_has_metallic_roughness_texture
-        ? texture(u_metallic_roughness_texture, mapped_uv(1)) : vec4(1.0);
-    float metallic = clamp(u_metallic_factor * metallic_roughness.b, 0.0, 1.0);
-    float roughness = clamp(u_roughness_factor * metallic_roughness.g, 0.045, 1.0);
-
-    vec3 linear_color;
-    if (u_unlit) {
-        linear_color = max(base_color.rgb, vec3(0.0));
-    } else {
-        vec3 normal = safe_normalize(v_world_normal, vec3(0.0, 1.0, 0.0));
-        if (!gl_FrontFacing) {
-            normal = -normal;
-        }
-        vec3 view_direction = safe_normalize(u_camera_world_position - v_world_position, normal);
-        vec3 light_direction = safe_normalize(-u_light_direction, vec3(0.0, 1.0, 0.0));
-        vec3 half_vector = safe_normalize(view_direction + light_direction, normal);
-        float n_dot_l = max(dot(normal, light_direction), 0.0);
-        float n_dot_v = max(dot(normal, view_direction), 0.0001);
-        float n_dot_h = max(dot(normal, half_vector), 0.0);
-        float h_dot_v = max(dot(half_vector, view_direction), 0.0);
-
-        float alpha = roughness * roughness;
-        float alpha_squared = alpha * alpha;
-        float denominator = n_dot_h * n_dot_h * (alpha_squared - 1.0) + 1.0;
-        float distribution = alpha_squared / max(pi * denominator * denominator, 0.0001);
-        float geometry_k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
-        float geometry_view = n_dot_v / (n_dot_v * (1.0 - geometry_k) + geometry_k);
-        float geometry_light = n_dot_l / (n_dot_l * (1.0 - geometry_k) + geometry_k);
-        float dielectric_f0_scalar = pow((u_ior - 1.0) / (u_ior + 1.0), 2.0);
-        vec3 dielectric_f0 = min(vec3(1.0),
-                                 vec3(dielectric_f0_scalar * u_specular_factor) *
-                                 u_specular_color_factor);
-        vec3 f0 = mix(dielectric_f0, base_color.rgb, metallic);
-        vec3 f90 = mix(vec3(u_specular_factor), vec3(1.0), metallic);
-        vec3 fresnel = f0 + (f90 - f0) * pow(1.0 - h_dot_v, 5.0);
-        vec3 specular = distribution * geometry_view * geometry_light * fresnel /
-                        max(4.0 * n_dot_v * n_dot_l, 0.0001);
-        vec3 diffuse = (1.0 - fresnel) * (1.0 - metallic) * base_color.rgb / pi;
-        vec3 direct = (diffuse + specular) * u_light_color.rgb *
-                      u_diffuse_intensity * n_dot_l;
-        float occlusion = u_has_occlusion_texture
-            ? mix(1.0, texture(u_occlusion_texture, mapped_uv(2)).r,
-                  clamp(u_occlusion_strength, 0.0, 1.0))
-            : 1.0;
-        vec3 ambient = base_color.rgb * (1.0 - metallic) * u_ambient_intensity * occlusion;
-        vec3 emissive_sample = u_has_emissive_texture
-            ? texture(u_emissive_texture, mapped_uv(3)).rgb : vec3(1.0);
-        vec3 emissive = u_emissive_factor * emissive_sample;
-        linear_color = max(direct + ambient + emissive, vec3(0.0));
-    }
-    linear_color = mix(linear_color, u_highlight_color.rgb,
-                       clamp(u_highlight_strength, 0.0, 1.0));
-
-    fragment_color = vec4(linear_color, base_color.a);
-}
-)glsl";
-
 } // namespace
 
 void apply_clipping_description(const clipping::ClippingFilter& filter,
@@ -344,7 +149,7 @@ Result<std::unique_ptr<Renderer>> Renderer::create(std::unique_ptr<graphics::Dev
     }
 
     const graphics::GraphicsPipelineDescription description{
-        vertex_shader_source, fragment_shader_source,
+        main_vertex_shader_source(), main_fragment_shader_source(),
         graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4};
     Result<std::unique_ptr<graphics::GraphicsPipeline>> pipeline_result =
         device->create_graphics_pipeline(description);
@@ -461,13 +266,29 @@ Result<void> Renderer::draw_render_items(const scene::Storage& scene,
     }
     pass.statistics.material_switches = count_material_switches(prepared);
 
-    std::vector<graphics::IndexedDrawBatchItem> batch;
-    batch.reserve(prepared.size());
+    std::vector<graphics::StaticMesh*> meshes;
+    std::vector<graphics::DrawIndexedDescription> descriptions;
+    std::vector<std::array<graphics::Texture2D*, graphics::material_texture_count>> texture_sets;
+    meshes.reserve(prepared.size());
+    descriptions.reserve(prepared.size());
+    texture_sets.reserve(prepared.size());
     for (PreparedDraw& draw : prepared) {
-        draw.description.textures = draw.textures;
-        batch.push_back(graphics::IndexedDrawBatchItem{draw.mesh, draw.description});
+        const RenderItem& item = pass.list.items[descriptions.size()];
+        const DrawPacket& packet = draw_packet(scene, item, draw.packet_index);
+        texture_sets.emplace_back();
+        auto& textures = texture_sets.back();
+        for (std::size_t index = 0; index < textures.size(); ++index) {
+            if (packet.has_textures[index]) {
+                textures[index] =
+                    &texture(scene.id(), packet.document_images[index], packet.image_indices[index],
+                             packet.texture_indices[index]);
+            }
+        }
+        draw.description.textures = textures;
+        meshes.push_back(&mesh(scene.id(), packet.document_mesh, packet.mesh_index));
+        descriptions.push_back(draw.description);
     }
-    return device_->draw_indexed_batch(target, *pipeline_, batch);
+    return device_->draw_indexed_batch(target, *pipeline_, meshes, descriptions);
 }
 
 std::uint64_t
@@ -485,19 +306,18 @@ Renderer::count_material_switches(const std::vector<PreparedDraw>& prepared) con
 
 Result<void> Renderer::prepare_render_item(const scene::Storage& scene, const RenderItem& item,
                                            RenderPass& pass, std::vector<PreparedDraw>& prepared) {
-    const Result<const DrawPacket*> packet_result =
-        cached_draw_packet(scene, item, pass.statistics);
+    const Result<std::size_t> packet_result =
+        cached_draw_packet_index(scene, item, pass.statistics);
     if (!packet_result) {
         return packet_result.error();
     }
-    const DrawPacket& packet = *packet_result.value();
+    const DrawPacket& packet = draw_packet(scene, item, packet_result.value());
     prepared.emplace_back();
     PreparedDraw& prepared_draw = prepared.back();
-    prepared_draw.mesh = packet.mesh;
-    prepared_draw.textures = packet.textures;
+    prepared_draw.packet_index = packet_result.value();
     prepared_draw.material_identity = item.material_identity;
-    for (const graphics::Texture2D* texture : packet.textures) {
-        pass.statistics.texture_bindings += static_cast<std::uint64_t>(texture != nullptr);
+    for (const bool has_texture : packet.has_textures) {
+        pass.statistics.texture_bindings += static_cast<std::uint64_t>(has_texture);
     }
     graphics::DrawIndexedDescription& draw = prepared_draw.description;
     draw.model_matrix = item.model_matrix.elements;
@@ -535,9 +355,11 @@ Result<void> Renderer::prepare_render_item(const scene::Storage& scene, const Re
     apply_clipping_description(pass.clipping_filter, draw);
 
     ++pass.statistics.draw_calls;
-    pass.statistics.vertices += packet.mesh->vertex_count();
-    pass.statistics.indices += packet.mesh->index_count();
-    pass.statistics.triangles += packet.mesh->index_count() / 3;
+    const graphics::StaticMesh& gpu_mesh =
+        mesh(scene.id(), packet.document_mesh, packet.mesh_index);
+    pass.statistics.vertices += gpu_mesh.vertex_count();
+    pass.statistics.indices += gpu_mesh.index_count();
+    pass.statistics.triangles += gpu_mesh.index_count() / 3;
     return {};
 }
 
@@ -551,9 +373,9 @@ void Renderer::synchronize_draw_packet_cache(const scene::Storage& scene) {
     scene_cache.draw_packet_revision = revision;
 }
 
-Result<const Renderer::DrawPacket*> Renderer::cached_draw_packet(const scene::Storage& scene,
-                                                                 const RenderItem& item,
-                                                                 RenderStatistics& statistics) {
+Result<std::size_t> Renderer::cached_draw_packet_index(const scene::Storage& scene,
+                                                       const RenderItem& item,
+                                                       RenderStatistics& statistics) {
     CacheState::SceneEntry& scene_cache = cache_->scene(scene.id());
     const std::size_t entity_index = static_cast<std::size_t>(item.entity.debug_value());
     if (entity_index >= scene_cache.draw_packets.size()) {
@@ -570,30 +392,38 @@ Result<const Renderer::DrawPacket*> Renderer::cached_draw_packet(const scene::St
     }
     std::optional<DrawPacket>& cached = entity_packets->primitives[primitive_index];
     if (cached.has_value()) {
-        return &*cached;
+        return primitive_index;
     }
     const Result<scene::RuntimePrimitiveView> primitive =
         scene.runtime_primitive(item.entity, item.primitive_index);
     if (!primitive) {
         return primitive.error();
     }
-    Result<graphics::StaticMesh*> mesh = cached_mesh(scene.id(), primitive.value(), statistics);
-    if (!mesh) {
-        return mesh.error();
+    Result<std::size_t> mesh_index = cached_mesh(scene.id(), primitive.value(), statistics);
+    if (!mesh_index) {
+        return mesh_index.error();
     }
     DrawPacket packet;
-    packet.mesh = mesh.value();
+    packet.mesh_index = mesh_index.value();
+    packet.document_mesh = primitive.value().document_primitive.is_valid();
     packet.material = runtime_material_description(primitive.value().material_view);
     std::uint64_t ignored_texture_bindings = 0;
-    const Result<void> textures =
-        prepare_draw_textures(scene, primitive.value(), packet.textures,
-                              statistics.gpu_texture_uploads, ignored_texture_bindings);
+    const Result<void> textures = prepare_draw_textures(
+        scene, primitive.value(), packet, statistics.gpu_texture_uploads, ignored_texture_bindings);
     if (!textures) {
         return textures.error();
     }
     cached = std::move(packet);
     ++statistics.draw_packet_rebuilds;
-    return &*cached;
+    return primitive_index;
+}
+
+const Renderer::DrawPacket& Renderer::draw_packet(const scene::Storage& scene,
+                                                  const RenderItem& item,
+                                                  std::size_t packet_index) const noexcept {
+    const CacheState::SceneEntry& scene_cache = cache_->scene(scene.id());
+    const std::size_t entity_index = static_cast<std::size_t>(item.entity.debug_value());
+    return *scene_cache.draw_packets[entity_index]->primitives[packet_index];
 }
 
 Result<void> Renderer::draw_render_overlay(graphics::RenderTarget& target, RenderPass& pass) {
@@ -634,10 +464,10 @@ const graphics::Device& Renderer::device() const noexcept {
     return *device_;
 }
 
-Result<void> Renderer::prepare_draw_textures(
-    const scene::Storage& scene_storage, const scene::RuntimePrimitiveView& primitive,
-    std::array<graphics::Texture2D*, graphics::material_texture_count>& textures,
-    std::uint64_t& upload_count, std::uint64_t& texture_bindings) {
+Result<void> Renderer::prepare_draw_textures(const scene::Storage& scene_storage,
+                                             const scene::RuntimePrimitiveView& primitive,
+                                             DrawPacket& packet, std::uint64_t& upload_count,
+                                             std::uint64_t& texture_bindings) {
     constexpr std::array<scene::RuntimeMaterialTextureSlot, graphics::material_texture_count>
         texture_slots{scene::RuntimeMaterialTextureSlot::base_color,
                       scene::RuntimeMaterialTextureSlot::metallic_roughness,
@@ -655,20 +485,23 @@ Result<void> Renderer::prepare_draw_textures(
         if (!texture) {
             return texture.error();
         }
-        Result<graphics::Texture2D*> gpu_texture = cached_texture(
+        Result<std::size_t> texture_index = cached_texture(
             scene_storage.id(), texture.value(), texture_color_spaces[index], upload_count);
-        if (!gpu_texture) {
-            return gpu_texture.error();
+        if (!texture_index) {
+            return texture_index.error();
         }
-        textures[index] = gpu_texture.value();
+        packet.texture_indices[index] = texture_index.value();
+        packet.image_indices[index] = static_cast<std::size_t>(texture.value().image_identity);
+        packet.document_images[index] = texture.value().document_image;
+        packet.has_textures[index] = true;
         ++texture_bindings;
     }
     return {};
 }
 
-Result<graphics::StaticMesh*> Renderer::cached_mesh(SceneId scene_id,
-                                                    const scene::RuntimePrimitiveView& primitive,
-                                                    RenderStatistics& statistics) {
+Result<std::size_t> Renderer::cached_mesh(SceneId scene_id,
+                                          const scene::RuntimePrimitiveView& primitive,
+                                          RenderStatistics& statistics) {
     const bool document_primitive = primitive.document_primitive.is_valid();
     const std::uint64_t geometry = document_primitive ? primitive.document_primitive.debug_value()
                                                       : primitive.mesh.debug_value();
@@ -685,7 +518,7 @@ Result<graphics::StaticMesh*> Renderer::cached_mesh(SceneId scene_id,
     }
     std::optional<CacheState::MeshEntry>& slot = entries[geometry_index];
     if (slot.has_value()) {
-        return slot->mesh.get();
+        return geometry_index;
     }
     if (primitive.vertex_count() >
         static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
@@ -711,13 +544,13 @@ Result<graphics::StaticMesh*> Renderer::cached_mesh(SceneId scene_id,
     cache_->resident_geometry_bytes += resident_bytes;
     ++statistics.gpu_buffer_uploads;
     statistics.gpu_buffer_uploaded_bytes += resident_bytes;
-    return slot->mesh.get();
+    return geometry_index;
 }
 
-Result<graphics::Texture2D*> Renderer::cached_texture(SceneId scene_id,
-                                                      const scene::RuntimeTextureView& texture,
-                                                      TextureColorSpace color_space,
-                                                      std::uint64_t& upload_count) {
+Result<std::size_t> Renderer::cached_texture(SceneId scene_id,
+                                             const scene::RuntimeTextureView& texture,
+                                             TextureColorSpace color_space,
+                                             std::uint64_t& upload_count) {
     if (texture.image_identity >
         static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max() - 1U)) {
         return Error{ErrorCode::resource_limit_exceeded,
@@ -740,7 +573,7 @@ Result<graphics::Texture2D*> Renderer::cached_texture(SceneId scene_id,
             return variant.color_space == color_space && variant.sampler == texture.sampler;
         });
     if (existing != image->variants.end()) {
-        return existing->texture.get();
+        return static_cast<std::size_t>(existing - image->variants.begin());
     }
 
     graphics::Texture2DDescription description;
@@ -770,7 +603,22 @@ Result<graphics::Texture2D*> Renderer::cached_texture(SceneId scene_id,
     ++scene_cache.texture_count;
     ++cache_->texture_count;
     ++upload_count;
-    return image->variants.back().texture.get();
+    return image->variants.size() - 1U;
+}
+
+graphics::StaticMesh& Renderer::mesh(SceneId scene_id, bool document_primitive,
+                                     std::size_t index) const noexcept {
+    const CacheState::SceneEntry& scene_cache = cache_->scene(scene_id);
+    const auto& entries = document_primitive ? scene_cache.document_meshes : scene_cache.meshes;
+    return *entries[index]->mesh;
+}
+
+graphics::Texture2D& Renderer::texture(SceneId scene_id, bool document_image,
+                                       std::size_t image_index,
+                                       std::size_t variant_index) const noexcept {
+    const CacheState::SceneEntry& scene_cache = cache_->scene(scene_id);
+    const auto& images = document_image ? scene_cache.document_images : scene_cache.images;
+    return *images[image_index]->variants[variant_index].texture;
 }
 
 } // namespace elf3d::renderer

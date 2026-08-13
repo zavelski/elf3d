@@ -1,15 +1,20 @@
 # Elf3D C++ API Guide
 
-Elf3D exposes a C++20 API through the headers in `include/elf3d`. The primary
-include is:
+Elf3D exposes its Runtime and Model SDK C++20 API through the headers in
+`include/elf3d`. The primary Runtime SDK include is:
 
 ```cpp
 #include <elf3d/elf3d.h>
 ```
 
-Focused hosts may include `graphics.h` for backend and overlay vocabulary,
-`rendering.h` for render configuration and statistics, and `viewport.h` for
-the caller-owned viewport facade. The umbrella header provides all three.
+Focused runtime users may include `graphics.h` for backend and overlay
+vocabulary, `rendering.h` for render configuration and statistics, and
+`viewport.h` for the caller-owned viewport facade. The umbrella header provides
+all three. Standard desktop applications additionally include:
+
+```cpp
+#include <elf3d/app/application.h>
+```
 
 Build the `elf3d` target and link the resulting shared library and import
 library with a compatible Visual Studio C++20 configuration.
@@ -29,39 +34,52 @@ canonical CPU-side `elf3d::Document` without renderer, backend, viewport, or
 viewer targets. This is not a stable DLL ABI; bulk model DTOs may own standard
 library storage, while read-only access uses temporary spans and string views.
 
-## Creating the Engine
+## Choosing the Lifecycle
 
-A rendering engine requires a current OpenGL context and a host-provided
-procedure loader:
-
-```cpp
-elf3d::EngineConfiguration configuration;
-configuration.graphics_backend = elf3d::GraphicsBackend::opengl;
-configuration.opengl.load_procedure = load_host_opengl_symbol;
-
-auto engine_result = elf3d::Engine::create(configuration);
-if (!engine_result) {
-    report_error(engine_result.error());
-    return;
-}
-auto engine = std::move(engine_result).value();
-```
-
-CPU-only scene work uses the same factory with `GraphicsBackend::none`:
+`elf3d_app` / `elf3d::app` is the canonical desktop path. An application
+implements the narrow synchronous `Application` lifecycle and transfers control
+once with `run_application()`. The framework owns the window, OpenGL context,
+events, normalized input, frame order, queued rendering, presentation, shutdown,
+and teardown. `ApplicationContext::engine()` provides borrowed runtime access
+during valid lifecycle phases.
 
 ```cpp
-elf3d::EngineConfiguration configuration;
-configuration.graphics_backend = elf3d::GraphicsBackend::none;
+class MyApplication final : public elf3d::Application {
+  public:
+    elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override;
+    elf3d::Result<void>
+    update(elf3d::ApplicationUpdateContext& context) noexcept override;
+    elf3d::Result<void>
+    build_ui(elf3d::ApplicationUiContext& context) noexcept override;
+    void stop(elf3d::ApplicationContext& context) noexcept override;
+};
 
-auto engine_result = elf3d::Engine::create(configuration);
+MyApplication application;
+elf3d::ApplicationOptions options;
+options.title = "My Elf3D Application";
+auto exit_result = elf3d::run_application(options, application);
 ```
 
-Rendering viewports require a configured graphics backend.
+`elf3d_embed` / `elf3d::embed` is the separately named integration for a host
+that must own its native window, current OpenGL context, event loop, input,
+presentation, and teardown. Such a host creates `EmbeddedRuntime` with a
+procedure loader, uses its borrowed `engine()`, and destroys the runtime and all
+objects created through it before destroying the external graphics context.
+
+```cpp
+#include <elf3d/embed/runtime.h>
+```
+
+Link a standard application to `elf3d::app` and an explicit embedding host to
+`elf3d::embed`; each target brings the Runtime SDK dependency transitively.
+
+CPU-only model work does not require either lifecycle; link `elf3d_model` and
+use the `Document` API directly.
 
 ## Loading a Scene
 
 ```cpp
-auto loaded_result = engine->load_scene("model.glb");
+auto loaded_result = context.engine().load_scene("model.glb");
 if (!loaded_result) {
     report_error(loaded_result.error());
     return;
@@ -94,7 +112,7 @@ if (!saved) {
 
 `Scene::export_loaded_document()` exports the canonical `Document` retained by a scene
 loaded from glTF/GLB. The target extension selects `.glb` or `.gltf`; glTF may
-create buffer and image sidecars. Runtime visibility, viewport tools, and
+create buffer and image sidecars. Runtime visibility, viewport mechanism state, and
 Scene-created compatibility assets are intentionally not export data. A
 procedural Scene therefore cannot be exported through this operation. The
 retained imported Document is immutable through Scene, so the current
@@ -103,7 +121,7 @@ Document-only write diagnostics are not reachable through this facade bridge.
 ## Creating and Rendering a Viewport
 
 ```cpp
-auto viewport_result = engine->create_viewport({1280, 720});
+auto viewport_result = context.engine().create_viewport({1280, 720});
 if (!viewport_result) {
     report_error(viewport_result.error());
     return;
@@ -117,30 +135,16 @@ if (!camera_result) {
 }
 const elf3d::EntityId camera_entity = camera_result.value();
 
-while (host_running()) {
-    elf3d::ViewportInput input = translate_host_input();
-    auto navigation = viewport->update_navigation(*scene, camera_entity, input);
-    if (!navigation) {
-        report_error(navigation.error());
-        break;
-    }
-    auto rendered = viewport->render(*scene, camera_entity);
-    if (!rendered) {
-        report_error(rendered.error());
-        break;
-    }
-
-    auto texture = engine->native_texture_view(viewport->color_texture());
-    if (!texture) {
-        report_error(texture.error());
-        break;
-    }
-    present_texture(texture.value());
+auto queued = ui_context.queue_viewport_render(*viewport, *scene, camera_entity);
+if (!queued) {
+    return queued.error();
 }
 ```
 
-The host owns the native window, OpenGL context, event loop, input translation,
-and texture presentation.
+The standard framework executes queued rendering after application UI
+participation and presents the final frame. Direct `Viewport::render()` is an
+embedding operation, and only `EmbeddedRuntime::native_texture_view()` exposes
+its non-owning presentation texture to an external host.
 
 `RenderStatistics` reports primitive visibility, passes, draw/resource work,
 resident-byte estimates, CPU phases, and delayed nonblocking GPU main/resolve
@@ -160,12 +164,18 @@ and keep the default standard PBR path unchanged.
   `load_document()` imports glTF/GLB and `save_document()` exports the supported
   subset in `elf3d_model`; `ModelWriteReport` carries non-fatal fidelity
   diagnostics.
-- `Engine`: scene and viewport creation, loading, and native texture access.
+- `Application`: canonical standard lifecycle, normalized `InputSnapshot`
+  participation, owner-scoped interaction arbitration, queued rendering, and
+  deterministic teardown.
+- `EmbeddedRuntime`: explicit host-owned context/loop composition and native
+  texture presentation access.
+- `Engine`: runtime scene and viewport creation and loading.
 - `Scene`: hierarchy, transforms, cameras, model-backed loaded data,
-  Scene-created convenience assets, visibility, bounds, statistics, and
-  retained-Document export.
-- `Viewport`: rendering, navigation, picking, selection, visibility,
-  measurement, clipping, overlays, and statistics.
+  Scene-created convenience assets, visibility, bounds, surface-anchor
+  creation/resolution, statistics, and retained-Document export.
+- `Viewport`: rendering, navigation, picking, selection, visibility, explicit
+  clipping, projection, resolved-anchor visibility, generic overlays, and
+  statistics.
 - `Result<T>` and `Error`: expected operation results and error context.
 
 Identical model/runtime POD vocabulary is declared once in
@@ -190,8 +200,9 @@ raw-metadata setter. Image placement uses
 
 ## Ownership and Shutdown
 
-Elf3D objects are returned as `std::unique_ptr`. The engine must outlive every
-scene and viewport created from it.
+Elf3D objects are returned as `std::unique_ptr`. The framework or
+`EmbeddedRuntime` owns the engine, which must outlive every scene and viewport
+created from it.
 
 Shutdown in this order:
 
@@ -208,6 +219,7 @@ management are used from the owning application and graphics thread.
 
 The canonical examples are compiled by the normal full-engine test build:
 
+- [`standard_application.cpp`](../examples/standard_application.cpp)
 - [`embedded_viewer.cpp`](../examples/embedded_viewer.cpp)
 - [`load_and_report.cpp`](../examples/load_and_report.cpp)
 - [`procedural_scene.cpp`](../examples/procedural_scene.cpp)

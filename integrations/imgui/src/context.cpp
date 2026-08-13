@@ -1,6 +1,8 @@
 #include <elf3d/core/assert.h>
 #include <elf3d/imgui/context.h>
 
+#include "context_owner.h"
+
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -23,7 +25,7 @@ namespace {
     fatal_error("Elf3D Dear ImGui integration encountered an unexpected exception");
 }
 
-void apply_elf3d_style(GLFWwindow* window, const ContextOptions& options) noexcept {
+void apply_elf3d_style(GLFWwindow* window, const detail::ContextOptions& options) noexcept {
     float x_scale = 1.0F;
     float y_scale = 1.0F;
     glfwGetWindowContentScale(window, &x_scale, &y_scale);
@@ -107,7 +109,7 @@ void apply_elf3d_style(GLFWwindow* window, const ContextOptions& options) noexce
 
 } // namespace
 
-Context::~Context() noexcept {
+detail::ContextOwner::~ContextOwner() noexcept {
     if (context_ == nullptr) {
         return;
     }
@@ -124,15 +126,16 @@ Context::~Context() noexcept {
     ImGui::DestroyContext(context_);
 }
 
-Result<std::unique_ptr<Context>> Context::create(GLFWwindow* window, std::string_view glsl_version,
-                                                 const ContextOptions& options) noexcept {
+Result<std::unique_ptr<detail::ContextOwner>>
+detail::ContextOwner::create(GLFWwindow* window, std::string_view glsl_version,
+                             const ContextOptions& options) noexcept {
     try {
         if (glsl_version.empty()) {
             return Error{ErrorCode::invalid_argument,
                          "Dear ImGui initialization requires a GLSL version string"};
         }
         const std::string owned_glsl_version{glsl_version};
-        std::unique_ptr<Context> context = std::make_unique<Context>(ConstructionKey{});
+        std::unique_ptr<ContextOwner> context = std::make_unique<ContextOwner>(ConstructionKey{});
         const Result<void> initialized =
             context->initialize(window, owned_glsl_version.c_str(), options);
         if (!initialized) {
@@ -146,8 +149,8 @@ Result<std::unique_ptr<Context>> Context::create(GLFWwindow* window, std::string
     }
 }
 
-Result<void> Context::initialize(GLFWwindow* window, const char* glsl_version,
-                                 const ContextOptions& options) {
+Result<void> detail::ContextOwner::initialize(GLFWwindow* window, const char* glsl_version,
+                                              const ContextOptions& options) {
     if (window == nullptr) {
         return Error{ErrorCode::invalid_argument,
                      "Dear ImGui initialization requires a valid GLFW window"};
@@ -180,17 +183,45 @@ Result<void> Context::initialize(GLFWwindow* window, const char* glsl_version,
     return {};
 }
 
-void Context::begin_frame() noexcept {
+void detail::ContextOwner::begin_frame() noexcept {
     ImGui::SetCurrentContext(context_);
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
 
-void Context::render() noexcept {
+void detail::ContextOwner::discard_frame() noexcept {
+    ImGui::SetCurrentContext(context_);
+    ImGui::EndFrame();
+}
+
+void detail::ContextOwner::render() noexcept {
     ImGui::SetCurrentContext(context_);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+ImFont* load_font(std::string_view path_utf8, float logical_size_pixels, float dpi_scale) noexcept {
+    try {
+        ImGuiIO& io = ImGui::GetIO();
+        const float requested_size =
+            std::max(1.0F, logical_size_pixels) * std::clamp(dpi_scale, 1.0F, 3.0F);
+        if (!path_utf8.empty()) {
+            const std::string owned_path{path_utf8};
+            ImFont* font = io.Fonts->AddFontFromFileTTF(owned_path.c_str(), requested_size, nullptr,
+                                                        io.Fonts->GetGlyphRangesCyrillic());
+            if (font != nullptr) {
+                return font;
+            }
+        }
+        ImFontConfig config;
+        config.SizePixels = requested_size;
+        return io.Fonts->AddFontDefault(&config);
+    } catch (const std::bad_alloc&) {
+        fatal_imgui_allocation_failure();
+    } catch (...) {
+        fatal_unexpected_imgui_boundary_exception();
+    }
 }
 
 } // namespace elf3d::imgui

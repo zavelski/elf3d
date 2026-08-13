@@ -5,9 +5,9 @@
 #include <elf3d/core/api.h>
 #include <elf3d/core/result.h>
 #include <elf3d/graphics.h>
-#include <elf3d/measurement.h>
 #include <elf3d/navigation.h>
 #include <elf3d/picking.h>
+#include <elf3d/projection.h>
 #include <elf3d/rendering.h>
 #include <elf3d/scene.h>
 #include <elf3d/selection.h>
@@ -62,7 +62,7 @@ class ELF3D_API Viewport final {
     // viewport-local interaction state. The camera entity must belong to the
     // supplied Scene and contain a perspective-camera component.
     [[nodiscard]] Result<void> update_navigation(Scene& scene, EntityId camera_entity,
-                                                 const ViewportInput& input) noexcept;
+                                                 const NavigationInput& input) noexcept;
     [[nodiscard]] Result<void> set_examine_pivot(Scene& scene, EntityId camera_entity,
                                                  Float3 world_position) noexcept;
     [[nodiscard]] Result<void> fit_to_scene(Scene& scene, EntityId camera_entity) noexcept;
@@ -77,9 +77,6 @@ class ELF3D_API Viewport final {
     [[nodiscard]] OrbitNavigationSettings navigation_settings() const noexcept;
     [[nodiscard]] std::optional<NavigationSnapshot> navigation_snapshot() const noexcept;
 
-    // Interaction arbitration
-    void set_active_tool(ViewportTool tool) noexcept;
-    [[nodiscard]] ViewportTool active_tool() const noexcept;
     void cancel_interaction() noexcept;
 
     // Picking performs stateless queries and does not change selection.
@@ -100,25 +97,13 @@ class ELF3D_API Viewport final {
     [[nodiscard]] std::optional<EntityId> selected_entity() const noexcept;
     [[nodiscard]] std::optional<PickHit> selection_hit() const noexcept;
     [[nodiscard]] SelectionSnapshot selection_snapshot() const noexcept;
-    void set_selection_enabled(bool enabled) noexcept;
-    [[nodiscard]] bool selection_enabled() const noexcept;
-    [[nodiscard]] Result<void> set_selection_settings(const SelectionSettings& settings) noexcept;
-    [[nodiscard]] SelectionSettings selection_settings() const noexcept;
 
-    // Measurement state is local to this Viewport. Projection is a stateless
-    // query and does not change measurement state.
-    [[nodiscard]] Result<void> begin_distance_measurement() noexcept;
-    void cancel_distance_measurement() noexcept;
-    void clear_distance_measurement() noexcept;
-    [[nodiscard]] DistanceMeasurementSnapshot
-    distance_measurement_snapshot(const Scene& scene) const noexcept;
-    [[nodiscard]] Result<void>
-    set_measurement_settings(const DistanceMeasurementSettings& settings) noexcept;
-    [[nodiscard]] DistanceMeasurementSettings measurement_settings() const noexcept;
-    [[nodiscard]] MeasurementStatistics measurement_statistics() const noexcept;
+    // Projection and surface visibility are stateless mechanism queries.
     [[nodiscard]] Result<ProjectedViewportPoint>
     project_world_to_viewport(const Scene& scene, EntityId camera_entity,
                               Float3 world_position) const noexcept;
+    [[nodiscard]] Result<bool>
+    surface_anchor_visible(const Scene& scene, const ResolvedSurfaceAnchor& anchor) const noexcept;
 
     // Isolation is local to this Viewport. The explicitly named hide/show
     // operations mutate persistent local visibility in the supplied Scene.
@@ -127,10 +112,9 @@ class ELF3D_API Viewport final {
     void clear_isolation() noexcept;
     [[nodiscard]] bool is_isolating() const noexcept;
     [[nodiscard]] std::optional<EntityId> isolated_entity() const noexcept;
-    [[nodiscard]] Result<void> hide_selected_in_scene(Scene& scene) noexcept;
-    [[nodiscard]] Result<void> show_selected_in_scene(Scene& scene) noexcept;
-    [[nodiscard]] Result<void> isolate_selected(const Scene& scene) noexcept;
     [[nodiscard]] Result<std::optional<Bounds3>> visible_bounds(const Scene& scene) const noexcept;
+    [[nodiscard]] Result<std::optional<Bounds3>>
+    unclipped_visible_bounds(const Scene& scene) const noexcept;
 
     // Clipping state is local to this Viewport.
     [[nodiscard]] Result<void> set_section_plane(const SectionPlane& plane) noexcept;
@@ -141,17 +125,12 @@ class ELF3D_API Viewport final {
     [[nodiscard]] Result<void> remove_clipping_box(std::uint32_t index) noexcept;
     void clear_clipping_boxes() noexcept;
     void clear_clipping() noexcept;
-    [[nodiscard]] Result<void> set_clipping_helpers_visible(bool visible) noexcept;
-    [[nodiscard]] Result<void>
-    set_clipping_helper_settings(const ClippingHelperSettings& settings) noexcept;
-    [[nodiscard]] Result<void> reset_clipping_box_to_visible_bounds(const Scene& scene,
-                                                                    std::uint32_t index) noexcept;
-    [[nodiscard]] Result<std::uint32_t>
-    add_clipping_box_from_visible_bounds(const Scene& scene) noexcept;
     [[nodiscard]] ClippingSnapshot clipping_snapshot() const noexcept;
 
     // Rendering observes but does not own the Scene or camera entity.
     [[nodiscard]] Result<void> render(const Scene& scene, EntityId camera_entity) noexcept;
+    [[nodiscard]] Result<void> render(const Scene& scene, EntityId camera_entity,
+                                      const ViewportRenderOptions& options) noexcept;
     [[nodiscard]] RenderStatistics render_statistics() const noexcept;
     // The returned non-owning handle is invalidated by resize or destruction.
     [[nodiscard]] TextureHandle color_texture() const noexcept;

@@ -4,11 +4,15 @@
 #include <elf3d/assets.h>
 #include <elf3d/graphics.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
 
 namespace elf3d {
+
+inline constexpr std::size_t maximum_viewport_overlay_lines = 1024;
+inline constexpr std::size_t maximum_viewport_overlay_markers = 1024;
 
 struct BasicLighting {
     // Direction in which light travels in world space.

@@ -11,5 +11,5 @@
 | Rendering behavior | `RENDERING.md` |
 | Get support | `../SUPPORT.md` |
 
-The documentation describes behavior available in the current public source
-and release.
+The documentation describes the current public source tree. Archived release
+notes describe the behavior shipped by each published release.

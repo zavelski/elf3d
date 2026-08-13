@@ -4,7 +4,9 @@ add_library(
         include/elf3d/imgui/context.h
         include/elf3d/imgui/texture.h
         src/context.cpp
+        src/context_owner.h
         src/texture.cpp
+        src/viewport_texture.h
 )
 add_library(elf3d::imgui ALIAS elf3d_imgui)
 
@@ -13,6 +15,9 @@ target_include_directories(
     elf3d_imgui
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/facade/elf3d/src
 )
 target_link_libraries(
     elf3d_imgui

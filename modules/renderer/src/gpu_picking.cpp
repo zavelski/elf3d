@@ -189,8 +189,10 @@ Renderer::draw_picking_items(const scene::Storage& scene_storage, graphics::Pick
     if (!clear_result) {
         return clear_result.error();
     }
-    std::vector<graphics::PickingDrawBatchItem> batch;
-    batch.reserve(list.items.size());
+    std::vector<graphics::StaticMesh*> meshes;
+    std::vector<graphics::PickingDrawDescription> descriptions;
+    meshes.reserve(list.items.size());
+    descriptions.reserve(list.items.size());
     for (std::size_t item_index = 0; item_index < list.items.size(); ++item_index) {
         const RenderItem& item = list.items[item_index];
         const Result<scene::RuntimePrimitiveView> primitive =
@@ -199,18 +201,20 @@ Renderer::draw_picking_items(const scene::Storage& scene_storage, graphics::Pick
             return primitive.error();
         }
         RenderStatistics ignored_statistics;
-        Result<graphics::StaticMesh*> gpu_mesh =
+        Result<std::size_t> mesh_index =
             cached_mesh(scene_storage.id(), primitive.value(), ignored_statistics);
-        if (!gpu_mesh) {
-            return gpu_mesh.error();
+        if (!mesh_index) {
+            return mesh_index.error();
         }
         const graphics::PickingDrawDescription draw =
             picking_draw_description(list, item, primitive.value(),
                                      static_cast<std::uint32_t>(item_index + 1U), clipping_filter);
-        batch.push_back(graphics::PickingDrawBatchItem{gpu_mesh.value(), draw});
+        meshes.push_back(&mesh(scene_storage.id(), primitive.value().document_primitive.is_valid(),
+                               mesh_index.value()));
+        descriptions.push_back(draw);
     }
-    const Result<void> drawn = device_->draw_picking_batch(target, batch);
-    return drawn ? Result<std::uint64_t>{static_cast<std::uint64_t>(batch.size())}
+    const Result<void> drawn = device_->draw_picking_batch(target, meshes, descriptions);
+    return drawn ? Result<std::uint64_t>{static_cast<std::uint64_t>(meshes.size())}
                  : Result<std::uint64_t>{drawn.error()};
 }
 

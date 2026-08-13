@@ -378,6 +378,21 @@ std::uint64_t Scene::visibility_revision() const noexcept {
     return impl_ != nullptr ? impl_->storage.visibility_revision() : 0;
 }
 
+Result<SurfaceAnchor> Scene::create_surface_anchor(const PickHit& hit) const noexcept {
+    return impl_ != nullptr
+               ? impl_->storage.create_surface_anchor(hit)
+               : Result<SurfaceAnchor>{Error{ErrorCode::invalid_surface_anchor_hit,
+                                             "Surface anchor creation requires a live scene"}};
+}
+
+Result<ResolvedSurfaceAnchor>
+Scene::resolve_surface_anchor(const SurfaceAnchor& anchor) const noexcept {
+    return impl_ != nullptr ? impl_->storage.resolve_surface_anchor(anchor)
+                            : Result<ResolvedSurfaceAnchor>{
+                                  Error{ErrorCode::invalid_surface_anchor,
+                                        "Surface anchor resolution requires a live scene"}};
+}
+
 std::optional<Bounds3> Scene::world_bounds() const noexcept {
     ELF3D_ASSERT(impl_ != nullptr);
     return impl_->storage.world_bounds();

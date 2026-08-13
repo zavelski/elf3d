@@ -1,4 +1,8 @@
-#include "viewer_internal.hpp"
+#include "viewer_components.hpp"
+
+#include "viewer_browser.hpp"
+#include "viewer_ui.hpp"
+#include "viewer_viewport.hpp"
 
 #include <imgui.h>
 
@@ -9,10 +13,10 @@
 
 namespace elf3d::viewer {
 
-void build_error_modal(ViewerState& state) {
-    if (state.request_error_modal) {
+void build_error_modal(ViewerFrameContext& state) {
+    if (state.notifications.request_error_modal) {
         ImGui::OpenPopup("Model Load Error");
-        state.request_error_modal = false;
+        state.notifications.request_error_modal = false;
     }
     push_professional_dialog_style();
     ImGui::SetNextWindowSize(ImVec2{600.0F, 0.0F}, ImGuiCond_Appearing);
@@ -21,23 +25,22 @@ void build_error_modal(ViewerState& state) {
                                    ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::TextColored(ImVec4{1.00F, 0.470F, 0.390F, 1.00F}, "MODEL COULD NOT BE OPENED");
         ImGui::Separator();
-        if (state.load_failure.has_value()) {
+        if (state.notifications.load_failure.has_value()) {
             ImGui::TextDisabled("SOURCE");
-            ImGui::TextWrapped("%s", state.load_failure->source_path.c_str());
+            ImGui::TextWrapped("%s", state.notifications.load_failure->source_path.c_str());
             ImGui::Spacing();
             ImGui::TextDisabled("CATEGORY");
-            ImGui::TextUnformatted(error_category(state.load_failure->error.code()));
+            ImGui::TextUnformatted(error_category(state.notifications.load_failure->error.code()));
             ImGui::Separator();
-            ImGui::TextWrapped("%s", state.load_failure->error.message());
+            ImGui::TextWrapped("%s", state.notifications.load_failure->error.message());
         }
         ImGui::Spacing();
         const float close_width = 118.0F;
         ImGui::SetCursorPosX(
             std::max(ImGui::GetCursorPosX(),
                      ImGui::GetWindowWidth() - close_width - ImGui::GetStyle().WindowPadding.x));
-        if (ImGui::Button("Close", ImVec2{close_width, 0.0F}) ||
-            ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-            state.load_failure.reset();
+        if (ImGui::Button("Close", ImVec2{close_width, 0.0F}) || state.interaction.escape_pressed) {
+            state.notifications.load_failure.reset();
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -45,10 +48,10 @@ void build_error_modal(ViewerState& state) {
     pop_professional_dialog_style();
 }
 
-void build_save_error_modal(ViewerState& state) {
-    if (state.request_save_error_modal) {
+void build_save_error_modal(ViewerFrameContext& state) {
+    if (state.notifications.request_save_error_modal) {
         ImGui::OpenPopup("Model Save Error");
-        state.request_save_error_modal = false;
+        state.notifications.request_save_error_modal = false;
     }
     push_professional_dialog_style();
     ImGui::SetNextWindowSize(ImVec2{600.0F, 0.0F}, ImGuiCond_Appearing);
@@ -57,14 +60,14 @@ void build_save_error_modal(ViewerState& state) {
                                    ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::TextColored(ImVec4{1.00F, 0.470F, 0.390F, 1.00F}, "MODEL COULD NOT BE SAVED");
         ImGui::Separator();
-        if (state.save_failure.has_value()) {
+        if (state.notifications.save_failure.has_value()) {
             ImGui::TextDisabled("TARGET");
-            ImGui::TextWrapped("%s", state.save_failure->source_path.c_str());
+            ImGui::TextWrapped("%s", state.notifications.save_failure->source_path.c_str());
             ImGui::Separator();
-            ImGui::TextWrapped("%s", state.save_failure->error.message());
+            ImGui::TextWrapped("%s", state.notifications.save_failure->error.message());
         }
-        if (ImGui::Button("Close", ImVec2{118.0F, 0.0F}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-            state.save_failure.reset();
+        if (ImGui::Button("Close", ImVec2{118.0F, 0.0F}) || state.interaction.escape_pressed) {
+            state.notifications.save_failure.reset();
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -76,9 +79,16 @@ const char* graphics_backend_name(elf3d::GraphicsBackend backend) noexcept {
     return backend == elf3d::GraphicsBackend::opengl ? "OpenGL 4.1 core" : "Unknown";
 }
 
-void build_status_bar(const ViewerState& state, const elf3d::Engine& engine,
-                      const ViewerScene& scene, const elf3d::Viewport& engine_viewport) {
-    if (!state.show_status_bar) {
+[[nodiscard]] float viewer_frame_rate(const ViewerFrameContext& state) noexcept {
+    return state.interaction.frame_delta_seconds > 0.0
+               ? static_cast<float>(1.0 / state.interaction.frame_delta_seconds)
+               : 0.0F;
+}
+
+void build_status_bar(const ViewerFrameContext& state, const elf3d::Engine& engine,
+                      const SceneSession& scene, const elf3d::Viewport& engine_viewport,
+                      const ToolCoordinator& tools) {
+    if (!state.shell.show_status_bar) {
         return;
     }
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -94,7 +104,7 @@ void build_status_bar(const ViewerState& state, const elf3d::Engine& engine,
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.86F, 0.86F, 0.86F, 1.00F});
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.00F, 0.00F, 0.00F, 1.00F});
     if (ImGui::Begin("##Elf3DStatusBar", nullptr, flags)) {
-        const float fps = ImGui::GetIO().Framerate;
+        const float fps = viewer_frame_rate(state);
         const float frame_time_ms = fps > 0.0F ? 1000.0F / fps : 0.0F;
         const elf3d::SelectionSnapshot selection = engine_viewport.selection_snapshot();
         const std::string selection_status = selected_entity_label(scene, selection);
@@ -103,34 +113,35 @@ void build_status_bar(const ViewerState& state, const elf3d::Engine& engine,
         if (isolated.has_value()) {
             isolation_status = entity_label(scene, *isolated);
         }
-        const elf3d::DistanceMeasurementSnapshot measurement =
-            engine_viewport.distance_measurement_snapshot(*scene.scene);
+        const DistanceMeasurementSnapshot measurement = tools.measurement().snapshot(
+            *scene.scene, engine_viewport, tools.active_tool() == ViewerTool::distance_measurement);
         const elf3d::Result<std::optional<elf3d::Bounds3>> visible_bounds =
             engine_viewport.visible_bounds(*scene.scene);
         const std::string clipping =
             clipping_status(engine_viewport.clipping_snapshot(),
                             visible_bounds && visible_bounds.value().has_value());
-        std::string tool_status = std::string{"Tool: "} + tool_name(engine_viewport.active_tool());
-        if (engine_viewport.active_tool() == elf3d::ViewportTool::distance_measurement) {
+        std::string tool_status = std::string{"Tool: "} + tool_name(tools.active_tool());
+        if (tools.active_tool() == ViewerTool::distance_measurement) {
             tool_status += " | ";
             tool_status += measurement_state_name(measurement.state);
             if (measurement.preview_point.has_value()) {
                 tool_status += " | ";
                 tool_status += format_distance(measurement.preview_distance_meters,
-                                               engine_viewport.measurement_settings().display_unit);
+                                               tools.measurement().settings().display_unit);
             }
-        } else if (measurement.state == elf3d::DistanceMeasurementState::complete) {
+        } else if (measurement.state == DistanceMeasurementState::complete) {
             tool_status += " | Measurement: ";
             tool_status += format_distance(measurement.distance_meters,
-                                           engine_viewport.measurement_settings().display_unit);
+                                           tools.measurement().settings().display_unit);
         }
         ImGui::Text("Elf3D  |  %s  |  Viewport %u x %u  |  FBO %s  |  Draws %llu  |  "
                     "Triangles %llu  |  Selected: %s  |  Isolation: %s  |  %s  |  %s  |  %.2f ms  "
                     "|  %.1f FPS",
-                    graphics_backend_name(engine.graphics_backend()), state.view_dimensions.width,
-                    state.view_dimensions.height, state.framebuffer_valid ? "valid" : "inactive",
-                    static_cast<unsigned long long>(state.statistics.draw_calls),
-                    static_cast<unsigned long long>(state.statistics.triangles),
+                    graphics_backend_name(engine.graphics_backend()),
+                    state.rendering.view_dimensions.width, state.rendering.view_dimensions.height,
+                    state.rendering.framebuffer_valid ? "valid" : "inactive",
+                    static_cast<unsigned long long>(state.rendering.statistics.draw_calls),
+                    static_cast<unsigned long long>(state.rendering.statistics.triangles),
                     selection_status.c_str(), isolation_status.c_str(), clipping.c_str(),
                     tool_status.c_str(), frame_time_ms, fps);
     }
@@ -147,10 +158,10 @@ void build_about_property_row(const char* label, const char* value) {
     ImGui::TextUnformatted(value);
 }
 
-void build_about_window(ViewerState& state) {
-    if (state.show_about) {
+void build_about_window(ViewerFrameContext& state) {
+    if (state.shell.show_about) {
         ImGui::OpenPopup("About Elf3D");
-        state.show_about = false;
+        state.shell.show_about = false;
     }
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const ImVec2 center{viewport->WorkPos.x + viewport->WorkSize.x * 0.5F,
@@ -216,8 +227,7 @@ void build_about_window(ViewerState& state) {
         ImGui::SetCursorPosX(
             std::max(ImGui::GetCursorPosX(),
                      ImGui::GetWindowWidth() - close_width - ImGui::GetStyle().WindowPadding.x));
-        if (ImGui::Button("Close", ImVec2{close_width, 0.0F}) ||
-            ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        if (ImGui::Button("Close", ImVec2{close_width, 0.0F}) || state.interaction.escape_pressed) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

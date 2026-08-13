@@ -24,14 +24,14 @@ struct NavigationUpdate {
 struct NavigationUpdateRequest {
     EntityId camera;
     Extent2D extent;
-    ViewportInput input;
+    NavigationInput input;
     float click_drag_threshold_pixels = 0.0F;
 };
 
 class OrbitNavigationController final {
   public:
     [[nodiscard]] Result<NavigationUpdate> update(scene::Storage& scene, EntityId camera,
-                                                  Extent2D extent, const ViewportInput& input,
+                                                  Extent2D extent, const NavigationInput& input,
                                                   float click_drag_threshold_pixels);
     [[nodiscard]] Result<NavigationUpdate> update(scene::Storage& scene,
                                                   const NavigationUpdateRequest& request,

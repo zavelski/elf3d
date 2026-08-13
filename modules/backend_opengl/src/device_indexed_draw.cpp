@@ -288,19 +288,19 @@ void submit_indexed_draw(const IndexedDrawResources& resources,
 
 [[nodiscard]] Result<IndexedDrawResources>
 batch_item_resources(const RenderTargetView& target, const PipelineView& pipeline,
-                     const graphics::IndexedDrawBatchItem& item) noexcept {
-    if (item.mesh == nullptr ||
-        item.description.textures.size() != graphics::material_texture_count) {
+                     graphics::StaticMesh* mesh,
+                     const graphics::DrawIndexedDescription& description) noexcept {
+    if (mesh == nullptr || description.textures.size() != graphics::material_texture_count) {
         return Error{ErrorCode::invalid_argument,
                      "Indexed draw batches require a mesh and four ordered textures per item"};
     }
-    Result<MeshView> mesh_result = mesh_view(*item.mesh);
+    Result<MeshView> mesh_result = mesh_view(*mesh);
     if (!mesh_result) {
         return mesh_result.error();
     }
     IndexedDrawResources resources{target, pipeline, mesh_result.value()};
     for (std::size_t index = 0; index < resources.textures.size(); ++index) {
-        Result<GLuint> texture_result = texture_object(item.description.textures[index]);
+        Result<GLuint> texture_result = texture_object(description.textures[index]);
         if (!texture_result) {
             return texture_result.error();
         }
@@ -340,9 +340,10 @@ Result<void> draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipe
     return {};
 }
 
-Result<void> draw_indexed_batch(graphics::RenderTarget& target,
-                                graphics::GraphicsPipeline& pipeline,
-                                std::span<const graphics::IndexedDrawBatchItem> items) noexcept {
+Result<void>
+draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
+                   std::span<graphics::StaticMesh* const> meshes,
+                   std::span<const graphics::DrawIndexedDescription> descriptions) noexcept {
     Result<RenderTargetView> target_result = render_target_view(target);
     if (!target_result) {
         return target_result.error();
@@ -351,25 +352,29 @@ Result<void> draw_indexed_batch(graphics::RenderTarget& target,
     if (!pipeline_result) {
         return pipeline_result.error();
     }
-    if (!target_result.value().valid || items.empty()) {
+    if (meshes.size() != descriptions.size()) {
+        return Error{ErrorCode::invalid_argument,
+                     "Indexed draw batch meshes and descriptions must have equal counts"};
+    }
+    if (!target_result.value().valid || meshes.empty()) {
         return {};
     }
 
     RenderStateGuard state_guard;
     const IndexedDrawResources batch_resources{target_result.value(), pipeline_result.value(), {}};
     configure_indexed_pass_state(batch_resources);
-    upload_indexed_frame_uniforms(pipeline_result.value().uniforms, items.front().description);
-    upload_indexed_clipping_uniforms(pipeline_result.value().uniforms, items.front().description);
+    upload_indexed_frame_uniforms(pipeline_result.value().uniforms, descriptions.front());
+    upload_indexed_clipping_uniforms(pipeline_result.value().uniforms, descriptions.front());
     bind_material_sampler_uniforms(pipeline_result.value().uniforms);
     IndexedBatchStateCache cache;
-    for (const graphics::IndexedDrawBatchItem& item : items) {
-        Result<IndexedDrawResources> resources =
-            batch_item_resources(target_result.value(), pipeline_result.value(), item);
+    for (std::size_t index = 0; index < meshes.size(); ++index) {
+        Result<IndexedDrawResources> resources = batch_item_resources(
+            target_result.value(), pipeline_result.value(), meshes[index], descriptions[index]);
         if (!resources) {
             return resources.error();
         }
         if (resources.value().mesh.index_count != 0) {
-            submit_indexed_draw(resources.value(), item.description, cache);
+            submit_indexed_draw(resources.value(), descriptions[index], cache);
         }
     }
     if (glGetError() != GL_NO_ERROR) {

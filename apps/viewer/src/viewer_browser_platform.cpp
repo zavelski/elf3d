@@ -1,4 +1,4 @@
-#include "viewer_internal.hpp"
+#include "viewer_browser.hpp"
 
 #include <array>
 #include <string>

@@ -1,4 +1,7 @@
-#include "viewer_internal.hpp"
+#include "viewer_chrome.hpp"
+
+#include "viewer_ui.hpp"
+#include "viewer_viewport.hpp"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -10,92 +13,119 @@
 
 namespace elf3d::viewer {
 
-void build_file_menu(GLFWwindow* window, ViewerState& state, const ViewerScene& scene,
-                     ViewerCommands& commands) {
+void build_file_menu(const ViewerCapabilitySnapshot& capabilities,
+                     ViewerCommandDispatcher& commands) {
     if (!ImGui::BeginMenu("File")) {
         return;
     }
     if (ImGui::MenuItem("Open...")) {
-        state.request_open_modal = true;
+        commands.emit(ShowOpenDialogCommand{});
     }
-    ImGui::BeginDisabled(!scene.is_imported());
+    ImGui::BeginDisabled(!capabilities.scene_imported);
     if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) {
-        state.request_save_modal = true;
+        commands.emit(ShowSaveDialogCommand{});
     }
     ImGui::Separator();
-    commands.reload = ImGui::MenuItem("Reload");
-    commands.close_scene = ImGui::MenuItem("Close Scene");
+    if (ImGui::MenuItem("Reload")) {
+        commands.emit(ReloadSceneCommand{});
+    }
+    if (ImGui::MenuItem("Close Scene")) {
+        commands.emit(CloseSceneCommand{});
+    }
     ImGui::EndDisabled();
     ImGui::Separator();
     if (ImGui::MenuItem("Exit")) {
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
+        commands.emit(ExitViewerCommand{});
     }
     ImGui::EndMenu();
 }
 
-void build_view_menu(ViewerState& state) {
+void build_view_menu(ViewerFrameContext& state, ViewerCommandDispatcher& commands) {
     if (!ImGui::BeginMenu("View")) {
         return;
     }
-    ImGui::MenuItem("3D View", nullptr, &state.show_3d_view);
-    ImGui::MenuItem("Scene Hierarchy", nullptr, &state.show_scene_hierarchy);
-    ImGui::MenuItem("Model Information", nullptr, &state.show_model_information);
-    ImGui::MenuItem("Rendering", nullptr, &state.show_rendering_panel);
-    ImGui::MenuItem("Selection", nullptr, &state.show_selection_panel);
-    ImGui::MenuItem("Measurement", nullptr, &state.show_measurement_panel);
-    ImGui::MenuItem("Clipping", nullptr, &state.show_clipping_panel);
-    ImGui::MenuItem("Dear ImGui Demo", nullptr, &state.show_imgui_demo);
-    ImGui::MenuItem("Status Bar", nullptr, &state.show_status_bar);
+    ImGui::MenuItem("3D View", nullptr, &state.shell.show_3d_view);
+    ImGui::MenuItem("Scene Hierarchy", nullptr, &state.shell.show_scene_hierarchy);
+    ImGui::MenuItem("Model Information", nullptr, &state.shell.show_model_information);
+    ImGui::MenuItem("Rendering", nullptr, &state.shell.show_rendering_panel);
+    ImGui::MenuItem("Selection", nullptr, &state.shell.show_selection_panel);
+    ImGui::MenuItem("Measurement", nullptr, &state.shell.show_measurement_panel);
+    ImGui::MenuItem("Clipping", nullptr, &state.shell.show_clipping_panel);
+    ImGui::MenuItem("Dear ImGui Demo", nullptr, &state.shell.show_imgui_demo);
+    ImGui::MenuItem("Status Bar", nullptr, &state.shell.show_status_bar);
     if (ImGui::MenuItem("Reset Layout")) {
-        state.reset_dock_layout = true;
+        commands.emit(ResetViewerLayoutCommand{});
     }
     ImGui::EndMenu();
 }
 
-void build_tools_menu(elf3d::Viewport& viewport, ViewerCommands& commands) {
+void build_tools_menu(const ToolCoordinator& tools, ViewerCommandDispatcher& commands) {
     if (!ImGui::BeginMenu("Tools")) {
         return;
     }
-    const elf3d::ViewportTool active_tool = viewport.active_tool();
-    commands.select_tool =
-        ImGui::MenuItem("Select", "S", active_tool == elf3d::ViewportTool::selection);
-    commands.measure_tool = ImGui::MenuItem(
-        "Measure Distance", "M", active_tool == elf3d::ViewportTool::distance_measurement);
-    commands.show_clipping_panel = ImGui::MenuItem("Clipping");
+    const ViewerTool active_tool = tools.active_tool();
+    if (ImGui::MenuItem("Select", "S", active_tool == ViewerTool::selection)) {
+        commands.emit(ActivateViewerToolCommand{ViewerTool::selection});
+    }
+    if (ImGui::MenuItem("Measure Distance", "M", active_tool == ViewerTool::distance_measurement)) {
+        commands.emit(ActivateViewerToolCommand{ViewerTool::distance_measurement});
+    }
+    if (ImGui::MenuItem("Clipping")) {
+        commands.emit(ShowViewerPanelCommand{ViewerPanel::clipping});
+    }
     ImGui::EndMenu();
 }
 
-void build_clipping_menu(elf3d::Viewport& viewport, ViewerCommands& commands) {
+void build_clipping_menu(elf3d::Viewport& viewport, const ClippingTool& clipping_tool,
+                         const ViewerCapabilitySnapshot& capabilities,
+                         ViewerCommandDispatcher& commands) {
     if (!ImGui::BeginMenu("Clipping")) {
         return;
     }
     const elf3d::ClippingSnapshot clipping = viewport.clipping_snapshot();
-    commands.enable_section_plane =
-        ImGui::MenuItem("Enable Section Plane", nullptr, clipping.section_plane.enabled);
-    ImGui::BeginDisabled(!clipping.section_plane.enabled);
-    commands.flip_section_side = ImGui::MenuItem("Flip Section Side");
+    if (ImGui::MenuItem("Enable Section Plane", nullptr, clipping.section_plane.enabled)) {
+        commands.emit(ToggleSectionPlaneCommand{});
+    }
+    ImGui::BeginDisabled(!capabilities.section_plane_enabled);
+    if (ImGui::MenuItem("Flip Section Side")) {
+        commands.emit(FlipSectionPlaneCommand{});
+    }
     ImGui::EndDisabled();
-    ImGui::BeginDisabled(clipping.box_count >= elf3d::maximum_clipping_boxes);
-    commands.add_clipping_box_from_bounds = ImGui::MenuItem("Add Box from Visible Bounds");
+    ImGui::BeginDisabled(!capabilities.can_add_clipping_box ||
+                         !capabilities.unclipped_visible_content);
+    if (ImGui::MenuItem("Add Box from Visible Bounds")) {
+        commands.emit(AddClippingBoxFromBoundsCommand{});
+    }
     ImGui::EndDisabled();
-    commands.clear_clipping = ImGui::MenuItem("Clear Clipping");
-    commands.toggle_clipping_helpers =
-        ImGui::MenuItem("Show Helpers", nullptr, clipping.helpers.visible);
-    commands.fit_to_clipped_content = ImGui::MenuItem("Fit to Clipped Content");
+    ImGui::BeginDisabled(!capabilities.has_clipping);
+    if (ImGui::MenuItem("Clear Clipping")) {
+        commands.emit(ClearClippingCommand{});
+    }
+    ImGui::EndDisabled();
+    if (ImGui::MenuItem("Show Helpers", nullptr, clipping_tool.helpers_visible())) {
+        commands.emit(ToggleClippingHelpersCommand{});
+    }
+    ImGui::BeginDisabled(!capabilities.visible_content);
+    if (ImGui::MenuItem("Fit to Clipped Content")) {
+        commands.emit(FitClippedContentCommand{});
+    }
+    ImGui::EndDisabled();
     ImGui::EndMenu();
 }
 
-void build_camera_menu(ViewerState& state, const ViewerScene& scene, elf3d::Viewport& viewport,
-                       ViewerCommands& commands) {
+void build_camera_menu(ViewerFrameContext& state, elf3d::Viewport& viewport,
+                       const ViewerCapabilitySnapshot& capabilities,
+                       ViewerCommandDispatcher& commands) {
     if (!ImGui::BeginMenu("Camera")) {
         return;
     }
-    const elf3d::Result<std::optional<elf3d::Bounds3>> visible_bounds =
-        viewport.visible_bounds(*scene.scene);
-    ImGui::BeginDisabled(!visible_bounds || !visible_bounds.value().has_value() ||
-                         !has_nonzero_extent(state.view_dimensions) || !state.show_3d_view);
-    commands.fit_to_scene = ImGui::MenuItem("Fit to Scene", "F");
-    commands.reset_view = ImGui::MenuItem("Reset View", "Home");
+    ImGui::BeginDisabled(!capabilities.view_available || !capabilities.visible_content);
+    if (ImGui::MenuItem("Fit to Scene", "F")) {
+        commands.emit(FitViewCommand{});
+    }
+    if (ImGui::MenuItem("Reset View", "Home")) {
+        commands.emit(ResetViewCommand{});
+    }
     ImGui::EndDisabled();
     ImGui::Separator();
     const bool navigation_enabled = viewport.navigation_enabled();
@@ -103,85 +133,115 @@ void build_camera_menu(ViewerState& state, const ViewerScene& scene, elf3d::View
         viewport.set_navigation_enabled(!navigation_enabled);
     }
     if (ImGui::MenuItem("Navigation Settings...")) {
-        state.show_navigation_settings = true;
+        state.shell.show_navigation_settings = true;
     }
     ImGui::EndMenu();
 }
 
-void build_selection_menu(ViewerState& state, elf3d::Viewport& viewport, ViewerCommands& commands) {
+void build_selected_entity_menu(const ViewerCapabilitySnapshot& capabilities,
+                                ViewerCommandDispatcher& commands) {
+    ImGui::BeginDisabled(!capabilities.selected_entity.has_value());
+    if (ImGui::MenuItem("Clear Selection")) {
+        commands.emit(ClearSelectionCommand{});
+    }
+    if (ImGui::MenuItem("Hide Selected") && capabilities.selected_entity.has_value()) {
+        commands.emit(SetEntityVisibilityCommand{*capabilities.selected_entity, false});
+    }
+    if (ImGui::MenuItem("Show Selected") && capabilities.selected_entity.has_value()) {
+        commands.emit(SetEntityVisibilityCommand{*capabilities.selected_entity, true});
+    }
+    if (ImGui::MenuItem("Isolate Selected") && capabilities.selected_entity.has_value()) {
+        commands.emit(IsolateEntityCommand{*capabilities.selected_entity});
+    }
+    ImGui::EndDisabled();
+}
+
+void build_scene_visibility_menu(const ViewerCapabilitySnapshot& capabilities,
+                                 ViewerCommandDispatcher& commands) {
+    ImGui::Separator();
+    if (ImGui::MenuItem("Show All")) {
+        commands.emit(ShowAllEntitiesCommand{});
+    }
+    ImGui::BeginDisabled(!capabilities.isolating);
+    if (ImGui::MenuItem("Exit Isolation")) {
+        commands.emit(ExitIsolationCommand{});
+    }
+    ImGui::EndDisabled();
+}
+
+void build_selection_options_menu(ViewerFrameContext& state, elf3d::Viewport& viewport,
+                                  ToolCoordinator& tools) {
+    ImGui::Separator();
+    const bool selection_enabled = tools.selection().enabled();
+    if (ImGui::MenuItem("Enable Selection", nullptr, selection_enabled)) {
+        tools.selection().set_enabled(!selection_enabled);
+        if (selection_enabled) {
+            viewport.clear_selection();
+        }
+    }
+    if (ImGui::MenuItem("Selection Settings...")) {
+        state.shell.show_selection_panel = true;
+    }
+}
+
+void build_selection_menu(ViewerFrameContext& state, elf3d::Viewport& viewport,
+                          ToolCoordinator& tools, const ViewerCapabilitySnapshot& capabilities,
+                          ViewerCommandDispatcher& commands) {
     if (!ImGui::BeginMenu("Selection")) {
         return;
     }
-    ImGui::BeginDisabled(!viewport.has_selection());
-    commands.clear_selection = ImGui::MenuItem("Clear Selection");
-    commands.hide_selected = ImGui::MenuItem("Hide Selected");
-    commands.show_selected = ImGui::MenuItem("Show Selected");
-    commands.isolate_selected = ImGui::MenuItem("Isolate Selected");
-    ImGui::EndDisabled();
-    ImGui::Separator();
-    commands.show_all = ImGui::MenuItem("Show All");
-    ImGui::BeginDisabled(!viewport.is_isolating());
-    commands.exit_isolation = ImGui::MenuItem("Exit Isolation");
-    ImGui::EndDisabled();
-    ImGui::Separator();
-    const bool selection_enabled = viewport.selection_enabled();
-    if (ImGui::MenuItem("Enable Selection", nullptr, selection_enabled)) {
-        viewport.set_selection_enabled(!selection_enabled);
-    }
-    if (ImGui::MenuItem("Selection Settings...")) {
-        state.show_selection_panel = true;
-    }
+    build_selected_entity_menu(capabilities, commands);
+    build_scene_visibility_menu(capabilities, commands);
+    build_selection_options_menu(state, viewport, tools);
     ImGui::EndMenu();
 }
 
-void build_measurement_menu(ViewerState& state, const ViewerScene& scene, elf3d::Viewport& viewport,
-                            ViewerCommands& commands) {
+void build_measurement_menu(ViewerFrameContext& state, const ViewerCapabilitySnapshot& capabilities,
+                            ViewerCommandDispatcher& commands) {
     if (!ImGui::BeginMenu("Measurement")) {
         return;
     }
-    const elf3d::DistanceMeasurementSnapshot measurement =
-        viewport.distance_measurement_snapshot(*scene.scene);
-    const bool incomplete =
-        measurement.state == elf3d::DistanceMeasurementState::awaiting_second_point;
-    const bool has_measurement = measurement.first_point.has_value() ||
-                                 measurement.second_point.has_value() ||
-                                 measurement.preview_point.has_value();
-    ImGui::BeginDisabled(!incomplete);
-    commands.cancel_measurement = ImGui::MenuItem("Cancel Current", "Escape");
+    ImGui::BeginDisabled(!capabilities.measurement_incomplete);
+    if (ImGui::MenuItem("Cancel Current", "Escape")) {
+        commands.emit(CancelMeasurementCommand{});
+    }
     ImGui::EndDisabled();
-    ImGui::BeginDisabled(!has_measurement);
-    commands.clear_measurement = ImGui::MenuItem("Clear Measurement", "Delete");
+    ImGui::BeginDisabled(!capabilities.has_measurement);
+    if (ImGui::MenuItem("Clear Measurement", "Delete")) {
+        commands.emit(ClearMeasurementCommand{});
+    }
     ImGui::EndDisabled();
     if (ImGui::MenuItem("Measurement Settings...")) {
-        state.show_measurement_panel = true;
+        state.shell.show_measurement_panel = true;
     }
     ImGui::EndMenu();
 }
 
-void build_help_menu(ViewerState& state) {
+void build_help_menu(ViewerFrameContext& state) {
     if (!ImGui::BeginMenu("Help")) {
         return;
     }
     if (ImGui::MenuItem("About Elf3D")) {
-        state.show_about = true;
+        state.shell.show_about = true;
     }
     ImGui::EndMenu();
 }
 
-void build_main_menu(GLFWwindow* window, ViewerState& state, const ViewerScene& scene,
-                     elf3d::Viewport& engine_viewport, ViewerCommands& commands) {
+void build_main_menu(ViewerFrameContext& state, elf3d::Viewport& engine_viewport,
+                     ToolCoordinator& tools, const ViewerCapabilitySnapshot& capabilities,
+                     ViewerCommandDispatcher& commands) {
     if (!ImGui::BeginMainMenuBar()) {
-        state.main_menu_height = ImGui::GetFrameHeight();
+        state.shell.main_menu_height = ImGui::GetFrameHeight();
         return;
     }
-    state.main_menu_height = ImGui::GetWindowSize().y;
-    build_file_menu(window, state, scene, commands);
-    build_view_menu(state);
-    build_tools_menu(engine_viewport, commands);
-    build_clipping_menu(engine_viewport, commands);
-    build_camera_menu(state, scene, engine_viewport, commands);
-    build_selection_menu(state, engine_viewport, commands);
-    build_measurement_menu(state, scene, engine_viewport, commands);
+    state.shell.main_menu_height = ImGui::GetWindowSize().y;
+    build_file_menu(capabilities, commands);
+    build_view_menu(state, commands);
+    build_tools_menu(tools, commands);
+    build_clipping_menu(engine_viewport, tools.clipping(), capabilities, commands);
+    build_camera_menu(state, engine_viewport, capabilities, commands);
+    build_selection_menu(state, engine_viewport, tools, capabilities, commands);
+    build_measurement_menu(state, capabilities, commands);
     build_help_menu(state);
     ImGui::EndMainMenuBar();
 }
@@ -272,108 +332,114 @@ void toolbar_group_gap() {
 }
 
 struct ToolbarContext {
-    ViewerState* state = nullptr;
+    ViewerFrameContext* state = nullptr;
     const ToolbarIcons* icons = nullptr;
-    const ViewerScene* scene = nullptr;
     elf3d::Viewport* viewport = nullptr;
-    ViewerCommands* commands = nullptr;
+    ToolCoordinator* tools = nullptr;
+    const ViewerCapabilitySnapshot* capabilities = nullptr;
+    ViewerCommandDispatcher* commands = nullptr;
     float icon_size = 0.0F;
 };
 
 void draw_toolbar_file_group(const ToolbarContext& context) {
     if (toolbar_button(*context.icons, ToolbarIcon::open,
                        {"open", "Open glTF or GLB", context.icon_size})) {
-        context.state->request_open_modal = true;
+        context.commands->emit(ShowOpenDialogCommand{});
     }
     ImGui::SameLine();
     if (toolbar_button(*context.icons, ToolbarIcon::save_as,
                        {"save-as", "Save model as glTF or GLB", context.icon_size, false,
-                        context.scene->is_imported()})) {
-        context.state->request_save_modal = true;
+                        context.capabilities->scene_imported})) {
+        context.commands->emit(ShowSaveDialogCommand{});
     }
 }
 
 void draw_toolbar_camera_group(const ToolbarContext& context) {
-    if (toolbar_button(*context.icons, ToolbarIcon::fit_view,
-                       {"fit-view", "Fit visible content", context.icon_size, false,
-                        has_nonzero_extent(context.state->view_dimensions)})) {
-        context.commands->fit_to_scene = true;
+    if (toolbar_button(
+            *context.icons, ToolbarIcon::fit_view,
+            {"fit-view", "Fit visible content", context.icon_size, false,
+             context.capabilities->view_available && context.capabilities->visible_content})) {
+        context.commands->emit(FitViewCommand{});
     }
     ImGui::SameLine();
-    if (toolbar_button(*context.icons, ToolbarIcon::reset_camera,
-                       {"reset-camera", "Reset camera", context.icon_size, false,
-                        has_nonzero_extent(context.state->view_dimensions)})) {
-        context.commands->reset_view = true;
+    if (toolbar_button(
+            *context.icons, ToolbarIcon::reset_camera,
+            {"reset-camera", "Reset camera", context.icon_size, false,
+             context.capabilities->view_available && context.capabilities->visible_content})) {
+        context.commands->emit(ResetViewCommand{});
     }
 }
 
 void draw_toolbar_tool_group(const ToolbarContext& context) {
-    const elf3d::ViewportTool active_tool = context.viewport->active_tool();
+    const ViewerTool active_tool = context.tools->active_tool();
     if (toolbar_button(*context.icons, ToolbarIcon::select,
                        {"select", "Selection tool", context.icon_size,
-                        active_tool == elf3d::ViewportTool::selection})) {
-        context.commands->select_tool = true;
+                        active_tool == ViewerTool::selection})) {
+        context.commands->emit(ActivateViewerToolCommand{ViewerTool::selection});
     }
     ImGui::SameLine();
     if (toolbar_button(*context.icons, ToolbarIcon::measure,
                        {"measure", "Distance measurement tool", context.icon_size,
-                        active_tool == elf3d::ViewportTool::distance_measurement})) {
-        context.commands->measure_tool = true;
+                        active_tool == ViewerTool::distance_measurement})) {
+        context.commands->emit(ActivateViewerToolCommand{ViewerTool::distance_measurement});
     }
 }
 
 void draw_toolbar_clipping_group(const ToolbarContext& context) {
     if (toolbar_button(*context.icons, ToolbarIcon::clipping_panel,
                        {"clipping-panel", "Clipping panel", context.icon_size})) {
-        context.commands->show_clipping_panel = true;
+        context.commands->emit(ShowViewerPanelCommand{ViewerPanel::clipping});
     }
     ImGui::SameLine();
     const elf3d::ClippingSnapshot clipping = context.viewport->clipping_snapshot();
     if (toolbar_button(*context.icons, ToolbarIcon::section_plane,
                        {"section-plane", "Toggle section plane", context.icon_size,
                         clipping.section_plane.enabled})) {
-        context.commands->enable_section_plane = true;
+        context.commands->emit(ToggleSectionPlaneCommand{});
     }
     ImGui::SameLine();
     if (toolbar_button(*context.icons, ToolbarIcon::add_clipping_box,
-                       {"add-clipping-box", "Add clipping box", context.icon_size})) {
-        context.commands->add_clipping_box_from_bounds = true;
+                       {"add-clipping-box", "Add clipping box", context.icon_size, false,
+                        context.capabilities->can_add_clipping_box &&
+                            context.capabilities->unclipped_visible_content})) {
+        context.commands->emit(AddClippingBoxFromBoundsCommand{});
     }
     ImGui::SameLine();
     if (toolbar_button(*context.icons, ToolbarIcon::clear_clipping,
-                       {"clear-clipping", "Clear clipping", context.icon_size})) {
-        context.commands->clear_clipping = true;
+                       {"clear-clipping", "Clear clipping", context.icon_size, false,
+                        context.capabilities->has_clipping})) {
+        context.commands->emit(ClearClippingCommand{});
     }
 }
 
 void draw_toolbar_visibility_group(const ToolbarContext& context) {
-    const bool has_selection = context.viewport->has_selection();
-    if (toolbar_button(
-            *context.icons, ToolbarIcon::hide_selected,
-            {"hide-selected", "Hide selected entity", context.icon_size, false, has_selection})) {
-        context.commands->hide_selected = true;
+    const std::optional<EntityId>& selected = context.capabilities->selected_entity;
+    if (toolbar_button(*context.icons, ToolbarIcon::hide_selected,
+                       {"hide-selected", "Hide selected entity", context.icon_size, false,
+                        selected.has_value()})) {
+        context.commands->emit(SetEntityVisibilityCommand{*selected, false});
     }
     ImGui::SameLine();
-    if (toolbar_button(
-            *context.icons, ToolbarIcon::show_selected,
-            {"show-selected", "Show selected entity", context.icon_size, false, has_selection})) {
-        context.commands->show_selected = true;
+    if (toolbar_button(*context.icons, ToolbarIcon::show_selected,
+                       {"show-selected", "Show selected entity", context.icon_size, false,
+                        selected.has_value()})) {
+        context.commands->emit(SetEntityVisibilityCommand{*selected, true});
     }
     ImGui::SameLine();
     if (toolbar_button(*context.icons, ToolbarIcon::isolate_selected,
                        {"isolate-selected", "Isolate selected entity", context.icon_size, false,
-                        has_selection})) {
-        context.commands->isolate_selected = true;
+                        selected.has_value()})) {
+        context.commands->emit(IsolateEntityCommand{*selected});
     }
     ImGui::SameLine();
     if (toolbar_button(*context.icons, ToolbarIcon::show_all,
                        {"show-all", "Show all entities", context.icon_size})) {
-        context.commands->show_all = true;
+        context.commands->emit(ShowAllEntitiesCommand{});
     }
 }
 
 void draw_toolbar_content(const ToolbarContext& context, float button_size) {
-    ImGui::SetCursorPosY((context.state->toolbar_height - button_size) * 0.5F +
+    ImGui::SetCursorPosY((context.state->shell.toolbar_height - button_size) * 0.5F +
                          toolbar_button_visual_center_offset);
     draw_toolbar_file_group(context);
     toolbar_group_gap();
@@ -387,21 +453,21 @@ void draw_toolbar_content(const ToolbarContext& context, float button_size) {
     toolbar_group_gap();
     if (toolbar_button(*context.icons, ToolbarIcon::reset_layout,
                        {"reset-layout", "Reset dock layout", context.icon_size})) {
-        context.state->reset_dock_layout = true;
+        context.commands->emit(ResetViewerLayoutCommand{});
     }
 }
 
-void build_toolbar(ViewerState& state, const ToolbarIcons& icons, const ViewerScene& scene,
-                   elf3d::Viewport& engine_viewport, ViewerCommands& commands) {
+void build_toolbar(const ToolbarBuildContext& build) {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const float base_toolbar_height =
-        std::max(ImGui::GetFrameHeight() * 1.5F, state.main_menu_height * 1.6F);
+        std::max(ImGui::GetFrameHeight() * 1.5F, build.state.shell.main_menu_height * 1.6F);
     const float icon_size = base_toolbar_height * 45.0F / 55.0F;
     const float button_size = icon_size + 2.0F * toolbar_button_frame_padding;
-    state.toolbar_height =
+    build.state.shell.toolbar_height =
         std::max(base_toolbar_height, button_size + 2.0F * toolbar_button_vertical_margin);
-    ImGui::SetNextWindowPos(ImVec2{viewport->Pos.x, viewport->Pos.y + state.main_menu_height});
-    ImGui::SetNextWindowSize(ImVec2{viewport->Size.x, state.toolbar_height});
+    ImGui::SetNextWindowPos(
+        ImVec2{viewport->Pos.x, viewport->Pos.y + build.state.shell.main_menu_height});
+    ImGui::SetNextWindowSize(ImVec2{viewport->Size.x, build.state.shell.toolbar_height});
     ImGui::SetNextWindowViewport(viewport->ID);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking |
                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
@@ -409,9 +475,10 @@ void build_toolbar(ViewerState& state, const ToolbarIcons& icons, const ViewerSc
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{6.0F, 0.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{3.0F, 0.0F});
     if (ImGui::Begin("##Elf3DToolbar", nullptr, flags)) {
-        draw_toolbar_content(
-            ToolbarContext{&state, &icons, &scene, &engine_viewport, &commands, icon_size},
-            button_size);
+        draw_toolbar_content(ToolbarContext{&build.state, &build.icons, &build.viewport,
+                                            &build.tools, &build.capabilities, &build.commands,
+                                            icon_size},
+                             button_size);
     }
     ImGui::End();
     ImGui::PopStyleVar(2);
@@ -468,9 +535,8 @@ void draw_compact_tab_close_button(const CompactTabCloseContext& context, const 
         ImVec2{context.tab_bar->BarRect.Min.x + tab.Offset, context.tab_bar->BarRect.Min.y},
         ImVec2{context.tab_bar->BarRect.Min.x + tab.Offset + tab.Width,
                context.tab_bar->BarRect.Max.y}};
-    const bool hovered = ImGui::IsMouseHoveringRect(tab_rect.Min, tab_rect.Max);
     const bool selected = tab.ID == context.tab_bar->SelectedTabId;
-    if (!selected && !hovered) {
+    if (!selected) {
         return;
     }
     const ImVec2 button_pos{
@@ -478,10 +544,7 @@ void draw_compact_tab_close_button(const CompactTabCloseContext& context, const 
         tab_rect.Min.y + context.frame_padding.y};
     const ImRect button_rect{
         button_pos, ImVec2{button_pos.x + context.button_size, button_pos.y + context.button_size}};
-    const bool button_hovered = ImGui::IsMouseHoveringRect(button_rect.Min, button_rect.Max, false);
-    const ImU32 background = button_hovered
-                                 ? ImGui::GetColorU32(ImGuiCol_ButtonHovered)
-                                 : ImGui::GetColorU32(selected ? ImGuiCol_TabActive : ImGuiCol_Tab);
+    const ImU32 background = ImGui::GetColorU32(ImGuiCol_TabActive);
     context.draw_list->AddRectFilled(button_rect.Min, button_rect.Max, background);
 
     const ImVec2 raw_center = button_rect.GetCenter();
@@ -514,10 +577,10 @@ void draw_compact_tab_close_buttons(ImGuiDockNode* node) {
     }
 }
 
-ImGuiID build_main_dockspace(ViewerState& state) {
+ImGuiID build_main_dockspace(ViewerFrameContext& state) {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float status_height = state.show_status_bar ? ImGui::GetFrameHeight() : 0.0F;
-    const float top = state.main_menu_height + state.toolbar_height;
+    const float status_height = state.shell.show_status_bar ? ImGui::GetFrameHeight() : 0.0F;
+    const float top = state.shell.main_menu_height + state.shell.toolbar_height;
     const float height = std::max(1.0F, viewport->Size.y - top - status_height);
     ImGui::SetNextWindowPos(ImVec2{viewport->Pos.x, viewport->Pos.y + top});
     ImGui::SetNextWindowSize(ImVec2{viewport->Size.x, height});
@@ -529,22 +592,22 @@ ImGuiID build_main_dockspace(ViewerState& state) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
     ImGui::Begin("##Elf3DDockspaceHost", nullptr, window_flags);
     const ImGuiID dockspace_id = ImGui::GetID("Elf3DDockspace");
-    if (state.reset_dock_layout || !state.dock_layout_initialized ||
+    if (state.shell.reset_dock_layout || !state.shell.dock_layout_initialized ||
         ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
         const ImVec2 dockspace_size = ImGui::GetContentRegionAvail();
         if (dockspace_size.x > 0.0F && dockspace_size.y > 0.0F) {
             const DockLayoutNodes nodes =
                 initialize_default_dock_layout(dockspace_id, dockspace_size);
-            state.dock_center_id = nodes.center;
-            state.dock_right_id = nodes.right;
-            state.dock_right_bottom_id = nodes.right_bottom;
-            state.reset_dock_layout = false;
-            state.dock_layout_initialized = true;
-            state.apply_dock_layout = true;
+            state.shell.dock_center_id = nodes.center;
+            state.shell.dock_right_id = nodes.right;
+            state.shell.dock_right_bottom_id = nodes.right_bottom;
+            state.shell.reset_dock_layout = false;
+            state.shell.dock_layout_initialized = true;
+            state.shell.apply_dock_layout = true;
         }
     }
     {
-        const ScopedFont panel_title_font{state.panel_title_font};
+        const ScopedFont panel_title_font{state.presentation.panel_title_font};
         ImGui::DockSpace(dockspace_id, ImVec2{0.0F, 0.0F}, ImGuiDockNodeFlags_None);
         draw_compact_tab_close_buttons(ImGui::DockBuilderGetNode(dockspace_id));
     }

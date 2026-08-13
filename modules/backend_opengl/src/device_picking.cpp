@@ -312,20 +312,21 @@ void submit_picking_draw(const PickingResources& resources, const PickingDrawVie
 
 [[nodiscard]] Result<void>
 submit_picking_batch_items(const PickingResources& resources, const PickingTargetView& target,
-                           std::span<const graphics::PickingDrawBatchItem> items,
+                           std::span<graphics::StaticMesh* const> meshes,
+                           std::span<const graphics::PickingDrawDescription> descriptions,
                            PickingBatchStateCache& cache) noexcept {
-    for (const graphics::PickingDrawBatchItem& item : items) {
-        if (item.mesh == nullptr) {
+    for (std::size_t index = 0; index < meshes.size(); ++index) {
+        if (meshes[index] == nullptr) {
             return Error{ErrorCode::invalid_argument,
                          "Picking draw batches require a mesh for every item"};
         }
-        Result<MeshView> mesh_result = mesh_view(*item.mesh);
+        Result<MeshView> mesh_result = mesh_view(*meshes[index]);
         if (!mesh_result) {
             return mesh_result.error();
         }
         const PickingDrawViews views{target, mesh_result.value()};
-        if (views.mesh.index_count != 0 && item.description.object_id != 0) {
-            submit_picking_draw(resources, views, item.description, cache);
+        if (views.mesh.index_count != 0 && descriptions[index].object_id != 0) {
+            submit_picking_draw(resources, views, descriptions[index], cache);
         }
     }
     return {};
@@ -366,13 +367,19 @@ Result<void> draw_picking_indexed(PickingResources& resources, graphics::Picking
     return {};
 }
 
-Result<void> draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
-                                std::span<const graphics::PickingDrawBatchItem> items) noexcept {
+Result<void>
+draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
+                   std::span<graphics::StaticMesh* const> meshes,
+                   std::span<const graphics::PickingDrawDescription> descriptions) noexcept {
     Result<PickingTargetView> target_result = picking_target_view(target);
     if (!target_result) {
         return target_result.error();
     }
-    if (!target_result.value().valid || items.empty()) {
+    if (meshes.size() != descriptions.size()) {
+        return Error{ErrorCode::invalid_argument,
+                     "Picking draw batch meshes and descriptions must have equal counts"};
+    }
+    if (!target_result.value().valid || meshes.empty()) {
         return {};
     }
     const Result<void> resource_result = ensure_picking_resources(resources);
@@ -382,10 +389,10 @@ Result<void> draw_picking_batch(PickingResources& resources, graphics::PickingTa
 
     RenderStateGuard state_guard;
     configure_picking_pass_state(target_result.value(), resources.program);
-    upload_picking_frame_uniforms(resources, items.front().description);
+    upload_picking_frame_uniforms(resources, descriptions.front());
     PickingBatchStateCache cache;
     const Result<void> submission =
-        submit_picking_batch_items(resources, target_result.value(), items, cache);
+        submit_picking_batch_items(resources, target_result.value(), meshes, descriptions, cache);
     if (!submission) {
         return submission.error();
     }

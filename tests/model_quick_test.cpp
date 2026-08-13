@@ -1,4 +1,4 @@
-#include <elf3d/elf3d.h>
+#include <elf3d/embed/runtime.h>
 
 #include <glad/gl.h>
 
@@ -58,7 +58,7 @@ class Window final {
     GLFWwindow* window_ = nullptr;
 };
 
-elf3d::GraphicsProcedure load_opengl_procedure(const char* name) noexcept {
+elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcept {
     return glfwGetProcAddress(name);
 }
 
@@ -114,9 +114,10 @@ void configure_hidden_context() noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_rendered_pixels(elf3d::Engine& engine, elf3d::Viewport& viewport) {
+[[nodiscard]] int verify_rendered_pixels(elf3d::EmbeddedRuntime& runtime,
+                                         elf3d::Viewport& viewport) {
     const elf3d::Result<elf3d::NativeTextureView> texture_result =
-        engine.native_texture_view(viewport.color_texture());
+        runtime.native_texture_view(viewport.color_texture());
     if (!texture_result || texture_result.value().extent != elf3d::Extent2D{64U, 64U}) {
         return fail(8, "Embedded-model quick test returned an unexpected texture view");
     }
@@ -139,7 +140,8 @@ void configure_hidden_context() noexcept {
     return 0;
 }
 
-[[nodiscard]] int run_model_quick(elf3d::Engine& engine) {
+[[nodiscard]] int run_model_quick(elf3d::EmbeddedRuntime& runtime) {
+    elf3d::Engine& engine = runtime.engine();
     const std::filesystem::path model_path = std::filesystem::path{ELF3D_TEST_SOURCE_DIR} /
                                              "tests" / "fixtures" / "elf3d_smoke" /
                                              "elf3d_smoke.gltf";
@@ -169,25 +171,24 @@ void configure_hidden_context() noexcept {
     if (rendered != 0) {
         return rendered;
     }
-    return verify_rendered_pixels(engine, *viewport);
+    return verify_rendered_pixels(runtime, *viewport);
 }
 
-[[nodiscard]] int run_model_quick_with_engine() {
-    elf3d::EngineConfiguration configuration;
-    configuration.opengl.load_procedure = load_opengl_procedure;
-    elf3d::Result<std::unique_ptr<elf3d::Engine>> engine_result =
-        elf3d::Engine::create(configuration);
-    if (!engine_result) {
-        if (is_skippable_graphics_error(engine_result.error().code())) {
-            std::cout << "Skipping embedded-model quick test: " << engine_result.error().message()
+[[nodiscard]] int run_model_quick_with_runtime() {
+    const elf3d::EmbeddedRuntimeOptions options{load_opengl_procedure};
+    elf3d::Result<std::unique_ptr<elf3d::EmbeddedRuntime>> runtime_result =
+        elf3d::EmbeddedRuntime::create(options);
+    if (!runtime_result) {
+        if (is_skippable_graphics_error(runtime_result.error().code())) {
+            std::cout << "Skipping embedded-model quick test: " << runtime_result.error().message()
                       << '\n';
             return skipped;
         }
-        std::cerr << engine_result.error().message() << '\n';
+        std::cerr << runtime_result.error().message() << '\n';
         return 2;
     }
-    std::unique_ptr<elf3d::Engine> engine = std::move(engine_result).value();
-    return run_model_quick(*engine);
+    std::unique_ptr<elf3d::EmbeddedRuntime> runtime = std::move(runtime_result).value();
+    return run_model_quick(*runtime);
 }
 
 } // namespace
@@ -216,5 +217,5 @@ int main() {
         std::cout << "Skipping embedded-model quick test: OpenGL 4.1 is unavailable\n";
         return skipped;
     }
-    return run_model_quick_with_engine();
+    return run_model_quick_with_runtime();
 }

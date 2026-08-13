@@ -1,4 +1,4 @@
-#include "viewer_internal.hpp"
+#include "viewer_performance.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -27,8 +27,8 @@ void write_csv_header(std::ofstream& stream) {
               "max_texture_size\n";
 }
 
-void write_csv_row(std::ofstream& stream, std::size_t index, const ViewerState::FrameSample& sample,
-                   const ViewerState& state) {
+void write_csv_row(std::ofstream& stream, std::size_t index, const ViewerFrameSample& sample,
+                   const ViewerFrameContext& state) {
     stream << index << ',' << sample.frame_milliseconds << ',' << sample.event_input_milliseconds
            << ',' << sample.navigation_scene_milliseconds << ',' << sample.render_milliseconds
            << ',' << sample.ui_composition_milliseconds << ',' << sample.swap_wait_milliseconds
@@ -60,39 +60,42 @@ void write_csv_row(std::ofstream& stream, std::size_t index, const ViewerState::
            << ',' << sample.view_dimensions.height << ',' << sample.target_dimensions.width << ','
            << sample.target_dimensions.height << ',' << sample.render_scale_percent << ','
            << csv_flag(sample.vsync_enabled) << ',' << csv_flag(sample.standard_shading) << ",\""
-           << state.gl_vendor << "\",\"" << state.gl_renderer << "\",\"" << state.gl_version
-           << "\",\"" << state.glsl_version_report << "\"," << state.gl_context_flags << ','
-           << state.gl_context_profile_mask << ',' << state.default_red_bits << ','
-           << state.default_green_bits << ',' << state.default_blue_bits << ','
-           << state.default_alpha_bits << ',' << state.default_depth_bits << ','
-           << state.default_stencil_bits << ',' << state.default_samples << ','
-           << state.default_srgb_capable << ',' << state.maximum_texture_size << '\n';
+           << state.diagnostics.gl_vendor << "\",\"" << state.diagnostics.gl_renderer << "\",\""
+           << state.diagnostics.gl_version << "\",\"" << state.diagnostics.glsl_version_report
+           << "\"," << state.diagnostics.gl_context_flags << ','
+           << state.diagnostics.gl_context_profile_mask << ',' << state.diagnostics.default_red_bits
+           << ',' << state.diagnostics.default_green_bits << ','
+           << state.diagnostics.default_blue_bits << ',' << state.diagnostics.default_alpha_bits
+           << ',' << state.diagnostics.default_depth_bits << ','
+           << state.diagnostics.default_stencil_bits << ',' << state.diagnostics.default_samples
+           << ',' << state.diagnostics.default_srgb_capable << ','
+           << state.diagnostics.maximum_texture_size << '\n';
 }
 
 } // namespace
 
-bool write_performance_csv(ViewerState& state) {
+bool write_performance_csv(ViewerFrameContext& state) {
     std::error_code error;
-    std::filesystem::create_directories(state.performance_csv_path.parent_path(), error);
+    std::filesystem::create_directories(state.performance.csv_path.parent_path(), error);
     if (error) {
-        state.performance_capture_error = error.message();
+        state.performance.capture_error = error.message();
         return false;
     }
-    std::ofstream stream{state.performance_csv_path, std::ios::trunc};
+    std::ofstream stream{state.performance.csv_path, std::ios::trunc};
     if (!stream) {
-        state.performance_capture_error = "Could not open the performance CSV";
+        state.performance.capture_error = "Could not open the performance CSV";
         return false;
     }
     write_csv_header(stream);
     stream << std::fixed << std::setprecision(6);
-    for (std::size_t index = 0; index < state.frame_samples.size(); ++index) {
-        write_csv_row(stream, index, state.frame_samples[index], state);
+    for (std::size_t index = 0; index < state.performance.frame_samples.size(); ++index) {
+        write_csv_row(stream, index, state.performance.frame_samples[index], state);
     }
     if (!stream) {
-        state.performance_capture_error = "Could not finish writing the performance CSV";
+        state.performance.capture_error = "Could not finish writing the performance CSV";
         return false;
     }
-    state.performance_capture_error.clear();
+    state.performance.capture_error.clear();
     return true;
 }
 

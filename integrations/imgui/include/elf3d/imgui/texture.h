@@ -2,19 +2,47 @@
 #define ELF3D_IMGUI_TEXTURE_H
 
 #include <elf3d/core/result.h>
-#include <elf3d/graphics.h>
+#include <elf3d/math/value_types.h>
+
+#include <imgui.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <span>
 
 namespace elf3d::imgui {
 
-// Draws a non-owning Elf3D OpenGL texture in the current Dear ImGui window.
-// UVs are flipped vertically to account for OpenGL framebuffer orientation.
-[[nodiscard]] Result<void> image(const NativeTextureView& texture, Float2 display_size) noexcept;
+struct UiTextureDescription {
+    std::span<const std::byte> rgba8;
+    Extent2D extent;
+};
 
-// Draws a non-owning Elf3D OpenGL texture into an existing Dear ImGui item rectangle.
-// The position and size are in Dear ImGui screen-space logical units.
-[[nodiscard]] Result<void> draw_image(const NativeTextureView& texture,
-                                      Float2 top_left_screen_position,
-                                      Float2 display_size) noexcept;
+// Integration-owned UI texture. No native graphics value escapes this boundary.
+class UiTexture final {
+  private:
+    struct ConstructionKey final {};
+
+  public:
+    ~UiTexture() noexcept;
+
+    UiTexture(const UiTexture&) = delete;
+    UiTexture& operator=(const UiTexture&) = delete;
+    UiTexture(UiTexture&&) = delete;
+    UiTexture& operator=(UiTexture&&) = delete;
+
+    [[nodiscard]] static Result<std::unique_ptr<UiTexture>>
+    create(const UiTextureDescription& description) noexcept;
+
+    [[nodiscard]] bool is_valid() const noexcept;
+    [[nodiscard]] ImTextureRef texture_ref() const noexcept;
+
+    explicit UiTexture(ConstructionKey) noexcept {}
+
+  private:
+    std::uint32_t texture_ = 0;
+    Extent2D extent_;
+};
 
 } // namespace elf3d::imgui
 

@@ -79,9 +79,14 @@ class OpenGLDevice final : public graphics::Device {
         return device_detail::create_picking_target(state_, initial_extent);
     }
 
-    [[nodiscard]] Result<NativeTextureView>
+    [[nodiscard]] Result<graphics::NativeTextureView>
     native_texture_view(TextureHandle texture) const noexcept override {
-        return state_->native_texture_view(texture);
+        Result<OpenGLTextureView> view = state_->native_texture_view(texture);
+        if (!view) {
+            return view.error();
+        }
+        return graphics::NativeTextureView{graphics::NativeGraphicsApi::opengl, view.value().value,
+                                           view.value().extent};
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::StaticMesh>>
@@ -122,15 +127,16 @@ class OpenGLDevice final : public graphics::Device {
         return device_detail::draw_indexed(target, pipeline, mesh, description);
     }
 
-    [[nodiscard]] Result<void>
-    draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
-                       std::span<const graphics::IndexedDrawBatchItem> items) noexcept override {
+    [[nodiscard]] Result<void> draw_indexed_batch(
+        graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
+        std::span<graphics::StaticMesh* const> meshes,
+        std::span<const graphics::DrawIndexedDescription> descriptions) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
         }
         const GpuTimingScope timing{*state_, GpuTimingKind::main};
-        return device_detail::draw_indexed_batch(target, pipeline, items);
+        return device_detail::draw_indexed_batch(target, pipeline, meshes, descriptions);
     }
 
     [[nodiscard]] Result<void>
@@ -153,15 +159,15 @@ class OpenGLDevice final : public graphics::Device {
         return device_detail::draw_picking_indexed(picking_resources_, target, mesh, description);
     }
 
-    [[nodiscard]] Result<void>
-    draw_picking_batch(graphics::PickingTarget& target,
-                       std::span<const graphics::PickingDrawBatchItem> items) noexcept override {
+    [[nodiscard]] Result<void> draw_picking_batch(
+        graphics::PickingTarget& target, std::span<graphics::StaticMesh* const> meshes,
+        std::span<const graphics::PickingDrawDescription> descriptions) noexcept override {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
         }
         const GpuTimingScope timing{*state_, GpuTimingKind::picking};
-        return device_detail::draw_picking_batch(picking_resources_, target, items);
+        return device_detail::draw_picking_batch(picking_resources_, target, meshes, descriptions);
     }
 
     [[nodiscard]] Result<std::optional<graphics::PickingPixel>>
@@ -200,9 +206,8 @@ class OpenGLDevice final : public graphics::Device {
 
 } // namespace
 
-Result<std::unique_ptr<graphics::Device>>
-create_device(const OpenGLConfiguration& configuration) noexcept {
-    if (configuration.load_procedure == nullptr) {
+Result<std::unique_ptr<graphics::Device>> create_device(const DeviceOptions& options) noexcept {
+    if (options.load_procedure == nullptr) {
         return Error{ErrorCode::missing_graphics_procedure_loader, missing_loader_message};
     }
 
@@ -210,7 +215,7 @@ create_device(const OpenGLConfiguration& configuration) noexcept {
         static_assert(std::is_same_v<GraphicsProcedure, GLADapiproc>);
         static_assert(std::is_convertible_v<GraphicsProcedureLoader, GLADloadfunc>);
 
-        const int loaded_version = gladLoadGL(configuration.load_procedure);
+        const int loaded_version = gladLoadGL(options.load_procedure);
         if (loaded_version == 0) {
             return Error{ErrorCode::graphics_initialization_failed, glad_failure_message};
         }

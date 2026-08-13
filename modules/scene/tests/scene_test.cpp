@@ -1,7 +1,9 @@
 #include <elf3d/assets.h>
 #include <elf3d/core/result.h>
 #include <elf3d/model.h>
+#include <elf3d/picking.h>
 #include <elf3d/scene.h>
+#include <elf3d/surface_anchor.h>
 
 #include <array>
 #include <cmath>
@@ -379,6 +381,102 @@ struct RuntimeSceneFixture {
     return 0;
 }
 
+[[nodiscard]] int verify_surface_anchor_transform(elf3d::scene::Storage& scene,
+                                                  elf3d::EntityId model,
+                                                  const elf3d::SurfaceAnchor& anchor) {
+    elf3d::Transform moved;
+    moved.translation = {2.0F, 0.0F, 0.0F};
+    const auto moved_anchor = scene.set_local_transform(model, moved)
+                                  ? scene.resolve_surface_anchor(anchor)
+                                  : elf3d::Result<elf3d::ResolvedSurfaceAnchor>{
+                                        elf3d::Error{elf3d::ErrorCode::invalid_surface_anchor,
+                                                     "Surface anchor transform setup failed"}};
+    if (!moved_anchor || moved_anchor.value().world_position != elf3d::Float3{2.25F, 0.5F, 0.0F}) {
+        return 33;
+    }
+
+    return 0;
+}
+
+[[nodiscard]] int verify_surface_anchor_rejection(elf3d::scene::Storage& scene,
+                                                  elf3d::EntityId model,
+                                                  elf3d::MeshHandle replacement_mesh,
+                                                  elf3d::MaterialHandle material,
+                                                  const elf3d::SurfaceAnchor& anchor) {
+    elf3d::scene::Storage foreign_scene{scene_id(5)};
+    const auto foreign = foreign_scene.resolve_surface_anchor(anchor);
+    if (foreign || foreign.error().code() != elf3d::ErrorCode::invalid_surface_anchor) {
+        return 34;
+    }
+
+    const std::array<elf3d::ModelPrimitiveBinding, 1> replacement{{
+        {replacement_mesh, material},
+    }};
+    if (!scene.set_model_primitives(model, replacement) || scene.resolve_surface_anchor(anchor) ||
+        scene.resolve_surface_anchor(anchor).error().code() !=
+            elf3d::ErrorCode::invalid_surface_anchor) {
+        return 35;
+    }
+
+    elf3d::PickHit hit;
+    hit.entity = anchor.entity;
+    hit.mesh = anchor.mesh;
+    hit.barycentric_coordinates = {0.5F, 0.5F, 0.5F};
+    hit.world_normal = {0.0F, 0.0F, 1.0F};
+    hit.world_distance = 1.0F;
+    const auto invalid = scene.create_surface_anchor(hit);
+    if (invalid || invalid.error().code() != elf3d::ErrorCode::invalid_surface_anchor_hit) {
+        return 36;
+    }
+    return 0;
+}
+
+[[nodiscard]] int
+verify_initial_surface_anchor(const elf3d::scene::Storage& scene,
+                              const elf3d::Result<elf3d::ResolvedSurfaceAnchor>& resolved) {
+    if (!resolved || resolved.value().anchor.scene != scene.id() ||
+        resolved.value().world_position != elf3d::Float3{0.25F, 0.5F, 0.0F} ||
+        resolved.value().world_normal != elf3d::Float3{0.0F, 0.0F, 1.0F}) {
+        return 32;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_surface_anchor_contract() {
+    elf3d::scene::Storage scene{scene_id(4)};
+    const auto mesh = scene.create_mesh({triangle_vertices, triangle_indices});
+    const auto replacement_mesh = scene.create_mesh({triangle_vertices, triangle_indices});
+    const auto material = scene.create_material({});
+    if (!mesh || !replacement_mesh || !material) {
+        return 30;
+    }
+    const auto model = scene.create_model(mesh.value(), material.value());
+    if (!model) {
+        return 31;
+    }
+
+    elf3d::PickHit hit;
+    hit.entity = model.value();
+    hit.mesh = mesh.value();
+    hit.barycentric_coordinates = {0.25F, 0.25F, 0.5F};
+    hit.world_position = {0.25F, 0.5F, 0.0F};
+    hit.world_normal = {0.0F, 0.0F, 1.0F};
+    hit.world_distance = 1.0F;
+    const auto anchor = scene.create_surface_anchor(hit);
+    const auto resolved = anchor ? scene.resolve_surface_anchor(anchor.value())
+                                 : elf3d::Result<elf3d::ResolvedSurfaceAnchor>{anchor.error()};
+    const int initial = verify_initial_surface_anchor(scene, resolved);
+    if (initial != 0) {
+        return initial;
+    }
+    const int transform = verify_surface_anchor_transform(scene, model.value(), anchor.value());
+    if (transform != 0) {
+        return transform;
+    }
+    return verify_surface_anchor_rejection(scene, model.value(), replacement_mesh.value(),
+                                           material.value(), anchor.value());
+}
+
 } // namespace
 
 int elf3d_scene_test() {
@@ -390,5 +488,9 @@ int elf3d_scene_test() {
     if (runtime != 0) {
         return runtime;
     }
-    return verify_document_scene_contract();
+    const int document = verify_document_scene_contract();
+    if (document != 0) {
+        return document;
+    }
+    return verify_surface_anchor_contract();
 }

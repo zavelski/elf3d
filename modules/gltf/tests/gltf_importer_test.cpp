@@ -38,8 +38,7 @@ constexpr std::string_view jpeg_base64 =
 
 class TemporaryDirectory final {
   public:
-    TemporaryDirectory()
-        : path_(std::filesystem::temp_directory_path() / "elf3d_model_gltf_import_test") {
+    TemporaryDirectory() : path_(std::filesystem::path{ELF3D_TEST_BINARY_DIR} / "gltf_import") {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
         std::filesystem::create_directories(path_);

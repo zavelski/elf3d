@@ -161,8 +161,8 @@ class Renderer final {
     };
 
     struct PreparedDraw final {
-        graphics::StaticMesh* mesh = nullptr;
-        std::array<graphics::Texture2D*, graphics::material_texture_count> textures{};
+        std::size_t packet_index = 0;
+        std::array<std::size_t, graphics::material_texture_count> texture_indices{};
         std::uint64_t material_identity = 0;
         graphics::DrawIndexedDescription description;
     };
@@ -174,22 +174,31 @@ class Renderer final {
                                                    std::vector<PreparedDraw>& prepared);
     [[nodiscard]] std::uint64_t
     count_material_switches(const std::vector<PreparedDraw>& prepared) const noexcept;
-    [[nodiscard]] Result<const DrawPacket*> cached_draw_packet(const scene::Storage& scene,
+    [[nodiscard]] Result<std::size_t> cached_draw_packet_index(const scene::Storage& scene,
                                                                const RenderItem& item,
                                                                RenderStatistics& statistics);
+    [[nodiscard]] const DrawPacket& draw_packet(const scene::Storage& scene, const RenderItem& item,
+                                                std::size_t packet_index) const noexcept;
     void synchronize_draw_packet_cache(const scene::Storage& scene);
     [[nodiscard]] Result<void> draw_render_overlay(graphics::RenderTarget& target,
                                                    RenderPass& pass);
-    [[nodiscard]] Result<void> prepare_draw_textures(
-        const scene::Storage& scene, const scene::RuntimePrimitiveView& primitive,
-        std::array<graphics::Texture2D*, graphics::material_texture_count>& textures,
-        std::uint64_t& upload_count, std::uint64_t& texture_bindings);
-    [[nodiscard]] Result<graphics::StaticMesh*>
-    cached_mesh(SceneId scene_id, const scene::RuntimePrimitiveView& primitive,
-                RenderStatistics& statistics);
-    [[nodiscard]] Result<graphics::Texture2D*>
-    cached_texture(SceneId scene_id, const scene::RuntimeTextureView& texture,
-                   TextureColorSpace color_space, std::uint64_t& upload_count);
+    [[nodiscard]] Result<void> prepare_draw_textures(const scene::Storage& scene,
+                                                     const scene::RuntimePrimitiveView& primitive,
+                                                     DrawPacket& packet,
+                                                     std::uint64_t& upload_count,
+                                                     std::uint64_t& texture_bindings);
+    [[nodiscard]] Result<std::size_t> cached_mesh(SceneId scene_id,
+                                                  const scene::RuntimePrimitiveView& primitive,
+                                                  RenderStatistics& statistics);
+    [[nodiscard]] Result<std::size_t> cached_texture(SceneId scene_id,
+                                                     const scene::RuntimeTextureView& texture,
+                                                     TextureColorSpace color_space,
+                                                     std::uint64_t& upload_count);
+    [[nodiscard]] graphics::StaticMesh& mesh(SceneId scene_id, bool document_primitive,
+                                             std::size_t index) const noexcept;
+    [[nodiscard]] graphics::Texture2D& texture(SceneId scene_id, bool document_image,
+                                               std::size_t image_index,
+                                               std::size_t variant_index) const noexcept;
     [[nodiscard]] Result<void>
     validate_gpu_picking_context(const scene::Storage& scene) const noexcept;
     [[nodiscard]] Result<std::uint64_t>
@@ -205,6 +214,9 @@ class Renderer final {
 } // namespace elf3d::renderer
 
 namespace elf3d::renderer {
+
+[[nodiscard]] std::string_view main_vertex_shader_source() noexcept;
+[[nodiscard]] std::string_view main_fragment_shader_source() noexcept;
 
 [[nodiscard]] graphics::TextureAddressMode
 runtime_address_mode(scene::RuntimeTextureWrap wrap) noexcept;

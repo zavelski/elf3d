@@ -1,5 +1,7 @@
-#include "viewer_input_math.hpp"
-#include "viewer_internal.hpp"
+#include "viewer_assets.hpp"
+
+#include "viewer_application.hpp"
+#include "viewer_browser.hpp"
 
 #if defined(_WIN32)
 #ifndef NOMINMAX
@@ -13,21 +15,15 @@
 #include <windows.h>
 #endif
 
-#ifndef GL_CLAMP_TO_EDGE
-#define GL_CLAMP_TO_EDGE 0x812F
-#endif
-
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
-#include <iostream>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -62,14 +58,6 @@ namespace elf3d::viewer {
         return source_assets;
     }
     return executable_assets;
-}
-
-template <typename TextureId> TextureId to_imgui_texture_id(std::uintptr_t value) noexcept {
-    if constexpr (std::is_pointer_v<TextureId>) {
-        return reinterpret_cast<TextureId>(value);
-    } else {
-        return static_cast<TextureId>(value);
-    }
 }
 
 #if defined(_WIN32)
@@ -215,10 +203,7 @@ ToolbarTexture::ToolbarTexture(ToolbarTexture&& other) noexcept {
 
 ToolbarTexture& ToolbarTexture::operator=(ToolbarTexture&& other) noexcept {
     if (this != &other) {
-        reset();
-        texture_ = std::exchange(other.texture_, 0U);
-        width_ = std::exchange(other.width_, 0);
-        height_ = std::exchange(other.height_, 0);
+        texture_ = std::move(other.texture_);
     }
     return *this;
 }
@@ -227,44 +212,27 @@ bool ToolbarTexture::upload(const DecodedImage& image) noexcept {
     if (image.rgba.empty() || image.width == 0 || image.height == 0) {
         return false;
     }
-    reset();
-    unsigned int texture = 0;
-    glGenTextures(1, &texture);
-    if (texture == 0) {
+    const std::span<const unsigned char> pixels{image.rgba};
+    elf3d::Result<std::unique_ptr<elf3d::imgui::UiTexture>> created =
+        elf3d::imgui::UiTexture::create(elf3d::imgui::UiTextureDescription{
+            std::as_bytes(pixels), elf3d::Extent2D{image.width, image.height}});
+    if (!created) {
         return false;
     }
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(image.width),
-                 static_cast<GLsizei>(image.height), 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                 image.rgba.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    texture_ = texture;
-    width_ = static_cast<int>(image.width);
-    height_ = static_cast<int>(image.height);
-    return true;
+    texture_ = std::move(created).value();
+    return texture_->is_valid();
 }
 
 void ToolbarTexture::reset() noexcept {
-    if (texture_ != 0U) {
-        glDeleteTextures(1, &texture_);
-        texture_ = 0U;
-    }
-    width_ = 0;
-    height_ = 0;
+    texture_.reset();
 }
 
 bool ToolbarTexture::is_valid() const noexcept {
-    return texture_ != 0U && width_ > 0 && height_ > 0;
+    return texture_ != nullptr && texture_->is_valid();
 }
 
 ImTextureRef ToolbarTexture::texture_ref() const noexcept {
-    return ImTextureRef{to_imgui_texture_id<ImTextureID>(static_cast<std::uintptr_t>(texture_))};
+    return texture_ != nullptr ? texture_->texture_ref() : ImTextureRef{};
 }
 
 struct ToolbarIconSpec {
@@ -327,7 +295,7 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
     return camera_result.value();
 }
 
-[[nodiscard]] elf3d::Result<ViewerScene> create_demo_scene(elf3d::Engine& engine) {
+[[nodiscard]] elf3d::Result<SceneSession> create_demo_scene(elf3d::Engine& engine) {
     elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.create_scene();
     if (!scene_result) {
         return scene_result.error();
@@ -377,18 +345,18 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
     }
     const std::optional<elf3d::Bounds3> bounds = scene->world_bounds();
 
-    return ViewerScene{std::move(scene),
-                       camera_result.value(),
-                       cube_result.value(),
-                       material_result.value(),
-                       {},
-                       elf3d::SceneStatistics{2, 1, 1, 1, 1, 24, 36, 12},
-                       bounds,
-                       true};
+    return SceneSession{std::move(scene),
+                        camera_result.value(),
+                        cube_result.value(),
+                        material_result.value(),
+                        {},
+                        elf3d::SceneStatistics{2, 1, 1, 1, 1, 24, 36, 12},
+                        bounds,
+                        true};
 }
 
-[[nodiscard]] elf3d::Result<ViewerScene> load_model_scene(elf3d::Engine& engine,
-                                                          const std::filesystem::path& path) {
+[[nodiscard]] elf3d::Result<SceneSession> load_model_scene(elf3d::Engine& engine,
+                                                           const std::filesystem::path& path) {
     elf3d::Result<elf3d::LoadedScene> loaded_result = engine.load_scene(path_to_utf8(path));
     if (!loaded_result) {
         return loaded_result.error();
@@ -402,61 +370,16 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
         return camera_result.error();
     }
 
-    ViewerScene result{std::move(scene),
-                       camera_result.value(),
-                       std::nullopt,
-                       std::nullopt,
-                       path,
-                       source_statistics,
-                       bounds,
-                       true};
+    SceneSession result{std::move(scene),
+                        camera_result.value(),
+                        std::nullopt,
+                        std::nullopt,
+                        path,
+                        source_statistics,
+                        bounds,
+                        true};
     result.load_report = std::move(loaded.report);
     return result;
-}
-
-void glfw_error_callback(int error_code, const char* description) {
-    std::cerr << "GLFW error " << error_code << ": "
-              << (description != nullptr ? description : "No description") << '\n';
-}
-
-void glfw_drop_callback(GLFWwindow* window, int path_count, const char** paths) {
-    auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
-    if (state == nullptr || path_count <= 0 || paths == nullptr || paths[0] == nullptr) {
-        return;
-    }
-    try {
-        state->dropped_path = paths[0];
-    } catch (const std::bad_alloc&) {
-        fatal_viewer_allocation_failure();
-    } catch (const std::length_error&) {
-        state->drop_copy_failed = true;
-    } catch (...) {
-        fatal_unexpected_viewer_exception();
-    }
-}
-
-void glfw_navigation_scroll_callback(GLFWwindow* window, double, double y_offset) {
-    auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
-    if (state == nullptr) {
-        return;
-    }
-
-    const std::optional<float> accumulated_delta =
-        accumulated_wheel_delta(state->navigation_wheel_delta, y_offset);
-    if (!accumulated_delta.has_value()) {
-        return;
-    }
-
-    double x = 0.0;
-    double y = 0.0;
-    glfwGetCursorPos(window, &x, &y);
-    const ImVec2 position{static_cast<float>(x), static_cast<float>(y)};
-    if (!std::isfinite(position.x) || !std::isfinite(position.y)) {
-        return;
-    }
-
-    state->navigation_wheel_delta = *accumulated_delta;
-    state->navigation_wheel_position = position;
 }
 
 } // namespace elf3d::viewer

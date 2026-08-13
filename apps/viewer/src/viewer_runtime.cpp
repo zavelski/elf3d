@@ -1,9 +1,18 @@
-#include "viewer_internal.hpp"
+#include "viewer_application.hpp"
+
+#include "viewer_assets.hpp"
+#include "viewer_browser.hpp"
+#include "viewer_chrome.hpp"
+#include "viewer_components.hpp"
+#include "viewer_ui.hpp"
+#include "viewer_viewport.hpp"
+#include "viewer_workflow_execution.hpp"
+
+#include <elf3d/imgui/context.h>
 
 #include <imgui.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -11,62 +20,22 @@
 #include <new>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace elf3d::viewer {
 namespace {
 
-inline constexpr unsigned int gl_shading_language_version = 0x8B8CU;
-inline constexpr unsigned int gl_context_flags = 0x821EU;
-inline constexpr unsigned int gl_context_profile_mask = 0x9126U;
-inline constexpr unsigned int gl_samples = 0x80A9U;
-inline constexpr unsigned int gl_framebuffer_srgb = 0x8DB9U;
-
-[[nodiscard]] std::string gl_string(unsigned int name) {
-    const unsigned char* value = glGetString(name);
-    if (value == nullptr) {
-        return "unavailable";
-    }
-    std::string result;
-    for (std::size_t index = 0; value[index] != 0; ++index) {
-        result.push_back(static_cast<char>(value[index]));
-    }
-    return result;
-}
-
-void capture_context_diagnostics(GLFWwindow* window, ViewerState& state) {
-    (void)window;
-    state.gl_vendor = gl_string(GL_VENDOR);
-    state.gl_renderer = gl_string(GL_RENDERER);
-    state.gl_version = gl_string(GL_VERSION);
-    state.glsl_version_report = gl_string(gl_shading_language_version);
-    glGetIntegerv(gl_context_flags, &state.gl_context_flags);
-    glGetIntegerv(gl_context_profile_mask, &state.gl_context_profile_mask);
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &state.maximum_texture_size);
-    glGetIntegerv(GL_RED_BITS, &state.default_red_bits);
-    glGetIntegerv(GL_GREEN_BITS, &state.default_green_bits);
-    glGetIntegerv(GL_BLUE_BITS, &state.default_blue_bits);
-    glGetIntegerv(GL_ALPHA_BITS, &state.default_alpha_bits);
-    glGetIntegerv(GL_DEPTH_BITS, &state.default_depth_bits);
-    glGetIntegerv(GL_STENCIL_BITS, &state.default_stencil_bits);
-    glGetIntegerv(gl_samples, &state.default_samples);
-    state.default_srgb_capable = glIsEnabled(gl_framebuffer_srgb) == GL_TRUE ? 1 : 0;
-}
-
-[[nodiscard]] double elapsed_milliseconds(std::chrono::steady_clock::time_point begin,
-                                          std::chrono::steady_clock::time_point end) noexcept {
-    return std::chrono::duration<double, std::milli>(end - begin).count();
-}
-
-void retain_frame_sample(ViewerState& state, const ViewerState::FrameSample& sample) {
-    ++state.captured_frame_count;
-    state.frame_samples.push_back(sample);
-    const std::size_t maximum_samples = state.capture_performance_csv ? 10000U : 600U;
-    if (state.frame_samples.size() > maximum_samples) {
-        state.frame_samples.erase(
-            state.frame_samples.begin(),
-            state.frame_samples.begin() +
-                static_cast<std::ptrdiff_t>(state.frame_samples.size() - maximum_samples));
+void retain_frame_sample(ViewerFrameContext& state, const ViewerFrameSample& sample) {
+    ++state.performance.captured_frame_count;
+    state.performance.frame_samples.push_back(sample);
+    const std::size_t maximum_samples = state.performance.capture_csv ? 10000U : 600U;
+    if (state.performance.frame_samples.size() > maximum_samples) {
+        state.performance.frame_samples.erase(
+            state.performance.frame_samples.begin(),
+            state.performance.frame_samples.begin() +
+                static_cast<std::ptrdiff_t>(state.performance.frame_samples.size() -
+                                            maximum_samples));
     }
 }
 
@@ -80,270 +49,193 @@ void retain_frame_sample(ViewerState& state, const ViewerState::FrameSample& sam
     fatal_error("Elf3D viewer encountered an unexpected exception");
 }
 
-void report_load_failure(ViewerState& state, const std::string& path, const elf3d::Error& error) {
-    state.load_failure = LoadFailure{path, error};
-    state.request_error_modal = true;
-    std::cerr << "Failed to load '" << path << "' [" << error_category(error.code())
-              << "]: " << error.message() << '\n';
-}
-
-void attempt_model_save(ViewerState& state, ViewerScene& scene, const std::string& target_path) {
-    const elf3d::Result<void> saved = scene.scene->export_loaded_document(target_path);
-    if (!saved) {
-        state.save_failure = LoadFailure{target_path, saved.error()};
-        state.request_save_error_modal = true;
-        return;
-    }
-    scene.source_path = path_from_utf8(target_path);
-    remember_model_directory(state, scene.source_path);
-}
-
-void attempt_model_load(elf3d::Engine& engine, elf3d::Viewport& engine_viewport, ViewerState& state,
-                        ViewerScene& active_scene, const std::string& source_path) {
-    try {
-        const std::filesystem::path path = path_from_utf8(source_path);
-        elf3d::Result<ViewerScene> result = load_model_scene(engine, path);
-        if (!result) {
-            report_load_failure(state, source_path, result.error());
-            return;
-        }
-        engine_viewport.cancel_interaction();
-        engine_viewport.clear_selection();
-        engine_viewport.clear_isolation();
-        engine_viewport.clear_distance_measurement();
-        engine_viewport.clear_clipping();
-        active_scene = std::move(result).value();
-        remember_model_directory(state, active_scene.source_path);
-        state.rotation_angle = 0.0F;
-        state.statistics = {};
-        state.last_revealed_hierarchy_selection.reset();
-    } catch (const std::bad_alloc&) {
-        fatal_viewer_allocation_failure();
-    } catch (const std::filesystem::filesystem_error&) {
-        report_load_failure(state, source_path,
-                            elf3d::Error{elf3d::ErrorCode::invalid_argument,
-                                         "The viewer could not convert the UTF-8 source path"});
-    } catch (...) {
-        fatal_unexpected_viewer_exception();
-    }
-}
-
-[[nodiscard]] bool camera_shortcuts_available(const ViewerState& state, const ViewerScene& scene,
-                                              const elf3d::Viewport& engine_viewport) noexcept {
-    const elf3d::Result<std::optional<elf3d::Bounds3>> visible_bounds =
-        engine_viewport.visible_bounds(*scene.scene);
-    return state.show_3d_view && visible_bounds && visible_bounds.value().has_value() &&
-           has_nonzero_extent(state.view_dimensions) && !ImGui::GetIO().WantTextInput &&
-           !navigation_blocked_by_modal();
-}
-
-struct ViewerRuntime {
-    GlfwRuntime glfw;
-    Window window;
-    std::unique_ptr<elf3d::Engine> engine;
+struct ViewerAssembly {
+    elf3d::Engine* engine = nullptr;
     std::unique_ptr<elf3d::Viewport> viewport;
-    ViewerScene scene;
-    ViewerState state;
-    std::unique_ptr<elf3d::imgui::Context> imgui;
+    SceneSession scene;
+    ToolCoordinator tools;
+    ViewerShellState shell;
+    ViewerRenderingState rendering;
+    ViewerPerformanceState performance;
+    ViewerGraphicsDiagnosticsState diagnostics;
+    ViewerNotificationState notifications;
+    ViewerInteractionFrameState interaction;
+    SceneHierarchyComponentState hierarchy;
+    ViewerPresentationResources presentation;
+    PendingFileInputState pending_files;
+    FileBrowserState browser;
+    ViewerPreferencesState preferences;
+    SceneReplacementWorkflow scene_workflow;
+    ModelSaveWorkflow save_workflow;
+    ExternalEditorWorkflow external_editor_workflow;
     ToolbarIcons toolbar_icons;
+    InteractionOwnerId viewport_interaction_owner;
+    InteractionRegionId viewport_interaction_region;
+    bool exit_requested = false;
 };
 
-[[nodiscard]] bool initialize_viewer_window(ViewerRuntime& runtime) {
-    glfwSetErrorCallback(glfw_error_callback);
-    if (!runtime.glfw.initialize()) {
-        std::cerr << "Failed to initialize GLFW\n";
-        return false;
-    }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#if defined(__APPLE__)
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-#endif
-    runtime.window.reset(glfwCreateWindow(1600, 900, "Elf3D Viewer", nullptr, nullptr));
-    if (!runtime.window) {
-        std::cerr << "Failed to create the Elf3D GLFW window with an OpenGL 4.1 core context\n";
-        return false;
-    }
-    glfwMakeContextCurrent(runtime.window.get());
-    if (glfwGetCurrentContext() != runtime.window.get() || glGetString(GL_VERSION) == nullptr) {
-        std::cerr << "Failed to initialize the OpenGL context\n";
-        return false;
-    }
-    glfwSwapInterval(1);
-    capture_context_diagnostics(runtime.window.get(), runtime.state);
-    return true;
+[[nodiscard]] ViewerFrameContext frame_context(ViewerAssembly& runtime) noexcept {
+    return ViewerFrameContext{runtime.shell,       runtime.rendering,     runtime.performance,
+                              runtime.diagnostics, runtime.notifications, runtime.interaction,
+                              runtime.hierarchy,   runtime.presentation,  runtime.pending_files};
 }
 
-[[nodiscard]] bool initialize_viewer_engine(ViewerRuntime& runtime) {
-    elf3d::EngineConfiguration configuration;
-    configuration.opengl.load_procedure = load_opengl_procedure;
-    elf3d::Result<std::unique_ptr<elf3d::Engine>> engine = elf3d::Engine::create(configuration);
-    if (!engine) {
-        std::cerr << "Failed to create the Elf3D engine: " << engine.error().message() << '\n';
-        return false;
-    }
-    runtime.engine = std::move(engine).value();
+[[nodiscard]] ViewerWorkflowContext workflow_context(ViewerAssembly& runtime) noexcept {
+    return ViewerWorkflowContext{*runtime.engine,       *runtime.viewport, runtime.rendering,
+                                 runtime.notifications, runtime.hierarchy, runtime.preferences,
+                                 runtime.scene,         runtime.tools,     runtime.scene_workflow,
+                                 runtime.save_workflow};
+}
+
+[[nodiscard]] ViewerCapabilitySnapshot viewer_capabilities(const ViewerAssembly& runtime) noexcept {
+    ViewerCapabilitySnapshot result;
+    result.scene = runtime.scene.scene->id();
+    result.selected_entity = runtime.viewport->selected_entity();
+    result.scene_imported = runtime.scene.is_imported();
+    result.view_available =
+        runtime.shell.show_3d_view && has_nonzero_extent(runtime.rendering.view_dimensions);
+    const Result<std::optional<Bounds3>> visible =
+        runtime.viewport->visible_bounds(*runtime.scene.scene);
+    result.visible_content = visible && visible.value().has_value();
+    const Result<std::optional<Bounds3>> unclipped =
+        runtime.viewport->unclipped_visible_bounds(*runtime.scene.scene);
+    result.unclipped_visible_content = unclipped && unclipped.value().has_value();
+    const ClippingSnapshot clipping = runtime.viewport->clipping_snapshot();
+    result.section_plane_enabled = clipping.section_plane.enabled;
+    result.has_clipping = clipping.section_plane.enabled || clipping.box_count != 0;
+    result.can_add_clipping_box = clipping.box_count < maximum_clipping_boxes;
+    result.isolating = runtime.viewport->is_isolating();
+    const DistanceMeasurementSnapshot measurement = runtime.tools.measurement().snapshot(
+        *runtime.scene.scene, *runtime.viewport,
+        runtime.tools.active_tool() == ViewerTool::distance_measurement);
+    result.measurement_incomplete =
+        measurement.state == DistanceMeasurementState::awaiting_second_point;
+    result.has_measurement = measurement.first_point.has_value() ||
+                             measurement.second_point.has_value() ||
+                             measurement.preview_point.has_value();
+    return result;
+}
+
+[[nodiscard]] Result<void> initialize_viewer_engine(ViewerAssembly& runtime, Engine& engine) {
+    runtime.engine = &engine;
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport = runtime.engine->create_viewport({});
     if (!viewport) {
-        std::cerr << "Failed to create the Elf3D viewport: " << viewport.error().message() << '\n';
-        return false;
+        return viewport.error();
     }
     runtime.viewport = std::move(viewport).value();
-    elf3d::Result<ViewerScene> scene = create_demo_scene(*runtime.engine);
+    elf3d::Result<SceneSession> scene = create_demo_scene(*runtime.engine);
     if (!scene) {
-        std::cerr << "Failed to create the Elf3D demonstration scene: " << scene.error().message()
-                  << '\n';
-        return false;
+        return scene.error();
     }
     runtime.scene = std::move(scene).value();
-    return true;
+    return {};
 }
 
-[[nodiscard]] bool initialize_viewer_imgui(ViewerRuntime& runtime,
-                                           const std::filesystem::path& asset_root) {
+void initialize_viewer_presentation(ViewerAssembly& runtime,
+                                    const std::filesystem::path& asset_root, float dpi_scale) {
     const std::string font_path = path_to_utf8(asset_root / "font" / "DroidSans.ttf");
-    elf3d::imgui::ContextOptions options;
-    options.font_path_utf8 = font_path;
-    options.font_size_pixels = viewer_ui_font_size_pixels;
-    elf3d::Result<std::unique_ptr<elf3d::imgui::Context>> imgui =
-        elf3d::imgui::Context::create(runtime.window.get(), glsl_version, options);
-    if (!imgui) {
-        std::cerr << imgui.error().message() << '\n';
-        return false;
-    }
-    runtime.imgui = std::move(imgui).value();
     runtime.toolbar_icons = load_toolbar_icons(asset_root);
-    runtime.state.panel_title_font =
-        load_viewer_font(runtime.window.get(), font_path.c_str(), panel_title_font_size_pixels);
-    runtime.state.panel_content_font =
-        load_viewer_font(runtime.window.get(), font_path.c_str(), panel_content_font_size_pixels);
-    return true;
+    runtime.presentation.main_font =
+        elf3d::imgui::load_font(font_path, viewer_ui_font_size_pixels, dpi_scale);
+    ImGui::GetIO().FontDefault = runtime.presentation.main_font;
+    runtime.presentation.panel_title_font =
+        elf3d::imgui::load_font(font_path, panel_title_font_size_pixels, dpi_scale);
+    runtime.presentation.panel_content_font =
+        elf3d::imgui::load_font(font_path, panel_content_font_size_pixels, dpi_scale);
 }
 
-[[nodiscard]] bool initialize_viewer_runtime(ViewerRuntime& runtime, int argument_count,
-                                             char** arguments) {
-    if (!initialize_viewer_window(runtime) || !initialize_viewer_engine(runtime)) {
-        return false;
-    }
-    load_viewer_preferences(runtime.state);
-    glfwSetWindowUserPointer(runtime.window.get(), &runtime.state);
-    glfwSetScrollCallback(runtime.window.get(), glfw_navigation_scroll_callback);
-    const auto asset_root = viewer_asset_root(argument_count, arguments);
-    if (!initialize_viewer_imgui(runtime, asset_root)) {
-        return false;
-    }
-    glfwSetDropCallback(runtime.window.get(), glfw_drop_callback);
-    if (argument_count >= 2 && arguments[1] != nullptr) {
-        attempt_model_load(*runtime.engine, *runtime.viewport, runtime.state, runtime.scene,
-                           arguments[1]);
-    }
-    return true;
+void capture_context_diagnostics(const GraphicsContextSnapshot& graphics,
+                                 ViewerGraphicsDiagnosticsState& diagnostics) {
+    diagnostics.gl_vendor = graphics.vendor_name;
+    diagnostics.gl_renderer = graphics.device_name;
+    diagnostics.gl_version = graphics.api_version;
+    diagnostics.glsl_version_report = graphics.shading_language_version;
+    diagnostics.default_red_bits = graphics.red_bits;
+    diagnostics.default_green_bits = graphics.green_bits;
+    diagnostics.default_blue_bits = graphics.blue_bits;
+    diagnostics.default_alpha_bits = graphics.alpha_bits;
+    diagnostics.default_depth_bits = graphics.depth_bits;
+    diagnostics.default_stencil_bits = graphics.stencil_bits;
+    diagnostics.default_samples = graphics.samples;
+    diagnostics.default_srgb_capable = graphics.default_framebuffer_srgb ? 1 : 0;
+    diagnostics.maximum_texture_size = graphics.maximum_texture_extent;
 }
 
-void begin_viewer_frame(ViewerRuntime& runtime) {
-    runtime.state.viewport_rendered_this_frame = false;
-    runtime.state.navigation_wheel_delta = 0.0F;
-    runtime.state.navigation_wheel_position.reset();
-    glfwPollEvents();
-    runtime.state.application_focused =
-        glfwGetWindowAttrib(runtime.window.get(), GLFW_FOCUSED) == GLFW_TRUE;
-    if (!runtime.state.application_focused) {
-        runtime.viewport->cancel_interaction();
-        release_navigation_cursor(runtime.window.get(), runtime.state);
-    }
-    runtime.imgui->begin_frame();
-    runtime.state.viewport_error.clear();
-}
-
-void collect_save_shortcut(ViewerRuntime& runtime) {
-    if (runtime.scene.is_imported() && !navigation_blocked_by_modal() && ImGui::GetIO().KeyCtrl &&
-        ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
-        runtime.state.request_save_modal = true;
+void collect_save_shortcut(const InputSnapshot& input, const ViewerCapabilitySnapshot& capabilities,
+                           ViewerCommandDispatcher& commands) {
+    if (capabilities.scene_imported && !navigation_blocked_by_modal() && input.modifiers.control &&
+        input.modifiers.shift && input.key(InputKey::s).pressed && !input.text_input_owned) {
+        commands.emit(ShowSaveDialogCommand{});
     }
 }
 
-void collect_camera_shortcuts(ViewerRuntime& runtime, ViewerCommands& commands) {
-    if (!camera_shortcuts_available(runtime.state, runtime.scene, *runtime.viewport)) {
+void collect_camera_shortcuts(const InputSnapshot& input,
+                              const ViewerCapabilitySnapshot& capabilities,
+                              ViewerCommandDispatcher& commands) {
+    if (!capabilities.view_available || !capabilities.visible_content || input.text_input_owned ||
+        navigation_blocked_by_modal()) {
         return;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_F)) {
-        commands.fit_to_scene = true;
+    if (input.key(InputKey::f).pressed) {
+        commands.emit(FitViewCommand{});
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Home)) {
-        commands.reset_view = true;
+    if (input.key(InputKey::home).pressed) {
+        commands.emit(ResetViewCommand{});
     }
 }
 
-[[nodiscard]] bool tool_shortcuts_available(const ViewerRuntime& runtime) noexcept {
-    return runtime.state.show_3d_view && has_nonzero_extent(runtime.state.view_dimensions) &&
-           !ImGui::GetIO().WantTextInput && !navigation_blocked_by_modal();
+[[nodiscard]] bool tool_shortcuts_available(const ViewerAssembly& runtime,
+                                            const InputSnapshot& input) noexcept {
+    return runtime.shell.show_3d_view && has_nonzero_extent(runtime.rendering.view_dimensions) &&
+           !input.text_input_owned && !navigation_blocked_by_modal();
 }
 
-[[nodiscard]] bool selection_shortcut_pressed(const ViewerRuntime& runtime) noexcept {
-    return !glfw_mouse_button_down(runtime.window.get(), GLFW_MOUSE_BUTTON_LEFT) &&
-           !glfw_mouse_button_down(runtime.window.get(), GLFW_MOUSE_BUTTON_RIGHT) &&
-           !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_S);
+[[nodiscard]] bool selection_shortcut_pressed(const InputSnapshot& input) noexcept {
+    return !input.button(InputButton::left).down && !input.button(InputButton::right).down &&
+           !input.modifiers.control && !input.modifiers.shift && input.key(InputKey::s).pressed;
 }
 
-void collect_tool_shortcuts(ViewerRuntime& runtime, ViewerCommands& commands) {
-    if (!tool_shortcuts_available(runtime)) {
+void collect_tool_shortcuts(ViewerAssembly& runtime, const InputSnapshot& input,
+                            const ViewerCapabilitySnapshot& capabilities,
+                            ViewerCommandDispatcher& commands) {
+    if (!capabilities.view_available || !tool_shortcuts_available(runtime, input)) {
         return;
     }
-    if (selection_shortcut_pressed(runtime)) {
-        commands.select_tool = true;
+    if (selection_shortcut_pressed(input)) {
+        commands.emit(ActivateViewerToolCommand{ViewerTool::selection});
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_M)) {
-        commands.measure_tool = true;
+    if (input.key(InputKey::m).pressed) {
+        commands.emit(ActivateViewerToolCommand{ViewerTool::distance_measurement});
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
-        commands.clear_measurement = true;
+    if (input.key(InputKey::delete_key).pressed) {
+        commands.emit(ClearMeasurementCommand{});
     }
 }
 
-void collect_escape_shortcut(ViewerRuntime& runtime, ViewerCommands& commands) {
-    if (!runtime.state.show_3d_view || ImGui::GetIO().WantTextInput ||
-        navigation_blocked_by_modal() || !ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+void collect_escape_shortcut(ViewerAssembly& runtime, const InputSnapshot& input,
+                             const ViewerCapabilitySnapshot& capabilities,
+                             ViewerCommandDispatcher& commands) {
+    if (!runtime.shell.show_3d_view || input.text_input_owned || navigation_blocked_by_modal() ||
+        !input.key(InputKey::escape).pressed) {
         return;
     }
-    const elf3d::DistanceMeasurementSnapshot measurement =
-        runtime.viewport->distance_measurement_snapshot(*runtime.scene.scene);
-    if (measurement.state == elf3d::DistanceMeasurementState::awaiting_second_point) {
-        commands.cancel_measurement = true;
+    if (capabilities.measurement_incomplete) {
+        commands.emit(CancelMeasurementCommand{});
     } else {
-        commands.clear_selection = true;
+        commands.emit(ClearSelectionCommand{});
     }
 }
 
-void collect_viewer_shortcuts(ViewerRuntime& runtime, ViewerCommands& commands) {
-    collect_save_shortcut(runtime);
-    collect_camera_shortcuts(runtime, commands);
-    collect_tool_shortcuts(runtime, commands);
-    collect_escape_shortcut(runtime, commands);
+void collect_viewer_shortcuts(ViewerAssembly& runtime, const InputSnapshot& input,
+                              const ViewerCapabilitySnapshot& capabilities,
+                              ViewerCommandDispatcher& commands) {
+    collect_save_shortcut(input, capabilities, commands);
+    collect_camera_shortcuts(input, capabilities, commands);
+    collect_tool_shortcuts(runtime, input, capabilities, commands);
+    collect_escape_shortcut(runtime, input, capabilities, commands);
 }
 
-void execute_tool_commands(ViewerRuntime& runtime, const ViewerCommands& commands) {
-    if (commands.select_tool) {
-        runtime.viewport->set_active_tool(elf3d::ViewportTool::selection);
-    }
-    if (commands.measure_tool) {
-        const elf3d::Result<void> result = runtime.viewport->begin_distance_measurement();
-        if (!result) {
-            set_viewport_error(runtime.state, result.error());
-        }
-    }
-    if (commands.show_clipping_panel) {
-        runtime.state.show_clipping_panel = true;
-    }
-    if (commands.cancel_measurement) {
-        runtime.viewport->cancel_distance_measurement();
-    }
-    if (commands.clear_measurement) {
-        runtime.viewport->clear_distance_measurement();
-    }
-}
-
-void toggle_section_plane(ViewerRuntime& runtime) {
+[[nodiscard]] Result<void> toggle_section_plane(ViewerAssembly& runtime) {
     elf3d::SectionPlane plane = runtime.viewport->clipping_snapshot().section_plane;
     plane.enabled = !plane.enabled;
     if (plane.enabled) {
@@ -353,280 +245,524 @@ void toggle_section_plane(ViewerRuntime& runtime) {
             plane.point = bounds_center(*bounds.value());
         }
     }
-    const elf3d::Result<void> result = runtime.viewport->set_section_plane(plane);
-    if (!result) {
-        set_viewport_error(runtime.state, result.error());
-    }
+    return runtime.viewport->set_section_plane(plane);
 }
 
-void flip_section_plane(ViewerRuntime& runtime) {
+[[nodiscard]] Result<void> flip_section_plane(ViewerAssembly& runtime) {
     elf3d::SectionPlane plane = runtime.viewport->clipping_snapshot().section_plane;
     plane.retained_half_space = plane.retained_half_space == elf3d::PlaneHalfSpace::positive
                                     ? elf3d::PlaneHalfSpace::negative
                                     : elf3d::PlaneHalfSpace::positive;
-    const elf3d::Result<void> result = runtime.viewport->set_section_plane(plane);
-    if (!result) {
-        set_viewport_error(runtime.state, result.error());
-    }
+    return runtime.viewport->set_section_plane(plane);
 }
 
-void execute_section_plane_commands(ViewerRuntime& runtime, const ViewerCommands& commands) {
-    if (commands.enable_section_plane) {
-        toggle_section_plane(runtime);
-    }
-    if (commands.flip_section_side) {
-        flip_section_plane(runtime);
-    }
+[[nodiscard]] ViewerCommandCompletion command_failed(const Error& error) noexcept {
+    return ViewerCommandCompletion{ViewerCommandOutcomeStatus::failed, error, false};
 }
 
-void execute_clipping_commands(ViewerRuntime& runtime, const ViewerCommands& commands) {
-    if (commands.add_clipping_box_from_bounds) {
-        const elf3d::Result<std::uint32_t> result =
-            runtime.viewport->add_clipping_box_from_visible_bounds(*runtime.scene.scene);
-        if (!result) {
-            set_viewport_error(runtime.state, result.error());
-        }
-    }
-    if (commands.clear_clipping) {
-        runtime.viewport->clear_clipping();
-    }
-    if (commands.toggle_clipping_helpers) {
-        const elf3d::ClippingSnapshot clipping = runtime.viewport->clipping_snapshot();
-        const elf3d::Result<void> result =
-            runtime.viewport->set_clipping_helpers_visible(!clipping.helpers.visible);
-        if (!result) {
-            set_viewport_error(runtime.state, result.error());
-        }
-    }
-    if (commands.fit_to_clipped_content) {
-        const elf3d::Result<void> result =
-            runtime.viewport->fit_to_scene(*runtime.scene.scene, runtime.scene.camera);
-        if (!result) {
-            set_viewport_error(runtime.state, result.error());
-        }
-    }
+[[nodiscard]] ViewerCommandCompletion command_result(const Result<void>& result) noexcept {
+    return result ? ViewerCommandCompletion{} : command_failed(result.error());
 }
 
-void replace_with_demo_scene(ViewerRuntime& runtime) {
-    elf3d::Result<ViewerScene> replacement = create_demo_scene(*runtime.engine);
-    if (!replacement) {
-        report_load_failure(runtime.state, "Procedural cube demo", replacement.error());
-        return;
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ExitViewerCommand&) noexcept {
+    runtime.exit_requested = true;
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ShowOpenDialogCommand&) noexcept {
+    runtime.browser.request_open_modal = true;
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ShowSaveDialogCommand&) noexcept {
+    runtime.browser.request_save_modal = true;
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ResetViewerLayoutCommand&) noexcept {
+    runtime.shell.reset_dock_layout = true;
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ReloadSceneCommand&) {
+    return execute_scene_workflow(workflow_context(runtime),
+                                  SceneReplacementRequest{SceneReplacementKind::reload_model,
+                                                          path_to_utf8(runtime.scene.source_path)});
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const CloseSceneCommand&) {
+    return execute_scene_workflow(workflow_context(runtime),
+                                  SceneReplacementRequest{SceneReplacementKind::close_to_demo, {}});
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const FitViewCommand&) noexcept {
+    return command_result(
+        runtime.viewport->fit_to_scene(*runtime.scene.scene, runtime.scene.camera));
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ResetViewCommand&) noexcept {
+    return command_result(runtime.viewport->reset_view(*runtime.scene.scene, runtime.scene.camera));
+}
+
+[[nodiscard]] ViewerCommandCompletion
+execute_command(ViewerAssembly& runtime, const ShowViewerPanelCommand& command) noexcept {
+    if (command.panel == ViewerPanel::clipping) {
+        runtime.shell.show_clipping_panel = true;
     }
-    runtime.viewport->cancel_interaction();
-    runtime.viewport->clear_selection();
-    runtime.viewport->clear_isolation();
-    runtime.viewport->clear_distance_measurement();
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion
+execute_command(ViewerAssembly& runtime, const ActivateViewerToolCommand& command) noexcept {
+    runtime.tools.activate(command.tool);
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ToggleSectionPlaneCommand&) noexcept {
+    return command_result(toggle_section_plane(runtime));
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const FlipSectionPlaneCommand&) noexcept {
+    return command_result(flip_section_plane(runtime));
+}
+
+[[nodiscard]] ViewerCommandCompletion
+execute_command(ViewerAssembly& runtime, const AddClippingBoxFromBoundsCommand&) noexcept {
+    const Result<std::uint32_t> result = runtime.tools.clipping().add_box_from_visible_bounds(
+        *runtime.scene.scene, *runtime.viewport);
+    return result ? ViewerCommandCompletion{} : command_failed(result.error());
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ClearClippingCommand&) noexcept {
     runtime.viewport->clear_clipping();
-    runtime.scene = std::move(replacement).value();
-    runtime.state.statistics = {};
-    runtime.state.last_revealed_hierarchy_selection.reset();
+    return {};
 }
 
-void execute_scene_commands(ViewerRuntime& runtime, const ViewerCommands& commands) {
-    if (commands.reload && runtime.scene.is_imported()) {
-        attempt_model_load(*runtime.engine, *runtime.viewport, runtime.state, runtime.scene,
-                           path_to_utf8(runtime.scene.source_path));
+[[nodiscard]] ViewerCommandCompletion
+execute_command(ViewerAssembly& runtime, const ToggleClippingHelpersCommand&) noexcept {
+    runtime.tools.clipping().set_helpers_visible(!runtime.tools.clipping().helpers_visible());
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const FitClippedContentCommand&) noexcept {
+    return command_result(
+        runtime.viewport->fit_to_scene(*runtime.scene.scene, runtime.scene.camera));
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ClearSelectionCommand&) noexcept {
+    runtime.viewport->clear_selection();
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const CancelMeasurementCommand&) noexcept {
+    runtime.tools.measurement().cancel_incomplete();
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ClearMeasurementCommand&) noexcept {
+    runtime.tools.measurement().clear();
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const SelectEntityCommand& command) noexcept {
+    return command_result(
+        runtime.viewport->set_selected_entity(*runtime.scene.scene, command.entity));
+}
+
+[[nodiscard]] ViewerCommandCompletion
+execute_command(ViewerAssembly& runtime, const SetEntityVisibilityCommand& command) noexcept {
+    const Result<void> result =
+        command.visible && command.scope == EntityVisibilityScope::entity_and_ancestors
+            ? runtime.scene.scene->show_entity_and_ancestors(command.entity)
+            : runtime.scene.scene->set_entity_local_visibility(command.entity, command.visible);
+    if (result) {
+        invalidate_hierarchy_snapshot(runtime.scene);
     }
-    if (commands.close_scene) {
-        replace_with_demo_scene(runtime);
+    return command_result(result);
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ShowAllEntitiesCommand&) noexcept {
+    const Result<void> result = runtime.scene.scene->show_all_entities();
+    if (result) {
+        invalidate_hierarchy_snapshot(runtime.scene);
     }
-    if (commands.fit_to_scene) {
-        const elf3d::Result<void> result =
-            runtime.viewport->fit_to_scene(*runtime.scene.scene, runtime.scene.camera);
-        if (!result) {
-            set_viewport_error(runtime.state, result.error());
+    return command_result(result);
+}
+
+[[nodiscard]] ViewerCommandCompletion
+execute_command(ViewerAssembly& runtime, const IsolateEntityCommand& command) noexcept {
+    return command_result(runtime.viewport->isolate_entity(*runtime.scene.scene, command.entity));
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ExitIsolationCommand&) noexcept {
+    runtime.viewport->clear_isolation();
+    return {};
+}
+
+[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
+                                                      const ViewerCommand& command) {
+    return std::visit([&runtime](const auto& value) { return execute_command(runtime, value); },
+                      command);
+}
+
+void dispatch_viewer_commands(ViewerAssembly& runtime, ViewerCommandDispatcher& commands) {
+    std::optional<ViewerCommandDispatch> dispatch = commands.take_next(runtime.scene.scene->id());
+    while (dispatch.has_value()) {
+        const ViewerCommandCompletion completion = execute_command(runtime, dispatch->command);
+        if (completion.error.has_value()) {
+            set_viewport_error(frame_context(runtime), *completion.error);
+        }
+        commands.complete(*dispatch, completion);
+        dispatch = commands.take_next(runtime.scene.scene->id());
+    }
+    if (commands.enqueue_error().has_value()) {
+        set_viewport_error(frame_context(runtime), *commands.enqueue_error());
+    }
+}
+
+void handle_pending_model_files(ViewerAssembly& runtime) {
+    if (runtime.pending_files.dropped_path.has_value()) {
+        std::string path = std::move(*runtime.pending_files.dropped_path);
+        runtime.pending_files.dropped_path.reset();
+        const ViewerCommandCompletion completion = execute_scene_workflow(
+            workflow_context(runtime),
+            SceneReplacementRequest{SceneReplacementKind::dropped_file, std::move(path)});
+        if (completion.error.has_value()) {
+            set_viewport_error(frame_context(runtime), *completion.error);
         }
     }
-    if (commands.reset_view) {
-        const elf3d::Result<void> result =
-            runtime.viewport->reset_view(*runtime.scene.scene, runtime.scene.camera);
-        if (!result) {
-            set_viewport_error(runtime.state, result.error());
-        }
+    if (runtime.pending_files.drop_copy_failed) {
+        runtime.pending_files.drop_copy_failed = false;
+        const Error error{ErrorCode::invalid_argument,
+                          "The viewer could not copy the dropped UTF-8 path"};
+        runtime.notifications.load_failure = LoadFailure{"Dropped file", error};
+        runtime.notifications.request_error_modal = true;
     }
-}
-
-void execute_selection_commands(ViewerRuntime& runtime, const ViewerCommands& commands) {
-    if (commands.clear_selection) {
-        runtime.viewport->clear_selection();
-    }
-    if (commands.hide_selected) {
-        apply_hierarchy_error(runtime.state,
-                              runtime.viewport->hide_selected_in_scene(*runtime.scene.scene));
-        invalidate_hierarchy_snapshot(runtime.scene);
-    }
-    if (commands.show_selected) {
-        apply_hierarchy_error(runtime.state,
-                              runtime.viewport->show_selected_in_scene(*runtime.scene.scene));
-        invalidate_hierarchy_snapshot(runtime.scene);
-    }
-}
-
-void execute_visibility_commands(ViewerRuntime& runtime, const ViewerCommands& commands) {
-    if (commands.show_all) {
-        apply_hierarchy_error(runtime.state, runtime.scene.scene->show_all_entities());
-        invalidate_hierarchy_snapshot(runtime.scene);
-    }
-    if (commands.isolate_selected) {
-        apply_hierarchy_error(runtime.state,
-                              runtime.viewport->isolate_selected(*runtime.scene.scene));
-    }
-    if (commands.exit_isolation) {
-        runtime.viewport->clear_isolation();
-    }
-}
-
-void execute_viewer_commands(ViewerRuntime& runtime, const ViewerCommands& commands) {
-    execute_tool_commands(runtime, commands);
-    execute_section_plane_commands(runtime, commands);
-    execute_clipping_commands(runtime, commands);
-    execute_scene_commands(runtime, commands);
-    execute_selection_commands(runtime, commands);
-    execute_visibility_commands(runtime, commands);
-}
-
-void handle_pending_model_files(ViewerRuntime& runtime) {
-    if (runtime.state.dropped_path.has_value()) {
-        std::string path = std::move(*runtime.state.dropped_path);
-        runtime.state.dropped_path.reset();
-        attempt_model_load(*runtime.engine, *runtime.viewport, runtime.state, runtime.scene, path);
-    }
-    if (runtime.state.drop_copy_failed) {
-        runtime.state.drop_copy_failed = false;
-        report_load_failure(runtime.state, "Dropped file",
-                            elf3d::Error{elf3d::ErrorCode::invalid_argument,
-                                         "The viewer could not copy the dropped UTF-8 path"});
-    }
+    const FileBrowserFrameInput browser_input{runtime.interaction.escape_pressed,
+                                              runtime.interaction.primary_double_clicked};
     const std::optional<FileDialogResult> open_result =
-        build_open_modal(runtime.state, runtime.scene);
+        build_open_modal(runtime.browser, runtime.preferences, runtime.scene, browser_input,
+                         runtime.external_editor_workflow);
     if (open_result.has_value()) {
-        attempt_model_load(*runtime.engine, *runtime.viewport, runtime.state, runtime.scene,
-                           open_result->path);
+        const ViewerCommandCompletion completion = execute_scene_workflow(
+            workflow_context(runtime),
+            SceneReplacementRequest{SceneReplacementKind::open_model, open_result->path});
+        if (completion.error.has_value()) {
+            set_viewport_error(frame_context(runtime), *completion.error);
+        }
     }
     const std::optional<FileDialogResult> save_result =
-        build_save_modal(runtime.state, runtime.scene);
+        build_save_modal(runtime.browser, runtime.preferences, runtime.scene, browser_input,
+                         runtime.external_editor_workflow);
+    execute_external_editor_workflow(runtime.browser, runtime.external_editor_workflow);
     if (!save_result.has_value()) {
         return;
     }
     if (save_result->action == FileDialogAction::open) {
-        attempt_model_load(*runtime.engine, *runtime.viewport, runtime.state, runtime.scene,
-                           save_result->path);
+        const ViewerCommandCompletion completion = execute_scene_workflow(
+            workflow_context(runtime),
+            SceneReplacementRequest{SceneReplacementKind::open_model, save_result->path});
+        if (completion.error.has_value()) {
+            set_viewport_error(frame_context(runtime), *completion.error);
+        }
     } else {
-        attempt_model_save(runtime.state, runtime.scene, save_result->path);
+        const ViewerCommandCompletion completion =
+            execute_save_workflow(workflow_context(runtime), ModelSaveRequest{save_result->path});
+        if (completion.error.has_value()) {
+            set_viewport_error(frame_context(runtime), *completion.error);
+        }
     }
 }
 
-void build_viewer_panels(ViewerRuntime& runtime, ImGuiID dockspace_id) {
-    ViewerState& state = runtime.state;
-    ViewerScene& scene = runtime.scene;
+void build_viewer_panels(ViewerAssembly& runtime, ApplicationUiContext& application,
+                         ImGuiID dockspace_id, ViewerCommandDispatcher& commands) {
+    ViewerFrameContext state = frame_context(runtime);
+    SceneSession& scene = runtime.scene;
     build_rendering_panel(dockspace_id, state, scene);
-    update_demo_cube_animation(state, scene);
-    build_3d_view(ViewPanelContext{runtime.window.get(), dockspace_id, &state, runtime.engine.get(),
-                                   runtime.viewport.get(), &scene});
-    build_scene_hierarchy_panel(dockspace_id, state, scene, *runtime.viewport);
+    update_demo_cube_animation(state, scene, state.interaction.frame_delta_seconds);
+    build_3d_view(ViewPanelContext{dockspace_id, state, *runtime.viewport, scene, runtime.tools,
+                                   application, runtime.viewport_interaction_owner,
+                                   runtime.viewport_interaction_region});
+    build_scene_hierarchy_panel(dockspace_id, state, scene, *runtime.viewport, commands);
     build_model_information(dockspace_id, state, scene);
     build_navigation_settings_window(dockspace_id, state, *runtime.viewport);
-    build_selection_panel(dockspace_id, state, scene, *runtime.viewport);
-    build_measurement_panel(dockspace_id, state, scene, *runtime.viewport);
-    build_clipping_panel(dockspace_id, state, scene, *runtime.viewport);
-    build_status_bar(state, *runtime.engine, scene, *runtime.viewport);
+    build_selection_panel(dockspace_id, state, scene, *runtime.viewport, runtime.tools);
+    build_measurement_panel(dockspace_id, state, scene, *runtime.viewport, runtime.tools);
+    build_clipping_panel(dockspace_id, state, scene, *runtime.viewport, runtime.tools);
+    build_status_bar(state, *runtime.engine, scene, *runtime.viewport, runtime.tools);
     build_about_window(state);
     build_error_modal(state);
     build_save_error_modal(state);
-    if (state.show_imgui_demo) {
-        ImGui::ShowDemoWindow(&state.show_imgui_demo);
+    if (state.shell.show_imgui_demo) {
+        ImGui::ShowDemoWindow(&state.shell.show_imgui_demo);
     }
-    state.apply_dock_layout = false;
+    state.shell.apply_dock_layout = false;
 }
 
-void build_viewer_frame_ui(ViewerRuntime& runtime) {
-    ViewerCommands commands;
-    build_main_menu(runtime.window.get(), runtime.state, runtime.scene, *runtime.viewport,
-                    commands);
-    build_toolbar(runtime.state, runtime.toolbar_icons, runtime.scene, *runtime.viewport, commands);
-    const ImGuiID dockspace_id = build_main_dockspace(runtime.state);
-    collect_viewer_shortcuts(runtime, commands);
-    execute_viewer_commands(runtime, commands);
+void build_viewer_frame_ui(ViewerAssembly& runtime, ApplicationUiContext& application) {
+    runtime.scene_workflow.begin_frame();
+    runtime.save_workflow.begin_frame();
+    ViewerFrameContext state = frame_context(runtime);
+    const ViewerCapabilitySnapshot capabilities = viewer_capabilities(runtime);
+    ViewerCommandDispatcher commands;
+    commands.begin_frame(capabilities);
+    build_main_menu(state, *runtime.viewport, runtime.tools, capabilities, commands);
+    build_toolbar(ToolbarBuildContext{state, runtime.toolbar_icons, *runtime.viewport,
+                                      runtime.tools, capabilities, commands});
+    collect_viewer_shortcuts(runtime, application.input(), capabilities, commands);
+    dispatch_viewer_commands(runtime, commands);
+    const ImGuiID dockspace_id = build_main_dockspace(state);
     handle_pending_model_files(runtime);
-    build_viewer_panels(runtime, dockspace_id);
+    build_viewer_panels(runtime, application, dockspace_id, commands);
+    dispatch_viewer_commands(runtime, commands);
 }
 
-int run_viewer(int argument_count, char** arguments) {
-    ViewerRuntime runtime;
-    if (!initialize_viewer_runtime(runtime, argument_count, arguments)) {
-        return 1;
+void capture_frame_sample(ViewerAssembly& runtime, const ApplicationUpdateContext& context) {
+    ViewerFrameContext state = frame_context(runtime);
+    if (state.rendering.viewport_rendered_this_frame) {
+        state.rendering.statistics = runtime.viewport->render_statistics();
+        state.rendering.framebuffer_valid = runtime.viewport->framebuffer_valid();
     }
-    ViewerState& state = runtime.state;
-    Window& window = runtime.window;
-    std::unique_ptr<elf3d::imgui::Context>& imgui = runtime.imgui;
-
-    while (glfwWindowShouldClose(window.get()) == GLFW_FALSE) {
-        const auto frame_begin = std::chrono::steady_clock::now();
-        begin_viewer_frame(runtime);
-        const auto event_input_end = std::chrono::steady_clock::now();
-        build_viewer_frame_ui(runtime);
-
-        if (state.vsync_enabled != state.vsync_applied) {
-            glfwSwapInterval(state.vsync_enabled ? 1 : 0);
-            state.vsync_applied = state.vsync_enabled;
-        }
-
-        const auto ui_build_end = std::chrono::steady_clock::now();
-        int framebuffer_width = 0;
-        int framebuffer_height = 0;
-        glfwGetFramebufferSize(window.get(), &framebuffer_width, &framebuffer_height);
-        glViewport(0, 0, framebuffer_width, framebuffer_height);
-        glClearColor(0.035F, 0.04F, 0.05F, 1.0F);
-        glClear(GL_COLOR_BUFFER_BIT);
-        imgui->render();
-        const auto composition_end = std::chrono::steady_clock::now();
-        glfwSwapBuffers(window.get());
-        const auto frame_end = std::chrono::steady_clock::now();
-        const double work_milliseconds = elapsed_milliseconds(event_input_end, ui_build_end);
-        const double render_milliseconds =
-            state.viewport_rendered_this_frame ? state.statistics.cpu_total_milliseconds : 0.0;
-        ViewerState::FrameSample sample{elapsed_milliseconds(frame_begin, frame_end),
-                                        elapsed_milliseconds(frame_begin, event_input_end),
-                                        std::max(0.0, work_milliseconds - render_milliseconds),
-                                        render_milliseconds,
-                                        elapsed_milliseconds(ui_build_end, composition_end),
-                                        elapsed_milliseconds(composition_end, frame_end),
-                                        elapsed_milliseconds(event_input_end, frame_end)};
-        int window_width = 0;
-        int window_height = 0;
-        glfwGetWindowSize(window.get(), &window_width, &window_height);
-        if (state.viewport_rendered_this_frame) {
-            sample.render = state.statistics;
-        }
-        const Result<PickingStatistics> picking = runtime.viewport->picking_statistics();
-        if (picking &&
-            (picking.value().lifetime_gpu_requests != state.sampled_picking_gpu_requests ||
-             picking.value().lifetime_cpu_fallbacks != state.sampled_picking_cpu_fallbacks)) {
-            sample.picking = picking.value();
-            state.sampled_picking_gpu_requests = picking.value().lifetime_gpu_requests;
-            state.sampled_picking_cpu_fallbacks = picking.value().lifetime_cpu_fallbacks;
-        }
-        sample.window_dimensions = Extent2D{static_cast<std::uint32_t>(std::max(window_width, 0)),
-                                            static_cast<std::uint32_t>(std::max(window_height, 0))};
-        sample.framebuffer_dimensions =
-            Extent2D{static_cast<std::uint32_t>(std::max(framebuffer_width, 0)),
-                     static_cast<std::uint32_t>(std::max(framebuffer_height, 0))};
-        sample.view_dimensions = state.view_dimensions;
-        sample.target_dimensions = state.render_target_dimensions;
-        sample.render_scale_percent = state.diagnostic_render_scale_percent;
-        sample.vsync_enabled = state.vsync_enabled;
-        sample.standard_shading = state.shading_mode == RenderShadingMode::standard;
-        sample.rendered_3d = state.viewport_rendered_this_frame;
-        retain_frame_sample(state, sample);
+    ViewerFrameSample sample;
+    sample.frame_milliseconds = context.elapsed_seconds() * 1000.0;
+    sample.render_milliseconds = state.rendering.viewport_rendered_this_frame
+                                     ? state.rendering.statistics.cpu_total_milliseconds
+                                     : 0.0;
+    sample.navigation_scene_milliseconds =
+        std::max(0.0, sample.frame_milliseconds - sample.render_milliseconds);
+    sample.input_to_present_proxy_milliseconds = sample.frame_milliseconds;
+    if (state.rendering.viewport_rendered_this_frame) {
+        sample.render = state.rendering.statistics;
     }
-    release_navigation_cursor(window.get(), state);
-    return 0;
+    const Result<PickingStatistics> picking = runtime.viewport->picking_statistics();
+    if (picking &&
+        (picking.value().lifetime_gpu_requests != state.performance.sampled_picking_gpu_requests ||
+         picking.value().lifetime_cpu_fallbacks !=
+             state.performance.sampled_picking_cpu_fallbacks)) {
+        sample.picking = picking.value();
+        state.performance.sampled_picking_gpu_requests = picking.value().lifetime_gpu_requests;
+        state.performance.sampled_picking_cpu_fallbacks = picking.value().lifetime_cpu_fallbacks;
+    }
+    sample.window_dimensions = context.window_extent();
+    sample.framebuffer_dimensions = context.framebuffer_extent();
+    sample.view_dimensions = state.rendering.view_dimensions;
+    sample.target_dimensions = state.rendering.render_target_dimensions;
+    sample.render_scale_percent = state.rendering.diagnostic_render_scale_percent;
+    sample.vsync_enabled = state.rendering.vsync_enabled;
+    sample.standard_shading = state.rendering.shading_mode == RenderShadingMode::standard;
+    sample.rendered_3d = state.rendering.viewport_rendered_this_frame;
+    retain_frame_sample(state, sample);
+    state.rendering.viewport_rendered_this_frame = false;
+}
+
+void update_input_state(ViewerAssembly& runtime, const ApplicationUpdateContext& context) {
+    runtime.interaction.frame_delta_seconds = context.elapsed_seconds();
+    runtime.interaction.application_focused = context.focused();
+    runtime.interaction.escape_pressed = context.input().key(InputKey::escape).pressed;
+    const InputTransition& primary = context.input().button(InputButton::left);
+    if (primary.click_count == 2) {
+        runtime.interaction.primary_double_clicked = true;
+    } else if (!primary.down && !primary.released) {
+        runtime.interaction.primary_double_clicked = false;
+    }
+    runtime.notifications.viewport_error.clear();
+    if (!context.focused()) {
+        runtime.viewport->cancel_interaction();
+    }
+    if (context.dropped_file_count() != 0) {
+        runtime.pending_files.dropped_path = std::string{context.dropped_file(0)};
+    }
+}
+
+void synchronize_presentation_mode(ViewerAssembly& runtime,
+                                   ApplicationUpdateContext& context) noexcept {
+    if (runtime.rendering.vsync_enabled == runtime.rendering.vsync_applied) {
+        return;
+    }
+    context.set_presentation_mode(runtime.rendering.vsync_enabled ? PresentationMode::synchronized
+                                                                  : PresentationMode::immediate);
+    runtime.rendering.vsync_applied = runtime.rendering.vsync_enabled;
+}
+
+class ViewerApplication final : public Application {
+  public:
+    ViewerApplication(std::filesystem::path asset_root,
+                      std::optional<std::string> initial_model_path, bool smoke_mode)
+        : asset_root_(std::move(asset_root)), initial_model_path_(std::move(initial_model_path)),
+          smoke_mode_(smoke_mode) {}
+
+    [[nodiscard]] Result<void> start(ApplicationContext& context) noexcept override {
+        try {
+            return start_impl(context);
+        } catch (const std::bad_alloc&) {
+            fatal_viewer_allocation_failure();
+        } catch (...) {
+            fatal_unexpected_viewer_exception();
+        }
+    }
+
+    [[nodiscard]] Result<void> update(ApplicationUpdateContext& context) noexcept override {
+        try {
+            return update_impl(context);
+        } catch (const std::bad_alloc&) {
+            fatal_viewer_allocation_failure();
+        } catch (...) {
+            fatal_unexpected_viewer_exception();
+        }
+    }
+
+    [[nodiscard]] Result<void> build_ui(ApplicationUiContext& context) noexcept override {
+        try {
+            build_viewer_frame_ui(runtime_, context);
+            return {};
+        } catch (const std::bad_alloc&) {
+            fatal_viewer_allocation_failure();
+        } catch (...) {
+            fatal_unexpected_viewer_exception();
+        }
+    }
+
+    void stop(ApplicationContext& context) noexcept override {
+        if (runtime_.viewport_interaction_owner.is_valid()) {
+            context.interaction_arbiter().destroy_owner(runtime_.viewport_interaction_owner);
+        }
+        runtime_.toolbar_icons = {};
+        runtime_.presentation = {};
+        runtime_.viewport.reset();
+        runtime_.scene = {};
+        runtime_.engine = nullptr;
+    }
+
+  private:
+    [[nodiscard]] Result<void> start_impl(ApplicationContext& context) {
+        const Result<void> initialized = initialize_viewer_engine(runtime_, context.engine());
+        if (!initialized) {
+            return initialized.error();
+        }
+        load_viewer_preferences(runtime_.preferences);
+        capture_context_diagnostics(context.graphics_context(), runtime_.diagnostics);
+        initialize_viewer_presentation(runtime_, asset_root_, context.dpi_scale());
+        const Result<InteractionOwnerId> owner =
+            context.interaction_arbiter().create_owner(InteractionPriority::normal);
+        if (!owner) {
+            return owner.error();
+        }
+        runtime_.viewport_interaction_owner = owner.value();
+        if (initial_model_path_.has_value()) {
+            static_cast<void>(execute_scene_workflow(
+                workflow_context(runtime_),
+                SceneReplacementRequest{SceneReplacementKind::open_model, *initial_model_path_}));
+        }
+        return {};
+    }
+
+    [[nodiscard]] Result<void> validate_smoke_frame() const {
+        if (smoke_mode_ && (runtime_.presentation.main_font == nullptr ||
+                            ImGui::GetIO().FontDefault != runtime_.presentation.main_font ||
+                            std::string_view{runtime_.presentation.main_font->GetDebugName()} !=
+                                "DroidSans.ttf")) {
+            return Error{ErrorCode::graphics_initialization_failed,
+                         "Viewer DroidSans.ttf asset is not the default presentation font"};
+        }
+        if (smoke_mode_ && update_count_ >= 4 && !runtime_.notifications.viewport_error.empty()) {
+            return Error{ErrorCode::invalid_interaction_region,
+                         runtime_.notifications.viewport_error};
+        }
+        return {};
+    }
+
+    void advance_smoke_frame(ApplicationUpdateContext& context) {
+        if (!smoke_mode_) {
+            return;
+        }
+        if (update_count_ == 2) {
+            runtime_.shell.show_3d_view = false;
+        } else if (update_count_ == 3) {
+            runtime_.shell.show_3d_view = true;
+        }
+        if (update_count_ >= 4) {
+            context.request_exit();
+        }
+    }
+
+    [[nodiscard]] Result<void> update_impl(ApplicationUpdateContext& context) {
+        ++update_count_;
+        const Result<void> smoke_frame = validate_smoke_frame();
+        if (!smoke_frame) {
+            return smoke_frame.error();
+        }
+        capture_frame_sample(runtime_, context);
+        update_input_state(runtime_, context);
+        synchronize_presentation_mode(runtime_, context);
+        advance_smoke_frame(context);
+        if (runtime_.exit_requested) {
+            context.request_exit();
+        }
+        return {};
+    }
+
+    std::filesystem::path asset_root_;
+    std::optional<std::string> initial_model_path_;
+    bool smoke_mode_ = false;
+    std::uint32_t update_count_ = 0;
+    ViewerAssembly runtime_;
+};
+
+[[nodiscard]] bool environment_cannot_create_context(ErrorCode code) noexcept {
+    return code == ErrorCode::graphics_initialization_failed ||
+           code == ErrorCode::graphics_context_unavailable ||
+           code == ErrorCode::unsupported_graphics_version;
+}
+
+[[nodiscard]] const char* first_viewer_argument(int argument_count, char** arguments) noexcept {
+    return argument_count >= 2 && arguments != nullptr ? arguments[1] : nullptr;
 }
 
 int run_viewer_entry(int argument_count, char** arguments) {
     try {
-        return run_viewer(argument_count, arguments);
+        const char* first_argument = first_viewer_argument(argument_count, arguments);
+        const bool smoke_mode =
+            first_argument != nullptr && std::string_view{first_argument} == "--smoke";
+        std::optional<std::string> initial_model_path;
+        if (first_argument != nullptr && !smoke_mode) {
+            initial_model_path = first_argument;
+        }
+        ViewerApplication application{viewer_asset_root(argument_count, arguments),
+                                      std::move(initial_model_path), smoke_mode};
+        ApplicationOptions options;
+        options.title = "Elf3D Viewer";
+        options.initial_window_extent = {1600, 900};
+        options.presentation_mode = PresentationMode::synchronized;
+        options.initial_visibility =
+            smoke_mode ? ApplicationWindowVisibility::hidden : ApplicationWindowVisibility::visible;
+        const Result<int> result = run_application(options, application);
+        if (result) {
+            return result.value();
+        }
+        if (smoke_mode && environment_cannot_create_context(result.error().code())) {
+            return 77;
+        }
+        std::cerr << "Elf3D Viewer failed [" << error_category(result.error().code())
+                  << "]: " << result.error().message() << '\n';
+        return 1;
     } catch (const std::bad_alloc&) {
         fatal_viewer_allocation_failure();
     } catch (...) {

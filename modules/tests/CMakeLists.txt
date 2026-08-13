@@ -65,6 +65,7 @@ target_compile_definitions(
     elf3d_import_tests
     PRIVATE
         ELF3D_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+        ELF3D_TEST_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
 )
 elf3d_link_object_libraries(
     elf3d_import_tests
@@ -120,32 +121,30 @@ endif()
 if(ELF3D_BUILD_ENGINE)
 
 add_executable(
-    elf3d_tools_tests
-        tools_test_driver.cpp
+    elf3d_interaction_tests
+        interaction_test_driver.cpp
         ${PROJECT_SOURCE_DIR}/modules/navigation/tests/orbit_navigation_anchor_depth_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/navigation/tests/orbit_navigation_continuous_motion_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/navigation/tests/orbit_navigation_keyboard_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/navigation/tests/orbit_navigation_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/picking/tests/picking_test.cpp
-        ${PROJECT_SOURCE_DIR}/modules/tools/selection/tests/selection_test.cpp
-        ${PROJECT_SOURCE_DIR}/modules/tools/visibility/tests/visibility_test.cpp
-        ${PROJECT_SOURCE_DIR}/modules/tools/measurement/tests/measurement_test.cpp
-        ${PROJECT_SOURCE_DIR}/modules/tools/clipping/tests/clipping_controller_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/selection/tests/selection_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/visibility/tests/visibility_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/clipping_runtime/tests/clipping_controller_test.cpp
 )
-elf3d_configure_group_test(elf3d_tools_tests)
+elf3d_configure_group_test(elf3d_interaction_tests)
 elf3d_link_object_libraries(
-    elf3d_tools_tests
+    elf3d_interaction_tests
         elf3d_foundation_modules
         elf3d_model_modules
         elf3d_domain_modules
-        elf3d_tools_modules
+        elf3d_interaction_modules
 )
-add_test(NAME elf3d.navigation COMMAND elf3d_tools_tests --case navigation)
-add_test(NAME elf3d.picking COMMAND elf3d_tools_tests --case picking)
-add_test(NAME elf3d.selection COMMAND elf3d_tools_tests --case selection)
-add_test(NAME elf3d_tool_visibility_tests COMMAND elf3d_tools_tests --case visibility)
-add_test(NAME elf3d_tool_measurement_tests COMMAND elf3d_tools_tests --case measurement)
-add_test(NAME elf3d_tool_clipping_tests COMMAND elf3d_tools_tests --case tool_clipping)
+add_test(NAME elf3d.navigation COMMAND elf3d_interaction_tests --case navigation)
+add_test(NAME elf3d.picking COMMAND elf3d_interaction_tests --case picking)
+add_test(NAME elf3d.selection COMMAND elf3d_interaction_tests --case selection)
+add_test(NAME elf3d.visibility COMMAND elf3d_interaction_tests --case visibility)
+add_test(NAME elf3d.clipping_runtime COMMAND elf3d_interaction_tests --case clipping)
 
 add_executable(
     elf3d_view_tests
@@ -162,7 +161,7 @@ elf3d_link_object_libraries(
         elf3d_model_modules
         elf3d_domain_modules
         elf3d_graphics_modules
-        elf3d_tools_modules
+        elf3d_interaction_modules
         elf3d_view_modules
 )
 add_test(NAME elf3d.renderer COMMAND elf3d_view_tests --case renderer)

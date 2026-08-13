@@ -7,40 +7,35 @@
 
 namespace elf3d {
 
-struct ViewportInput {
+struct NavigationInput {
     Float2 pointer_position_pixels;
     Float2 pointer_delta_pixels;
 
-    // Elapsed host-frame time. The default preserves a 60 Hz integration step.
     float frame_delta_seconds = 1.0F / 60.0F;
-    // One logical wheel unit corresponds to one host integration wheel notch.
     float wheel_delta = 0.0F;
 
-    bool is_hovered = false;
-    bool is_focused = false;
+    bool pointer_hovered = false;
+    bool region_focused = false;
 
-    bool left_button_down = false;
-    bool middle_button_down = false;
-    bool right_button_down = false;
+    bool orbit_down = false;
+    bool pan_down = false;
+    bool zoom_down = false;
 
-    bool shift_down = false;
-    bool control_down = false;
-    bool alt_down = false;
-    bool x_down = false;
-    bool z_down = false;
-    bool space_down = false;
+    bool pan_modifier_down = false;
+    bool zoom_modifier_down = false;
+    bool eye_orbit_modifier_down = false;
 
-    // Current-frame keyboard navigation state. Host integrations should set
-    // these from physical key-down polling, not queued key-repeat events.
-    bool w_pressed = false;
-    bool s_pressed = false;
-    bool a_pressed = false;
-    bool d_pressed = false;
-    bool q_pressed = false;
-    bool e_pressed = false;
+    bool move_forward_down = false;
+    bool move_backward_down = false;
+    bool view_left_down = false;
+    bool view_right_down = false;
+    bool world_down_down = false;
+    bool world_up_down = false;
 };
 
 struct OrbitNavigationSettings {
+    // Maximum pointer travel that remains a click rather than a navigation drag.
+    float drag_threshold_pixels = 4.0F;
     // Radians applied per pointer pixel during orbit drags.
     float orbit_sensitivity = 0.005F;
     // Multiplier applied to screen-space pan world units per pixel.

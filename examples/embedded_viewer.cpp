@@ -1,10 +1,11 @@
-#include <elf3d/elf3d.h>
+#include <elf3d/embed/runtime.h>
 
 namespace elf3d_examples {
 
 [[nodiscard]] elf3d::Result<elf3d::NativeTextureView>
-render_embedded_frame(elf3d::Engine& engine, elf3d::Scene& scene, elf3d::Viewport& viewport,
-                      elf3d::EntityId camera_entity, const elf3d::ViewportInput& input) noexcept {
+render_embedded_frame(elf3d::EmbeddedRuntime& runtime, elf3d::Scene& scene,
+                      elf3d::Viewport& viewport, elf3d::EntityId camera_entity,
+                      const elf3d::NavigationInput& input) noexcept {
     const elf3d::Result<void> navigation = viewport.update_navigation(scene, camera_entity, input);
     if (!navigation) {
         return navigation.error();
@@ -15,7 +16,7 @@ render_embedded_frame(elf3d::Engine& engine, elf3d::Scene& scene, elf3d::Viewpor
         return rendered.error();
     }
 
-    return engine.native_texture_view(viewport.color_texture());
+    return runtime.native_texture_view(viewport.color_texture());
 }
 
 } // namespace elf3d_examples

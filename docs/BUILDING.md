@@ -40,8 +40,9 @@ The Release viewer is written to:
 out/build/windows-release/bin/Release/elf3d_viewer.exe
 ```
 
-Both checked-in full presets explicitly enable the optional
-`elf3d_render_benchmark` target.
+Both checked-in full presets build the Runtime SDK, Standard Application
+Framework, explicit embedding integration, reference viewer, and explicitly
+enable the optional `elf3d_render_benchmark` target.
 
 Keep the generated `assets` directory beside the viewer executable when
 copying it to another location.
@@ -49,8 +50,9 @@ copying it to another location.
 ## Model-Only Build
 
 Use the model-only presets for `elf3d_model` and model/import/export tests. They
-do not configure Scene/Assets, renderer, OpenGL, GLFW, ImGui, viewport, or
-viewer targets. They explicitly disable the optional performance benchmark and
+do not configure Scene/Assets, renderer, OpenGL, the application framework,
+embedding integration, GLFW, ImGui, viewport, or viewer targets. They explicitly
+disable the optional performance benchmark and
 include a configured-target dependency check:
 
 ```powershell
@@ -71,15 +73,23 @@ out/build/windows-model-debug/lib/Debug/elf3d_model.lib
 | --- | --- |
 | `elf3d_model` | Static CPU-side model library |
 | `elf3d` | Shared C++ engine library |
-| `elf3d_imgui` | Dear ImGui presentation integration |
+| `elf3d_app` / `elf3d::app` | Canonical standard desktop application lifecycle |
+| `elf3d_embed` / `elf3d::embed` | Explicit host-owned context and loop integration |
+| `elf3d_imgui` / `elf3d::imgui` | Named Dear ImGui presentation integration |
 | `elf3d_viewer` | Desktop reference viewer |
+| `elf3d_public_api_examples` | Compile-checks the canonical public integration examples |
 | `elf3d_render_benchmark` | Optional hidden-context rendering benchmark |
 
-Set `ELF3D_BUILD_VIEWER=OFF` when only the engine library is required. Set
-`ELF3D_BUILD_ENGINE=OFF` for the model-only configuration. Standard CMake
-testing can be controlled with `BUILD_TESTING`. The performance benchmark
-defaults to `OFF`; set `ELF3D_BUILD_PERFORMANCE_BENCHMARK=ON` to include it in
-a custom engine build. The checked-in full presets already do so.
+Set `ELF3D_BUILD_VIEWER=OFF` when only the SDK/framework products are required.
+Set `ELF3D_BUILD_APP=OFF` or `ELF3D_BUILD_EMBED=OFF` to omit the corresponding
+integration. A custom model-only configuration must disable engine,
+application, embedding, viewer, and performance-benchmark targets together;
+the checked-in model-only presets provide that exact mapping. The viewer
+requires the application framework, and the performance benchmark requires the
+embedding integration. Standard CMake testing can be controlled with
+`BUILD_TESTING`. The performance benchmark defaults to `OFF`; set
+`ELF3D_BUILD_PERFORMANCE_BENCHMARK=ON` to include it in a custom engine build.
+The checked-in full presets already do so.
 
 Validate all four checked-in preset option and target contracts without
 compiling them:

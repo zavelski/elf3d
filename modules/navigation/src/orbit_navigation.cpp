@@ -57,9 +57,11 @@ to_navigation_mode(interaction::InteractionMode mode) noexcept {
 }
 
 [[nodiscard]] bool valid_sensitivity_settings(const OrbitNavigationSettings& settings) noexcept {
-    return std::isfinite(settings.orbit_sensitivity) && settings.orbit_sensitivity >= 0.0F &&
-           std::isfinite(settings.pan_sensitivity) && settings.pan_sensitivity >= 0.0F &&
-           std::isfinite(settings.zoom_sensitivity) && settings.zoom_sensitivity >= 0.0F;
+    return std::isfinite(settings.drag_threshold_pixels) &&
+           settings.drag_threshold_pixels >= 0.0F && std::isfinite(settings.orbit_sensitivity) &&
+           settings.orbit_sensitivity >= 0.0F && std::isfinite(settings.pan_sensitivity) &&
+           settings.pan_sensitivity >= 0.0F && std::isfinite(settings.zoom_sensitivity) &&
+           settings.zoom_sensitivity >= 0.0F;
 }
 
 [[nodiscard]] bool valid_distance_settings(const OrbitNavigationSettings& settings) noexcept {

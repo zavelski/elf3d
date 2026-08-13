@@ -1,5 +1,9 @@
+#include "viewer_viewport.hpp"
 #include "viewer_input_math.hpp"
-#include "viewer_internal.hpp"
+
+#include "viewer_assets.hpp"
+#include "viewer_input_math.hpp"
+#include "viewer_ui.hpp"
 
 #include <elf3d/imgui/texture.h>
 
@@ -11,14 +15,11 @@
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 
 namespace elf3d::viewer {
-
-elf3d::GraphicsProcedure load_opengl_procedure(const char* name) noexcept {
-    return glfwGetProcAddress(name);
-}
 
 elf3d::Extent2D content_extent_in_pixels(ImVec2 logical_size) noexcept {
     const ImVec2 scale = ImGui::GetIO().DisplayFramebufferScale;
@@ -28,30 +29,6 @@ elf3d::Extent2D content_extent_in_pixels(ImVec2 logical_size) noexcept {
 
 [[nodiscard]] bool has_nonzero_extent(elf3d::Extent2D extent) noexcept {
     return extent.width != 0 && extent.height != 0;
-}
-
-[[nodiscard]] const char* tool_name(elf3d::ViewportTool tool) noexcept {
-    switch (tool) {
-    case elf3d::ViewportTool::selection:
-        return "Select";
-    case elf3d::ViewportTool::distance_measurement:
-        return "Measure Distance";
-    }
-    return "Select";
-}
-
-[[nodiscard]] const char* measurement_state_name(elf3d::DistanceMeasurementState state) noexcept {
-    switch (state) {
-    case elf3d::DistanceMeasurementState::empty:
-        return "Empty";
-    case elf3d::DistanceMeasurementState::awaiting_first_point:
-        return "Select first point";
-    case elf3d::DistanceMeasurementState::awaiting_second_point:
-        return "Select second point";
-    case elf3d::DistanceMeasurementState::complete:
-        return "Complete";
-    }
-    return "Empty";
 }
 
 [[nodiscard]] std::string clipping_status(const elf3d::ClippingSnapshot& snapshot,
@@ -102,37 +79,37 @@ elf3d::Extent2D content_extent_in_pixels(ImVec2 logical_size) noexcept {
                          (bounds.minimum.z + bounds.maximum.z) * 0.5F};
 }
 
-[[nodiscard]] const char* unit_name(elf3d::LengthDisplayUnit unit) noexcept {
+[[nodiscard]] const char* unit_name(LengthDisplayUnit unit) noexcept {
     switch (unit) {
-    case elf3d::LengthDisplayUnit::automatic_metric:
+    case LengthDisplayUnit::automatic_metric:
         return "Automatic metric";
-    case elf3d::LengthDisplayUnit::meters:
+    case LengthDisplayUnit::meters:
         return "Meters";
-    case elf3d::LengthDisplayUnit::centimeters:
+    case LengthDisplayUnit::centimeters:
         return "Centimeters";
-    case elf3d::LengthDisplayUnit::millimeters:
+    case LengthDisplayUnit::millimeters:
         return "Millimeters";
-    case elf3d::LengthDisplayUnit::feet:
+    case LengthDisplayUnit::feet:
         return "Feet";
-    case elf3d::LengthDisplayUnit::inches:
+    case LengthDisplayUnit::inches:
         return "Inches";
     }
     return "Meters";
 }
 
-[[nodiscard]] const char* unit_suffix(elf3d::LengthDisplayUnit unit) noexcept {
+[[nodiscard]] const char* unit_suffix(LengthDisplayUnit unit) noexcept {
     switch (unit) {
-    case elf3d::LengthDisplayUnit::meters:
+    case LengthDisplayUnit::meters:
         return "m";
-    case elf3d::LengthDisplayUnit::centimeters:
+    case LengthDisplayUnit::centimeters:
         return "cm";
-    case elf3d::LengthDisplayUnit::millimeters:
+    case LengthDisplayUnit::millimeters:
         return "mm";
-    case elf3d::LengthDisplayUnit::feet:
+    case LengthDisplayUnit::feet:
         return "ft";
-    case elf3d::LengthDisplayUnit::inches:
+    case LengthDisplayUnit::inches:
         return "in";
-    case elf3d::LengthDisplayUnit::automatic_metric:
+    case LengthDisplayUnit::automatic_metric:
         break;
     }
     return "m";
@@ -140,41 +117,40 @@ elf3d::Extent2D content_extent_in_pixels(ImVec2 logical_size) noexcept {
 
 struct DisplayDistance {
     double value = 0.0;
-    elf3d::LengthDisplayUnit unit = elf3d::LengthDisplayUnit::meters;
+    LengthDisplayUnit unit = LengthDisplayUnit::meters;
 };
 
-[[nodiscard]] DisplayDistance display_distance(double meters,
-                                               elf3d::LengthDisplayUnit unit) noexcept {
-    elf3d::LengthDisplayUnit resolved = unit;
-    if (resolved == elf3d::LengthDisplayUnit::automatic_metric) {
+[[nodiscard]] DisplayDistance display_distance(double meters, LengthDisplayUnit unit) noexcept {
+    LengthDisplayUnit resolved = unit;
+    if (resolved == LengthDisplayUnit::automatic_metric) {
         const double absolute = std::abs(meters);
         if (absolute >= 1.0) {
-            resolved = elf3d::LengthDisplayUnit::meters;
+            resolved = LengthDisplayUnit::meters;
         } else if (absolute >= 0.01) {
-            resolved = elf3d::LengthDisplayUnit::centimeters;
+            resolved = LengthDisplayUnit::centimeters;
         } else {
-            resolved = elf3d::LengthDisplayUnit::millimeters;
+            resolved = LengthDisplayUnit::millimeters;
         }
     }
 
     switch (resolved) {
-    case elf3d::LengthDisplayUnit::meters:
+    case LengthDisplayUnit::meters:
         return DisplayDistance{meters, resolved};
-    case elf3d::LengthDisplayUnit::centimeters:
+    case LengthDisplayUnit::centimeters:
         return DisplayDistance{meters * 100.0, resolved};
-    case elf3d::LengthDisplayUnit::millimeters:
+    case LengthDisplayUnit::millimeters:
         return DisplayDistance{meters * 1000.0, resolved};
-    case elf3d::LengthDisplayUnit::feet:
+    case LengthDisplayUnit::feet:
         return DisplayDistance{meters * 3.280839895, resolved};
-    case elf3d::LengthDisplayUnit::inches:
+    case LengthDisplayUnit::inches:
         return DisplayDistance{meters * 39.37007874, resolved};
-    case elf3d::LengthDisplayUnit::automatic_metric:
+    case LengthDisplayUnit::automatic_metric:
         break;
     }
-    return DisplayDistance{meters, elf3d::LengthDisplayUnit::meters};
+    return DisplayDistance{meters, LengthDisplayUnit::meters};
 }
 
-[[nodiscard]] std::string format_distance(double meters, elf3d::LengthDisplayUnit unit) {
+[[nodiscard]] std::string format_distance(double meters, LengthDisplayUnit unit) {
     const DisplayDistance display = display_distance(meters, unit);
     char buffer[64]{};
     std::snprintf(buffer, sizeof(buffer), "%.4g %s", display.value, unit_suffix(display.unit));
@@ -185,222 +161,40 @@ struct DisplayDistance {
     return ImGui::GetTopMostPopupModal() != nullptr;
 }
 
-void disable_imgui_cursor_updates(ViewerState& state) noexcept {
-    if (state.imgui_cursor_change_disabled_by_capture) {
-        return;
-    }
-    ImGuiIO& io = ImGui::GetIO();
-    state.imgui_cursor_change_was_disabled =
-        (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange) != 0;
-    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-    state.imgui_cursor_change_disabled_by_capture = true;
-}
-
-void restore_imgui_cursor_updates(ViewerState& state) noexcept {
-    if (!state.imgui_cursor_change_disabled_by_capture) {
-        return;
-    }
-    if (!state.imgui_cursor_change_was_disabled) {
-        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
-    }
-    state.imgui_cursor_change_disabled_by_capture = false;
-    state.imgui_cursor_change_was_disabled = false;
-}
-
-[[nodiscard]] std::optional<ImVec2> glfw_cursor_position(GLFWwindow* window) noexcept {
-    if (window == nullptr) {
-        return std::nullopt;
-    }
-
-    double x = 0.0;
-    double y = 0.0;
-    glfwGetCursorPos(window, &x, &y);
-    if (!std::isfinite(x) || !std::isfinite(y)) {
-        return std::nullopt;
-    }
-    return ImVec2{static_cast<float>(x), static_cast<float>(y)};
-}
-
-void reset_navigation_cursor_sample(GLFWwindow* window, ViewerState& state) noexcept {
-    state.navigation_cursor_position = glfw_cursor_position(window);
-}
-
-struct NavigationCursorSample {
-    ImVec2 position;
-    ImVec2 delta;
-};
-
-[[nodiscard]] NavigationCursorSample
-navigation_cursor_sample(GLFWwindow* window, ViewerState& state, bool tracking_enabled) noexcept {
-    const ImGuiIO& io = ImGui::GetIO();
-    NavigationCursorSample sample{io.MousePos, ImVec2{0.0F, 0.0F}};
-    if (!tracking_enabled) {
-        state.navigation_cursor_position.reset();
-        return sample;
-    }
-
-    const std::optional<ImVec2> cursor_position = glfw_cursor_position(window);
-    if (!cursor_position.has_value()) {
-        state.navigation_cursor_position.reset();
-        return sample;
-    }
-
-    sample.position = *cursor_position;
-    if (state.navigation_cursor_position.has_value()) {
-        sample.delta = ImVec2{sample.position.x - state.navigation_cursor_position->x,
-                              sample.position.y - state.navigation_cursor_position->y};
-    }
-    state.navigation_cursor_position = sample.position;
-    return sample;
-}
-
-void acquire_navigation_cursor(GLFWwindow* window, ViewerState& state) noexcept {
-    if (window == nullptr) {
-        return;
-    }
-
-    disable_imgui_cursor_updates(state);
-    if (!state.cursor_captured) {
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        state.cursor_captured = true;
-        reset_navigation_cursor_sample(window, state);
-    }
-
-#if defined(GLFW_RAW_MOUSE_MOTION)
-    if (!state.raw_mouse_motion_enabled && glfwRawMouseMotionSupported() == GLFW_TRUE) {
-        glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-        state.raw_mouse_motion_enabled = true;
-    }
-#endif
-}
-
-void release_navigation_cursor(GLFWwindow* window, ViewerState& state) noexcept {
-#if defined(GLFW_RAW_MOUSE_MOTION)
-    if (window != nullptr && state.raw_mouse_motion_enabled) {
-        glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
-    }
-#endif
-    state.raw_mouse_motion_enabled = false;
-
-    if (window != nullptr && state.cursor_captured) {
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    }
-    state.cursor_captured = false;
-    state.navigation_cursor_position.reset();
-    restore_imgui_cursor_updates(state);
-}
-
-void sync_navigation_cursor(GLFWwindow* window, ViewerState& state,
-                            const elf3d::Viewport& engine_viewport, bool view_available) noexcept {
-    const std::optional<elf3d::NavigationSnapshot> snapshot = engine_viewport.navigation_snapshot();
-    const bool should_capture = view_available && state.application_focused &&
-                                !navigation_blocked_by_modal() && snapshot.has_value() &&
-                                snapshot->is_pointer_captured;
-    if (should_capture) {
-        acquire_navigation_cursor(window, state);
-    } else {
-        release_navigation_cursor(window, state);
-    }
-}
-
-[[nodiscard]] bool glfw_key_down(GLFWwindow* window, int key) noexcept {
-    return window != nullptr && glfwGetKey(window, key) == GLFW_PRESS;
-}
-
-[[nodiscard]] bool glfw_mouse_button_down(GLFWwindow* window, int button) noexcept {
-    return window != nullptr && glfwGetMouseButton(window, button) == GLFW_PRESS;
-}
-
-[[nodiscard]] float navigation_wheel_delta_for_view(const ViewerState& state, ImVec2 item_min,
-                                                    ImVec2 item_size,
-                                                    bool input_available) noexcept {
-    if (!input_available || !state.navigation_wheel_position.has_value()) {
-        return 0.0F;
-    }
-
-    const ImVec2 position = *state.navigation_wheel_position;
-    const ImVec2 item_max{item_min.x + item_size.x, item_min.y + item_size.y};
-    const bool inside = position.x >= item_min.x && position.x < item_max.x &&
-                        position.y >= item_min.y && position.y < item_max.y;
-    return inside ? state.navigation_wheel_delta : 0.0F;
-}
-
-struct ViewportInputRegion {
-    ImVec2 minimum;
-    ImVec2 size;
-    elf3d::Extent2D render_extent;
-    bool hovered = false;
-    bool focused = false;
-    bool pointer_captured = false;
-};
-
-[[nodiscard]] bool navigation_tracking_enabled(const ViewportInputRegion& region,
-                                               bool left_button_down, bool middle_button_down,
-                                               bool right_button_down) noexcept {
-    return region.hovered || region.focused || region.pointer_captured || left_button_down ||
-           middle_button_down || right_button_down;
-}
-
-[[nodiscard]] elf3d::ViewportInput
-viewport_input_from_imgui(GLFWwindow* window, ViewerState& state,
-                          const ViewportInputRegion& region) noexcept {
-    const ImGuiIO& io = ImGui::GetIO();
-    const Float2 logical_size{region.size.x, region.size.y};
-    const float x_scale = region.size.x > 0.0F
-                              ? static_cast<float>(region.render_extent.width) / region.size.x
-                              : 0.0F;
-    const float y_scale = region.size.y > 0.0F
-                              ? static_cast<float>(region.render_extent.height) / region.size.y
-                              : 0.0F;
-    const bool left_button_down = glfw_mouse_button_down(window, GLFW_MOUSE_BUTTON_LEFT);
-    const bool middle_button_down = glfw_mouse_button_down(window, GLFW_MOUSE_BUTTON_MIDDLE);
-    const bool right_button_down = glfw_mouse_button_down(window, GLFW_MOUSE_BUTTON_RIGHT);
-    const bool tracking_enabled = navigation_tracking_enabled(
-        region, left_button_down, middle_button_down, right_button_down);
-    const NavigationCursorSample cursor_sample =
-        navigation_cursor_sample(window, state, tracking_enabled);
-    const Float2 logical_delta{cursor_sample.delta.x, cursor_sample.delta.y};
-    const Float2 pointer_delta =
-        pointer_delta_in_target_pixels(logical_delta, logical_size, region.render_extent);
-    elf3d::ViewportInput input;
-    input.frame_delta_seconds = io.DeltaTime;
-    input.pointer_position_pixels = {
-        (cursor_sample.position.x - region.minimum.x) * x_scale,
-        (cursor_sample.position.y - region.minimum.y) * y_scale,
-    };
-    input.pointer_delta_pixels = pointer_delta;
-    input.wheel_delta = navigation_wheel_delta_for_view(state, region.minimum, region.size,
-                                                        state.application_focused &&
-                                                            !navigation_blocked_by_modal());
-    input.is_hovered = region.hovered || input.wheel_delta != 0.0F;
-    input.is_focused = region.focused || region.pointer_captured;
-    input.left_button_down = left_button_down;
-    input.middle_button_down = middle_button_down;
-    input.right_button_down = right_button_down;
-    input.shift_down = io.KeyShift;
-    input.control_down = io.KeyCtrl;
-    input.alt_down = io.KeyAlt;
-    input.x_down = glfw_key_down(window, GLFW_KEY_X);
-    input.z_down = glfw_key_down(window, GLFW_KEY_Z);
-    if (!io.WantTextInput) {
-        input.space_down = glfw_key_down(window, GLFW_KEY_SPACE);
-        input.w_pressed = glfw_key_down(window, GLFW_KEY_W);
-        input.s_pressed = glfw_key_down(window, GLFW_KEY_S);
-        input.a_pressed = glfw_key_down(window, GLFW_KEY_A);
-        input.d_pressed = glfw_key_down(window, GLFW_KEY_D);
-        input.q_pressed = glfw_key_down(window, GLFW_KEY_Q);
-        input.e_pressed = glfw_key_down(window, GLFW_KEY_E);
+[[nodiscard]] elf3d::NavigationInput
+viewport_input_from_framework(const ViewerFrameContext& state, const InputSnapshot& snapshot,
+                              const InteractionRegionInput& region) noexcept {
+    elf3d::NavigationInput input;
+    input.frame_delta_seconds = static_cast<float>(state.interaction.frame_delta_seconds);
+    input.pointer_position_pixels = region.pointer_position_pixels;
+    input.pointer_delta_pixels = region.pointer_delta_pixels;
+    input.wheel_delta = region.wheel_delta;
+    input.pointer_hovered = region.hovered;
+    input.region_focused = region.focused || region.pointer_captured;
+    input.orbit_down = region.buttons[static_cast<std::size_t>(InputButton::left)].down;
+    input.pan_down = region.buttons[static_cast<std::size_t>(InputButton::middle)].down;
+    input.zoom_down = region.buttons[static_cast<std::size_t>(InputButton::right)].down;
+    input.pan_modifier_down = snapshot.key(InputKey::x).down;
+    input.zoom_modifier_down = snapshot.key(InputKey::z).down;
+    if (!snapshot.text_input_owned) {
+        input.eye_orbit_modifier_down = snapshot.key(InputKey::space).down;
+        input.move_forward_down = snapshot.key(InputKey::w).down;
+        input.move_backward_down = snapshot.key(InputKey::s).down;
+        input.view_left_down = snapshot.key(InputKey::a).down;
+        input.view_right_down = snapshot.key(InputKey::d).down;
+        input.world_down_down = snapshot.key(InputKey::q).down;
+        input.world_up_down = snapshot.key(InputKey::e).down;
     }
     return input;
 }
 
-void set_viewport_error(ViewerState& state, const elf3d::Error& error) {
-    state.viewport_error = error.message();
-    state.framebuffer_valid = false;
+void set_viewport_error(ViewerFrameContext state, const elf3d::Error& error) {
+    state.notifications.viewport_error = error.message();
+    state.rendering.framebuffer_valid = false;
 }
 
-void reset_demo_cube_transform(ViewerState& state, ViewerScene& scene) {
-    state.rotation_angle = 0.0F;
+void reset_demo_cube_transform(ViewerFrameContext& state, SceneSession& scene) {
+    state.rendering.rotation_angle = 0.0F;
     if (!scene.cube.has_value()) {
         return;
     }
@@ -412,15 +206,18 @@ void reset_demo_cube_transform(ViewerState& state, ViewerScene& scene) {
     }
 }
 
-void update_demo_cube_animation(ViewerState& state, ViewerScene& scene) {
-    if (scene.is_imported() || !state.rotate_cube || !scene.cube.has_value()) {
+void update_demo_cube_animation(ViewerFrameContext& state, SceneSession& scene,
+                                double elapsed_seconds) {
+    if (scene.is_imported() || !state.rendering.rotate_cube || !scene.cube.has_value()) {
         return;
     }
 
-    state.rotation_angle = std::fmod(
-        state.rotation_angle + state.rotation_speed * ImGui::GetIO().DeltaTime, 6.2831853072F);
+    state.rendering.rotation_angle = std::fmod(
+        state.rendering.rotation_angle +
+            state.rendering.rotation_speed * static_cast<float>(std::max(elapsed_seconds, 0.0)),
+        6.2831853072F);
     elf3d::Transform cube_transform;
-    cube_transform.rotation = axis_angle({0.0F, 1.0F, 0.0F}, state.rotation_angle);
+    cube_transform.rotation = axis_angle({0.0F, 1.0F, 0.0F}, state.rendering.rotation_angle);
     const elf3d::Result<void> transform_result =
         scene.scene->set_local_transform(*scene.cube, cube_transform);
     if (!transform_result) {
@@ -428,15 +225,15 @@ void update_demo_cube_animation(ViewerState& state, ViewerScene& scene) {
     }
 }
 
-void apply_demo_cube_color(ViewerState& state, ViewerScene& scene) {
+void apply_demo_cube_color(ViewerFrameContext& state, SceneSession& scene) {
     if (scene.is_imported() || !scene.cube_material.has_value()) {
         return;
     }
 
     const elf3d::Result<void> material_result = scene.scene->set_material_description(
-        *scene.cube_material,
-        elf3d::MaterialDescription{elf3d::Color4{state.cube_color[0], state.cube_color[1],
-                                                 state.cube_color[2], state.cube_color[3]}});
+        *scene.cube_material, elf3d::MaterialDescription{elf3d::Color4{
+                                  state.rendering.cube_color[0], state.rendering.cube_color[1],
+                                  state.rendering.cube_color[2], state.rendering.cube_color[3]}});
     if (!material_result) {
         set_viewport_error(state, material_result.error());
     }
@@ -453,19 +250,24 @@ bool color_control(const char* label, std::array<float, 4>& rgba) {
     return changed;
 }
 
-void draw_measurement_label(ViewerState& state, elf3d::Viewport& engine_viewport,
-                            const ViewerScene& scene, ImVec2 image_min, ImVec2 area_size) {
-    const elf3d::DistanceMeasurementSnapshot measurement =
-        engine_viewport.distance_measurement_snapshot(*scene.scene);
+struct MeasurementLabelArea {
+    ImVec2 image_min;
+    ImVec2 area_size;
+};
+
+void draw_measurement_label(ViewerFrameContext& state, elf3d::Viewport& engine_viewport,
+                            const SceneSession& scene, const ToolCoordinator& tools,
+                            MeasurementLabelArea area) {
+    const DistanceMeasurementSnapshot measurement = tools.measurement().snapshot(
+        *scene.scene, engine_viewport, tools.active_tool() == ViewerTool::distance_measurement);
     if (!measurement.overlay_visible || !measurement.midpoint_world_position.has_value()) {
         return;
     }
 
-    const double meters = measurement.state == elf3d::DistanceMeasurementState::complete
+    const double meters = measurement.state == DistanceMeasurementState::complete
                               ? measurement.distance_meters
                               : measurement.preview_distance_meters;
-    const std::string label =
-        format_distance(meters, engine_viewport.measurement_settings().display_unit);
+    const std::string label = format_distance(meters, tools.measurement().settings().display_unit);
     const elf3d::Result<elf3d::ProjectedViewportPoint> projected =
         engine_viewport.project_world_to_viewport(*scene.scene, scene.camera,
                                                   *measurement.midpoint_world_position);
@@ -477,17 +279,20 @@ void draw_measurement_label(ViewerState& state, elf3d::Viewport& engine_viewport
         return;
     }
 
-    const float logical_x = image_min.x + ((projected.value().position_pixels.x + 0.5F) /
-                                           static_cast<float>(state.view_dimensions.width)) *
-                                              area_size.x;
-    const float logical_y = image_min.y + ((projected.value().position_pixels.y + 0.5F) /
-                                           static_cast<float>(state.view_dimensions.height)) *
-                                              area_size.y;
+    const float logical_x =
+        area.image_min.x + ((projected.value().position_pixels.x + 0.5F) /
+                            static_cast<float>(state.rendering.view_dimensions.width)) *
+                               area.area_size.x;
+    const float logical_y =
+        area.image_min.y + ((projected.value().position_pixels.y + 0.5F) /
+                            static_cast<float>(state.rendering.view_dimensions.height)) *
+                               area.area_size.y;
     const ImVec2 text_size = ImGui::CalcTextSize(label.c_str());
     ImVec2 label_min{logical_x + 8.0F, logical_y - text_size.y - 8.0F};
-    const ImVec2 image_max{image_min.x + area_size.x, image_min.y + area_size.y};
-    const float minimum_x = image_min.x + 4.0F;
-    const float minimum_y = image_min.y + 4.0F;
+    const ImVec2 image_max{area.image_min.x + area.area_size.x,
+                           area.image_min.y + area.area_size.y};
+    const float minimum_x = area.image_min.x + 4.0F;
+    const float minimum_y = area.image_min.y + 4.0F;
     const float maximum_x = std::max(minimum_x, image_max.x - text_size.x - 12.0F);
     const float maximum_y = std::max(minimum_y, image_max.y - text_size.y - 8.0F);
     label_min.x = std::clamp(label_min.x, minimum_x, maximum_x);
@@ -524,30 +329,29 @@ struct ViewportCanvas {
     ImVec2 area_size;
     ImVec2 image_min;
     bool has_area = false;
-    bool hovered = false;
 };
 
 void deactivate_3d_view(const ViewPanelContext& context) {
-    context.state->view_dimensions = {};
-    context.state->render_target_dimensions = {};
-    context.state->framebuffer_valid = false;
-    context.state->statistics = {};
-    context.state->retained_viewport_frame.reset();
-    context.viewport->cancel_interaction();
-    release_navigation_cursor(context.window, *context.state);
-    const elf3d::Result<void> result = context.viewport->resize({});
+    context.interaction_region = {};
+    context.state.rendering.view_dimensions = {};
+    context.state.rendering.render_target_dimensions = {};
+    context.state.rendering.framebuffer_valid = false;
+    context.state.rendering.statistics = {};
+    context.state.rendering.retained_viewport_frame.reset();
+    context.viewport.cancel_interaction();
+    const elf3d::Result<void> result = context.viewport.resize({});
     if (!result) {
-        set_viewport_error(*context.state, result.error());
+        set_viewport_error(context.state, result.error());
     }
 }
 
-[[nodiscard]] ViewportCanvas begin_viewport_canvas(ViewerState& state) {
+[[nodiscard]] ViewportCanvas begin_viewport_canvas(ViewerFrameContext& state) {
     ViewportCanvas canvas;
     canvas.area_size = ImGui::GetContentRegionAvail();
     canvas.image_min = ImGui::GetCursorScreenPos();
-    state.view_dimensions = content_extent_in_pixels(canvas.area_size);
+    state.rendering.view_dimensions = content_extent_in_pixels(canvas.area_size);
     canvas.has_area = canvas.area_size.x > 0.0F && canvas.area_size.y > 0.0F &&
-                      has_nonzero_extent(state.view_dimensions);
+                      has_nonzero_extent(state.rendering.view_dimensions);
     if (!canvas.has_area) {
         ImGui::Dummy(
             ImVec2{std::max(canvas.area_size.x, 0.0F), std::max(canvas.area_size.y, 0.0F)});
@@ -556,9 +360,8 @@ void deactivate_3d_view(const ViewPanelContext& context) {
     constexpr ImGuiButtonFlags input_flags = ImGuiButtonFlags_MouseButtonLeft |
                                              ImGuiButtonFlags_MouseButtonMiddle |
                                              ImGuiButtonFlags_MouseButtonRight;
-    ImGui::InvisibleButton("##Elf3DViewportInput", canvas.area_size, input_flags);
+    ImGui::InvisibleButton("##Elf3DViewportInteraction", canvas.area_size, input_flags);
     canvas.image_min = ImGui::GetItemRectMin();
-    canvas.hovered = !navigation_blocked_by_modal() && ImGui::IsItemHovered();
     return canvas;
 }
 
@@ -566,158 +369,213 @@ void deactivate_3d_view(const ViewPanelContext& context) {
     elf3d::Extent2D target_extent;
     if (canvas.has_area) {
         const std::uint32_t scale =
-            static_cast<std::uint32_t>(context.state->diagnostic_render_scale_percent);
-        target_extent.width =
-            std::max(std::uint32_t{1}, (context.state->view_dimensions.width * scale + 99U) / 100U);
-        target_extent.height = std::max(
-            std::uint32_t{1}, (context.state->view_dimensions.height * scale + 99U) / 100U);
+            static_cast<std::uint32_t>(context.state.rendering.diagnostic_render_scale_percent);
+        target_extent.width = std::max(
+            std::uint32_t{1}, (context.state.rendering.view_dimensions.width * scale + 99U) / 100U);
+        target_extent.height =
+            std::max(std::uint32_t{1},
+                     (context.state.rendering.view_dimensions.height * scale + 99U) / 100U);
     }
-    context.state->render_target_dimensions = target_extent;
-    const elf3d::Result<void> result = context.viewport->resize(target_extent);
+    context.state.rendering.render_target_dimensions = target_extent;
+    const elf3d::Result<void> result = context.viewport.resize(target_extent);
     if (!result) {
-        set_viewport_error(*context.state, result.error());
+        set_viewport_error(context.state, result.error());
         return false;
     }
     if (canvas.has_area) {
         return true;
     }
-    context.viewport->cancel_interaction();
-    release_navigation_cursor(context.window, *context.state);
-    context.state->framebuffer_valid = false;
-    context.state->statistics = {};
+    context.viewport.cancel_interaction();
+    context.state.rendering.framebuffer_valid = false;
+    context.state.rendering.statistics = {};
     return false;
 }
 
 void reset_view_camera_if_needed(const ViewPanelContext& context) {
-    if (!context.scene->camera_needs_reset) {
+    if (!context.scene.camera_needs_reset) {
         return;
     }
     const elf3d::Result<void> result =
-        context.viewport->reset_view(*context.scene->scene, context.scene->camera);
-    context.scene->camera_needs_reset = false;
+        context.viewport.reset_view(*context.scene.scene, context.scene.camera);
+    context.scene.camera_needs_reset = false;
     if (!result) {
-        set_viewport_error(*context.state, result.error());
+        set_viewport_error(context.state, result.error());
     }
 }
 
 [[nodiscard]] bool
-measurement_cursor_requested(const ViewPanelContext& context, const ViewportCanvas& canvas,
+measurement_cursor_requested(const ViewPanelContext& context, bool hovered,
                              const std::optional<elf3d::NavigationSnapshot>& snapshot) noexcept {
-    return canvas.hovered &&
-           context.viewport->active_tool() == elf3d::ViewportTool::distance_measurement &&
+    return hovered && context.tools.active_tool() == ViewerTool::distance_measurement &&
            (!snapshot.has_value() || !snapshot->is_pointer_captured);
 }
 
-[[nodiscard]] bool viewport_input_focused(const ViewPanelContext& context) noexcept {
-    return context.state->application_focused &&
-           ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-           !navigation_blocked_by_modal();
+[[nodiscard]] Result<InteractionRegionInput> routed_viewport_input(const ViewPanelContext& context,
+                                                                   const ViewportCanvas& canvas) {
+    if (!context.interaction_owner.is_valid()) {
+        return elf3d::Error{elf3d::ErrorCode::invalid_interaction_owner,
+                            "The viewer viewport interaction owner is unavailable"};
+    }
+    InteractionArbiter& arbiter = context.application.interaction_arbiter();
+    const Result<InteractionRegionId> registered = arbiter.register_region(
+        context.interaction_owner, context.interaction_region,
+        InteractionRegionDescription{Float2{canvas.image_min.x, canvas.image_min.y},
+                                     Float2{canvas.area_size.x, canvas.area_size.y},
+                                     context.state.rendering.render_target_dimensions,
+                                     context.state.interaction.application_focused &&
+                                         !navigation_blocked_by_modal()});
+    if (!registered) {
+        return registered.error();
+    }
+    context.interaction_region = registered.value();
+    arbiter.finalize_regions();
+    return arbiter.region_input(context.interaction_owner, context.interaction_region);
 }
 
-[[nodiscard]] bool
-viewport_pointer_captured(const ViewPanelContext& context,
-                          const std::optional<elf3d::NavigationSnapshot>& snapshot) noexcept {
-    return context.state->application_focused && !navigation_blocked_by_modal() &&
-           (context.state->cursor_captured ||
-            (snapshot.has_value() && snapshot->is_pointer_captured));
+void synchronize_navigation_capture(const ViewPanelContext& context, InteractionArbiter& arbiter) {
+    const std::optional<elf3d::NavigationSnapshot> navigation =
+        context.viewport.navigation_snapshot();
+    const bool capture_requested = navigation.has_value() && navigation->is_pointer_captured;
+    const InteractionSnapshot arbitration = arbiter.snapshot(context.interaction_owner);
+    if (capture_requested) {
+        const Result<void> requested = arbiter.request(
+            context.interaction_owner, context.interaction_region, InteractionRequest::navigation);
+        if (!requested) {
+            context.viewport.cancel_interaction();
+            set_viewport_error(context.state, requested.error());
+        }
+        return;
+    }
+    if (arbitration.active_owner == context.interaction_owner &&
+        arbitration.state == InteractionState::navigation) {
+        arbiter.release(context.interaction_owner);
+    }
 }
 
 void update_viewport_input(const ViewPanelContext& context, const ViewportCanvas& canvas) {
-    const std::optional<elf3d::NavigationSnapshot> snapshot =
-        context.viewport->navigation_snapshot();
-    if (measurement_cursor_requested(context, canvas, snapshot)) {
+    const Result<InteractionRegionInput> routed = routed_viewport_input(context, canvas);
+    if (!routed) {
+        set_viewport_error(context.state, routed.error());
+        return;
+    }
+    InteractionArbiter& arbiter = context.application.interaction_arbiter();
+    const std::optional<elf3d::NavigationSnapshot> before = context.viewport.navigation_snapshot();
+    if (measurement_cursor_requested(context, routed.value().hovered, before)) {
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
-    const ViewportInputRegion region{canvas.image_min,
-                                     canvas.area_size,
-                                     context.state->render_target_dimensions,
-                                     canvas.hovered,
-                                     viewport_input_focused(context),
-                                     viewport_pointer_captured(context, snapshot)};
-    const elf3d::ViewportInput input =
-        viewport_input_from_imgui(context.window, *context.state, region);
-    const elf3d::Result<void> result =
-        context.viewport->update_navigation(*context.scene->scene, context.scene->camera, input);
-    if (!result) {
-        set_viewport_error(*context.state, result.error());
+    if (arbiter.snapshot(context.interaction_owner).cancellation_reason !=
+        InteractionCancellationReason::none) {
+        context.viewport.cancel_interaction();
     }
-    sync_navigation_cursor(context.window, *context.state, *context.viewport, true);
+    const elf3d::NavigationInput input =
+        viewport_input_from_framework(context.state, context.application.input(), routed.value());
+    const elf3d::Result<void> result =
+        context.viewport.update_navigation(*context.scene.scene, context.scene.camera, input);
+    if (!result) {
+        set_viewport_error(context.state, result.error());
+        return;
+    }
+    const std::optional<elf3d::NavigationSnapshot> after = context.viewport.navigation_snapshot();
+    const bool navigation_captured = after.has_value() && after->is_pointer_captured;
+    const Result<void> tool_result = context.tools.update(ToolUpdateContext{
+        *context.scene.scene, context.viewport, context.scene.camera, routed.value(),
+        context.application.input().modifiers, navigation_captured});
+    if (!tool_result) {
+        set_viewport_error(context.state, tool_result.error());
+        return;
+    }
+    synchronize_navigation_capture(context, arbiter);
 }
 
 void present_viewport_texture(const ViewPanelContext& context, const ViewportCanvas& canvas) {
-    if (!context.state->framebuffer_valid) {
-        return;
-    }
-    const elf3d::Result<elf3d::NativeTextureView> texture =
-        context.engine->native_texture_view(context.viewport->color_texture());
-    if (!texture) {
-        set_viewport_error(*context.state, texture.error());
-        return;
-    }
-    const elf3d::Result<void> image = elf3d::imgui::draw_image(
-        texture.value(), elf3d::Float2{canvas.image_min.x, canvas.image_min.y},
+    const elf3d::Result<void> image = context.application.draw_viewport_image(
+        context.viewport, elf3d::Float2{canvas.image_min.x, canvas.image_min.y},
         elf3d::Float2{canvas.area_size.x, canvas.area_size.y});
     if (!image) {
-        set_viewport_error(*context.state, image.error());
+        set_viewport_error(context.state, image.error());
         return;
     }
-    draw_measurement_label(*context.state, *context.viewport, *context.scene, canvas.image_min,
-                           canvas.area_size);
+    draw_measurement_label(context.state, context.viewport, context.scene, context.tools,
+                           MeasurementLabelArea{canvas.image_min, canvas.area_size});
 }
 
 void render_3d_view(const ViewPanelContext& context, const ViewportCanvas& canvas) {
-    context.viewport->set_clear_color(
-        elf3d::Color4{context.state->clear_color[0], context.state->clear_color[1],
-                      context.state->clear_color[2], context.state->clear_color[3]});
-    context.viewport->set_basic_lighting(context.state->lighting);
-    context.viewport->set_render_shading_mode(context.state->shading_mode);
+    context.viewport.set_clear_color(elf3d::Color4{
+        context.state.rendering.clear_color[0], context.state.rendering.clear_color[1],
+        context.state.rendering.clear_color[2], context.state.rendering.clear_color[3]});
+    context.viewport.set_basic_lighting(context.state.rendering.lighting);
+    context.viewport.set_render_shading_mode(context.state.rendering.shading_mode);
     const RetainedViewportFrameKey key =
-        viewport_frame_key(*context.state, *context.scene, *context.viewport);
-    if (viewport_frame_render_required(*context.state, key, *context.viewport)) {
-        const elf3d::Result<void> result =
-            context.viewport->render(*context.scene->scene, context.scene->camera);
-        if (!result) {
-            set_viewport_error(*context.state, result.error());
+        viewport_frame_key(context.state, context.scene, context.viewport, context.tools);
+    if (viewport_frame_render_required(context.state, key, context.viewport)) {
+        ViewportRenderOptions options;
+        options.shading_mode = context.state.rendering.shading_mode;
+        options.highlight = context.tools.selection().render_feedback(context.viewport);
+        const Result<MeasurementOverlay> measurement_overlay =
+            context.tools.measurement().overlay(*context.scene.scene, context.viewport);
+        if (!measurement_overlay) {
+            set_viewport_error(context.state, measurement_overlay.error());
             return;
         }
-        context.state->statistics = context.viewport->render_statistics();
-        context.state->framebuffer_valid = context.viewport->framebuffer_valid();
-        context.state->retained_viewport_frame = key;
-        context.state->viewport_rendered_this_frame = true;
-        ++context.state->rendered_3d_frame_count;
+        const Result<ClippingToolOverlay> clipping_overlay =
+            context.tools.clipping().overlay(*context.scene.scene, context.viewport);
+        if (!clipping_overlay) {
+            set_viewport_error(context.state, clipping_overlay.error());
+            return;
+        }
+        std::array<OverlayLineSegment, 2 + 4 + maximum_clipping_boxes * 12> overlay_lines;
+        std::size_t overlay_line_count = 0;
+        for (const OverlayLineSegment& line : measurement_overlay.value().line_span()) {
+            overlay_lines[overlay_line_count++] = line;
+        }
+        for (const OverlayLineSegment& line : clipping_overlay.value().line_span()) {
+            overlay_lines[overlay_line_count++] = line;
+        }
+        options.overlay_lines =
+            std::span<const OverlayLineSegment>{overlay_lines.data(), overlay_line_count};
+        options.overlay_markers = measurement_overlay.value().marker_span();
+        const elf3d::Result<void> result = context.application.queue_viewport_render(
+            context.viewport, *context.scene.scene, context.scene.camera, options);
+        if (!result) {
+            set_viewport_error(context.state, result.error());
+            return;
+        }
+        context.state.rendering.retained_viewport_frame = key;
+        context.state.rendering.viewport_rendered_this_frame = true;
+        ++context.state.performance.rendered_3d_frame_count;
     } else {
-        ++context.state->reused_3d_frame_count;
+        ++context.state.performance.reused_3d_frame_count;
     }
     present_viewport_texture(context, canvas);
 }
 
 void draw_3d_view_content(const ViewPanelContext& context) {
-    const ViewportCanvas canvas = begin_viewport_canvas(*context.state);
+    const ViewportCanvas canvas = begin_viewport_canvas(context.state);
     if (resize_3d_view(context, canvas)) {
         reset_view_camera_if_needed(context);
         update_viewport_input(context, canvas);
         render_3d_view(context, canvas);
     }
-    if (!context.state->viewport_error.empty()) {
-        draw_viewport_error_overlay(context.state->viewport_error, canvas.image_min,
+    if (!context.state.notifications.viewport_error.empty()) {
+        draw_viewport_error_overlay(context.state.notifications.viewport_error, canvas.image_min,
                                     canvas.area_size);
     }
 }
 
 void build_3d_view(const ViewPanelContext& context) {
-    if (!context.state->show_3d_view) {
+    if (!context.state.shell.show_3d_view) {
         deactivate_3d_view(context);
         return;
     }
-    set_default_dock(context.state->dock_center_id != 0 ? context.state->dock_center_id
-                                                        : context.dockspace_id,
-                     context.state->apply_dock_layout);
+    set_default_dock(context.state.shell.dock_center_id != 0 ? context.state.shell.dock_center_id
+                                                             : context.dockspace_id,
+                     context.state.shell.apply_dock_layout);
     constexpr ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.94F, 0.94F, 0.94F, 1.0F});
-    const bool visible = begin_panel_window("3D View", &context.state->show_3d_view,
-                                            context.state->panel_title_font, flags);
+    const bool visible = begin_panel_window("3D View", &context.state.shell.show_3d_view,
+                                            context.state.presentation.panel_title_font, flags);
     if (visible) {
         draw_3d_view_content(context);
     } else {

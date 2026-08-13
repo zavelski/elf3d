@@ -19,7 +19,7 @@ import elf.scene;
 namespace elf3d::navigation {
 namespace navigation_detail {
 
-[[nodiscard]] bool finite_input(const ViewportInput& input) noexcept {
+[[nodiscard]] bool finite_input(const NavigationInput& input) noexcept {
     return std::isfinite(input.pointer_position_pixels.x) &&
            std::isfinite(input.pointer_position_pixels.y) &&
            std::isfinite(input.pointer_delta_pixels.x) &&
@@ -29,16 +29,16 @@ namespace navigation_detail {
 }
 
 [[nodiscard]] interaction::PointerInputSnapshot
-interaction_input(const ViewportInput& input) noexcept {
+interaction_input(const NavigationInput& input) noexcept {
     return interaction::PointerInputSnapshot{input.pointer_position_pixels,
                                              input.pointer_delta_pixels,
-                                             input.is_hovered,
-                                             input.is_focused,
-                                             input.left_button_down,
-                                             input.middle_button_down,
-                                             input.right_button_down,
-                                             input.x_down,
-                                             input.z_down};
+                                             input.pointer_hovered,
+                                             input.region_focused,
+                                             input.orbit_down,
+                                             input.pan_down,
+                                             input.zoom_down,
+                                             input.pan_modifier_down,
+                                             input.zoom_modifier_down};
 }
 
 [[nodiscard]] Float2 sanitized_delta(Float2 delta) noexcept {
@@ -50,24 +50,24 @@ interaction_input(const ViewportInput& input) noexcept {
     return 1.0F + (multiplier - 1.0F) * speed_scale;
 }
 
-[[nodiscard]] float keyboard_time_scale(const ViewportInput& input) noexcept {
+[[nodiscard]] float keyboard_time_scale(const NavigationInput& input) noexcept {
     const float frame_delta =
         std::clamp(input.frame_delta_seconds, 0.0F, maximum_keyboard_frame_delta_seconds);
     return frame_delta * keyboard_reference_updates_per_second;
 }
 
-[[nodiscard]] float keyboard_forward_delta(const ViewportInput& input) noexcept {
+[[nodiscard]] float keyboard_forward_delta(const NavigationInput& input) noexcept {
     float delta = 0.0F;
-    if (input.w_pressed) {
+    if (input.move_forward_down) {
         delta += 1.0F;
     }
-    if (input.s_pressed) {
+    if (input.move_backward_down) {
         delta -= 1.0F;
     }
     return delta;
 }
 
-[[nodiscard]] KeyboardPanDelta keyboard_pan_delta_pixels(const ViewportInput& input,
+[[nodiscard]] KeyboardPanDelta keyboard_pan_delta_pixels(const NavigationInput& input,
                                                          Extent2D extent) noexcept {
     if (extent.width == 0U) {
         return {};
@@ -75,16 +75,16 @@ interaction_input(const ViewportInput& input) noexcept {
     const float step = static_cast<float>(extent.width) / keyboard_pan_step_width_divisor *
                        keyboard_time_scale(input);
     KeyboardPanDelta delta;
-    if (input.a_pressed) {
+    if (input.view_left_down) {
         delta.view_horizontal_pixels += step;
     }
-    if (input.d_pressed) {
+    if (input.view_right_down) {
         delta.view_horizontal_pixels -= step;
     }
-    if (input.q_pressed) {
+    if (input.world_down_down) {
         delta.world_vertical_pixels -= step;
     }
-    if (input.e_pressed) {
+    if (input.world_up_down) {
         delta.world_vertical_pixels += step;
     }
     return delta;
@@ -277,9 +277,9 @@ struct KeyboardMotion final {
     bool active = false;
 };
 
-[[nodiscard]] KeyboardMotion keyboard_motion(const ViewportInput& input, Extent2D extent) noexcept {
-    const bool navigation_active =
-        input.is_focused && (input.left_button_down || input.right_button_down);
+[[nodiscard]] KeyboardMotion keyboard_motion(const NavigationInput& input,
+                                             Extent2D extent) noexcept {
+    const bool navigation_active = input.region_focused && (input.orbit_down || input.zoom_down);
     const float forward = navigation_active ? keyboard_forward_delta(input) : 0.0F;
     const KeyboardPanDelta pan =
         navigation_active ? keyboard_pan_delta_pixels(input, extent) : KeyboardPanDelta{};
@@ -292,10 +292,10 @@ struct KeyboardMotion final {
 
 [[nodiscard]] bool
 left_keyboard_navigation_started(const interaction::ViewportInteractionFrame& frame,
-                                 const ViewportInput& input,
+                                 const NavigationInput& input,
                                  bool keyboard_translation_active) noexcept {
     return frame.left_pressed && !frame.drag_active && keyboard_translation_active &&
-           !input.x_down && !input.z_down;
+           !input.pan_modifier_down && !input.zoom_modifier_down;
 }
 
 [[nodiscard]] bool
@@ -315,7 +315,7 @@ using namespace navigation_detail;
 
 Result<NavigationUpdate> OrbitNavigationController::update(scene::Storage& scene, EntityId camera,
                                                            Extent2D extent,
-                                                           const ViewportInput& input,
+                                                           const NavigationInput& input,
                                                            float click_drag_threshold_pixels) {
     const Result<scene::VisibilityFilter> visibility =
         scene::make_visibility_filter(scene, std::nullopt);
@@ -337,7 +337,7 @@ OrbitNavigationController::make_update_frame(const NavigationUpdateRequest& requ
         }
         keyboard_navigation_used_ = false;
     }
-    frame.has_hover_wheel = request.input.is_hovered && request.input.wheel_delta != 0.0F;
+    frame.has_hover_wheel = request.input.pointer_hovered && request.input.wheel_delta != 0.0F;
     const KeyboardMotion keyboard = keyboard_motion(request.input, request.extent);
     frame.keyboard_forward = keyboard.forward;
     frame.keyboard_view_pan = keyboard.view_pan;
@@ -346,7 +346,7 @@ OrbitNavigationController::make_update_frame(const NavigationUpdateRequest& requ
     if (keyboard.active) {
         keyboard_navigation_used_ = true;
     }
-    frame.stop = !request.input.is_focused && !frame.has_hover_wheel;
+    frame.stop = !request.input.region_focused && !frame.has_hover_wheel;
     return frame;
 }
 
@@ -359,7 +359,7 @@ void OrbitNavigationController::update_orbit_activation(const NavigationUpdateRe
     if (left_started || orbit_started) {
         screen_anchor_.reset();
     }
-    if (orbit_started && request.input.space_down) {
+    if (orbit_started && request.input.eye_orbit_modifier_down) {
         eye_orbit_active_ = true;
     } else if (orbit_started) {
         eye_orbit_active_ = false;
@@ -497,7 +497,7 @@ Result<void> OrbitNavigationController::apply_keyboard_forward(
                      "Viewport keyboard input produced an invalid movement multiplier"};
     }
     const float reference_multiplier = scaled_dolly_multiplier(
-        base_multiplier, wheel_dolly_speed_scale * keyboard_forward_to_wheel_speed_scale);
+        base_multiplier, wheel_dolly_speed_scale * keyboard_to_wheel_speed_scale);
     const float multiplier = std::pow(reference_multiplier, keyboard_time_scale(request.input));
     if (!std::isfinite(multiplier) || multiplier <= 0.0F) {
         return Error{ErrorCode::invalid_viewport_input,

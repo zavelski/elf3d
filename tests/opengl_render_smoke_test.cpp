@@ -1,4 +1,4 @@
-#include <elf3d/elf3d.h>
+#include <elf3d/embed/runtime.h>
 
 #include <glad/gl.h>
 
@@ -58,7 +58,7 @@ class Window final {
     GLFWwindow* window_ = nullptr;
 };
 
-elf3d::GraphicsProcedure load_opengl_procedure(const char* name) noexcept {
+elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcept {
     return glfwGetProcAddress(name);
 }
 
@@ -285,7 +285,7 @@ class ForeignGlObjects final {
 
 [[nodiscard]] int verify_camera_role_errors(SmokeFixture& fixture) {
     const elf3d::Result<void> navigation = fixture.viewport->update_navigation(
-        *fixture.scene, fixture.non_camera_entity, elf3d::ViewportInput{});
+        *fixture.scene, fixture.non_camera_entity, elf3d::NavigationInput{});
     if (navigation || navigation.error().code() != elf3d::ErrorCode::entity_has_no_camera) {
         return fail(20, "Viewport navigation accepted a non-camera entity");
     }
@@ -320,7 +320,8 @@ class ForeignGlObjects final {
     return 0;
 }
 
-[[nodiscard]] int verify_foreign_state_preserved(elf3d::Engine& engine, SmokeFixture& fixture) {
+[[nodiscard]] int verify_foreign_state_preserved(elf3d::EmbeddedRuntime& runtime,
+                                                 SmokeFixture& fixture) {
     ForeignGlObjects objects;
     if (!configure_foreign_state(objects)) {
         return fail(24, "OpenGL smoke test failed to configure foreign host state");
@@ -339,16 +340,17 @@ class ForeignGlObjects final {
     }
 
     const elf3d::Result<elf3d::NativeTextureView> texture =
-        engine.native_texture_view(fixture.viewport->color_texture());
+        runtime.native_texture_view(fixture.viewport->color_texture());
     if (!texture || capture_foreign_state() != expected) {
         return fail(27, "Viewport display resolve did not preserve foreign OpenGL state");
     }
     return 0;
 }
 
-[[nodiscard]] int verify_rendered_pixel(elf3d::Engine& engine, const SmokeFixture& fixture) {
+[[nodiscard]] int verify_rendered_pixel(elf3d::EmbeddedRuntime& runtime,
+                                        const SmokeFixture& fixture) {
     const elf3d::Result<elf3d::NativeTextureView> texture_result =
-        engine.native_texture_view(fixture.viewport->color_texture());
+        runtime.native_texture_view(fixture.viewport->color_texture());
     if (!texture_result) {
         std::cerr << texture_result.error().message() << '\n';
         return 7;
@@ -385,11 +387,12 @@ class ForeignGlObjects final {
            statistics.gpu_resolve_milliseconds >= 0.0;
 }
 
-[[nodiscard]] int verify_delayed_render_gpu_timings(elf3d::Engine& engine, SmokeFixture& fixture) {
+[[nodiscard]] int verify_delayed_render_gpu_timings(elf3d::EmbeddedRuntime& runtime,
+                                                    SmokeFixture& fixture) {
     bool render_timings_available = false;
     for (int attempt = 0; attempt < 16 && !render_timings_available; ++attempt) {
         if (!fixture.viewport->render(*fixture.scene, fixture.camera) ||
-            !engine.native_texture_view(fixture.viewport->color_texture())) {
+            !runtime.native_texture_view(fixture.viewport->color_texture())) {
             return fail(28, "GPU timing test could not render and resolve a frame");
         }
         glfwSwapBuffers(glfwGetCurrentContext());
@@ -420,8 +423,9 @@ class ForeignGlObjects final {
     return 0;
 }
 
-[[nodiscard]] int verify_delayed_gpu_timings(elf3d::Engine& engine, SmokeFixture& fixture) {
-    const int render = verify_delayed_render_gpu_timings(engine, fixture);
+[[nodiscard]] int verify_delayed_gpu_timings(elf3d::EmbeddedRuntime& runtime,
+                                             SmokeFixture& fixture) {
+    const int render = verify_delayed_render_gpu_timings(runtime, fixture);
     return render != 0 ? render : verify_delayed_picking_gpu_timing(fixture);
 }
 
@@ -439,7 +443,8 @@ class ForeignGlObjects final {
                : fail(32, "Viewport rendering disturbed a foreign timer query");
 }
 
-[[nodiscard]] int run_render_smoke(elf3d::Engine& engine) {
+[[nodiscard]] int run_render_smoke(elf3d::EmbeddedRuntime& runtime) {
+    elf3d::Engine& engine = runtime.engine();
     SmokeFixture fixture;
     const int objects = create_public_objects(engine, fixture);
     if (objects != 0) {
@@ -462,11 +467,11 @@ class ForeignGlObjects final {
     if (rendered != 0) {
         return rendered;
     }
-    const int state_preservation = verify_foreign_state_preserved(engine, fixture);
+    const int state_preservation = verify_foreign_state_preserved(runtime, fixture);
     if (state_preservation != 0) {
         return state_preservation;
     }
-    const int timings = verify_delayed_gpu_timings(engine, fixture);
+    const int timings = verify_delayed_gpu_timings(runtime, fixture);
     if (timings != 0) {
         return timings;
     }
@@ -474,25 +479,57 @@ class ForeignGlObjects final {
     if (foreign_timer != 0) {
         return foreign_timer;
     }
-    return verify_rendered_pixel(engine, fixture);
+    return verify_rendered_pixel(runtime, fixture);
 }
 
-[[nodiscard]] int run_render_smoke_with_engine() {
-    elf3d::EngineConfiguration configuration;
-    configuration.opengl.load_procedure = load_opengl_procedure;
-    elf3d::Result<std::unique_ptr<elf3d::Engine>> engine_result =
-        elf3d::Engine::create(configuration);
-    if (!engine_result) {
-        if (is_skippable_graphics_error(engine_result.error().code())) {
-            std::cout << "Skipping OpenGL render smoke test: " << engine_result.error().message()
+[[nodiscard]] int
+verify_late_dependent_destruction(std::unique_ptr<elf3d::EmbeddedRuntime>& runtime) {
+    elf3d::Engine& engine = runtime->engine();
+    elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.create_scene();
+    elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
+        engine.create_viewport({16, 16});
+    if (!scene_result || !viewport_result) {
+        return fail(33, "Late-destruction test could not create runtime dependents");
+    }
+    std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
+    std::unique_ptr<elf3d::Viewport> viewport = std::move(viewport_result).value();
+    const elf3d::Result<elf3d::EntityId> camera = scene->create_perspective_camera_entity({});
+    if (!camera) {
+        return fail(34, "Late-destruction test could not create a camera");
+    }
+
+    runtime.reset();
+    const elf3d::Result<void> render = viewport->render(*scene, camera.value());
+    if (render || render.error().code() != elf3d::ErrorCode::graphics_shutdown) {
+        return fail(35, "A late Viewport operation did not report Engine shutdown");
+    }
+    viewport.reset();
+    scene.reset();
+    return 0;
+}
+
+[[nodiscard]] int run_render_smoke_with_runtime() {
+    const elf3d::Result<std::unique_ptr<elf3d::EmbeddedRuntime>> missing_loader =
+        elf3d::EmbeddedRuntime::create({});
+    if (missing_loader ||
+        missing_loader.error().code() != elf3d::ErrorCode::missing_graphics_procedure_loader) {
+        return fail(36, "EmbeddedRuntime did not reject a missing procedure loader");
+    }
+    const elf3d::EmbeddedRuntimeOptions options{load_opengl_procedure};
+    elf3d::Result<std::unique_ptr<elf3d::EmbeddedRuntime>> runtime_result =
+        elf3d::EmbeddedRuntime::create(options);
+    if (!runtime_result) {
+        if (is_skippable_graphics_error(runtime_result.error().code())) {
+            std::cout << "Skipping OpenGL render smoke test: " << runtime_result.error().message()
                       << '\n';
             return skipped;
         }
-        std::cerr << engine_result.error().message() << '\n';
+        std::cerr << runtime_result.error().message() << '\n';
         return 2;
     }
-    std::unique_ptr<elf3d::Engine> engine = std::move(engine_result).value();
-    return run_render_smoke(*engine);
+    std::unique_ptr<elf3d::EmbeddedRuntime> runtime = std::move(runtime_result).value();
+    const int smoke = run_render_smoke(*runtime);
+    return smoke != 0 ? smoke : verify_late_dependent_destruction(runtime);
 }
 
 } // namespace
@@ -522,5 +559,5 @@ int main() {
         std::cout << "Skipping OpenGL render smoke test: OpenGL 4.1 is unavailable\n";
         return skipped;
     }
-    return run_render_smoke_with_engine();
+    return run_render_smoke_with_runtime();
 }

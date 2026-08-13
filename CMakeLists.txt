@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.3.4)
 
 project(
     Elf3D
-    VERSION 0.9.1
+    VERSION 0.10.2
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
@@ -21,13 +21,26 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>")
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 option(ELF3D_BUILD_ENGINE "Build the full Elf3D engine and rendering stack" ON)
+option(
+    ELF3D_BUILD_APP
+    "Build the Elf3D standard desktop application framework"
+    ${ELF3D_BUILD_ENGINE}
+)
+option(
+    ELF3D_BUILD_EMBED
+    "Build the explicit host-owned embedding integration"
+    ${ELF3D_BUILD_ENGINE}
+)
 option(ELF3D_BUILD_VIEWER "Build the Elf3D reference viewer" ON)
 option(ELF3D_BUILD_PERFORMANCE_BENCHMARK "Build the non-CTest render benchmark" OFF)
-if(ELF3D_BUILD_VIEWER AND NOT ELF3D_BUILD_ENGINE)
-    message(FATAL_ERROR "ELF3D_BUILD_VIEWER requires ELF3D_BUILD_ENGINE")
+if((ELF3D_BUILD_APP OR ELF3D_BUILD_EMBED OR ELF3D_BUILD_VIEWER) AND NOT ELF3D_BUILD_ENGINE)
+    message(FATAL_ERROR "Elf3D application, embedding, and viewer targets require ELF3D_BUILD_ENGINE")
 endif()
-if(ELF3D_BUILD_PERFORMANCE_BENCHMARK AND NOT ELF3D_BUILD_ENGINE)
-    message(FATAL_ERROR "ELF3D_BUILD_PERFORMANCE_BENCHMARK requires ELF3D_BUILD_ENGINE")
+if(ELF3D_BUILD_VIEWER AND NOT ELF3D_BUILD_APP)
+    message(FATAL_ERROR "ELF3D_BUILD_VIEWER requires ELF3D_BUILD_APP")
+endif()
+if(ELF3D_BUILD_PERFORMANCE_BENCHMARK AND NOT ELF3D_BUILD_EMBED)
+    message(FATAL_ERROR "ELF3D_BUILD_PERFORMANCE_BENCHMARK requires ELF3D_BUILD_EMBED")
 endif()
 
 set(
@@ -48,8 +61,16 @@ if(ELF3D_BUILD_ENGINE)
     add_subdirectory(facade/elf3d)
 endif()
 
-if(ELF3D_BUILD_VIEWER)
+if(ELF3D_BUILD_EMBED)
+    add_subdirectory(integrations/embed)
+endif()
+
+if(ELF3D_BUILD_APP)
     add_subdirectory(integrations/imgui)
+    add_subdirectory(framework/app)
+endif()
+
+if(ELF3D_BUILD_VIEWER)
     add_subdirectory(apps/viewer)
 endif()
 

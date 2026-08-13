@@ -2,8 +2,10 @@ add_library(
     elf3d
     SHARED
         src/engine.cpp
+        src/engine_access.h
         src/scene.cpp
         src/viewport.cpp
+        src/viewport_navigation.cpp
 )
 add_library(elf3d::elf3d ALIAS elf3d)
 
@@ -13,6 +15,8 @@ target_include_directories(
     elf3d
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 elf3d_link_object_libraries(
     elf3d
@@ -23,7 +27,7 @@ elf3d_link_object_libraries(
         elf3d_gltf_modules
         elf3d_graphics_modules
         elf3d_opengl_modules
-        elf3d_tools_modules
+        elf3d_interaction_modules
         elf3d_view_modules
 )
 set_target_properties(

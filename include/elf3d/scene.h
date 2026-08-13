@@ -5,6 +5,7 @@
 #include <elf3d/core/api.h>
 #include <elf3d/core/result.h>
 #include <elf3d/model_types.h>
+#include <elf3d/surface_anchor.h>
 
 #include <cstdint>
 #include <memory>
@@ -20,6 +21,7 @@ class Access;
 }
 
 class Engine;
+struct PickHit;
 
 struct SceneStatistics {
     std::uint64_t entities = 0;
@@ -195,6 +197,13 @@ class ELF3D_API Scene final {
     [[nodiscard]] Result<void> show_entity_and_ancestors(EntityId entity) noexcept;
     [[nodiscard]] Result<void> show_all_entities() noexcept;
     [[nodiscard]] std::uint64_t visibility_revision() const noexcept;
+
+    // Creates a stable Scene-owned triangle reference from a validated pick.
+    // Resolution recomputes world values after transform changes and rejects
+    // stale or foreign geometry.
+    [[nodiscard]] Result<SurfaceAnchor> create_surface_anchor(const PickHit& hit) const noexcept;
+    [[nodiscard]] Result<ResolvedSurfaceAnchor>
+    resolve_surface_anchor(const SurfaceAnchor& anchor) const noexcept;
 
     [[nodiscard]] std::optional<Bounds3> world_bounds() const noexcept;
     [[nodiscard]] std::optional<Bounds3> visible_bounds() const noexcept;

@@ -35,9 +35,11 @@ objects, measure surfaces, and cut through geometry with section planes and
 clipping boxes.
 
 The project is deliberately focused. It is a static-scene visualization engine,
-not a game engine or a general-purpose content editor. The host application
-keeps ownership of the native window, event loop, OpenGL context, input, and
-final presentation; Elf3D owns scene inspection, rendering, and viewport tools.
+not a game engine or a general-purpose content editor. The standard application
+framework owns the native window, event loop, OpenGL context, normalized input,
+frame sequence, final presentation, and teardown. Applications own composition
+and concrete Components, Tools, and Workflows. Hosts that need to retain their
+own window and loop use the separately named embedding integration.
 
 ## Highlights
 
@@ -52,9 +54,10 @@ final presentation; Elf3D owns scene inspection, rendering, and viewport tools.
 - **OpenGL 4.1 rendering** — metallic/roughness material values, base-color,
   emissive and occlusion textures, vertex color, unlit materials, alpha mask
   and blend paths, and off-screen viewport output.
-- **Embeddable by design** — public C++ API with explicit ownership, structured
-  `Result<T>` failures, host-controlled lifetime, and no GLFW, Dear ImGui,
-  OpenGL, GLM, or cgltf types in the engine API.
+- **Two explicit lifecycle products** — `elf3d_app` provides the canonical
+  Elf3D-owned desktop lifecycle, while `elf3d_embed` supports host-owned window,
+  context, input, presentation, and teardown. Neither leaks GLFW, Dear ImGui,
+  OpenGL, GLM, or cgltf types through the Runtime SDK API.
 - **Bounded input handling** — structured compatibility diagnostics and
   reviewed limits for files, buffers, images, hierarchy depth, and geometry.
 
@@ -63,14 +66,16 @@ final presentation; Elf3D owns scene inspection, rendering, and viewport tools.
 | Target | Use it when you need |
 | --- | --- |
 | `elf3d_viewer` | A Windows desktop application for opening, inspecting, and exporting models. |
-| `elf3d` / `elf3d::elf3d` | The full shared engine library: Scene, Viewport, rendering, picking, navigation, and tools. |
+| `elf3d_app` / `elf3d::app` | The canonical desktop lifecycle with normalized input and queued viewport rendering. |
+| `elf3d_embed` / `elf3d::embed` | An explicit host-owned window, context, loop, and presentation path. |
+| `elf3d` / `elf3d::elf3d` | The shared Runtime SDK: Scene, Viewport, rendering, picking, navigation, and general mechanisms. |
 | `elf3d_model` / `elf3d::model` | A static CPU-only `Document` library for construction, validation, processing, and glTF/GLB import/export. |
-| `elf3d_imgui` / `elf3d::imgui` | Optional presentation of an Elf3D viewport texture through Dear ImGui. |
+| `elf3d_imgui` / `elf3d::imgui` | Named Dear ImGui presentation integration used by the standard desktop framework. |
 
 ## Download the viewer
 
 Download the current
-[Elf3D 0.9.1 Windows x64 package](https://github.com/zavelski/elf3d/releases/tag/v0.9.1),
+[Elf3D 0.10.2 Windows x64 package](https://github.com/zavelski/elf3d/releases/tag/v0.10.2),
 extract it, and run `elf3d_viewer.exe`.
 
 Requirements:
@@ -113,15 +118,19 @@ Release configurations, output paths, and troubleshooting are documented in
 
 ## Architecture
 
-Elf3D uses 19 restricted C++20 named modules as its primary architecture.
+Elf3D uses 18 restricted C++20 named modules as its primary architecture.
 Nine internal CMake `OBJECT` targets group those modules for practical build
 and IDE scale; the groups do not replace the module boundaries.
 
 ```mermaid
 flowchart TD
-    Viewer["elf3d_viewer<br/>Windows host application"] --> ImGui["elf3d_imgui<br/>ImGui presentation"]
-    Viewer --> Engine["elf3d<br/>shared engine library"]
-    ImGui --> Engine
+    Viewer["elf3d_viewer<br/>Components · Tools · Workflows"] --> App["elf3d_app<br/>standard lifecycle"]
+    Viewer --> ImGui["elf3d_imgui<br/>named UI integration"]
+    Viewer --> Engine["elf3d<br/>Runtime SDK"]
+    App --> ImGui
+    App --> Engine
+    Embedder["External host"] --> Embed["elf3d_embed<br/>explicit embedding path"]
+    Embed --> Engine
 
     ModelProduct["elf3d_model<br/>static model library"] --> Foundation["elf3d_foundation_modules<br/>core · math"]
     ModelProduct --> Image["elf3d_image_modules<br/>PNG · JPEG boundary"]
@@ -135,12 +144,12 @@ flowchart TD
     Engine --> Gltf
     Engine --> Graphics["elf3d_graphics_modules<br/>backend-neutral graphics"]
     Engine --> OpenGL["elf3d_opengl_modules<br/>OpenGL 4.1 backend"]
-    Engine --> Tools["elf3d_tools_modules<br/>navigation · picking · viewport tools"]
+    Engine --> Interaction["elf3d_interaction_modules<br/>navigation · picking · view mechanisms"]
     Engine --> View["elf3d_view_modules<br/>renderer · viewport"]
 
-    View --> Tools
+    View --> Interaction
     View --> Graphics
-    Tools --> Domain
+    Interaction --> Domain
     OpenGL --> Graphics
     Graphics --> Domain
     Domain --> Model
@@ -186,9 +195,12 @@ graphics behavior is in [Rendering reference](docs/RENDERING.md).
 | `include/elf3d/` | Public C++ headers |
 | `facade/elf3d/` | Shared-library entry points and public/internal conversion |
 | `modules/` | Named modules, implementations, and focused tests |
-| `integrations/imgui/` | Optional Dear ImGui presentation integration |
-| `apps/viewer/` | Desktop host application and runtime assets |
-| `tests/` | Public API and real OpenGL integration tests |
+| `framework/app/` | Standard desktop application lifecycle and normalized input |
+| `integrations/embed/` | Explicit host-owned context and loop integration |
+| `integrations/imgui/` | Named Dear ImGui presentation integration |
+| `apps/viewer/` | Reference application assembly and runtime assets |
+| `examples/` | Compile-checked public integration examples |
+| `tests/` | Public API, external copy/adapt, and real OpenGL integration tests |
 | `cmake/` | Target-scoped build configuration |
 | `third_party/` | Pinned vendored dependencies and license notices |
 | `docs/` | Viewer, API, format, rendering, build, and testing documentation |

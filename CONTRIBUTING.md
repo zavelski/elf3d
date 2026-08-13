@@ -6,7 +6,8 @@ are welcome.
 ## Before Submitting a Change
 
 1. Keep the change limited to one clear purpose.
-2. Preserve the separation between the engine, host integration, and viewer.
+2. Preserve the separation between the engine, Standard Application Framework,
+   explicit host integration, and viewer application.
 3. Add or update tests for behavior changes.
 4. Update the relevant public documentation.
 5. Preserve all third-party copyright and license notices.

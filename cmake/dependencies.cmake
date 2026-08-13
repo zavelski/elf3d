@@ -198,7 +198,7 @@ set_target_properties(
         POSITION_INDEPENDENT_CODE ON
 )
 
-if(NOT ELF3D_BUILD_VIEWER)
+if(NOT ELF3D_BUILD_APP)
     return()
 endif()
 

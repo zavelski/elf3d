@@ -3,8 +3,6 @@ module;
 #include <elf3d/core/result.h>
 #include <elf3d/viewport.h>
 
-#include <array>
-#include <cstddef>
 #include <memory>
 #include <optional>
 
@@ -12,9 +10,11 @@ export module elf.viewport;
 
 import elf.clipping;
 import elf.graphics;
+import elf.navigation;
 import elf.picking;
 import elf.renderer;
 import elf.scene;
+import elf.clipping.runtime;
 
 export namespace elf3d::viewport {
 
@@ -27,7 +27,40 @@ struct ViewportPickRequest {
 class OffscreenViewport final {
   private:
     struct ConstructionKey final {};
-    class State;
+    class State final {
+      public:
+        class SelectionState;
+        class VisibilityState;
+
+        State();
+        ~State() noexcept;
+
+        [[nodiscard]] Result<std::optional<Bounds3>>
+        visible_bounds(const scene::Storage& scene,
+                       const scene::VisibilityFilter& visibility_filter,
+                       const clipping::ClippingFilter& clipping_filter);
+        void validate_visibility(const scene::Storage& scene) noexcept;
+        [[nodiscard]] Result<scene::VisibilityFilter>
+        visibility_filter(const scene::Storage& scene);
+        [[nodiscard]] Result<void> isolate_entity(const scene::Storage& scene, EntityId entity);
+        void clear_isolation() noexcept;
+        void clear_scene_isolation(SceneId scene) noexcept;
+        [[nodiscard]] bool is_isolating() const noexcept;
+        [[nodiscard]] std::optional<EntityId> isolated_entity() const noexcept;
+
+        navigation::OrbitNavigationController navigation;
+        std::unique_ptr<SelectionState> selection;
+        std::unique_ptr<VisibilityState> visibility;
+        clipping_runtime::ClippingController clipping;
+        SceneId visible_bounds_scene;
+        std::optional<EntityId> visible_bounds_isolated_root;
+        std::optional<Bounds3> cached_visible_bounds;
+        std::uint64_t visible_bounds_spatial_revision = 0;
+        std::uint64_t visible_bounds_hierarchy_revision = 0;
+        std::uint64_t visible_bounds_visibility_revision = 0;
+        std::uint64_t visible_bounds_clipping_revision = 0;
+        bool visible_bounds_valid = false;
+    };
     struct Resources final {
         std::unique_ptr<graphics::RenderTarget> render_target;
         std::unique_ptr<graphics::PickingTarget> picking_target;
@@ -59,9 +92,8 @@ class OffscreenViewport final {
     [[nodiscard]] std::uint64_t render_revision() const noexcept;
 
     [[nodiscard]] Result<void> update_navigation(renderer::Renderer& renderer,
-                                                 picking::PickingService& picking,
                                                  scene::Storage& scene, EntityId camera,
-                                                 const ViewportInput& input);
+                                                 const NavigationInput& input);
     [[nodiscard]] Result<void> set_examine_pivot(scene::Storage& scene, EntityId camera,
                                                  Float3 world_position);
     [[nodiscard]] Result<void> fit_to_scene(scene::Storage& scene, EntityId camera);
@@ -74,9 +106,6 @@ class OffscreenViewport final {
     [[nodiscard]] Result<void> set_navigation_settings(const OrbitNavigationSettings& settings);
     [[nodiscard]] OrbitNavigationSettings navigation_settings() const noexcept;
     [[nodiscard]] std::optional<NavigationSnapshot> navigation_snapshot() const noexcept;
-
-    void set_active_tool(ViewportTool tool) noexcept;
-    [[nodiscard]] ViewportTool active_tool() const noexcept;
 
     [[nodiscard]] Result<Ray3> make_picking_ray(picking::PickingService& picking,
                                                 const scene::Storage& scene, EntityId camera,
@@ -96,36 +125,23 @@ class OffscreenViewport final {
     [[nodiscard]] std::optional<EntityId> selected_entity() const noexcept;
     [[nodiscard]] std::optional<PickHit> selection_hit() const noexcept;
     [[nodiscard]] SelectionSnapshot selection_snapshot() const noexcept;
-    void set_selection_enabled(bool enabled) noexcept;
-    [[nodiscard]] bool selection_enabled() const noexcept;
-    [[nodiscard]] Result<void> set_selection_settings(const SelectionSettings& settings);
-    [[nodiscard]] SelectionSettings selection_settings() const noexcept;
     [[nodiscard]] PickingStatistics
     picking_statistics(const picking::PickingService& picking) const noexcept;
 
-    [[nodiscard]] Result<void> begin_distance_measurement();
-    void cancel_distance_measurement() noexcept;
-    void clear_distance_measurement() noexcept;
-    void clear_scene_measurement(SceneId scene) noexcept;
-    [[nodiscard]] DistanceMeasurementSnapshot
-    distance_measurement_snapshot(const scene::Storage& scene) noexcept;
-    [[nodiscard]] Result<void>
-    set_measurement_settings(const DistanceMeasurementSettings& settings);
-    [[nodiscard]] DistanceMeasurementSettings measurement_settings() const noexcept;
-    [[nodiscard]] MeasurementStatistics measurement_statistics() const noexcept;
     [[nodiscard]] Result<ProjectedViewportPoint>
     project_world_to_viewport(const scene::Storage& scene, EntityId camera,
                               Float3 world_position) const;
+    [[nodiscard]] Result<bool> surface_anchor_visible(const scene::Storage& scene,
+                                                      const ResolvedSurfaceAnchor& anchor);
 
     [[nodiscard]] Result<void> isolate_entity(const scene::Storage& scene, EntityId entity);
     void clear_isolation() noexcept;
     void clear_scene_isolation(SceneId scene) noexcept;
     [[nodiscard]] bool is_isolating() const noexcept;
     [[nodiscard]] std::optional<EntityId> isolated_entity() const noexcept;
-    [[nodiscard]] Result<void> hide_selected(scene::Storage& scene);
-    [[nodiscard]] Result<void> show_selected(scene::Storage& scene);
-    [[nodiscard]] Result<void> isolate_selected(const scene::Storage& scene);
     [[nodiscard]] Result<std::optional<Bounds3>> visible_bounds(const scene::Storage& scene);
+    [[nodiscard]] Result<std::optional<Bounds3>>
+    unclipped_visible_bounds(const scene::Storage& scene);
 
     [[nodiscard]] Result<void> set_section_plane(const SectionPlane& plane);
     void clear_section_plane() noexcept;
@@ -134,17 +150,12 @@ class OffscreenViewport final {
     [[nodiscard]] Result<void> remove_clipping_box(std::uint32_t index);
     void clear_clipping_boxes() noexcept;
     void clear_clipping() noexcept;
-    [[nodiscard]] Result<void> set_clipping_helpers_visible(bool visible) noexcept;
-    [[nodiscard]] Result<void>
-    set_clipping_helper_settings(const ClippingHelperSettings& settings) noexcept;
-    [[nodiscard]] Result<void> reset_clipping_box_to_visible_bounds(const scene::Storage& scene,
-                                                                    std::uint32_t index);
-    [[nodiscard]] Result<std::uint32_t>
-    add_clipping_box_from_visible_bounds(const scene::Storage& scene);
     [[nodiscard]] ClippingSnapshot clipping_snapshot() const noexcept;
 
     [[nodiscard]] Result<void> render(renderer::Renderer& renderer, const scene::Storage& scene,
                                       EntityId camera);
+    [[nodiscard]] Result<void> render(renderer::Renderer& renderer, const scene::Storage& scene,
+                                      EntityId camera, const ViewportRenderOptions& options);
     [[nodiscard]] RenderStatistics statistics() const noexcept;
     [[nodiscard]] TextureHandle color_texture() const noexcept;
     [[nodiscard]] bool framebuffer_valid() const noexcept;
@@ -154,7 +165,6 @@ class OffscreenViewport final {
   private:
     struct InteractionFrame {
         EntityId camera;
-        ViewportInput input;
         scene::VisibilityFilter visibility;
         elf3d::clipping::ClippingFilter clipping_filter;
     };
@@ -174,51 +184,15 @@ class OffscreenViewport final {
     focus_depth_anchor(renderer::Renderer& renderer, const scene::Storage& scene, EntityId camera,
                        const scene::VisibilityFilter& visibility,
                        const elf3d::clipping::ClippingFilter& clipping_filter);
-    [[nodiscard]] Result<InteractionFrame> interaction_frame(scene::Storage& scene, EntityId camera,
-                                                             const ViewportInput& input);
-    [[nodiscard]] ViewportInput normalized_pointer_hover(const ViewportInput& input) const noexcept;
     [[nodiscard]] Result<void>
     update_orbit_screen_anchor(renderer::Renderer& renderer, scene::Storage& scene,
                                const InteractionFrame& frame,
                                std::optional<Float2> orbit_start_position);
-    [[nodiscard]] Result<void> handle_navigation_click(renderer::Renderer& renderer,
-                                                       picking::PickingService& picking,
-                                                       scene::Storage& scene,
-                                                       const InteractionFrame& frame,
-                                                       std::optional<Float2> click_position);
-    [[nodiscard]] Result<void> handle_measurement_click(renderer::Renderer& renderer,
-                                                        picking::PickingService& picking,
-                                                        scene::Storage& scene,
-                                                        const InteractionFrame& frame,
-                                                        Float2 click_position);
-    [[nodiscard]] Result<void> handle_selection_click(renderer::Renderer& renderer,
-                                                      picking::PickingService& picking,
-                                                      scene::Storage& scene,
-                                                      const InteractionFrame& frame,
-                                                      Float2 click_position);
-    [[nodiscard]] Result<bool> hide_clicked_entity(scene::Storage& scene,
-                                                   const InteractionFrame& frame,
-                                                   const std::optional<PickHit>& hit);
-    [[nodiscard]] Result<void> select_control_click(const scene::Storage& scene,
-                                                    const InteractionFrame& frame,
-                                                    const std::optional<PickHit>& hit);
-    [[nodiscard]] Result<void> anchor_plain_click(scene::Storage& scene,
-                                                  const InteractionFrame& frame,
-                                                  const std::optional<PickHit>& hit);
-    [[nodiscard]] Result<void> update_measurement_preview(renderer::Renderer& renderer,
-                                                          picking::PickingService& picking,
-                                                          scene::Storage& scene,
-                                                          const InteractionFrame& frame);
 
     std::unique_ptr<graphics::RenderTarget> render_target_;
     std::unique_ptr<graphics::PickingTarget> picking_target_;
     std::unique_ptr<graphics::PickingTarget> focus_depth_target_;
     std::unique_ptr<State> state_;
-    ViewportTool active_tool_ = ViewportTool::selection;
-    std::array<OverlayLineSegment, 2 + 4 + maximum_clipping_boxes * 12> overlay_lines_;
-    std::array<OverlayPointMarker, 3> overlay_markers_;
-    std::size_t overlay_line_count_ = 0;
-    std::size_t overlay_marker_count_ = 0;
     Color4 clear_color_{0.08F, 0.16F, 0.28F, 1.0F};
     BasicLighting lighting_;
     RenderShadingMode shading_mode_ = RenderShadingMode::standard;

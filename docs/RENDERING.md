@@ -32,8 +32,11 @@ Scene visibility, viewport isolation, the section plane, and clipping boxes are
 applied consistently to display, picking, measurement placement, visible
 bounds, and camera fitting.
 
-## Host Integration
+## Presentation Integration
 
-Create, resize, render, present, and destroy a viewport while its compatible
-OpenGL context is current. The host must not delete or modify a native texture
-handle returned by Elf3D.
+The standard application framework owns rendering and presentation. An
+explicit embedding host creates `EmbeddedRuntime`, keeps its compatible OpenGL
+context current while creating, resizing, rendering, resolving, and destroying
+viewport resources, and presents the non-owning view returned by
+`EmbeddedRuntime::native_texture_view()`. The host must not delete or modify the
+native texture.

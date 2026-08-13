@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.10.2
+
+- Halved the Examine-mode keyboard pan rate for view-left/view-right A/D and
+  world-down/world-up Q/E movement while preserving frame-time scaling and the
+  existing W/S dolly rate.
+
+## 0.10.1
+
+- Restored the bundled `DroidSans.ttf` as the viewer's primary default font
+  after the application-lifecycle migration and added smoke validation for the
+  configured default font.
+- Doubled the Examine-mode keyboard dolly rate for both W and S while
+  preserving frame-time scaling and local working-depth behavior.
+
+## 0.10.0
+
+- Added the `elf3d_app` Standard Application Framework with a canonical
+  `run_application()` lifecycle, normalized input, deterministic interaction
+  arbitration, queued viewport rendering, presentation, and teardown.
+- Added the separately named `elf3d_embed` integration for applications that
+  retain ownership of their native window, graphics context, event loop,
+  input, presentation, and shutdown.
+- Refocused the Runtime SDK on general mechanisms by adding surface anchors,
+  projection, generic overlays, and explicit viewport state while moving
+  concrete measurement, selection, and clipping presentation policy into
+  viewer-owned Tools.
+- Reorganized the reference viewer around explicit Components, typed commands,
+  Tools, and file Workflows with independently owned state and bounded command
+  execution.
+- Expanded automated coverage for application lifecycle rollback, normalized
+  input, interaction arbitration, viewer behavior, public-only Measurement
+  Tool copy/adapt reuse, restored interaction regions, and all four checked-in
+  build presets.
+
 ## 0.9.1
 
 - Kept the model-only dependency checker in the public source projection so

@@ -39,9 +39,9 @@ struct RenderEntityContext final {
 };
 
 struct RenderListBuildContext final {
-    const scene::Storage& scene;
-    const Frustum& frustum;
-    const clipping::ClippingFilter& clipping;
+    scene::VisibilityFilter visibility;
+    clipping::ClippingFilter clipping;
+    Frustum frustum;
     Float3 camera_position;
     bool frustum_culling_required = true;
 };
@@ -156,17 +156,18 @@ make_camera_frame(const scene::Storage& scene_storage, EntityId camera,
 }
 
 [[nodiscard]] Result<void> append_primitive(const RenderListBuildContext& build,
+                                            const scene::Storage& scene,
                                             const RenderEntityContext& context,
                                             std::uint32_t primitive_index, RenderList& list) {
     ++list.candidate_primitives;
     const Result<scene::RuntimePrimitiveView> primitive =
-        build.scene.runtime_primitive(context.entity, primitive_index);
+        scene.runtime_primitive(context.entity, primitive_index);
     if (!primitive) {
         return primitive.error();
     }
     if (build.frustum_culling_required || build.clipping.has_clipping()) {
         const Result<Bounds3> world_bounds =
-            build.scene.primitive_world_bounds(context.entity, primitive_index);
+            scene.primitive_world_bounds(context.entity, primitive_index);
         if (!world_bounds) {
             return world_bounds.error();
         }
@@ -188,16 +189,17 @@ make_camera_frame(const scene::Storage& scene_storage, EntityId camera,
 }
 
 [[nodiscard]] Result<void> append_entity(const RenderListBuildContext& build,
+                                         const scene::Storage& scene,
                                          const scene::EntityRecord& record, RenderList& list) {
-    const Result<Float4x4> model = build.scene.world_matrix(record.id);
+    const Result<Float4x4> model = scene.world_matrix(record.id);
     if (!model) {
         return model.error();
     }
-    const Result<math::Matrix3x3> normals = build.scene.world_normal_matrix(record.id);
+    const Result<math::Matrix3x3> normals = scene.world_normal_matrix(record.id);
     if (!normals) {
         return normals.error();
     }
-    const Result<bool> orientation = build.scene.world_orientation_reversed(record.id);
+    const Result<bool> orientation = scene.world_orientation_reversed(record.id);
     if (!orientation) {
         return orientation.error();
     }
@@ -205,7 +207,7 @@ make_camera_frame(const scene::Storage& scene_storage, EntityId camera,
                                       orientation.value(), build.camera_position};
     for (std::uint32_t primitive_index = 0; primitive_index < record.model->primitives.size();
          ++primitive_index) {
-        Result<void> appended = append_primitive(build, context, primitive_index, list);
+        Result<void> appended = append_primitive(build, scene, context, primitive_index, list);
         if (!appended) {
             return appended.error();
         }
@@ -285,13 +287,13 @@ Result<RenderList> build_render_list(const scene::Storage& scene_storage, Entity
     const Frustum frustum = make_frustum(camera_frame.value());
     const bool frustum_culling_required =
         requires_primitive_frustum_culling(scene_storage, frustum);
-    const RenderListBuildContext build{scene_storage, frustum, clipping_filter,
+    const RenderListBuildContext build{visibility, clipping_filter, frustum,
                                        list.camera_world_position, frustum_culling_required};
     for (const std::optional<scene::EntityRecord>& record : scene_storage.entities()) {
         if (!record_is_renderable(scene_storage, visibility, record)) {
             continue;
         }
-        Result<void> appended = append_entity(build, *record, list);
+        Result<void> appended = append_entity(build, scene_storage, *record, list);
         if (!appended) {
             return appended.error();
         }

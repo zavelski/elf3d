@@ -209,7 +209,7 @@ void OpenGLDeviceState::unregister_texture(TextureHandle handle) noexcept {
     texture_records_.erase(detail::TextureHandleAccess::value(handle));
 }
 
-Result<NativeTextureView> OpenGLDeviceState::native_texture_view(TextureHandle handle) const {
+Result<OpenGLTextureView> OpenGLDeviceState::native_texture_view(TextureHandle handle) const {
     const Result<void> validation = validate_operation();
     if (!validation) {
         return validation.error();
@@ -230,8 +230,7 @@ Result<NativeTextureView> OpenGLDeviceState::native_texture_view(TextureHandle h
         }
     }
 
-    return NativeTextureView{NativeGraphicsApi::opengl,
-                             static_cast<std::uintptr_t>(record->second.texture),
+    return OpenGLTextureView{static_cast<std::uintptr_t>(record->second.texture),
                              record->second.extent};
 }
 

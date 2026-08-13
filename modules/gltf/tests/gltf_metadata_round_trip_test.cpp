@@ -44,8 +44,7 @@ constexpr std::string_view expected_root_extension =
 
 class TemporaryDirectory final {
   public:
-    TemporaryDirectory()
-        : path_(std::filesystem::temp_directory_path() / "elf3d_gltf_metadata_test") {
+    TemporaryDirectory() : path_(std::filesystem::path{ELF3D_TEST_BINARY_DIR} / "gltf_metadata") {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
         std::filesystem::create_directories(path_);

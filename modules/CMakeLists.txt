@@ -79,6 +79,7 @@ if(ELF3D_BUILD_ENGINE)
             scene/src/runtime_adapter.cpp
             scene/src/spatial.cpp
             scene/src/storage.cpp
+            scene/src/surface_anchor.cpp
             scene/src/visibility.cpp
     )
     add_library(elf3d::domain_modules ALIAS elf3d_domain_modules)
@@ -270,7 +271,7 @@ target_link_libraries(
 )
 
 add_library(
-    elf3d_tools_modules
+    elf3d_interaction_modules
     OBJECT
         navigation/src/orbit_navigation_state.cpp
         navigation/src/orbit_navigation.cpp
@@ -278,42 +279,42 @@ add_library(
         picking/src/geometry_detail.h
         picking/src/service_geometry.cpp
         picking/src/service.cpp
-        tools/selection/src/selection_controller.cpp
-        tools/visibility/src/visibility_controller.cpp
-        tools/measurement/src/distance_measurement.cpp
-        tools/clipping/src/clipping_controller.cpp
+        selection/src/selection_controller.cpp
+        visibility/src/visibility_controller.cpp
+        clipping_runtime/src/clipping_controller.cpp
 )
-add_library(elf3d::tools_modules ALIAS elf3d_tools_modules)
-elf3d_configure_module_group(elf3d_tools_modules)
+add_library(elf3d::interaction_modules ALIAS elf3d_interaction_modules)
+elf3d_configure_module_group(elf3d_interaction_modules)
 target_sources(
-    elf3d_tools_modules
+    elf3d_interaction_modules
     PUBLIC
-        FILE_SET elf3d_tools_cxx_modules TYPE CXX_MODULES
+        FILE_SET elf3d_interaction_cxx_modules TYPE CXX_MODULES
         FILES
             navigation/src/elf.navigation.cppm
             picking/src/elf.picking.cppm
-            tools/selection/src/elf.tool.selection.cppm
-            tools/visibility/src/elf.tool.visibility.cppm
-            tools/measurement/src/elf.tool.measurement.cppm
-            tools/clipping/src/elf.tool.clipping.cppm
+            selection/src/elf.selection.cppm
+            visibility/src/elf.visibility.cppm
+            clipping_runtime/src/elf.clipping.runtime.cppm
 )
 target_link_libraries(
-    elf3d_tools_modules
+    elf3d_interaction_modules
     PUBLIC
         elf3d_foundation_modules
         elf3d_domain_modules
-        elf3d_graphics_modules
 )
 
 add_library(
     elf3d_view_modules
     OBJECT
         renderer/src/gpu_picking.cpp
+        renderer/src/main_shader_source.cpp
         renderer/src/model_rendering.cpp
         renderer/src/render_list.cpp
         renderer/src/renderer.cpp
         viewport/src/offscreen_viewport.cpp
+        viewport/src/offscreen_viewport_navigation.cpp
         viewport/src/offscreen_viewport_picking.cpp
+        viewport/src/offscreen_viewport_projection.cpp
         viewport/src/offscreen_viewport_render_settings.cpp
 )
 add_library(elf3d::view_modules ALIAS elf3d_view_modules)
@@ -332,7 +333,7 @@ target_link_libraries(
         elf3d_foundation_modules
         elf3d_domain_modules
         elf3d_graphics_modules
-        elf3d_tools_modules
+        elf3d_interaction_modules
 )
 
 endif()

@@ -20,24 +20,27 @@ import elf.core;
 import elf.math;
 
 export namespace elf3d::graphics {
+enum class NativeGraphicsApi { none, opengl };
 
+struct NativeTextureView {
+    NativeGraphicsApi api = NativeGraphicsApi::none;
+    std::uintptr_t value = 0;
+    Extent2D extent;
+};
 enum class VertexLayout {
     position_normal_float3,
     position_normal_float3_texcoord_float2,
     position_normal_float3_texcoord2_float2_color_float4,
 };
-
 enum class TextureFormat {
     rgba8_unorm,
     rgba8_srgb,
 };
-
 enum class TextureAddressMode {
     repeat,
     mirrored_repeat,
     clamp_to_edge,
 };
-
 enum class TextureFilterMode {
     nearest,
     linear,
@@ -46,11 +49,9 @@ enum class TextureFilterMode {
     nearest_mipmap_linear,
     linear_mipmap_linear,
 };
-
 class StaticMesh;
 class Texture2D;
 inline constexpr std::size_t material_texture_count = 4;
-
 struct Texture2DDescription {
     Extent2D extent;
     TextureFormat format = TextureFormat::rgba8_unorm;
@@ -60,7 +61,6 @@ struct Texture2DDescription {
     TextureFilterMode min_filter = TextureFilterMode::linear;
     TextureFilterMode mag_filter = TextureFilterMode::linear;
 };
-
 struct StaticMeshDescription {
     std::span<const std::byte> vertex_bytes;
     std::uint32_t vertex_count = 0;
@@ -126,14 +126,6 @@ struct PickingDrawDescription {
     std::uint32_t clipping_box_count = 0;
 };
 
-struct IndexedDrawBatchItem {
-    StaticMesh* mesh = nullptr;
-    DrawIndexedDescription description;
-};
-struct PickingDrawBatchItem {
-    StaticMesh* mesh = nullptr;
-    PickingDrawDescription description;
-};
 struct PickingPixel {
     std::uint32_t object_id = 0;
     std::uint32_t primitive_index = 0;
@@ -264,15 +256,16 @@ class Device {
                  const DrawIndexedDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void>
     draw_indexed_batch(RenderTarget& target, GraphicsPipeline& pipeline,
-                       std::span<const IndexedDrawBatchItem> items) noexcept = 0;
+                       std::span<StaticMesh* const> meshes,
+                       std::span<const DrawIndexedDescription> descriptions) noexcept = 0;
     [[nodiscard]] virtual Result<void>
     draw_overlay(RenderTarget& target, const DrawOverlayDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void>
     draw_picking_indexed(PickingTarget& target, StaticMesh& mesh,
                          const PickingDrawDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void>
-    draw_picking_batch(PickingTarget& target,
-                       std::span<const PickingDrawBatchItem> items) noexcept = 0;
+    draw_picking_batch(PickingTarget& target, std::span<StaticMesh* const> meshes,
+                       std::span<const PickingDrawDescription> descriptions) noexcept = 0;
     [[nodiscard]] virtual Result<std::optional<PickingPixel>>
     read_picking_pixel(PickingTarget& target, Float2 position_pixels) noexcept = 0;
     [[nodiscard]] virtual Result<std::vector<float>>

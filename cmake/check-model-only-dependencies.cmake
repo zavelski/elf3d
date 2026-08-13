@@ -55,7 +55,7 @@ set(forbidden_targets
     elf3d_domain_tests
     elf3d_graphics_modules
     elf3d_opengl_modules
-    elf3d_tools_modules
+    elf3d_interaction_modules
     elf3d_view_modules
     elf3d_third_party_glad
     elf3d_third_party_imgui

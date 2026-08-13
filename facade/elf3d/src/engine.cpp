@@ -22,6 +22,7 @@ import elf.renderer;
 import elf.scene;
 import elf.viewport;
 
+#include "engine_access.h"
 #include "viewport_impl.h"
 
 namespace elf3d {
@@ -216,10 +217,6 @@ class Engine::Impl final {
 
     Impl() noexcept : engine_token(allocate_engine_owner_token()) {}
 
-    explicit Impl(GraphicsBackend backend) : Impl() {
-        this->backend = backend;
-    }
-
     static void release_scene(std::uintptr_t context, SceneId scene) noexcept {
         std::unique_ptr<SceneReleaseTicket> ticket{reinterpret_cast<SceneReleaseTicket*>(context)};
         if (ticket == nullptr) {
@@ -235,7 +232,6 @@ class Engine::Impl final {
         }
     }
 
-    GraphicsBackend backend = GraphicsBackend::none;
     std::uint64_t engine_token = 0;
     std::shared_ptr<renderer::Renderer> renderer;
     std::shared_ptr<picking::PickingService> picking;
@@ -246,30 +242,17 @@ Engine::Engine(ConstructionKey, std::unique_ptr<Impl> impl) noexcept : impl_(std
 
 Engine::~Engine() noexcept = default;
 
-Result<std::unique_ptr<Engine>> Engine::create(const EngineConfiguration& configuration) noexcept {
+Result<std::unique_ptr<Engine>>
+detail::EngineAccess::create(const detail::EngineCreateOptions& options) noexcept {
     try {
-        if (configuration.graphics_backend == GraphicsBackend::none) {
-            auto impl = std::make_unique<Impl>(GraphicsBackend::none);
-            return std::make_unique<Engine>(ConstructionKey{}, std::move(impl));
-        }
-
-        Result<std::unique_ptr<graphics::Device>> device_result =
-            Error{ErrorCode::invalid_argument, "The requested graphics backend is unsupported"};
-
-        switch (configuration.graphics_backend) {
-        case GraphicsBackend::opengl:
-            device_result = backend::opengl::create_device(configuration.opengl);
-            break;
-        default:
-            return Error{ErrorCode::invalid_argument,
-                         "The requested graphics backend is unsupported"};
-        }
+        Result<std::unique_ptr<graphics::Device>> device_result = backend::opengl::create_device(
+            backend::opengl::DeviceOptions{options.load_opengl_procedure});
 
         if (!device_result) {
             return device_result.error();
         }
 
-        auto impl = std::make_unique<Impl>(configuration.graphics_backend);
+        auto impl = std::make_unique<Engine::Impl>();
         Result<std::unique_ptr<renderer::Renderer>> renderer_result =
             renderer::Renderer::create(std::move(device_result).value(), impl->engine_token);
         if (!renderer_result) {
@@ -277,7 +260,7 @@ Result<std::unique_ptr<Engine>> Engine::create(const EngineConfiguration& config
         }
         impl->renderer = std::shared_ptr<renderer::Renderer>{std::move(renderer_result).value()};
         impl->picking = std::make_shared<picking::PickingService>();
-        return std::make_unique<Engine>(ConstructionKey{}, std::move(impl));
+        return std::make_unique<Engine>(Engine::ConstructionKey{}, std::move(impl));
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {
@@ -286,11 +269,7 @@ Result<std::unique_ptr<Engine>> Engine::create(const EngineConfiguration& config
 }
 
 GraphicsBackend Engine::graphics_backend() const noexcept {
-    return impl_ != nullptr ? impl_->backend : GraphicsBackend::none;
-}
-
-bool Engine::graphics_initialized() const noexcept {
-    return impl_ != nullptr && impl_->renderer != nullptr;
+    return impl_ != nullptr ? GraphicsBackend::opengl : GraphicsBackend::none;
 }
 
 Result<std::unique_ptr<Viewport>> Engine::create_viewport(Extent2D initial_extent) noexcept {
@@ -377,14 +356,24 @@ Result<LoadedScene> Engine::load_scene(std::string_view path_utf8,
     }
 }
 
-Result<NativeTextureView> Engine::native_texture_view(TextureHandle texture) const noexcept {
-    if (impl_ == nullptr || impl_->renderer == nullptr) {
+Result<detail::NativeTextureView>
+detail::EngineAccess::native_texture_view(const Engine& engine, TextureHandle texture) noexcept {
+    if (engine.impl_ == nullptr || engine.impl_->renderer == nullptr) {
         return Error{ErrorCode::graphics_shutdown,
                      "Native texture access requires an initialized graphics backend"};
     }
 
     try {
-        return impl_->renderer->device().native_texture_view(texture);
+        Result<graphics::NativeTextureView> view =
+            engine.impl_->renderer->device().native_texture_view(texture);
+        if (!view) {
+            return view.error();
+        }
+        const graphics::NativeTextureView& value = view.value();
+        const detail::NativeGraphicsApi api = value.api == graphics::NativeGraphicsApi::opengl
+                                                  ? detail::NativeGraphicsApi::opengl
+                                                  : detail::NativeGraphicsApi::none;
+        return detail::NativeTextureView{api, value.value, value.extent};
     } catch (const std::bad_alloc&) {
         fatal_allocation_failure();
     } catch (...) {

@@ -32,20 +32,10 @@ struct ClippingBox {
     bool operator==(const ClippingBox&) const = default;
 };
 
-struct ClippingHelperSettings {
-    bool visible = true;
-    Color4 section_plane_color{0.2F, 0.75F, 1.0F, 1.0F};
-    Color4 box_color{1.0F, 0.8F, 0.15F, 1.0F};
-    float line_thickness_pixels = 2.0F;
-
-    bool operator==(const ClippingHelperSettings&) const = default;
-};
-
 struct ClippingSnapshot {
     SectionPlane section_plane;
     std::array<ClippingBox, maximum_clipping_boxes> boxes;
     std::uint32_t box_count = 0;
-    ClippingHelperSettings helpers;
     std::uint64_t revision = 0;
 
     bool operator==(const ClippingSnapshot&) const = default;

@@ -16,7 +16,14 @@ class Device;
 
 export namespace elf3d::backend::opengl {
 
+using GraphicsProcedure = void (*)();
+using GraphicsProcedureLoader = GraphicsProcedure (*)(const char* name) noexcept;
+
+struct DeviceOptions {
+    GraphicsProcedureLoader load_procedure = nullptr;
+};
+
 [[nodiscard]] Result<std::unique_ptr<graphics::Device>>
-create_device(const OpenGLConfiguration& configuration) noexcept;
+create_device(const DeviceOptions& options) noexcept;
 
 } // namespace elf3d::backend::opengl

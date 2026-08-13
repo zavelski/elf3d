@@ -198,7 +198,7 @@ $contracts = @(
             "elf3d_domain_modules",
             "elf3d_graphics_modules",
             "elf3d_opengl_modules",
-            "elf3d_tools_modules",
+            "elf3d_interaction_modules",
             "elf3d_view_modules"
         )
     },
@@ -223,7 +223,7 @@ $contracts = @(
             "elf3d_domain_modules",
             "elf3d_graphics_modules",
             "elf3d_opengl_modules",
-            "elf3d_tools_modules",
+            "elf3d_interaction_modules",
             "elf3d_view_modules"
         )
     }

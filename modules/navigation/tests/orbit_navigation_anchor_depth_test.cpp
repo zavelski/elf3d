@@ -84,8 +84,8 @@ released_pointer(const elf3d::Result<elf3d::navigation::NavigationUpdate>& updat
     if (!is_inside_view(anchor.projected)) {
         return 35;
     }
-    elf3d::ViewportInput input = hovered_input();
-    input.left_button_down = true;
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
     input.pointer_position_pixels = {
         (anchor.projected.x + 1.0F) * 0.5F * static_cast<float>(viewport_extent.width),
         (1.0F - anchor.projected.y) * 0.5F * static_cast<float>(viewport_extent.height),
@@ -93,7 +93,7 @@ released_pointer(const elf3d::Result<elf3d::navigation::NavigationUpdate>& updat
     if (!update_navigation(context, input)) {
         return 36;
     }
-    input.left_button_down = false;
+    input.orbit_down = false;
     input.pointer_delta_pixels = {};
     if (!released_pointer(update_navigation(context, input), context)) {
         return 37;
@@ -153,7 +153,7 @@ started_static_pan(const elf3d::Result<elf3d::navigation::NavigationUpdate>& upd
         return established;
     }
     const float distance_before = length(subtract(anchor.pivot, anchor.position));
-    elf3d::ViewportInput input = hovered_input();
+    elf3d::NavigationInput input = hovered_input();
     input.pointer_position_pixels = {400.0F, 300.0F};
     input.pointer_delta_pixels = {400.0F, 300.0F};
     if (!has_idle_anchor_update(update_navigation(context, input), context, anchor)) {
@@ -169,7 +169,7 @@ started_static_pan(const elf3d::Result<elf3d::navigation::NavigationUpdate>& upd
     }
     const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
     input = hovered_input();
-    input.middle_button_down = true;
+    input.pan_down = true;
     const elf3d::Float3 pan_start = camera_position(context.fixture.scene, context.fixture.camera);
     if (!started_static_pan(update_navigation(context, input), context, pan_start, forward)) {
         return 65;
@@ -182,7 +182,7 @@ started_static_pan(const elf3d::Result<elf3d::navigation::NavigationUpdate>& upd
     if (!has_bounded_pan_step(context, before_pan, forward)) {
         return 67;
     }
-    input.middle_button_down = false;
+    input.pan_down = false;
     input.pointer_delta_pixels = {};
     static_cast<void>(update_navigation(context, input));
     return 0;
@@ -216,7 +216,7 @@ started_static_pan(const elf3d::Result<elf3d::navigation::NavigationUpdate>& upd
                                               anchor.pivot)) {
         return 44;
     }
-    elf3d::ViewportInput input = hovered_input();
+    elf3d::NavigationInput input = hovered_input();
     input.pointer_position_pixels = {400.0F, 300.0F};
     input.pointer_delta_pixels = {400.0F, 300.0F};
     if (!has_idle_anchor_update(update_navigation(context, input), context, anchor) ||
@@ -224,7 +224,7 @@ started_static_pan(const elf3d::Result<elf3d::navigation::NavigationUpdate>& upd
                       anchor.forward)) {
         return 45;
     }
-    input.middle_button_down = true;
+    input.pan_down = true;
     input.pointer_delta_pixels = {};
     if (!update_navigation(context, input) || !captured_static_camera(context, anchor)) {
         return 46;
@@ -234,7 +234,7 @@ started_static_pan(const elf3d::Result<elf3d::navigation::NavigationUpdate>& upd
     if (!update_navigation(context, input) || !captured_pan_moved(context, anchor)) {
         return 47;
     }
-    input.middle_button_down = false;
+    input.pan_down = false;
     input.pointer_delta_pixels = {};
     if (!released_pointer(update_navigation(context, input), context)) {
         return 48;
@@ -279,8 +279,8 @@ has_static_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>&
                                               anchor.pivot)) {
         return 51;
     }
-    elf3d::ViewportInput input = hovered_input();
-    input.left_button_down = true;
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
     input.pointer_position_pixels = {400.0F, 300.0F};
     if (!update_navigation(context, input)) {
         return 52;
@@ -300,7 +300,7 @@ has_static_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>&
     if (!has_expected_anchor_orbit(context, anchor)) {
         return 55;
     }
-    input.left_button_down = false;
+    input.orbit_down = false;
     input.pointer_delta_pixels = {};
     if (!released_pointer(update_navigation(context, input), context)) {
         return 56;
@@ -355,7 +355,7 @@ struct CrossingContext {
 }
 
 [[nodiscard]] int cross_anchor_depth(AnchorDepthContext& context, const CrossingContext& crossing) {
-    elf3d::ViewportInput input = hovered_input();
+    elf3d::NavigationInput input = hovered_input();
     input.wheel_delta = 1.0F;
     const elf3d::Float3 before_step =
         camera_position(context.fixture.scene, context.fixture.camera);
@@ -382,7 +382,7 @@ struct CrossingContext {
 
 [[nodiscard]] int recover_after_crossing(AnchorDepthContext& context,
                                          const CrossingContext& crossing) {
-    elf3d::ViewportInput input = hovered_input();
+    elf3d::NavigationInput input = hovered_input();
     input.wheel_delta = -1.0F;
     const float signed_before = signed_camera_distance_to(
         context.fixture.scene, context.fixture.camera, crossing.start.pivot);
@@ -392,7 +392,7 @@ struct CrossingContext {
         return 63;
     }
     input = hovered_input();
-    input.middle_button_down = true;
+    input.pan_down = true;
     static_cast<void>(update_navigation(context, input));
     const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
     input.pointer_delta_pixels = {40.0F, 0.0F};
@@ -401,7 +401,7 @@ struct CrossingContext {
                         position)) <= crossing.minimum_motion * 0.01F) {
         return 64;
     }
-    input.middle_button_down = false;
+    input.pan_down = false;
     input.pointer_delta_pixels = {};
     static_cast<void>(update_navigation(context, input));
     return 0;
@@ -434,8 +434,8 @@ struct CrossingContext {
                                        viewport_extent)) {
         return 17;
     }
-    elf3d::ViewportInput input = hovered_input();
-    input.left_button_down = true;
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
     input.pointer_position_pixels = {10.0F, 10.0F};
     static_cast<void>(update_navigation(context, input));
     input.pointer_position_pixels = {10.0F, 60.0F};
@@ -484,7 +484,7 @@ struct CrossingContext {
         return 22;
     }
     const float second_distance = context.second_viewport.snapshot().distance;
-    elf3d::ViewportInput input = hovered_input();
+    elf3d::NavigationInput input = hovered_input();
     input.wheel_delta = 1.0F;
     static_cast<void>(context.first_viewport.update(context.fixture.scene, context.fixture.camera,
                                                     viewport_extent, input,
@@ -494,7 +494,7 @@ struct CrossingContext {
         return 23;
     }
     input = hovered_input();
-    input.left_button_down = true;
+    input.orbit_down = true;
     static_cast<void>(context.first_viewport.update(context.fixture.scene, context.fixture.camera,
                                                     viewport_extent, input,
                                                     navigation_test_click_threshold));
@@ -517,8 +517,8 @@ struct CrossingContext {
         !context.first_viewport.synchronize(context.fixture.scene, context.fixture.camera)) {
         return 26;
     }
-    elf3d::ViewportInput input = hovered_input();
-    input.left_button_down = true;
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
     input.pointer_delta_pixels = {500.0F, 500.0F};
     const elf3d::NavigationSnapshot before = context.first_viewport.snapshot();
     static_cast<void>(context.first_viewport.update(context.fixture.scene, context.fixture.camera,

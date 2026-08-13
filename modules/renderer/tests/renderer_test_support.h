@@ -169,7 +169,7 @@ class FakeDevice final : public elf3d::graphics::Device {
         target->extent_value = initial_extent;
         return std::unique_ptr<elf3d::graphics::PickingTarget>{std::move(target)};
     }
-    [[nodiscard]] elf3d::Result<elf3d::NativeTextureView>
+    [[nodiscard]] elf3d::Result<elf3d::graphics::NativeTextureView>
     native_texture_view(elf3d::TextureHandle) const noexcept override {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument, "Not used"};
     }
@@ -215,15 +215,20 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
     [[nodiscard]] elf3d::Result<void> draw_indexed_batch(
         elf3d::graphics::RenderTarget& target, elf3d::graphics::GraphicsPipeline& pipeline,
-        std::span<const elf3d::graphics::IndexedDrawBatchItem> items) noexcept override {
+        std::span<elf3d::graphics::StaticMesh* const> meshes,
+        std::span<const elf3d::graphics::DrawIndexedDescription> descriptions) noexcept override {
         ++state_.indexed_batch_count;
-        for (const elf3d::graphics::IndexedDrawBatchItem& item : items) {
-            if (item.mesh == nullptr) {
+        if (meshes.size() != descriptions.size()) {
+            return elf3d::Error{elf3d::ErrorCode::invalid_argument,
+                                "Fake batch arrays must have equal counts"};
+        }
+        for (std::size_t index = 0; index < meshes.size(); ++index) {
+            if (meshes[index] == nullptr) {
                 return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                     "Fake batch item requires a mesh"};
             }
             const elf3d::Result<void> result =
-                draw_indexed(target, pipeline, *item.mesh, item.description);
+                draw_indexed(target, pipeline, *meshes[index], descriptions[index]);
             if (!result) {
                 return result.error();
             }
@@ -247,15 +252,20 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
     [[nodiscard]] elf3d::Result<void> draw_picking_batch(
         elf3d::graphics::PickingTarget& target,
-        std::span<const elf3d::graphics::PickingDrawBatchItem> items) noexcept override {
+        std::span<elf3d::graphics::StaticMesh* const> meshes,
+        std::span<const elf3d::graphics::PickingDrawDescription> descriptions) noexcept override {
         ++state_.picking_batch_count;
-        for (const elf3d::graphics::PickingDrawBatchItem& item : items) {
-            if (item.mesh == nullptr) {
+        if (meshes.size() != descriptions.size()) {
+            return elf3d::Error{elf3d::ErrorCode::invalid_argument,
+                                "Fake picking batch arrays must have equal counts"};
+        }
+        for (std::size_t index = 0; index < meshes.size(); ++index) {
+            if (meshes[index] == nullptr) {
                 return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                     "Fake picking batch item requires a mesh"};
             }
             const elf3d::Result<void> result =
-                draw_picking_indexed(target, *item.mesh, item.description);
+                draw_picking_indexed(target, *meshes[index], descriptions[index]);
             if (!result) {
                 return result.error();
             }

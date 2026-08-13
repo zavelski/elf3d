@@ -1,4 +1,4 @@
-#include <elf3d/elf3d.h>
+#include <elf3d/embed/runtime.h>
 
 #include <glad/gl.h>
 
@@ -43,6 +43,15 @@ struct Options final {
     std::filesystem::path report;
 };
 
+struct OptionPresence final {
+    bool model = false;
+    bool extent = false;
+    bool scenario = false;
+    bool warmup = false;
+    bool frames = false;
+    bool report = false;
+};
+
 struct FrameResult final {
     double milliseconds = 0.0;
     elf3d::RenderStatistics render;
@@ -65,6 +74,22 @@ struct ContextDiagnostics final {
     GLint samples = 0;
     GLint maximum_texture_size = 0;
     bool framebuffer_srgb_enabled = false;
+};
+
+struct ReportEnvironment final {
+    const char* vendor = "unavailable";
+    const char* renderer = "unavailable";
+    const char* version = "unavailable";
+    const char* shading_language = "unavailable";
+    ContextDiagnostics context;
+};
+
+struct FrameReport final {
+    const Options& options;
+    double load_milliseconds = 0.0;
+    std::size_t index = 0;
+    const FrameResult& frame;
+    const ReportEnvironment& environment;
 };
 
 [[nodiscard]] ContextDiagnostics capture_context_diagnostics() noexcept {
@@ -102,6 +127,17 @@ struct ContextDiagnostics final {
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &context.maximum_texture_size);
     context.framebuffer_srgb_enabled = glIsEnabled(GL_FRAMEBUFFER_SRGB) == GL_TRUE;
     return context;
+}
+
+[[nodiscard]] const char* graphics_string(GLenum name) noexcept {
+    const auto* value = glGetString(name);
+    return value == nullptr ? "unavailable" : reinterpret_cast<const char*>(value);
+}
+
+[[nodiscard]] ReportEnvironment capture_report_environment() noexcept {
+    return ReportEnvironment{
+        graphics_string(GL_VENDOR), graphics_string(GL_RENDERER), graphics_string(GL_VERSION),
+        graphics_string(GL_SHADING_LANGUAGE_VERSION), capture_context_diagnostics()};
 }
 
 class GlfwRuntime final {
@@ -151,7 +187,7 @@ class Window final {
     return std::filesystem::path{std::u8string{begin, begin + value.size()}};
 }
 
-elf3d::GraphicsProcedure load_opengl_procedure(const char* name) noexcept {
+elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcept {
     return glfwGetProcAddress(name);
 }
 
@@ -202,49 +238,81 @@ elf3d::GraphicsProcedure load_opengl_procedure(const char* name) noexcept {
     return std::nullopt;
 }
 
+template <typename Value>
+[[nodiscard]] bool set_once(Value& destination, bool& present, Value value) {
+    if (present) {
+        return false;
+    }
+    destination = std::move(value);
+    present = true;
+    return true;
+}
+
+[[nodiscard]] bool parse_path_option(std::string_view option, std::string_view value,
+                                     Options& options, OptionPresence& presence) {
+    if (option == "--model") {
+        return set_once(options.model, presence.model, path_from_utf8(value));
+    }
+    if (option == "--report") {
+        return set_once(options.report, presence.report, path_from_utf8(value));
+    }
+    return false;
+}
+
+[[nodiscard]] bool parse_frame_option(std::string_view option, std::string_view value,
+                                      Options& options, OptionPresence& presence) {
+    const std::optional<std::uint32_t> frames = unsigned_value(value);
+    if (!frames.has_value()) {
+        return false;
+    }
+    if (option == "--warmup") {
+        return set_once(options.warmup_frames, presence.warmup, *frames);
+    }
+    if (option == "--frames" && *frames != 0) {
+        return set_once(options.measured_frames, presence.frames, *frames);
+    }
+    return false;
+}
+
+[[nodiscard]] bool parse_value_option(std::string_view option, std::string_view value,
+                                      Options& options, OptionPresence& presence) {
+    if (option == "--extent") {
+        const std::optional<elf3d::Extent2D> extent = extent_value(value);
+        return extent.has_value() && set_once(options.extent, presence.extent, *extent);
+    }
+    if (option == "--scenario") {
+        const std::optional<Scenario> scenario = scenario_value(value);
+        if (!scenario.has_value() || presence.scenario) {
+            return false;
+        }
+        options.scenario = *scenario;
+        options.scenario_name = value;
+        presence.scenario = true;
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]] std::optional<Options> parse_options(int count, char** values) {
     Options options;
+    OptionPresence presence;
     for (int index = 1; index < count; index += 2) {
-        if (index + 1 >= count || values[index] == nullptr || values[index + 1] == nullptr) {
+        if (index + 1 >= count) {
             return std::nullopt;
         }
+        ELF3D_ASSERT(values[index] != nullptr);
+        ELF3D_ASSERT(values[index + 1] != nullptr);
         const std::string_view option{values[index]};
         const std::string_view value{values[index + 1]};
-        if (option == "--model") {
-            options.model = path_from_utf8(value);
-        } else if (option == "--extent") {
-            const std::optional<elf3d::Extent2D> extent = extent_value(value);
-            if (!extent.has_value()) {
-                return std::nullopt;
-            }
-            options.extent = *extent;
-        } else if (option == "--scenario") {
-            const std::optional<Scenario> scenario = scenario_value(value);
-            if (!scenario.has_value()) {
-                return std::nullopt;
-            }
-            options.scenario = *scenario;
-            options.scenario_name = value;
-        } else if (option == "--warmup") {
-            const std::optional<std::uint32_t> frames = unsigned_value(value);
-            if (!frames.has_value()) {
-                return std::nullopt;
-            }
-            options.warmup_frames = *frames;
-        } else if (option == "--frames") {
-            const std::optional<std::uint32_t> frames = unsigned_value(value);
-            if (!frames.has_value() || *frames == 0) {
-                return std::nullopt;
-            }
-            options.measured_frames = *frames;
-        } else if (option == "--report") {
-            options.report = path_from_utf8(value);
-        } else {
+        if (!parse_path_option(option, value, options, presence) &&
+            !parse_frame_option(option, value, options, presence) &&
+            !parse_value_option(option, value, options, presence)) {
             return std::nullopt;
         }
     }
-    if (options.model.empty() || options.extent.width == 0 || options.extent.height == 0 ||
-        options.scenario_name.empty() || options.measured_frames == 0 || options.report.empty()) {
+    const std::array required{presence.model,  presence.extent, presence.scenario,
+                              presence.warmup, presence.frames, presence.report};
+    if (!std::all_of(required.begin(), required.end(), [](bool value) { return value; })) {
         return std::nullopt;
     }
     if (options.scenario == Scenario::first_frame && options.measured_frames != 1) {
@@ -259,19 +327,19 @@ void print_usage() {
                  "--warmup <frames> --frames <frames> --report <csv-path>\n";
 }
 
-[[nodiscard]] elf3d::ViewportInput scripted_input(Scenario scenario, std::uint32_t frame,
-                                                  elf3d::Extent2D extent) noexcept {
-    elf3d::ViewportInput input;
+[[nodiscard]] elf3d::NavigationInput scripted_input(Scenario scenario, std::uint32_t frame,
+                                                    elf3d::Extent2D extent) noexcept {
+    elf3d::NavigationInput input;
     input.pointer_position_pixels = {static_cast<float>(extent.width) * 0.5F,
                                      static_cast<float>(extent.height) * 0.5F};
-    input.is_hovered = true;
-    input.is_focused = true;
+    input.pointer_hovered = true;
+    input.region_focused = true;
     input.frame_delta_seconds = 1.0F / 60.0F;
     if (scenario == Scenario::orbit || scenario == Scenario::orbit_anchor) {
-        input.left_button_down = true;
+        input.orbit_down = true;
         input.pointer_delta_pixels = frame == 0 ? elf3d::Float2{} : elf3d::Float2{2.0F, -1.0F};
     } else if (scenario == Scenario::pan) {
-        input.middle_button_down = true;
+        input.pan_down = true;
         input.pointer_delta_pixels = frame == 0 ? elf3d::Float2{} : elf3d::Float2{2.0F, 1.0F};
     } else if (scenario == Scenario::wheel) {
         input.wheel_delta = 0.125F;
@@ -283,7 +351,7 @@ void print_usage() {
                                                 elf3d::Viewport& viewport, elf3d::Scene& scene,
                                                 elf3d::EntityId camera) {
     if (options.scenario == Scenario::orbit_anchor) {
-        elf3d::ViewportInput pressed = scripted_input(options.scenario, 0, options.extent);
+        elf3d::NavigationInput pressed = scripted_input(options.scenario, 0, options.extent);
         const elf3d::Result<void> press = viewport.update_navigation(scene, camera, pressed);
         if (!press) {
             return press.error();
@@ -317,6 +385,60 @@ void print_usage() {
     return viewport.render(scene, camera);
 }
 
+void write_report_header(std::ofstream& stream) {
+    stream << "scenario,frame,load_ms,frame_ms,draw_calls,triangles,candidate_primitives,"
+              "visible_primitives,culled_primitives,buffer_uploads,buffer_uploaded_bytes,"
+              "draw_packet_rebuilds,"
+              "resident_geometry_bytes,resident_texture_bytes,cpu_list_ms,cpu_resources_ms,"
+              "cpu_gl_ms,cpu_render_total_ms,gpu_main_available,gpu_main_ms,"
+              "gpu_resolve_available,gpu_resolve_ms,pick_draw_calls,"
+              "pick_pixels_read,pick_target_allocations,pick_pass_ms,pick_readback_ms,"
+              "pick_allocation_ms,pick_cpu_ms,pick_gpu_available,pick_gpu_ms,gl_vendor,"
+              "gl_renderer,gl_version,glsl_version,window_width,window_height,framebuffer_width,"
+              "framebuffer_height,target_width,target_height,vsync,context_flags,profile_mask,"
+              "red_bits,green_bits,blue_bits,alpha_bits,depth_bits,stencil_bits,samples,"
+              "framebuffer_srgb_enabled,max_texture_size\n";
+}
+
+void write_frame_report(std::ofstream& stream, const FrameReport& report) {
+    const ContextDiagnostics& context = report.environment.context;
+    const FrameResult& frame = report.frame;
+    stream << report.options.scenario_name << ',' << report.index << ',' << report.load_milliseconds
+           << ',' << frame.milliseconds << ',' << frame.render.draw_calls << ','
+           << frame.render.triangles << ',' << frame.render.candidate_primitives << ','
+           << frame.render.visible_primitives << ',' << frame.render.frustum_culled_primitives
+           << ',' << frame.render.gpu_buffer_uploads << ','
+           << frame.render.gpu_buffer_uploaded_bytes << ',' << frame.render.draw_packet_rebuilds
+           << ',' << frame.render.estimated_resident_geometry_bytes << ','
+           << frame.render.estimated_resident_texture_bytes << ','
+           << frame.render.cpu_render_list_milliseconds << ','
+           << frame.render.cpu_resource_preparation_milliseconds << ','
+           << frame.render.cpu_gl_submission_milliseconds << ','
+           << frame.render.cpu_total_milliseconds << ','
+           << (frame.render.gpu_main_pass_timing_available ? 1 : 0) << ','
+           << frame.render.gpu_main_pass_milliseconds << ','
+           << (frame.render.gpu_resolve_timing_available ? 1 : 0) << ','
+           << frame.render.gpu_resolve_milliseconds << ',' << frame.picking.latest_gpu_draw_calls
+           << ',' << frame.picking.latest_gpu_pixels_read << ','
+           << frame.picking.latest_target_allocations << ','
+           << frame.picking.latest_pass_milliseconds << ','
+           << frame.picking.latest_readback_milliseconds << ','
+           << frame.picking.latest_allocation_milliseconds << ','
+           << frame.picking.latest_cpu_milliseconds << ','
+           << (frame.picking.latest_gpu_timing_available ? 1 : 0) << ','
+           << frame.picking.latest_gpu_milliseconds << ',' << '"' << report.environment.vendor
+           << "\",\"" << report.environment.renderer << "\",\"" << report.environment.version
+           << "\",\"" << report.environment.shading_language << "\"," << context.window_width << ','
+           << context.window_height << ',' << context.framebuffer_width << ','
+           << context.framebuffer_height << ',' << report.options.extent.width << ','
+           << report.options.extent.height << ",0," << context.context_flags << ','
+           << context.profile_mask << ',' << context.red_bits << ',' << context.green_bits << ','
+           << context.blue_bits << ',' << context.alpha_bits << ',' << context.depth_bits << ','
+           << context.stencil_bits << ',' << context.samples << ','
+           << (context.framebuffer_srgb_enabled ? 1 : 0) << ',' << context.maximum_texture_size
+           << '\n';
+}
+
 [[nodiscard]] bool write_report(const Options& options, double load_milliseconds,
                                 const std::vector<FrameResult>& frames) {
     std::error_code error;
@@ -330,72 +452,26 @@ void print_usage() {
         std::cerr << "Could not create report: " << path_to_utf8(options.report) << '\n';
         return false;
     }
-    stream << "scenario,frame,load_ms,frame_ms,draw_calls,triangles,candidate_primitives,"
-              "visible_primitives,culled_primitives,buffer_uploads,buffer_uploaded_bytes,"
-              "draw_packet_rebuilds,"
-              "resident_geometry_bytes,resident_texture_bytes,cpu_list_ms,cpu_resources_ms,"
-              "cpu_gl_ms,cpu_render_total_ms,gpu_main_available,gpu_main_ms,"
-              "gpu_resolve_available,gpu_resolve_ms,pick_draw_calls,"
-              "pick_pixels_read,pick_target_allocations,pick_pass_ms,pick_readback_ms,"
-              "pick_allocation_ms,pick_cpu_ms,pick_gpu_available,pick_gpu_ms,gl_vendor,"
-              "gl_renderer,gl_version,glsl_version,window_width,window_height,framebuffer_width,"
-              "framebuffer_height,target_width,target_height,vsync,context_flags,profile_mask,"
-              "red_bits,green_bits,blue_bits,alpha_bits,depth_bits,stencil_bits,samples,"
-              "framebuffer_srgb_enabled,max_texture_size\n";
+    write_report_header(stream);
     stream << std::fixed << std::setprecision(6);
-    const char* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
-    const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
-    const char* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
-    const char* glsl = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
-    const ContextDiagnostics context = capture_context_diagnostics();
+    const ReportEnvironment environment = capture_report_environment();
     for (std::size_t index = 0; index < frames.size(); ++index) {
-        const FrameResult& frame = frames[index];
-        stream << options.scenario_name << ',' << index << ',' << load_milliseconds << ','
-               << frame.milliseconds << ',' << frame.render.draw_calls << ','
-               << frame.render.triangles << ',' << frame.render.candidate_primitives << ','
-               << frame.render.visible_primitives << ',' << frame.render.frustum_culled_primitives
-               << ',' << frame.render.gpu_buffer_uploads << ','
-               << frame.render.gpu_buffer_uploaded_bytes << ',' << frame.render.draw_packet_rebuilds
-               << ',' << frame.render.estimated_resident_geometry_bytes << ','
-               << frame.render.estimated_resident_texture_bytes << ','
-               << frame.render.cpu_render_list_milliseconds << ','
-               << frame.render.cpu_resource_preparation_milliseconds << ','
-               << frame.render.cpu_gl_submission_milliseconds << ','
-               << frame.render.cpu_total_milliseconds << ','
-               << (frame.render.gpu_main_pass_timing_available ? 1 : 0) << ','
-               << frame.render.gpu_main_pass_milliseconds << ','
-               << (frame.render.gpu_resolve_timing_available ? 1 : 0) << ','
-               << frame.render.gpu_resolve_milliseconds << ','
-               << frame.picking.latest_gpu_draw_calls << ',' << frame.picking.latest_gpu_pixels_read
-               << ',' << frame.picking.latest_target_allocations << ','
-               << frame.picking.latest_pass_milliseconds << ','
-               << frame.picking.latest_readback_milliseconds << ','
-               << frame.picking.latest_allocation_milliseconds << ','
-               << frame.picking.latest_cpu_milliseconds << ','
-               << (frame.picking.latest_gpu_timing_available ? 1 : 0) << ','
-               << frame.picking.latest_gpu_milliseconds << ',' << '"'
-               << (vendor != nullptr ? vendor : "unavailable") << "\",\""
-               << (renderer != nullptr ? renderer : "unavailable") << "\",\""
-               << (version != nullptr ? version : "unavailable") << "\",\""
-               << (glsl != nullptr ? glsl : "unavailable") << "\"," << context.window_width << ','
-               << context.window_height << ',' << context.framebuffer_width << ','
-               << context.framebuffer_height << ',' << options.extent.width << ','
-               << options.extent.height << ",0," << context.context_flags << ','
-               << context.profile_mask << ',' << context.red_bits << ',' << context.green_bits
-               << ',' << context.blue_bits << ',' << context.alpha_bits << ',' << context.depth_bits
-               << ',' << context.stencil_bits << ',' << context.samples << ','
-               << (context.framebuffer_srgb_enabled ? 1 : 0) << ',' << context.maximum_texture_size
-               << '\n';
+        write_frame_report(
+            stream, FrameReport{options, load_milliseconds, index, frames[index], environment});
     }
     return static_cast<bool>(stream);
 }
 
-[[nodiscard]] int run(const Options& options) {
-    if (!std::filesystem::is_regular_file(options.model)) {
-        std::cerr << "Model does not exist: " << path_to_utf8(options.model) << '\n';
-        return 3;
-    }
-    GlfwRuntime glfw;
+struct BenchmarkScene final {
+    std::unique_ptr<elf3d::EmbeddedRuntime> runtime;
+    elf3d::LoadedScene loaded;
+    std::unique_ptr<elf3d::Viewport> viewport;
+    elf3d::EntityId camera;
+    double load_milliseconds = 0.0;
+};
+
+[[nodiscard]] int initialize_graphics(const Options& options, GlfwRuntime& glfw,
+                                      std::unique_ptr<Window>& window) {
     if (!glfw.initialize()) {
         std::cerr << "GLFW initialization failed\n";
         return 4;
@@ -404,102 +480,145 @@ void print_usage() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    Window window{glfwCreateWindow(static_cast<int>(options.extent.width),
-                                   static_cast<int>(options.extent.height),
-                                   "Elf3D render benchmark", nullptr, nullptr)};
-    if (window.get() == nullptr) {
+    window = std::make_unique<Window>(glfwCreateWindow(static_cast<int>(options.extent.width),
+                                                       static_cast<int>(options.extent.height),
+                                                       "Elf3D render benchmark", nullptr, nullptr));
+    if (window->get() == nullptr) {
         std::cerr << "Hidden OpenGL 4.1 context creation failed\n";
         return 5;
     }
-    glfwMakeContextCurrent(window.get());
+    glfwMakeContextCurrent(window->get());
     glfwSwapInterval(0);
     if (gladLoadGL(load_opengl_procedure) == 0 || GLAD_GL_VERSION_4_1 == 0) {
         std::cerr << "OpenGL 4.1 is unavailable\n";
         return 6;
     }
+    return 0;
+}
 
-    elf3d::EngineConfiguration configuration;
-    configuration.opengl.load_procedure = load_opengl_procedure;
-    elf3d::Result<std::unique_ptr<elf3d::Engine>> engine_result =
-        elf3d::Engine::create(configuration);
-    if (!engine_result) {
-        std::cerr << engine_result.error().message() << '\n';
-        return 7;
+[[nodiscard]] elf3d::Result<BenchmarkScene> create_benchmark_scene(const Options& options) {
+    const elf3d::EmbeddedRuntimeOptions runtime_options{load_opengl_procedure};
+    elf3d::Result<std::unique_ptr<elf3d::EmbeddedRuntime>> runtime_result =
+        elf3d::EmbeddedRuntime::create(runtime_options);
+    if (!runtime_result) {
+        return runtime_result.error();
     }
-    std::unique_ptr<elf3d::Engine> engine = std::move(engine_result).value();
+    BenchmarkScene benchmark;
+    benchmark.runtime = std::move(runtime_result).value();
+    elf3d::Engine& engine = benchmark.runtime->engine();
     const auto load_begin = std::chrono::steady_clock::now();
     elf3d::Result<elf3d::LoadedScene> loaded_result =
-        engine->load_scene(path_to_utf8(options.model));
+        engine.load_scene(path_to_utf8(options.model));
     const auto load_end = std::chrono::steady_clock::now();
     if (!loaded_result) {
-        std::cerr << loaded_result.error().message() << '\n';
-        return 8;
+        return loaded_result.error();
     }
-    elf3d::LoadedScene loaded = std::move(loaded_result).value();
+    benchmark.loaded = std::move(loaded_result).value();
     const elf3d::Result<elf3d::EntityId> camera =
-        loaded.scene->create_perspective_camera_entity({});
+        benchmark.loaded.scene->create_perspective_camera_entity({});
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
-        engine->create_viewport(options.extent);
-    if (!camera || !viewport_result) {
-        std::cerr << "Camera or viewport creation failed\n";
-        return 9;
+        engine.create_viewport(options.extent);
+    if (!camera) {
+        return camera.error();
     }
-    std::unique_ptr<elf3d::Viewport> viewport = std::move(viewport_result).value();
-    if (!viewport->reset_view(*loaded.scene, camera.value())) {
-        std::cerr << "Could not frame the model\n";
-        return 10;
+    if (!viewport_result) {
+        return viewport_result.error();
     }
+    benchmark.camera = camera.value();
+    benchmark.viewport = std::move(viewport_result).value();
+    const elf3d::Result<void> framed =
+        benchmark.viewport->reset_view(*benchmark.loaded.scene, benchmark.camera);
+    if (!framed) {
+        return framed.error();
+    }
+    benchmark.load_milliseconds =
+        std::chrono::duration<double, std::milli>(load_end - load_begin).count();
+    return benchmark;
+}
 
+[[nodiscard]] elf3d::Result<void> warm_up(const Options& options, BenchmarkScene& benchmark,
+                                          GLFWwindow& window) {
     for (std::uint32_t frame = 0; frame < options.warmup_frames; ++frame) {
         const bool event_scenario =
             options.scenario == Scenario::orbit_anchor || options.scenario == Scenario::pick;
         const elf3d::Result<void> result =
-            event_scenario
-                ? viewport->render(*loaded.scene, camera.value())
-                : execute_frame(options, frame, *viewport, *loaded.scene, camera.value());
+            event_scenario ? benchmark.viewport->render(*benchmark.loaded.scene, benchmark.camera)
+                           : execute_frame(options, frame, *benchmark.viewport,
+                                           *benchmark.loaded.scene, benchmark.camera);
         if (!result) {
-            std::cerr << result.error().message() << '\n';
-            return 11;
+            return result.error();
         }
         const elf3d::Result<elf3d::NativeTextureView> resolved =
-            engine->native_texture_view(viewport->color_texture());
+            benchmark.runtime->native_texture_view(benchmark.viewport->color_texture());
         if (!resolved) {
-            std::cerr << resolved.error().message() << '\n';
-            return 11;
+            return resolved.error();
         }
-        glfwSwapBuffers(window.get());
+        glfwSwapBuffers(&window);
     }
+    return {};
+}
 
+[[nodiscard]] elf3d::Result<std::vector<FrameResult>>
+measure(const Options& options, BenchmarkScene& benchmark, GLFWwindow& window) {
     std::vector<FrameResult> frames;
     frames.reserve(options.measured_frames);
     for (std::uint32_t frame = 0; frame < options.measured_frames; ++frame) {
         const auto begin = std::chrono::steady_clock::now();
-        const elf3d::Result<void> result = execute_frame(options, options.warmup_frames + frame,
-                                                         *viewport, *loaded.scene, camera.value());
+        const elf3d::Result<void> result =
+            execute_frame(options, options.warmup_frames + frame, *benchmark.viewport,
+                          *benchmark.loaded.scene, benchmark.camera);
         if (!result) {
-            std::cerr << result.error().message() << '\n';
-            return 12;
+            return result.error();
         }
         const elf3d::Result<elf3d::NativeTextureView> resolved =
-            engine->native_texture_view(viewport->color_texture());
-        glfwSwapBuffers(window.get());
+            benchmark.runtime->native_texture_view(benchmark.viewport->color_texture());
+        glfwSwapBuffers(&window);
         const auto end = std::chrono::steady_clock::now();
         if (!resolved) {
-            std::cerr << resolved.error().message() << '\n';
-            return 12;
+            return resolved.error();
         }
         elf3d::PickingStatistics picking;
         const elf3d::Result<elf3d::PickingStatistics> picking_result =
-            viewport->picking_statistics();
+            benchmark.viewport->picking_statistics();
         if (picking_result) {
             picking = picking_result.value();
         }
         frames.push_back(FrameResult{std::chrono::duration<double, std::milli>(end - begin).count(),
-                                     viewport->render_statistics(), picking});
+                                     benchmark.viewport->render_statistics(), picking});
     }
-    const double load_milliseconds =
-        std::chrono::duration<double, std::milli>(load_end - load_begin).count();
-    if (!write_report(options, load_milliseconds, frames)) {
+    return frames;
+}
+
+[[nodiscard]] int run(const Options& options) {
+    if (!std::filesystem::is_regular_file(options.model)) {
+        std::cerr << "Model does not exist: " << path_to_utf8(options.model) << '\n';
+        return 3;
+    }
+    GlfwRuntime glfw;
+    std::unique_ptr<Window> window;
+    const int graphics_status = initialize_graphics(options, glfw, window);
+    if (graphics_status != 0) {
+        return graphics_status;
+    }
+    elf3d::Result<BenchmarkScene> benchmark_result = create_benchmark_scene(options);
+    if (!benchmark_result) {
+        std::cerr << benchmark_result.error().message() << '\n';
+        return 7;
+    }
+    BenchmarkScene benchmark = std::move(benchmark_result).value();
+    const elf3d::Result<void> warmed = warm_up(options, benchmark, *window->get());
+    if (!warmed) {
+        std::cerr << warmed.error().message() << '\n';
+        return 11;
+    }
+    elf3d::Result<std::vector<FrameResult>> frames_result =
+        measure(options, benchmark, *window->get());
+    if (!frames_result) {
+        std::cerr << frames_result.error().message() << '\n';
+        return 12;
+    }
+    const std::vector<FrameResult>& frames = frames_result.value();
+    if (!write_report(options, benchmark.load_milliseconds, frames)) {
         return 13;
     }
     std::cout << "Wrote " << frames.size() << " frame(s) to " << path_to_utf8(options.report)

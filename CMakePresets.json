@@ -15,6 +15,8 @@
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "ELF3D_BUILD_APP": "ON",
+        "ELF3D_BUILD_EMBED": "ON",
         "ELF3D_BUILD_ENGINE": "ON",
         "ELF3D_BUILD_VIEWER": "ON",
         "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "ON"
@@ -29,6 +31,8 @@
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "ELF3D_BUILD_APP": "ON",
+        "ELF3D_BUILD_EMBED": "ON",
         "ELF3D_BUILD_ENGINE": "ON",
         "ELF3D_BUILD_VIEWER": "ON",
         "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "ON"
@@ -43,6 +47,8 @@
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "ELF3D_BUILD_APP": "OFF",
+        "ELF3D_BUILD_EMBED": "OFF",
         "ELF3D_BUILD_ENGINE": "OFF",
         "ELF3D_BUILD_VIEWER": "OFF",
         "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "OFF"
@@ -57,6 +63,8 @@
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "ELF3D_BUILD_APP": "OFF",
+        "ELF3D_BUILD_EMBED": "OFF",
         "ELF3D_BUILD_ENGINE": "OFF",
         "ELF3D_BUILD_VIEWER": "OFF",
         "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "OFF"

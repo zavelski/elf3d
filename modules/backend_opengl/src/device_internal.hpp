@@ -63,6 +63,11 @@ struct TextureRecord {
     ColorTextureResolver* resolver = nullptr;
 };
 
+struct OpenGLTextureView {
+    std::uintptr_t value = 0;
+    Extent2D extent;
+};
+
 enum class GpuTimingKind : std::uint8_t {
     main,
     picking,
@@ -105,7 +110,7 @@ class OpenGLDeviceState final {
     [[nodiscard]] Result<TextureHandle> register_texture(GLuint texture, Extent2D extent,
                                                          ColorTextureResolver* resolver = nullptr);
     void unregister_texture(TextureHandle handle) noexcept;
-    [[nodiscard]] Result<NativeTextureView> native_texture_view(TextureHandle handle) const;
+    [[nodiscard]] Result<OpenGLTextureView> native_texture_view(TextureHandle handle) const;
     [[nodiscard]] bool begin_gpu_timing(GpuTimingKind kind) noexcept;
     void end_gpu_timing(GpuTimingKind kind) noexcept;
     [[nodiscard]] GpuTimingResult latest_gpu_timing(GpuTimingKind kind) noexcept;
@@ -300,7 +305,8 @@ draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipelin
              const graphics::DrawIndexedDescription& description) noexcept;
 [[nodiscard]] Result<void>
 draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
-                   std::span<const graphics::IndexedDrawBatchItem> items) noexcept;
+                   std::span<graphics::StaticMesh* const> meshes,
+                   std::span<const graphics::DrawIndexedDescription> descriptions) noexcept;
 
 struct OverlayResources {
     GLuint program = 0;
@@ -345,7 +351,8 @@ draw_picking_indexed(PickingResources& resources, graphics::PickingTarget& targe
                      const graphics::PickingDrawDescription& description) noexcept;
 [[nodiscard]] Result<void>
 draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
-                   std::span<const graphics::PickingDrawBatchItem> items) noexcept;
+                   std::span<graphics::StaticMesh* const> meshes,
+                   std::span<const graphics::PickingDrawDescription> descriptions) noexcept;
 [[nodiscard]] Result<std::optional<PickingReadback>>
 read_picking_pixel(graphics::PickingTarget& target, Float2 position_pixels) noexcept;
 [[nodiscard]] Result<std::vector<float>>

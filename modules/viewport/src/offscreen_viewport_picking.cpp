@@ -101,21 +101,6 @@ void reset_latest_gpu_picking_statistics(PickingStatistics& statistics) noexcept
     statistics.latest_gpu_timing_available = false;
 }
 
-class PickingCpuTimer final {
-  public:
-    PickingCpuTimer(graphics::Device& device, PickingStatistics& statistics) noexcept
-        : device_(device), statistics_(statistics), begin_(device.monotonic_time_milliseconds()) {}
-
-    ~PickingCpuTimer() {
-        statistics_.latest_cpu_milliseconds = device_.monotonic_time_milliseconds() - begin_;
-    }
-
-  private:
-    graphics::Device& device_;
-    PickingStatistics& statistics_;
-    double begin_ = 0.0;
-};
-
 void record_target_allocation(PickingStatistics& statistics, double milliseconds) noexcept {
     ++statistics.latest_target_allocations;
     ++statistics.lifetime_target_allocations;
@@ -211,14 +196,6 @@ Extent2D OffscreenViewport::extent() const noexcept {
     return render_target_ != nullptr ? render_target_->extent() : Extent2D{};
 }
 
-ViewportInput
-OffscreenViewport::normalized_pointer_hover(const ViewportInput& input) const noexcept {
-    ViewportInput normalized = input;
-    normalized.is_hovered =
-        input.is_hovered && contains_viewport_position(extent(), input.pointer_position_pixels);
-    return normalized;
-}
-
 Result<void> OffscreenViewport::resize(Extent2D extent) {
     if (render_target_ == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "Viewport graphics resources are unavailable"};
@@ -256,7 +233,7 @@ Result<std::optional<PickHit>> OffscreenViewport::pick_gpu_first(
     const scene::VisibilityFilter& visibility, const PickOperation& operation) {
     const Extent2D viewport_extent = extent();
     reset_latest_gpu_picking_statistics(gpu_picking_statistics_);
-    const PickingCpuTimer cpu_timer{renderer.device(), gpu_picking_statistics_};
+    const double cpu_begin = renderer.device().monotonic_time_milliseconds();
     const picking::PickRequest pick_request{operation.camera, viewport_extent,
                                             operation.position_pixels, operation.options};
 
@@ -270,9 +247,14 @@ Result<std::optional<PickHit>> OffscreenViewport::pick_gpu_first(
         prepare_gpu_pick_target(picking_target_.get(), viewport_extent, operation.position_pixels,
                                 renderer.device(), gpu_picking_statistics_);
     if (preparation.action == GpuPickAction::cpu_fallback) {
-        return cpu_fallback();
+        Result<std::optional<PickHit>> result = cpu_fallback();
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
+        return result;
     }
     if (preparation.action == GpuPickAction::empty) {
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return std::optional<PickHit>{};
     }
 
@@ -283,7 +265,10 @@ Result<std::optional<PickHit>> OffscreenViewport::pick_gpu_first(
     Result<renderer::GpuPickResult> gpu_result =
         renderer.gpu_pick(scene, *picking_target_, visibility, operation.clipping_filter, request);
     if (!gpu_result) {
-        return cpu_fallback();
+        Result<std::optional<PickHit>> result = cpu_fallback();
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
+        return result;
     }
 
     gpu_picking_statistics_.latest_gpu_draw_calls = gpu_result.value().draw_calls;
@@ -294,6 +279,8 @@ Result<std::optional<PickHit>> OffscreenViewport::pick_gpu_first(
     if (!gpu_result.value().hit.has_value()) {
         ++gpu_picking_statistics_.latest_gpu_misses;
         ++gpu_picking_statistics_.lifetime_gpu_misses;
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return std::optional<PickHit>{};
     }
 
@@ -305,14 +292,21 @@ Result<std::optional<PickHit>> OffscreenViewport::pick_gpu_first(
     Result<std::optional<PickHit>> refined = picking.refine_candidate(
         scene, pick_request, visibility, operation.clipping_filter, candidate);
     if (!refined) {
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return refined.error();
     }
     ++gpu_picking_statistics_.latest_cpu_refinements;
     ++gpu_picking_statistics_.lifetime_cpu_refinements;
     const std::optional<PickHit>& refined_hit = refined.value();
     if (!refined_hit.has_value()) {
-        return cpu_fallback();
+        Result<std::optional<PickHit>> result = cpu_fallback();
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
+        return result;
     }
+    gpu_picking_statistics_.latest_cpu_milliseconds =
+        renderer.device().monotonic_time_milliseconds() - cpu_begin;
     return refined;
 }
 
@@ -321,13 +315,17 @@ OffscreenViewport::focus_depth_anchor(renderer::Renderer& renderer, const scene:
                                       EntityId camera, const scene::VisibilityFilter& visibility,
                                       const clipping::ClippingFilter& clipping_filter) {
     reset_latest_gpu_picking_statistics(gpu_picking_statistics_);
-    const PickingCpuTimer cpu_timer{renderer.device(), gpu_picking_statistics_};
+    const double cpu_begin = renderer.device().monotonic_time_milliseconds();
 
     if (focus_depth_target_ == nullptr) {
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return std::optional<Float3>{};
     }
     const Extent2D viewport_extent = extent();
     if (viewport_extent.width == 0U || viewport_extent.height == 0U) {
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return std::optional<Float3>{};
     }
     const double allocation_begin = renderer.device().monotonic_time_milliseconds();
@@ -335,12 +333,16 @@ OffscreenViewport::focus_depth_anchor(renderer::Renderer& renderer, const scene:
         focus_depth_target_.get(), focus_depth_target_extent(viewport_extent));
     const double allocation_end = renderer.device().monotonic_time_milliseconds();
     if (!resized) {
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return resized.error();
     }
     if (resized.value()) {
         record_target_allocation(gpu_picking_statistics_, allocation_end - allocation_begin);
     }
     if (focus_depth_target_->extent().width == 0U || focus_depth_target_->extent().height == 0U) {
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return std::optional<Float3>{};
     }
 
@@ -350,6 +352,8 @@ OffscreenViewport::focus_depth_anchor(renderer::Renderer& renderer, const scene:
     Result<renderer::GpuFocusDepthAnchorResult> anchor_result = renderer.gpu_focus_depth_anchor(
         scene, *focus_depth_target_, visibility, clipping_filter, request);
     if (!anchor_result) {
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return anchor_result.error();
     }
     gpu_picking_statistics_.latest_gpu_draw_calls = anchor_result.value().draw_calls;
@@ -361,11 +365,15 @@ OffscreenViewport::focus_depth_anchor(renderer::Renderer& renderer, const scene:
     if (!anchor_result.value().world_position.has_value()) {
         ++gpu_picking_statistics_.latest_gpu_misses;
         ++gpu_picking_statistics_.lifetime_gpu_misses;
+        gpu_picking_statistics_.latest_cpu_milliseconds =
+            renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return std::optional<Float3>{};
     }
 
     ++gpu_picking_statistics_.latest_gpu_hits;
     ++gpu_picking_statistics_.lifetime_gpu_hits;
+    gpu_picking_statistics_.latest_cpu_milliseconds =
+        renderer.device().monotonic_time_milliseconds() - cpu_begin;
     return anchor_result.value().world_position;
 }
 
