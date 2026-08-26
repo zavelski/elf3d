@@ -75,7 +75,7 @@ own window and loop use the separately named embedding integration.
 ## Download the viewer
 
 Download the current
-[Elf3D 0.10.2 Windows x64 package](https://github.com/zavelski/elf3d/releases/tag/v0.10.2),
+[Elf3D 0.10.3 Windows x64 package](https://github.com/zavelski/elf3d/releases/tag/v0.10.3),
 extract it, and run `elf3d_viewer.exe`.
 
 Requirements:
@@ -179,11 +179,13 @@ triangle strip/fan conversion, two UV sets, vertex color, core PBR values,
 selected material extensions, PNG/JPEG images, hierarchy, transforms, model
 diagnostics, and transactional export.
 
-Animation playback, skinning, morph deformation, orthographic rendering, scene
-lights, shadows, image-based lighting, tangent-space normal mapping, compressed
-geometry, KTX2/BasisU/WebP, and order-independent transparency are outside the
-current rendering scope. Windows x64 is the validated platform; other
-platforms remain portability targets.
+Animation playback, skinning, morph deformation, orthographic rendering,
+authored scene lights, shadows, external HDR environments and skyboxes,
+automatic exposure, tangent-space normal mapping, compressed geometry,
+KTX2/BasisU/WebP, and order-independent transparency are outside the current
+rendering scope. Standard PBR does include a built-in neutral studio
+image-based-lighting profile and PBR Neutral tone mapping. Windows x64 is the
+validated platform; other platforms remain portability targets.
 
 The detailed support matrix is in [glTF compatibility](docs/GLTF.md), and the
 graphics behavior is in [Rendering reference](docs/RENDERING.md).

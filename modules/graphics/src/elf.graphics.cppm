@@ -4,6 +4,7 @@ module;
 #include <elf3d/core/result.h>
 #include <elf3d/graphics.h>
 #include <elf3d/model_types.h>
+#include <elf3d/rendering.h>
 
 #include <array>
 #include <cstddef>
@@ -27,6 +28,11 @@ struct NativeTextureView {
     std::uintptr_t value = 0;
     Extent2D extent;
 };
+
+// CPU reference for the display-resolve contract. Backends must produce the
+// same transfer for equivalent linear input and display settings.
+[[nodiscard]] Color4 resolve_display_color(Color4 linear_color,
+                                           const DisplayTransform& transform) noexcept;
 enum class VertexLayout {
     position_normal_float3,
     position_normal_float3_texcoord_float2,
@@ -35,6 +41,7 @@ enum class VertexLayout {
 enum class TextureFormat {
     rgba8_unorm,
     rgba8_srgb,
+    rgba16_float,
 };
 enum class TextureAddressMode {
     repeat,
@@ -51,6 +58,7 @@ enum class TextureFilterMode {
 };
 class StaticMesh;
 class Texture2D;
+class TextureCube;
 inline constexpr std::size_t material_texture_count = 4;
 struct Texture2DDescription {
     Extent2D extent;
@@ -59,6 +67,17 @@ struct Texture2DDescription {
     TextureAddressMode wrap_u = TextureAddressMode::repeat;
     TextureAddressMode wrap_v = TextureAddressMode::repeat;
     TextureFilterMode min_filter = TextureFilterMode::linear;
+    TextureFilterMode mag_filter = TextureFilterMode::linear;
+};
+inline constexpr std::size_t cubemap_face_count = 6;
+struct TextureCubeMipDescription {
+    std::uint32_t extent = 0;
+    std::array<std::span<const std::byte>, cubemap_face_count> faces;
+};
+struct TextureCubeDescription {
+    TextureFormat format = TextureFormat::rgba16_float;
+    std::span<const TextureCubeMipDescription> mips;
+    TextureFilterMode min_filter = TextureFilterMode::linear_mipmap_linear;
     TextureFilterMode mag_filter = TextureFilterMode::linear;
 };
 struct StaticMeshDescription {
@@ -96,6 +115,11 @@ struct DrawIndexedDescription {
     float highlight_strength = 0.0F;
     // Temporary observers ordered as base color, metallic-roughness, occlusion, emissive.
     std::span<Texture2D* const> textures;
+    TextureCube* diffuse_environment = nullptr;
+    TextureCube* specular_environment = nullptr;
+    Texture2D* environment_brdf_lut = nullptr;
+    float environment_intensity = 0.0F;
+    float environment_rotation_radians = 0.0F;
     std::array<TextureMapping, material_texture_count> texture_mappings{};
     AlphaMode alpha_mode = AlphaMode::opaque;
     float alpha_cutoff = 0.5F;
@@ -154,6 +178,21 @@ class Texture2D {
     Texture2D() = default;
 };
 
+class TextureCube {
+  public:
+    virtual ~TextureCube() noexcept;
+    TextureCube(const TextureCube&) = delete;
+    TextureCube& operator=(const TextureCube&) = delete;
+    TextureCube(TextureCube&&) = delete;
+    TextureCube& operator=(TextureCube&&) = delete;
+    [[nodiscard]] virtual std::uint32_t extent() const noexcept = 0;
+    [[nodiscard]] virtual std::uint32_t mip_count() const noexcept = 0;
+    [[nodiscard]] virtual std::uintptr_t backend_resource_token() const noexcept = 0;
+
+  protected:
+    TextureCube() = default;
+};
+
 class StaticMesh {
   public:
     virtual ~StaticMesh() noexcept;
@@ -193,6 +232,7 @@ class RenderTarget {
     [[nodiscard]] virtual Extent2D extent() const noexcept = 0;
     [[nodiscard]] virtual Result<void> resize(Extent2D extent) noexcept = 0;
     [[nodiscard]] virtual Result<void> clear(Color4 color) noexcept = 0;
+    virtual void set_display_transform(const DisplayTransform& transform) noexcept = 0;
     [[nodiscard]] virtual TextureHandle color_texture() const noexcept = 0;
     [[nodiscard]] virtual bool is_valid() const noexcept = 0;
     [[nodiscard]] virtual std::uintptr_t backend_resource_token() const noexcept = 0;
@@ -249,6 +289,8 @@ class Device {
     create_static_mesh(const StaticMeshDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<Texture2D>>
     create_texture_2d(const Texture2DDescription& description) noexcept = 0;
+    [[nodiscard]] virtual Result<std::unique_ptr<TextureCube>>
+    create_texture_cube(const TextureCubeDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<std::unique_ptr<GraphicsPipeline>>
     create_graphics_pipeline(const GraphicsPipelineDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void>

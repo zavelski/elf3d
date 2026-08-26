@@ -264,8 +264,15 @@ The **Rendering** panel controls:
 - viewport clear color;
 - light direction;
 - directional light intensity;
-- ambient intensity;
+- environment intensity and rotation;
+- exposure and PBR Neutral tone mapping;
+- compatibility-only legacy ambient intensity;
 - lighting reset.
+
+The default neutral studio environment provides fill and shaped reflections.
+Use environment intensity for ordinary brightness/reflection adjustment, and
+rotate it to reposition highlights. **Camera Evidence** copies the exact camera,
+projection, viewport, lighting, and display values for repeatable screenshots.
 
 When the demo cube is active, it also controls cube rotation, speed, transform
 reset, and base color.

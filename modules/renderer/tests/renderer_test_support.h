@@ -29,6 +29,9 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
         ++clear_count;
         return {};
     }
+    void set_display_transform(const elf3d::DisplayTransform& transform) noexcept override {
+        display_transform = transform;
+    }
     [[nodiscard]] elf3d::TextureHandle color_texture() const noexcept override {
         return {};
     }
@@ -41,6 +44,7 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
 
     elf3d::Extent2D extent_value{640, 360};
     int clear_count = 0;
+    elf3d::DisplayTransform display_transform;
 };
 
 class FakePickingTarget final : public elf3d::graphics::PickingTarget {
@@ -106,6 +110,30 @@ class FakeTexture final : public elf3d::graphics::Texture2D {
         return fake_resource_token;
     }
 };
+class FakeTextureCube final : public elf3d::graphics::TextureCube {
+  public:
+    FakeTextureCube(std::uint32_t extent, std::uint32_t mip_count, int& live_count) noexcept
+        : extent_(extent), mip_count_(mip_count), live_count_(&live_count) {
+        ++*live_count_;
+    }
+    ~FakeTextureCube() override {
+        --*live_count_;
+    }
+    [[nodiscard]] std::uint32_t extent() const noexcept override {
+        return extent_;
+    }
+    [[nodiscard]] std::uint32_t mip_count() const noexcept override {
+        return mip_count_;
+    }
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+        return fake_resource_token;
+    }
+
+  private:
+    std::uint32_t extent_ = 0;
+    std::uint32_t mip_count_ = 0;
+    int* live_count_ = nullptr;
+};
 
 struct FakeDeviceState {
     int upload_count = 0;
@@ -117,6 +145,9 @@ struct FakeDeviceState {
     int overlay_line_count = 0;
     int overlay_marker_count = 0;
     int texture_upload_count = 0;
+    int cubemap_upload_count = 0;
+    std::vector<std::uint32_t> cubemap_extents;
+    std::vector<std::uint32_t> cubemap_mip_counts;
     struct TextureDescriptionSnapshot {
         elf3d::graphics::TextureFormat format;
         elf3d::graphics::TextureAddressMode wrap_u;
@@ -155,9 +186,15 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] const FakeDeviceState& state() const noexcept {
         return state_;
     }
+    void fail_cubemap_upload_at(int attempt) noexcept {
+        failed_cubemap_upload_ = attempt;
+    }
+    [[nodiscard]] int live_cubemap_count() const noexcept {
+        return live_cubemap_count_;
+    }
 
     [[nodiscard]] elf3d::GraphicsBackend backend() const noexcept override {
-        return elf3d::GraphicsBackend::opengl;
+        return elf3d::GraphicsBackend::none;
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::RenderTarget>>
     create_render_target(elf3d::Extent2D) noexcept override {
@@ -189,6 +226,19 @@ class FakeDevice final : public elf3d::graphics::Device {
             description.format, description.wrap_u, description.wrap_v, description.min_filter,
             description.mag_filter});
         return std::unique_ptr<elf3d::graphics::Texture2D>{std::make_unique<FakeTexture>()};
+    }
+    [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::TextureCube>> create_texture_cube(
+        const elf3d::graphics::TextureCubeDescription& description) noexcept override {
+        ++state_.cubemap_upload_count;
+        state_.cubemap_extents.push_back(
+            description.mips.empty() ? 0U : description.mips.front().extent);
+        state_.cubemap_mip_counts.push_back(static_cast<std::uint32_t>(description.mips.size()));
+        if (state_.cubemap_upload_count == failed_cubemap_upload_) {
+            return elf3d::Error{elf3d::ErrorCode::graphics_initialization_failed,
+                                "Injected cubemap creation failure"};
+        }
+        return std::unique_ptr<elf3d::graphics::TextureCube>{std::make_unique<FakeTextureCube>(
+            state_.cubemap_extents.back(), state_.cubemap_mip_counts.back(), live_cubemap_count_)};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::GraphicsPipeline>>
     create_graphics_pipeline(
@@ -290,6 +340,8 @@ class FakeDevice final : public elf3d::graphics::Device {
   private:
     mutable double clock_milliseconds_ = 0.0;
     FakeDeviceState state_;
+    int failed_cubemap_upload_ = -1;
+    int live_cubemap_count_ = 0;
 };
 
 } // namespace elf3d::renderer::tests

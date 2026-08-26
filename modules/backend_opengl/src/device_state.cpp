@@ -270,6 +270,7 @@ AllocationStateGuard::AllocationStateGuard() noexcept {
     glGetIntegerv(GL_RENDERBUFFER_BINDING, &renderbuffer_);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &active_texture_);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture_2d_);
+    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &texture_cube_);
     glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &pixel_unpack_buffer_);
     glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack_alignment_);
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertex_array_);
@@ -279,6 +280,7 @@ AllocationStateGuard::AllocationStateGuard() noexcept {
 AllocationStateGuard::~AllocationStateGuard() {
     glActiveTexture(static_cast<GLenum>(active_texture_));
     glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_2d_));
+    glBindTexture(GL_TEXTURE_CUBE_MAP, static_cast<GLuint>(texture_cube_));
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, static_cast<GLuint>(pixel_unpack_buffer_));
     glPixelStorei(GL_UNPACK_ALIGNMENT, unpack_alignment_);
     glBindVertexArray(static_cast<GLuint>(vertex_array_));
@@ -289,6 +291,9 @@ AllocationStateGuard::~AllocationStateGuard() {
 }
 
 RenderStateGuard::RenderStateGuard() noexcept {
+    constexpr std::array<GLenum, 5> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
+                                                     GL_TEXTURE3, GL_TEXTURE6};
+    constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE4, GL_TEXTURE5};
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer_);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_framebuffer_);
     glGetIntegerv(GL_VIEWPORT, viewport_);
@@ -310,9 +315,13 @@ RenderStateGuard::RenderStateGuard() noexcept {
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertex_array_);
     glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &array_buffer_);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &active_texture_);
-    for (std::size_t index = 0; index < texture_units_.size(); ++index) {
-        glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture_units_[index]);
+    for (std::size_t index = 0; index < texture_2d_units_.size(); ++index) {
+        glActiveTexture(texture_2d_units[index]);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture_2d_units_[index]);
+    }
+    for (std::size_t index = 0; index < texture_cube_units_.size(); ++index) {
+        glActiveTexture(texture_cube_units[index]);
+        glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &texture_cube_units_[index]);
     }
     glActiveTexture(static_cast<GLenum>(active_texture_));
     glGetIntegerv(GL_DEPTH_FUNC, &depth_function_);
@@ -329,6 +338,9 @@ RenderStateGuard::RenderStateGuard() noexcept {
 }
 
 RenderStateGuard::~RenderStateGuard() {
+    constexpr std::array<GLenum, 5> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
+                                                     GL_TEXTURE3, GL_TEXTURE6};
+    constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE4, GL_TEXTURE5};
     set_enabled(GL_SCISSOR_TEST, scissor_enabled_);
     set_enabled(GL_FRAMEBUFFER_SRGB, framebuffer_srgb_enabled_);
     set_enabled(GL_DEPTH_TEST, depth_test_enabled_);
@@ -358,9 +370,13 @@ RenderStateGuard::~RenderStateGuard() {
     glUseProgram(static_cast<GLuint>(program_));
     glBindVertexArray(static_cast<GLuint>(vertex_array_));
     glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(array_buffer_));
-    for (std::size_t index = 0; index < texture_units_.size(); ++index) {
-        glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_units_[index]));
+    for (std::size_t index = 0; index < texture_2d_units_.size(); ++index) {
+        glActiveTexture(texture_2d_units[index]);
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_2d_units_[index]));
+    }
+    for (std::size_t index = 0; index < texture_cube_units_.size(); ++index) {
+        glActiveTexture(texture_cube_units[index]);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, static_cast<GLuint>(texture_cube_units_[index]));
     }
     glActiveTexture(static_cast<GLenum>(active_texture_));
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(draw_framebuffer_));

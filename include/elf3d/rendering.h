@@ -18,8 +18,27 @@ struct BasicLighting {
     // Direction in which light travels in world space.
     Float3 direction{-0.5F, -1.0F, -0.3F};
     Color4 color{1.0F, 1.0F, 1.0F, 1.0F};
-    float ambient_intensity = 0.08F;
-    float diffuse_intensity = 3.0F;
+    float ambient_intensity = 0.0F;
+    float diffuse_intensity = 2.0F;
+};
+
+enum class ToneMappingMode : std::uint8_t {
+    none,
+    pbr_neutral,
+};
+
+struct EnvironmentLighting {
+    float intensity = 1.0F;
+    float rotation_radians = 0.0F;
+
+    bool operator==(const EnvironmentLighting&) const = default;
+};
+
+struct DisplayTransform {
+    float exposure_ev = 0.0F;
+    ToneMappingMode tone_mapping = ToneMappingMode::pbr_neutral;
+
+    bool operator==(const DisplayTransform&) const = default;
 };
 
 enum class RenderShadingMode : std::uint8_t {
@@ -58,6 +77,9 @@ struct RenderStatistics {
     // Current renderer-owned residency estimates after the latest render call.
     std::uint64_t estimated_resident_geometry_bytes = 0;
     std::uint64_t estimated_resident_texture_bytes = 0;
+    std::uint64_t estimated_resident_environment_bytes = 0;
+    // One only on the render call that lazily prepares the shared studio IBL.
+    std::uint64_t environment_preparations = 0;
 
     // CPU timings cover the latest render call. GPU timings are delayed and are
     // valid only when the matching availability flag is true.

@@ -70,6 +70,8 @@ struct ViewerRenderingState {
     std::array<float, 4> clear_color{1.0F, 1.0F, 1.0F, 1.0F};
     std::array<float, 4> cube_color{0.72F, 0.32F, 0.12F, 1.0F};
     BasicLighting lighting;
+    EnvironmentLighting environment_lighting;
+    DisplayTransform display_transform;
     bool rotate_cube = true;
     float rotation_speed = 0.8F;
     float rotation_angle = 0.0F;

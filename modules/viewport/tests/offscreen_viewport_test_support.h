@@ -40,6 +40,9 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
         ++clear_count;
         return {};
     }
+    void set_display_transform(const elf3d::DisplayTransform& transform) noexcept override {
+        display_transform = transform;
+    }
 
     [[nodiscard]] elf3d::TextureHandle color_texture() const noexcept override {
         return texture_handle_;
@@ -56,6 +59,7 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
     int resize_count = 0;
     int clear_count = 0;
     elf3d::Color4 last_clear_color;
+    elf3d::DisplayTransform display_transform;
 
   private:
     void update_handle() noexcept {
@@ -107,6 +111,7 @@ class FakePickingTarget final : public elf3d::graphics::PickingTarget {
 
 struct FakeDeviceState {
     elf3d::Extent2D latest_render_target_extent;
+    FakeRenderTarget* render_target = nullptr;
     elf3d::Extent2D last_picking_read_extent;
     std::vector<FakePickingTarget*> picking_targets;
     std::optional<elf3d::graphics::PickingPixel> picking_pixel;
@@ -139,13 +144,14 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
 
     [[nodiscard]] elf3d::GraphicsBackend backend() const noexcept override {
-        return elf3d::GraphicsBackend::opengl;
+        return elf3d::GraphicsBackend::none;
     }
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::RenderTarget>>
     create_render_target(elf3d::Extent2D initial_extent) noexcept override {
         state_.latest_render_target_extent = initial_extent;
         auto target = std::make_unique<FakeRenderTarget>(initial_extent);
+        state_.render_target = target.get();
         return std::unique_ptr<elf3d::graphics::RenderTarget>{std::move(target)};
     }
 
@@ -197,6 +203,26 @@ class FakeDevice final : public elf3d::graphics::Device {
             return fake_resource_token;
         }
     };
+    class FakeTextureCube final : public elf3d::graphics::TextureCube {
+      public:
+        explicit FakeTextureCube(
+            const elf3d::graphics::TextureCubeDescription& description) noexcept
+            : extent_(description.mips.empty() ? 0U : description.mips.front().extent),
+              mip_count_(static_cast<std::uint32_t>(description.mips.size())) {}
+        [[nodiscard]] std::uint32_t extent() const noexcept override {
+            return extent_;
+        }
+        [[nodiscard]] std::uint32_t mip_count() const noexcept override {
+            return mip_count_;
+        }
+        [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+            return fake_resource_token;
+        }
+
+      private:
+        std::uint32_t extent_ = 0;
+        std::uint32_t mip_count_ = 0;
+    };
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::StaticMesh>>
     create_static_mesh(const elf3d::graphics::StaticMeshDescription&) noexcept override {
@@ -206,6 +232,11 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::Texture2D>>
     create_texture_2d(const elf3d::graphics::Texture2DDescription&) noexcept override {
         return std::unique_ptr<elf3d::graphics::Texture2D>{std::make_unique<FakeTexture>()};
+    }
+    [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::TextureCube>> create_texture_cube(
+        const elf3d::graphics::TextureCubeDescription& description) noexcept override {
+        return std::unique_ptr<elf3d::graphics::TextureCube>{
+            std::make_unique<FakeTextureCube>(description)};
     }
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::GraphicsPipeline>>

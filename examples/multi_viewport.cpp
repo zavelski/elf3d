@@ -22,6 +22,11 @@ namespace elf3d_examples {
     }
     std::unique_ptr<elf3d::Viewport> second = std::move(second_result).value();
 
+    first->set_environment_lighting({1.0F, 0.0F});
+    first->set_display_transform({0.0F, elf3d::ToneMappingMode::pbr_neutral});
+    second->set_environment_lighting({1.0F, 3.14159265359F});
+    second->set_display_transform({-0.5F, elf3d::ToneMappingMode::pbr_neutral});
+
     const elf3d::Result<void> first_render = first->render(scene, camera_entity);
     if (!first_render) {
         return first_render.error();

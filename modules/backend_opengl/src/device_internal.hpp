@@ -24,6 +24,7 @@ class PickingTarget;
 class RenderTarget;
 class StaticMesh;
 class Texture2D;
+class TextureCube;
 struct DrawIndexedDescription;
 struct IndexedDrawBatchItem;
 struct DrawOverlayDescription;
@@ -32,6 +33,7 @@ struct PickingDrawDescription;
 struct PickingDrawBatchItem;
 struct StaticMeshDescription;
 struct Texture2DDescription;
+struct TextureCubeDescription;
 } // namespace elf3d::graphics
 
 namespace elf3d::backend::opengl::device_detail {
@@ -151,6 +153,7 @@ class AllocationStateGuard final {
     GLint renderbuffer_ = 0;
     GLint active_texture_ = GL_TEXTURE0;
     GLint texture_2d_ = 0;
+    GLint texture_cube_ = 0;
     GLint pixel_unpack_buffer_ = 0;
     GLint unpack_alignment_ = 4;
     GLint vertex_array_ = 0;
@@ -188,7 +191,8 @@ class RenderStateGuard final {
     GLint vertex_array_ = 0;
     GLint array_buffer_ = 0;
     GLint active_texture_ = GL_TEXTURE0;
-    std::array<GLint, 4> texture_units_{};
+    std::array<GLint, 5> texture_2d_units_{};
+    std::array<GLint, 2> texture_cube_units_{};
     GLint depth_function_ = GL_LESS;
     GLint blend_source_rgb_ = GL_ONE;
     GLint blend_destination_rgb_ = GL_ZERO;
@@ -219,6 +223,8 @@ struct UniformLocations {
     GLint light_color = -1;
     GLint ambient_intensity = -1;
     GLint diffuse_intensity = -1;
+    GLint environment_intensity = -1;
+    GLint environment_rotation = -1;
     GLint metallic_factor = -1;
     GLint roughness_factor = -1;
     GLint emissive_factor = -1;
@@ -236,6 +242,9 @@ struct UniformLocations {
     GLint metallic_roughness_texture = -1;
     GLint occlusion_texture = -1;
     GLint emissive_texture = -1;
+    GLint diffuse_environment = -1;
+    GLint specular_environment = -1;
+    GLint environment_brdf_lut = -1;
     GLint texture_texcoord_sets = -1;
     GLint texture_offsets = -1;
     GLint texture_scales = -1;
@@ -275,6 +284,8 @@ struct MeshView {
 struct PipelineView {
     GLuint program = 0;
     UniformLocations uniforms;
+    std::optional<float>* environment_intensity = nullptr;
+    std::optional<float>* environment_rotation = nullptr;
 };
 
 [[nodiscard]] Result<std::unique_ptr<graphics::RenderTarget>>
@@ -292,12 +303,16 @@ create_static_mesh(std::shared_ptr<OpenGLDeviceState> state,
 [[nodiscard]] Result<std::unique_ptr<graphics::Texture2D>>
 create_texture_2d(std::shared_ptr<OpenGLDeviceState> state,
                   const graphics::Texture2DDescription& description) noexcept;
+[[nodiscard]] Result<std::unique_ptr<graphics::TextureCube>>
+create_texture_cube(std::shared_ptr<OpenGLDeviceState> state,
+                    const graphics::TextureCubeDescription& description) noexcept;
 [[nodiscard]] Result<std::unique_ptr<graphics::GraphicsPipeline>>
 create_graphics_pipeline(std::shared_ptr<OpenGLDeviceState> state,
                          const graphics::GraphicsPipelineDescription& description) noexcept;
 [[nodiscard]] Result<MeshView> mesh_view(graphics::StaticMesh& mesh) noexcept;
 [[nodiscard]] Result<PipelineView> pipeline_view(graphics::GraphicsPipeline& pipeline) noexcept;
 [[nodiscard]] Result<GLuint> texture_object(const graphics::Texture2D* texture) noexcept;
+[[nodiscard]] Result<GLuint> texture_cube_object(const graphics::TextureCube* texture) noexcept;
 
 [[nodiscard]] Result<void>
 draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,

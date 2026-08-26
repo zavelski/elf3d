@@ -70,6 +70,28 @@ BasicLighting Viewport::basic_lighting() const noexcept {
                                                           : BasicLighting{};
 }
 
+void Viewport::set_environment_lighting(const EnvironmentLighting& lighting) noexcept {
+    if (impl_ != nullptr && impl_->viewport != nullptr) {
+        impl_->viewport->set_environment_lighting(lighting);
+    }
+}
+
+EnvironmentLighting Viewport::environment_lighting() const noexcept {
+    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->environment_lighting()
+                                                          : EnvironmentLighting{};
+}
+
+void Viewport::set_display_transform(const DisplayTransform& transform) noexcept {
+    if (impl_ != nullptr && impl_->viewport != nullptr) {
+        impl_->viewport->set_display_transform(transform);
+    }
+}
+
+DisplayTransform Viewport::display_transform() const noexcept {
+    return impl_ != nullptr && impl_->viewport != nullptr ? impl_->viewport->display_transform()
+                                                          : DisplayTransform{};
+}
+
 void Viewport::set_render_shading_mode(RenderShadingMode mode) noexcept {
     if (impl_ != nullptr && impl_->viewport != nullptr) {
         impl_->viewport->set_render_shading_mode(mode);

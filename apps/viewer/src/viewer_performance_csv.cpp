@@ -17,7 +17,8 @@ void write_csv_header(std::ofstream& stream) {
               "gl_submission_ms,gpu_main_available,gpu_main_ms,gpu_resolve_available,"
               "gpu_resolve_ms,candidates,visible,culled,draw_calls,material_switches,"
               "shader_switches,instanced_draws,passes,buffer_uploads,buffer_upload_bytes,"
-              "resident_geometry_bytes,resident_texture_bytes,pick_pass_ms,pick_readback_ms,"
+              "resident_geometry_bytes,resident_texture_bytes,resident_environment_bytes,"
+              "environment_preparations,pick_pass_ms,pick_readback_ms,"
               "pick_allocation_ms,pick_cpu_ms,pick_gpu_available,pick_gpu_ms,pick_draw_calls,"
               "pick_pixels_read,pick_target_allocations,window_width,window_height,"
               "framebuffer_width,framebuffer_height,view_width,view_height,target_width,"
@@ -47,6 +48,8 @@ void write_csv_row(std::ofstream& stream, std::size_t index, const ViewerFrameSa
            << sample.render.gpu_buffer_uploads << ',' << sample.render.gpu_buffer_uploaded_bytes
            << ',' << sample.render.estimated_resident_geometry_bytes << ','
            << sample.render.estimated_resident_texture_bytes << ','
+           << sample.render.estimated_resident_environment_bytes << ','
+           << sample.render.environment_preparations << ','
            << sample.picking.latest_pass_milliseconds << ','
            << sample.picking.latest_readback_milliseconds << ','
            << sample.picking.latest_allocation_milliseconds << ','

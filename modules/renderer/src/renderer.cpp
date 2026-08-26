@@ -167,6 +167,13 @@ Renderer::Renderer(ConstructionKey, Resources resources) noexcept
 
 Renderer::~Renderer() = default;
 
+Result<bool> Renderer::prepare_environment(const RenderRequest& request) {
+    if (request.options.shading_mode != RenderShadingMode::standard) {
+        return false;
+    }
+    return ensure_environment_resources();
+}
+
 Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
                                           graphics::RenderTarget& target,
                                           const RenderRequest& request) {
@@ -209,20 +216,36 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
         return statistics;
     }
 
+    return execute_render_pass(scene_storage, target, request,
+                               {visibility, clipping_filter, total_begin});
+}
+
+Result<RenderStatistics> Renderer::execute_render_pass(const scene::Storage& scene_storage,
+                                                       graphics::RenderTarget& target,
+                                                       const RenderRequest& request,
+                                                       const RenderExecutionContext& execution) {
+    Result<bool> environment_result = prepare_environment(request);
+    if (!environment_result) {
+        return environment_result.error();
+    }
+    const bool environment_prepared = environment_result.value();
+
     const double list_begin = device_->monotonic_time_milliseconds();
-    Result<RenderList> list_result = build_render_list(
-        scene_storage, request.camera, target.extent(), visibility, clipping_filter);
+    Result<RenderList> list_result =
+        build_render_list(scene_storage, request.camera, target.extent(), execution.visibility,
+                          execution.clipping_filter);
     if (!list_result) {
         return list_result.error();
     }
 
     const double list_end = device_->monotonic_time_milliseconds();
-    RenderPass pass{request, std::move(list_result).value(), clipping_filter, {}};
+    RenderPass pass{request, std::move(list_result).value(), execution.clipping_filter, {}};
     pass.statistics.cpu_render_list_milliseconds = list_end - list_begin;
     pass.statistics.candidate_primitives = pass.list.candidate_primitives;
     pass.statistics.visible_primitives = static_cast<std::uint64_t>(pass.list.items.size());
     pass.statistics.frustum_culled_primitives = pass.list.frustum_culled_primitives;
     pass.statistics.render_passes = 1;
+    pass.statistics.environment_preparations = environment_prepared ? 1U : 0U;
     pass.statistics.clipping_bounds_tested = pass.list.clipping_bounds_tested;
     pass.statistics.clipping_bounds_rejected = pass.list.clipping_bounds_rejected;
     pass.statistics.clipping_bounds_intersecting = pass.list.clipping_bounds_intersecting;
@@ -240,6 +263,8 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
     pass.statistics.unique_gpu_textures = cache_->texture_count;
     pass.statistics.estimated_resident_geometry_bytes = cache_->resident_geometry_bytes;
     pass.statistics.estimated_resident_texture_bytes = cache_->resident_texture_bytes;
+    pass.statistics.estimated_resident_environment_bytes =
+        environment_ != nullptr ? environment_->resident_bytes : 0U;
     pass.statistics.shader_switches = static_cast<std::uint64_t>(pass.statistics.draw_calls != 0);
     const graphics::GpuTimingSample main_timing =
         device_->delayed_gpu_timing(graphics::GpuTimingPass::main);
@@ -249,7 +274,7 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
         device_->delayed_gpu_timing(graphics::GpuTimingPass::resolve);
     pass.statistics.gpu_resolve_milliseconds = resolve_timing.milliseconds;
     pass.statistics.gpu_resolve_timing_available = resolve_timing.available;
-    pass.statistics.cpu_total_milliseconds = submission_end - total_begin;
+    pass.statistics.cpu_total_milliseconds = submission_end - execution.total_begin;
     return pass.statistics;
 }
 
@@ -330,6 +355,13 @@ Result<void> Renderer::prepare_render_item(const scene::Storage& scene, const Re
     draw.light_color = pass.request.lighting.color;
     draw.ambient_intensity = pass.request.lighting.ambient_intensity;
     draw.diffuse_intensity = pass.request.lighting.diffuse_intensity;
+    draw.environment_intensity = pass.request.environment_lighting.intensity;
+    draw.environment_rotation_radians = pass.request.environment_lighting.rotation_radians;
+    if (environment_ != nullptr) {
+        draw.diffuse_environment = environment_->diffuse.get();
+        draw.specular_environment = environment_->specular.get();
+        draw.environment_brdf_lut = environment_->brdf_lut.get();
+    }
     draw.metallic_factor = packet.material.metallic_factor;
     draw.roughness_factor = packet.material.roughness_factor;
     draw.emissive_factor = packet.material.emissive_factor;

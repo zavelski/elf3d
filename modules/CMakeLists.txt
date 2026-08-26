@@ -311,6 +311,7 @@ add_library(
         renderer/src/model_rendering.cpp
         renderer/src/render_list.cpp
         renderer/src/renderer.cpp
+        renderer/src/studio_environment.cpp
         viewport/src/offscreen_viewport.cpp
         viewport/src/offscreen_viewport_navigation.cpp
         viewport/src/offscreen_viewport_picking.cpp

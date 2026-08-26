@@ -107,6 +107,15 @@ class OpenGLDevice final : public graphics::Device {
         return device_detail::create_texture_2d(state_, description);
     }
 
+    [[nodiscard]] Result<std::unique_ptr<graphics::TextureCube>>
+    create_texture_cube(const graphics::TextureCubeDescription& description) noexcept override {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+        return device_detail::create_texture_cube(state_, description);
+    }
+
     [[nodiscard]] Result<std::unique_ptr<graphics::GraphicsPipeline>> create_graphics_pipeline(
         const graphics::GraphicsPipelineDescription& description) noexcept override {
         const Result<void> validation = state_->validate_operation();

@@ -75,6 +75,12 @@ The viewer displays:
 - texture-coordinate selection and `KHR_texture_transform`;
 - emissive strength, IOR, specular factors, and supported quantized attributes.
 
+Core metallic-roughness materials receive built-in neutral studio
+image-based lighting, including diffuse irradiance and roughness-dependent
+specular reflections. This environment is renderer-owned rather than imported
+from the glTF file. Authored scene lights, shadows, external HDR environments,
+skyboxes, and tangent-space normal mapping remain unsupported.
+
 ## Diagnostics
 
 A scene can open with compatibility diagnostics. Open **Model Information** to

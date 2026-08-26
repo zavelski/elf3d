@@ -152,6 +152,8 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_layout_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_frustum_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_document_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/renderer/tests/display_transform_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/viewport/tests/offscreen_viewport_test.cpp
 )
 elf3d_configure_group_test(elf3d_view_tests)
@@ -167,6 +169,8 @@ elf3d_link_object_libraries(
 add_test(NAME elf3d.renderer COMMAND elf3d_view_tests --case renderer)
 add_test(NAME elf3d.renderer_layout COMMAND elf3d_view_tests --case renderer_layout)
 add_test(NAME elf3d.renderer_frustum COMMAND elf3d_view_tests --case renderer_frustum)
+add_test(NAME elf3d.renderer_document COMMAND elf3d_view_tests --case renderer_document)
+add_test(NAME elf3d.display_transform COMMAND elf3d_view_tests --case display_transform)
 add_test(NAME elf3d.viewport_lifetime COMMAND elf3d_view_tests --case viewport_lifetime)
 
 endif()

@@ -51,6 +51,8 @@ void verify_compile_time_contracts() noexcept {
     static_assert(std::is_standard_layout_v<elf3d::EntityHighlight>);
     static_assert(std::is_standard_layout_v<elf3d::ModelLoadOptions>);
     static_assert(std::is_standard_layout_v<elf3d::PerspectiveCameraDescription>);
+    static_assert(std::is_standard_layout_v<elf3d::EnvironmentLighting>);
+    static_assert(std::is_standard_layout_v<elf3d::DisplayTransform>);
     static_assert(std::is_standard_layout_v<elf3d::SamplerDescription>);
     static_assert(std::is_standard_layout_v<elf3d::VertexPositionNormal>);
     static_assert(std::is_standard_layout_v<elf3d::VertexPositionNormalTexCoord>);
@@ -84,6 +86,17 @@ void verify_compile_time_contracts() noexcept {
            !input.orbit_down && !input.pan_down && !input.zoom_down && input.wheel_delta == 0.0F;
 }
 
+[[nodiscard]] bool has_expected_rendering_defaults() noexcept {
+    const elf3d::BasicLighting lighting;
+    const elf3d::EnvironmentLighting environment;
+    const elf3d::DisplayTransform display;
+    return lighting.direction == elf3d::Float3{-0.5F, -1.0F, -0.3F} &&
+           lighting.diffuse_intensity == 2.0F && lighting.ambient_intensity == 0.0F &&
+           environment.intensity == 1.0F && environment.rotation_radians == 0.0F &&
+           display.exposure_ev == 0.0F &&
+           display.tone_mapping == elf3d::ToneMappingMode::pbr_neutral;
+}
+
 [[nodiscard]] bool has_expected_scene_defaults() noexcept {
     const elf3d::Ray3 ray;
     const elf3d::SectionPlane section_plane;
@@ -103,7 +116,7 @@ void verify_compile_time_contracts() noexcept {
 int main() {
     verify_compile_time_contracts();
     return has_expected_math_defaults() && has_expected_navigation_defaults() &&
-                   has_expected_scene_defaults()
+                   has_expected_rendering_defaults() && has_expected_scene_defaults()
                ? 0
                : 1;
 }

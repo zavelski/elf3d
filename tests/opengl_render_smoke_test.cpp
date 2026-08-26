@@ -108,7 +108,8 @@ struct ForeignGlState {
     GLint program = 0;
     GLint vertex_array = 0;
     GLint active_texture = 0;
-    GLint texture = 0;
+    std::array<GLint, 7> textures_2d{};
+    std::array<GLint, 7> textures_cube{};
     GLboolean blend = GL_FALSE;
     GLboolean depth_test = GL_FALSE;
     GLboolean cull_face = GL_FALSE;
@@ -123,10 +124,15 @@ class ForeignGlObjects final {
     ~ForeignGlObjects() {
         glUseProgram(0);
         glBindVertexArray(0);
+        for (std::size_t index = 0; index < 7; ++index) {
+            glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        }
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteTextures(1, &texture);
+        glDeleteTextures(1, &texture_2d);
+        glDeleteTextures(1, &texture_cube);
         glDeleteVertexArrays(1, &vertex_array);
         glDeleteFramebuffers(1, &framebuffer);
         glDeleteProgram(program);
@@ -137,7 +143,8 @@ class ForeignGlObjects final {
 
     GLuint framebuffer = 0;
     GLuint vertex_array = 0;
-    GLuint texture = 0;
+    GLuint texture_2d = 0;
+    GLuint texture_cube = 0;
     GLuint program = 0;
 
     ForeignGlObjects() = default;
@@ -191,7 +198,12 @@ class ForeignGlObjects final {
     glGetIntegerv(GL_CURRENT_PROGRAM, &state.program);
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &state.vertex_array);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &state.active_texture);
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &state.texture);
+    for (std::size_t index = 0; index < state.textures_2d.size(); ++index) {
+        glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &state.textures_2d[index]);
+        glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &state.textures_cube[index]);
+    }
+    glActiveTexture(static_cast<GLenum>(state.active_texture));
     state.blend = glIsEnabled(GL_BLEND);
     state.depth_test = glIsEnabled(GL_DEPTH_TEST);
     state.cull_face = glIsEnabled(GL_CULL_FACE);
@@ -203,10 +215,11 @@ class ForeignGlObjects final {
 [[nodiscard]] bool configure_foreign_state(ForeignGlObjects& objects) noexcept {
     glGenFramebuffers(1, &objects.framebuffer);
     glGenVertexArrays(1, &objects.vertex_array);
-    glGenTextures(1, &objects.texture);
+    glGenTextures(1, &objects.texture_2d);
+    glGenTextures(1, &objects.texture_cube);
     objects.program = create_foreign_program();
-    if (objects.framebuffer == 0 || objects.vertex_array == 0 || objects.texture == 0 ||
-        objects.program == 0) {
+    if (objects.framebuffer == 0 || objects.vertex_array == 0 || objects.texture_2d == 0 ||
+        objects.texture_cube == 0 || objects.program == 0) {
         return false;
     }
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, objects.framebuffer);
@@ -214,8 +227,12 @@ class ForeignGlObjects final {
     glViewport(3, 4, 17, 19);
     glUseProgram(objects.program);
     glBindVertexArray(objects.vertex_array);
+    for (std::size_t index = 0; index < 7; ++index) {
+        glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
+        glBindTexture(GL_TEXTURE_2D, objects.texture_2d);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, objects.texture_cube);
+    }
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, objects.texture);
     glEnable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -381,6 +398,41 @@ class ForeignGlObjects final {
     return 0;
 }
 
+[[nodiscard]] std::optional<std::array<std::uint8_t, 4>>
+read_center_pixel(elf3d::EmbeddedRuntime& runtime, const SmokeFixture& fixture) {
+    const elf3d::Result<elf3d::NativeTextureView> texture =
+        runtime.native_texture_view(fixture.viewport->color_texture());
+    if (!texture || texture.value().extent != elf3d::Extent2D{64U, 64U}) {
+        return std::nullopt;
+    }
+    std::vector<std::uint8_t> pixels(64U * 64U * 4U);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture.value().value));
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    if (glGetError() != GL_NO_ERROR) {
+        return std::nullopt;
+    }
+    constexpr std::size_t center = ((32U * 64U) + 32U) * 4U;
+    return std::array<std::uint8_t, 4>{pixels[center], pixels[center + 1U], pixels[center + 2U],
+                                       pixels[center + 3U]};
+}
+
+[[nodiscard]] int verify_lazy_display_invalidation(elf3d::EmbeddedRuntime& runtime,
+                                                   SmokeFixture& fixture) {
+    const auto before = read_center_pixel(runtime, fixture);
+    const std::uint64_t revision = fixture.viewport->render_revision();
+    elf3d::DisplayTransform display;
+    display.exposure_ev = 1.0F;
+    fixture.viewport->set_display_transform(display);
+    const auto after = read_center_pixel(runtime, fixture);
+    if (!before || !after || fixture.viewport->render_revision() != revision + 1U ||
+        (*after)[0] <= (*before)[0] || (*after)[1] <= (*before)[1]) {
+        return fail(37,
+                    "Display-transform change did not lazily re-resolve the retained HDR frame");
+    }
+    return 0;
+}
+
 [[nodiscard]] bool has_render_gpu_timings(const elf3d::RenderStatistics& statistics) noexcept {
     return statistics.gpu_main_pass_timing_available && statistics.gpu_resolve_timing_available &&
            statistics.gpu_main_pass_milliseconds >= 0.0 &&
@@ -479,7 +531,8 @@ class ForeignGlObjects final {
     if (foreign_timer != 0) {
         return foreign_timer;
     }
-    return verify_rendered_pixel(runtime, fixture);
+    const int pixel = verify_rendered_pixel(runtime, fixture);
+    return pixel != 0 ? pixel : verify_lazy_display_invalidation(runtime, fixture);
 }
 
 [[nodiscard]] int

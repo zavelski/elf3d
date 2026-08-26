@@ -18,7 +18,8 @@ namespace elf3d::viewer {
                                                 const SelectionSnapshot& selection);
 void build_model_information(ImGuiID dockspace_id, ViewerFrameContext& state,
                              const SceneSession& scene);
-void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, SceneSession& scene);
+void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, SceneSession& scene,
+                           const Viewport& viewport);
 void build_navigation_settings_window(ImGuiID dockspace_id, ViewerFrameContext& state,
                                       Viewport& viewport);
 void build_selection_panel(ImGuiID dockspace_id, ViewerFrameContext& state,

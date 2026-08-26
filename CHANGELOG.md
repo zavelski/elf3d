@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+## 0.10.3
+
+- Added a calibrated renderer-owned neutral studio IBL profile with diffuse
+  irradiance, roughness-prefiltered specular reflections, and a BRDF LUT shared
+  across viewports.
+- Added fixed exposure and Khronos PBR Neutral display mapping, viewport
+  environment/display controls, Viewer lighting and Camera Evidence controls,
+  and reproducible hidden-context render-quality capture tooling.
+- Added calibrated real-pixel, OpenGL state, resource lifetime/accounting, and
+  Debug/Release rendering validation for the new path.
+
 ## 0.10.2
 
 - Halved the Examine-mode keyboard pan rate for view-left/view-right A/D and

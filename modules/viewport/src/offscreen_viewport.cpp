@@ -354,7 +354,9 @@ Result<void> OffscreenViewport::render(renderer::Renderer& renderer, const scene
     if (!clipping_filter) {
         return clipping_filter.error();
     }
-    const renderer::RenderRequest request{camera, clear_color_, lighting_, requested_options};
+    render_target_->set_display_transform(display_transform_);
+    const renderer::RenderRequest request{camera, clear_color_, lighting_, environment_lighting_,
+                                          requested_options};
     Result<RenderStatistics> render_result = renderer.render(
         scene, *render_target_, request, visibility.value(), clipping_filter.value());
     if (!render_result) {

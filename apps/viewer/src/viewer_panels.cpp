@@ -2,6 +2,7 @@
 
 #include "viewer_browser.hpp"
 #include "viewer_performance.hpp"
+#include "viewer_rendering_controls.hpp"
 #include "viewer_ui.hpp"
 #include "viewer_viewport.hpp"
 
@@ -337,26 +338,8 @@ void build_demo_cube_rendering_controls(ViewerFrameContext& state, SceneSession&
     }
 }
 
-void build_lighting_controls(ViewerFrameContext& state) {
-    if (!ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
-        return;
-    }
-    std::array<float, 3> direction{state.rendering.lighting.direction.x,
-                                   state.rendering.lighting.direction.y,
-                                   state.rendering.lighting.direction.z};
-    if (ImGui::DragFloat3("Light direction", direction.data(), 0.01F, -1.0F, 1.0F)) {
-        state.rendering.lighting.direction = {direction[0], direction[1], direction[2]};
-    }
-    ImGui::SliderFloat("Light intensity", &state.rendering.lighting.diffuse_intensity, 0.0F, 10.0F,
-                       "%.2f");
-    ImGui::SliderFloat("Ambient intensity", &state.rendering.lighting.ambient_intensity, 0.0F, 2.0F,
-                       "%.2f");
-    if (ImGui::Button("Reset Lighting")) {
-        state.rendering.lighting = elf3d::BasicLighting{};
-    }
-}
-
-void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, SceneSession& scene) {
+void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, SceneSession& scene,
+                           const Viewport& viewport) {
     if (!state.shell.show_rendering_panel) {
         return;
     }
@@ -370,6 +353,7 @@ void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, Scen
         color_control("Clear color", state.rendering.clear_color);
         build_demo_cube_rendering_controls(state, scene);
         build_lighting_controls(state);
+        build_camera_evidence(state, scene, viewport);
         draw_performance_diagnostics(state);
         draw_context_diagnostics(state);
     }

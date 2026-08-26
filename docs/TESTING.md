@@ -50,6 +50,12 @@ asset-reference behavior, and OpenGL rendering. A separate external target
 copies and adapts a Measurement Tool while seeing only public Elf3D headers and
 targets; it does not link the viewer or use private implementation includes.
 
+The context-dependent `elf3d.render_quality_material_pixels` test renders a
+generated white/dielectric/polished-metal/rough-metal scene and enforces the
+neutral studio's luminance, clipping, and highlight criteria. The optional
+`elf3d_render_quality_capture` executable can write a resolved PNG plus
+path-free JSON camera/settings metadata for local comparisons.
+
 The model-only suite stops before renderer, backend OpenGL, viewport, Standard
 Application Framework, embedding integration, ImGui, GLFW, and viewer targets.
 It covers Document construction and processing, all-scene glTF import,

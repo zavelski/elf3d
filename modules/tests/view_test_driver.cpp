@@ -4,6 +4,8 @@
 int elf3d_renderer_test();
 int elf3d_renderer_layout_test();
 int elf3d_renderer_frustum_test();
+int elf3d_renderer_document_test();
+int elf3d_display_transform_test();
 int elf3d_viewport_lifetime_test();
 
 namespace {
@@ -27,6 +29,12 @@ int main(int argument_count, char** arguments) {
     }
     if (test_case == "renderer_frustum") {
         return elf3d_renderer_frustum_test();
+    }
+    if (test_case == "renderer_document") {
+        return elf3d_renderer_document_test();
+    }
+    if (test_case == "display_transform") {
+        return elf3d_display_transform_test();
     }
     if (test_case == "viewport_lifetime") {
         return elf3d_viewport_lifetime_test();

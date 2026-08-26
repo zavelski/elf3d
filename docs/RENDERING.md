@@ -17,8 +17,17 @@ The renderer supports:
 - distance-measurement overlays;
 - section-plane and clipping-box filtering.
 
-Lighting combines a directional light with ambient illumination. The reference
-viewer exposes both values in the **Rendering** panel.
+Standard PBR combines a directional key light with a built-in neutral studio
+environment. The environment supplies diffuse fill and roughness-dependent
+reflections, so glossy dielectrics and metals remain readable from more than
+one viewing direction. It is lighting-only and is not drawn as a background.
+
+The default display transform uses fixed `0 EV` exposure and Khronos PBR
+Neutral tone mapping before one sRGB encoding step. The reference viewer
+exposes directional intensity, environment intensity and rotation, exposure,
+tone mapping, and the compatibility-only **Legacy ambient** value in the
+**Rendering** panel. Automatic exposure and external HDR environments are not
+supported.
 
 ## Transparency
 

@@ -504,6 +504,8 @@ void render_3d_view(const ViewPanelContext& context, const ViewportCanvas& canva
         context.state.rendering.clear_color[0], context.state.rendering.clear_color[1],
         context.state.rendering.clear_color[2], context.state.rendering.clear_color[3]});
     context.viewport.set_basic_lighting(context.state.rendering.lighting);
+    context.viewport.set_environment_lighting(context.state.rendering.environment_lighting);
+    context.viewport.set_display_transform(context.state.rendering.display_transform);
     context.viewport.set_render_shading_mode(context.state.rendering.shading_mode);
     const RetainedViewportFrameKey key =
         viewport_frame_key(context.state, context.scene, context.viewport, context.tools);

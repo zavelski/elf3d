@@ -6,6 +6,7 @@ module;
 
 #include "device_internal.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -54,6 +55,41 @@ class OpenGLTexture2D final : public graphics::Texture2D {
     std::shared_ptr<OpenGLDeviceState> state_;
     GLuint texture_ = 0;
     Extent2D extent_;
+};
+
+class OpenGLTextureCube final : public graphics::TextureCube {
+  public:
+    OpenGLTextureCube(std::shared_ptr<OpenGLDeviceState> state, GLuint texture,
+                      std::uint32_t extent, std::uint32_t mip_count) noexcept
+        : state_(std::move(state)), texture_(texture), extent_(extent), mip_count_(mip_count) {}
+
+    ~OpenGLTextureCube() override {
+        if (state_->can_destroy_objects() && texture_ != 0) {
+            glDeleteTextures(1, &texture_);
+        }
+    }
+
+    [[nodiscard]] std::uint32_t extent() const noexcept override {
+        return extent_;
+    }
+
+    [[nodiscard]] std::uint32_t mip_count() const noexcept override {
+        return mip_count_;
+    }
+
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+        return opengl_resource_token();
+    }
+
+    [[nodiscard]] GLuint texture() const noexcept {
+        return texture_;
+    }
+
+  private:
+    std::shared_ptr<OpenGLDeviceState> state_;
+    GLuint texture_ = 0;
+    std::uint32_t extent_ = 0;
+    std::uint32_t mip_count_ = 0;
 };
 
 GLenum texture_wrap(graphics::TextureAddressMode mode) noexcept {
@@ -174,10 +210,20 @@ class OpenGLGraphicsPipeline final : public graphics::GraphicsPipeline {
         return uniforms_;
     }
 
+    [[nodiscard]] std::optional<float>& environment_intensity() noexcept {
+        return environment_intensity_;
+    }
+
+    [[nodiscard]] std::optional<float>& environment_rotation() noexcept {
+        return environment_rotation_;
+    }
+
   private:
     std::shared_ptr<OpenGLDeviceState> state_;
     GLuint program_ = 0;
     UniformLocations uniforms_;
+    std::optional<float> environment_intensity_;
+    std::optional<float> environment_rotation_;
 };
 
 [[nodiscard]] Result<std::size_t> mesh_vertex_stride(graphics::VertexLayout layout) noexcept {
@@ -260,10 +306,16 @@ void configure_mesh_attributes(graphics::VertexLayout layout, std::size_t vertex
         return GL_SRGB8_ALPHA8;
     case graphics::TextureFormat::rgba8_unorm:
         return GL_RGBA8;
+    case graphics::TextureFormat::rgba16_float:
+        return GL_RGBA16F;
     default:
         return Error{ErrorCode::unsupported_texture_format,
-                     "OpenGL texture upload supports only RGBA8 and sRGB RGBA8"};
+                     "OpenGL texture upload does not support the requested format"};
     }
+}
+
+[[nodiscard]] std::size_t texture_bytes_per_pixel(graphics::TextureFormat format) noexcept {
+    return format == graphics::TextureFormat::rgba16_float ? 8U : 4U;
 }
 
 [[nodiscard]] Result<void>
@@ -276,11 +328,12 @@ validate_texture_description(const graphics::Texture2DDescription& description,
     }
     const std::size_t width = description.extent.width;
     const std::size_t height = description.extent.height;
-    if (width > std::numeric_limits<std::size_t>::max() / 4 ||
-        height > std::numeric_limits<std::size_t>::max() / (width * 4) ||
-        description.pixels.size() != width * height * 4) {
+    const std::size_t bytes_per_pixel = texture_bytes_per_pixel(description.format);
+    if (width > std::numeric_limits<std::size_t>::max() / bytes_per_pixel ||
+        height > std::numeric_limits<std::size_t>::max() / (width * bytes_per_pixel) ||
+        description.pixels.size() != width * height * bytes_per_pixel) {
         return Error{ErrorCode::gpu_texture_upload_failed,
-                     "Texture upload does not contain tightly packed RGBA8 pixels"};
+                     "Texture upload does not contain tightly packed pixels"};
     }
     if (description.mag_filter != graphics::TextureFilterMode::nearest &&
         description.mag_filter != graphics::TextureFilterMode::linear) {
@@ -303,8 +356,11 @@ void upload_texture(GLuint texture, const graphics::Texture2DDescription& descri
                     static_cast<GLint>(texture_filter(description.min_filter)));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
                     static_cast<GLint>(texture_filter(description.mag_filter)));
+    const GLenum type = description.format == graphics::TextureFormat::rgba16_float
+                            ? GL_HALF_FLOAT
+                            : GL_UNSIGNED_BYTE;
     glTexImage2D(GL_TEXTURE_2D, 0, internal_format, static_cast<GLsizei>(description.extent.width),
-                 static_cast<GLsizei>(description.extent.height), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 static_cast<GLsizei>(description.extent.height), 0, GL_RGBA, type,
                  description.pixels.data());
     if (uses_mipmaps(description.min_filter)) {
         glGenerateMipmap(GL_TEXTURE_2D);
@@ -330,6 +386,93 @@ create_texture_object(const graphics::Texture2DDescription& description,
     return texture;
 }
 
+[[nodiscard]] Result<void> validate_texture_cube_mip(const graphics::TextureCubeMipDescription& mip,
+                                                     std::uint32_t expected_extent,
+                                                     const OpenGLDeviceState& state) noexcept {
+    if (mip.extent == 0 || mip.extent != expected_extent ||
+        !state.supports({mip.extent, mip.extent})) {
+        return Error{ErrorCode::gpu_texture_creation_failed,
+                     "Cubemap mip dimensions are invalid or exceed OpenGL limits"};
+    }
+    const std::size_t extent = mip.extent;
+    if (extent > std::numeric_limits<std::size_t>::max() / 8U ||
+        extent > std::numeric_limits<std::size_t>::max() / (extent * 8U)) {
+        return Error{ErrorCode::size_overflow, "Cubemap mip byte size overflows"};
+    }
+    const std::size_t expected_bytes = extent * extent * 8U;
+    for (const std::span<const std::byte> face : mip.faces) {
+        if (face.size() != expected_bytes) {
+            return Error{ErrorCode::gpu_texture_upload_failed,
+                         "Every cubemap mip must provide six tightly packed RGBA16F faces"};
+        }
+    }
+    return {};
+}
+
+[[nodiscard]] Result<void>
+validate_texture_cube_description(const graphics::TextureCubeDescription& description,
+                                  const OpenGLDeviceState& state) noexcept {
+    if (description.format != graphics::TextureFormat::rgba16_float || description.mips.empty()) {
+        return Error{ErrorCode::unsupported_texture_format,
+                     "Studio cubemaps require one or more RGBA16F mip levels"};
+    }
+    if (description.mag_filter != graphics::TextureFilterMode::nearest &&
+        description.mag_filter != graphics::TextureFilterMode::linear) {
+        return Error{ErrorCode::invalid_sampler_filter,
+                     "Cubemap magnification supports only nearest or linear filtering"};
+    }
+    std::uint32_t expected_extent = description.mips.front().extent;
+    for (const graphics::TextureCubeMipDescription& mip : description.mips) {
+        const Result<void> mip_validation = validate_texture_cube_mip(mip, expected_extent, state);
+        if (!mip_validation) {
+            return mip_validation.error();
+        }
+        expected_extent = std::max(expected_extent / 2U, 1U);
+    }
+    return {};
+}
+
+[[nodiscard]] Result<GLuint>
+create_texture_cube_object(const graphics::TextureCubeDescription& description) noexcept {
+    AllocationStateGuard state_guard;
+    while (glGetError() != GL_NO_ERROR) {
+    }
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    if (texture == 0) {
+        return Error{ErrorCode::gpu_texture_creation_failed,
+                     "OpenGL failed to allocate a cubemap texture object"};
+    }
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER,
+                    static_cast<GLint>(texture_filter(description.min_filter)));
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER,
+                    static_cast<GLint>(texture_filter(description.mag_filter)));
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL,
+                    static_cast<GLint>(description.mips.size() - 1U));
+    for (std::size_t level = 0; level < description.mips.size(); ++level) {
+        const graphics::TextureCubeMipDescription& mip = description.mips[level];
+        for (std::size_t face = 0; face < mip.faces.size(); ++face) {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + static_cast<GLenum>(face),
+                         static_cast<GLint>(level), GL_RGBA16F, static_cast<GLsizei>(mip.extent),
+                         static_cast<GLsizei>(mip.extent), 0, GL_RGBA, GL_HALF_FLOAT,
+                         mip.faces[face].data());
+        }
+    }
+    if (glGetError() != GL_NO_ERROR) {
+        glDeleteTextures(1, &texture);
+        return Error{ErrorCode::gpu_texture_upload_failed,
+                     "OpenGL reported an error while uploading a cubemap"};
+    }
+    return texture;
+}
+
 [[nodiscard]] Result<GLuint>
 create_graphics_program(const graphics::GraphicsPipelineDescription& description) {
     return create_program_from_sources(description.vertex_shader_source,
@@ -348,6 +491,8 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
                             glGetUniformLocation(program, "u_light_color"),
                             glGetUniformLocation(program, "u_ambient_intensity"),
                             glGetUniformLocation(program, "u_diffuse_intensity"),
+                            glGetUniformLocation(program, "u_environment_intensity"),
+                            glGetUniformLocation(program, "u_environment_rotation"),
                             glGetUniformLocation(program, "u_metallic_factor"),
                             glGetUniformLocation(program, "u_roughness_factor"),
                             glGetUniformLocation(program, "u_emissive_factor"),
@@ -365,6 +510,9 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
                             glGetUniformLocation(program, "u_metallic_roughness_texture"),
                             glGetUniformLocation(program, "u_occlusion_texture"),
                             glGetUniformLocation(program, "u_emissive_texture"),
+                            glGetUniformLocation(program, "u_diffuse_environment"),
+                            glGetUniformLocation(program, "u_specular_environment"),
+                            glGetUniformLocation(program, "u_environment_brdf_lut"),
                             glGetUniformLocation(program, "u_texture_texcoord_sets[0]"),
                             glGetUniformLocation(program, "u_texture_offsets[0]"),
                             glGetUniformLocation(program, "u_texture_scales[0]"),
@@ -386,12 +534,21 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
            locations.normal >= 0 && locations.vertex_layout >= 0 && locations.base_color >= 0;
 }
 
-[[nodiscard]] bool lighting_locations_valid(const UniformLocations& locations) noexcept {
+[[nodiscard]] bool direct_lighting_locations_valid(const UniformLocations& locations) noexcept {
     return locations.camera_world_position >= 0 && locations.light_direction >= 0 &&
            locations.light_color >= 0 && locations.ambient_intensity >= 0 &&
-           locations.diffuse_intensity >= 0 && locations.metallic_factor >= 0 &&
-           locations.roughness_factor >= 0 && locations.emissive_factor >= 0 &&
-           locations.occlusion_strength >= 0;
+           locations.diffuse_intensity >= 0;
+}
+
+[[nodiscard]] bool indirect_lighting_locations_valid(const UniformLocations& locations) noexcept {
+    return locations.environment_intensity >= 0 && locations.environment_rotation >= 0 &&
+           locations.metallic_factor >= 0 && locations.roughness_factor >= 0 &&
+           locations.emissive_factor >= 0 && locations.occlusion_strength >= 0;
+}
+
+[[nodiscard]] bool lighting_locations_valid(const UniformLocations& locations) noexcept {
+    return direct_lighting_locations_valid(locations) &&
+           indirect_lighting_locations_valid(locations);
 }
 
 [[nodiscard]] bool surface_locations_valid(const UniformLocations& locations) noexcept {
@@ -400,11 +557,16 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
            locations.highlight_strength >= 0;
 }
 
-[[nodiscard]] bool texture_unit_locations_valid(const UniformLocations& locations) noexcept {
+[[nodiscard]] bool material_texture_locations_valid(const UniformLocations& locations) noexcept {
     return locations.has_base_color_texture >= 0 && locations.has_metallic_roughness_texture >= 0 &&
            locations.has_occlusion_texture >= 0 && locations.has_emissive_texture >= 0 &&
            locations.base_color_texture >= 0 && locations.metallic_roughness_texture >= 0 &&
            locations.occlusion_texture >= 0 && locations.emissive_texture >= 0;
+}
+
+[[nodiscard]] bool texture_unit_locations_valid(const UniformLocations& locations) noexcept {
+    return material_texture_locations_valid(locations) && locations.diffuse_environment >= 0 &&
+           locations.specular_environment >= 0 && locations.environment_brdf_lut >= 0;
 }
 
 [[nodiscard]] bool texture_parameter_locations_valid(const UniformLocations& locations) noexcept {
@@ -420,6 +582,18 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
            locations.clipping_retain_positive_half_space >= 0 &&
            locations.clipping_box_count >= 0 && locations.clipping_box_minimums >= 0 &&
            locations.clipping_box_maximums >= 0;
+}
+
+void configure_texture_sampler_uniforms(GLuint program, const UniformLocations& uniforms) noexcept {
+    const std::array<GLint, 7> locations{
+        uniforms.base_color_texture,   uniforms.metallic_roughness_texture,
+        uniforms.occlusion_texture,    uniforms.emissive_texture,
+        uniforms.diffuse_environment,  uniforms.specular_environment,
+        uniforms.environment_brdf_lut,
+    };
+    for (std::size_t index = 0; index < locations.size(); ++index) {
+        glProgramUniform1i(program, locations[index], static_cast<GLint>(index));
+    }
 }
 
 } // namespace
@@ -494,6 +668,29 @@ create_texture_2d(std::shared_ptr<OpenGLDeviceState> state,
     }
 }
 
+Result<std::unique_ptr<graphics::TextureCube>>
+create_texture_cube(std::shared_ptr<OpenGLDeviceState> state,
+                    const graphics::TextureCubeDescription& description) noexcept {
+    const Result<void> description_validation =
+        validate_texture_cube_description(description, *state);
+    if (!description_validation) {
+        return description_validation.error();
+    }
+    try {
+        Result<GLuint> texture_result = create_texture_cube_object(description);
+        if (!texture_result) {
+            return texture_result.error();
+        }
+        return std::unique_ptr<graphics::TextureCube>{std::make_unique<OpenGLTextureCube>(
+            std::move(state), texture_result.value(), description.mips.front().extent,
+            static_cast<std::uint32_t>(description.mips.size()))};
+    } catch (const std::bad_alloc&) {
+        fatal_opengl_allocation_failure();
+    } catch (...) {
+        fatal_unexpected_opengl_boundary_exception();
+    }
+}
+
 Result<std::unique_ptr<graphics::GraphicsPipeline>>
 create_graphics_pipeline(std::shared_ptr<OpenGLDeviceState> state,
                          const graphics::GraphicsPipelineDescription& description) noexcept {
@@ -515,6 +712,7 @@ create_graphics_pipeline(std::shared_ptr<OpenGLDeviceState> state,
             return Error{ErrorCode::shader_linking_failed,
                          "The linked shader program is missing a required renderer uniform"};
         }
+        configure_texture_sampler_uniforms(program, uniforms);
         return std::unique_ptr<graphics::GraphicsPipeline>{
             std::make_unique<OpenGLGraphicsPipeline>(std::move(state), program, uniforms)};
     } catch (const std::bad_alloc&) {
@@ -539,7 +737,9 @@ Result<PipelineView> pipeline_view(graphics::GraphicsPipeline& pipeline) noexcep
                      "The graphics pipeline does not belong to OpenGL"};
     }
     auto& opengl_pipeline = static_cast<OpenGLGraphicsPipeline&>(pipeline);
-    return PipelineView{opengl_pipeline.program(), opengl_pipeline.uniforms()};
+    return PipelineView{opengl_pipeline.program(), opengl_pipeline.uniforms(),
+                        &opengl_pipeline.environment_intensity(),
+                        &opengl_pipeline.environment_rotation()};
 }
 
 Result<GLuint> texture_object(const graphics::Texture2D* texture) noexcept {
@@ -550,6 +750,17 @@ Result<GLuint> texture_object(const graphics::Texture2D* texture) noexcept {
         return Error{ErrorCode::backend_mismatch, "The material texture does not belong to OpenGL"};
     }
     return static_cast<const OpenGLTexture2D*>(texture)->texture();
+}
+
+Result<GLuint> texture_cube_object(const graphics::TextureCube* texture) noexcept {
+    if (texture == nullptr) {
+        return GLuint{0};
+    }
+    if (texture->backend_resource_token() != opengl_resource_token()) {
+        return Error{ErrorCode::backend_mismatch,
+                     "The environment cubemap does not belong to OpenGL"};
+    }
+    return static_cast<const OpenGLTextureCube*>(texture)->texture();
 }
 
 } // namespace elf3d::backend::opengl::device_detail

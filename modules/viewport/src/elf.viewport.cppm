@@ -87,6 +87,12 @@ class OffscreenViewport final {
     void set_basic_lighting(const BasicLighting& lighting) noexcept;
     [[nodiscard]] BasicLighting basic_lighting() const noexcept;
 
+    void set_environment_lighting(const EnvironmentLighting& lighting) noexcept;
+    [[nodiscard]] EnvironmentLighting environment_lighting() const noexcept;
+
+    void set_display_transform(const DisplayTransform& transform) noexcept;
+    [[nodiscard]] DisplayTransform display_transform() const noexcept;
+
     void set_render_shading_mode(RenderShadingMode mode) noexcept;
     [[nodiscard]] RenderShadingMode render_shading_mode() const noexcept;
     [[nodiscard]] std::uint64_t render_revision() const noexcept;
@@ -195,6 +201,8 @@ class OffscreenViewport final {
     std::unique_ptr<State> state_;
     Color4 clear_color_{0.08F, 0.16F, 0.28F, 1.0F};
     BasicLighting lighting_;
+    EnvironmentLighting environment_lighting_;
+    DisplayTransform display_transform_;
     RenderShadingMode shading_mode_ = RenderShadingMode::standard;
     std::uint64_t render_revision_ = 1;
     RenderStatistics statistics_;

@@ -6,8 +6,10 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -22,6 +24,8 @@
 #include <vector>
 
 namespace {
+
+constexpr std::string_view procedural_material_model = "procedural-material";
 
 enum class Scenario {
     first_frame,
@@ -322,7 +326,8 @@ template <typename Value>
 }
 
 void print_usage() {
-    std::cerr << "Usage: elf3d_render_benchmark --model <path> --extent <width>x<height> "
+    std::cerr << "Usage: elf3d_render_benchmark --model <path|procedural-material> "
+                 "--extent <width>x<height> "
                  "--scenario first-frame|steady|orbit|pan|wheel|orbit-anchor|pick "
                  "--warmup <frames> --frames <frames> --report <csv-path>\n";
 }
@@ -389,7 +394,8 @@ void write_report_header(std::ofstream& stream) {
     stream << "scenario,frame,load_ms,frame_ms,draw_calls,triangles,candidate_primitives,"
               "visible_primitives,culled_primitives,buffer_uploads,buffer_uploaded_bytes,"
               "draw_packet_rebuilds,"
-              "resident_geometry_bytes,resident_texture_bytes,cpu_list_ms,cpu_resources_ms,"
+              "resident_geometry_bytes,resident_texture_bytes,resident_environment_bytes,"
+              "environment_preparations,cpu_list_ms,cpu_resources_ms,"
               "cpu_gl_ms,cpu_render_total_ms,gpu_main_available,gpu_main_ms,"
               "gpu_resolve_available,gpu_resolve_ms,pick_draw_calls,"
               "pick_pixels_read,pick_target_allocations,pick_pass_ms,pick_readback_ms,"
@@ -411,6 +417,8 @@ void write_frame_report(std::ofstream& stream, const FrameReport& report) {
            << frame.render.gpu_buffer_uploaded_bytes << ',' << frame.render.draw_packet_rebuilds
            << ',' << frame.render.estimated_resident_geometry_bytes << ','
            << frame.render.estimated_resident_texture_bytes << ','
+           << frame.render.estimated_resident_environment_bytes << ','
+           << frame.render.environment_preparations << ','
            << frame.render.cpu_render_list_milliseconds << ','
            << frame.render.cpu_resource_preparation_milliseconds << ','
            << frame.render.cpu_gl_submission_milliseconds << ','
@@ -464,11 +472,96 @@ void write_frame_report(std::ofstream& stream, const FrameReport& report) {
 
 struct BenchmarkScene final {
     std::unique_ptr<elf3d::EmbeddedRuntime> runtime;
-    elf3d::LoadedScene loaded;
+    std::unique_ptr<elf3d::Scene> scene;
     std::unique_ptr<elf3d::Viewport> viewport;
     elf3d::EntityId camera;
     double load_milliseconds = 0.0;
 };
+
+struct SphereMesh final {
+    std::vector<elf3d::VertexPositionNormal> vertices;
+    std::vector<std::uint32_t> indices;
+};
+
+[[nodiscard]] SphereMesh make_sphere() {
+    constexpr std::uint32_t longitude_count = 48;
+    constexpr std::uint32_t latitude_count = 24;
+    constexpr float pi = 3.14159265359F;
+    SphereMesh mesh;
+    constexpr std::uint32_t longitude_vertex_count = longitude_count + 1U;
+    constexpr std::uint32_t latitude_vertex_count = latitude_count + 1U;
+    mesh.vertices.reserve(longitude_vertex_count * latitude_vertex_count);
+    for (std::uint32_t latitude = 0; latitude <= latitude_count; ++latitude) {
+        const float polar = pi * static_cast<float>(latitude) / static_cast<float>(latitude_count);
+        const float y = std::cos(polar);
+        const float radius = std::sin(polar);
+        for (std::uint32_t longitude = 0; longitude <= longitude_count; ++longitude) {
+            const float azimuth =
+                2.0F * pi * static_cast<float>(longitude) / static_cast<float>(longitude_count);
+            const elf3d::Float3 normal{radius * std::cos(azimuth), y, radius * std::sin(azimuth)};
+            mesh.vertices.push_back({normal, normal});
+        }
+    }
+    for (std::uint32_t latitude = 0; latitude < latitude_count; ++latitude) {
+        for (std::uint32_t longitude = 0; longitude < longitude_count; ++longitude) {
+            const std::uint32_t row = longitude_count + 1;
+            const std::uint32_t top_left = latitude * row + longitude;
+            const std::uint32_t bottom_left = top_left + row;
+            mesh.indices.insert(mesh.indices.end(), {top_left, bottom_left, top_left + 1,
+                                                     top_left + 1, bottom_left, bottom_left + 1});
+        }
+    }
+    return mesh;
+}
+
+[[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::Scene>>
+create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
+    auto scene_result = engine.create_scene();
+    if (!scene_result) {
+        return scene_result.error();
+    }
+    std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
+    const SphereMesh sphere = make_sphere();
+    const auto mesh = scene->create_mesh({sphere.vertices, sphere.indices});
+    if (!mesh) {
+        return mesh.error();
+    }
+    constexpr std::array<float, 4> x_positions{{-3.0F, -1.0F, 1.0F, 3.0F}};
+    constexpr std::array<float, 4> metallic{{0.0F, 0.0F, 1.0F, 1.0F}};
+    constexpr std::array<float, 4> roughness{{0.8F, 0.25F, 0.08F, 0.65F}};
+    constexpr std::array<elf3d::Color4, 4> colors{{
+        {1.0F, 1.0F, 1.0F, 1.0F},
+        {0.55F, 0.55F, 0.55F, 1.0F},
+        {0.85F, 0.58F, 0.22F, 1.0F},
+        {0.72F, 0.76F, 0.8F, 1.0F},
+    }};
+    for (std::size_t index = 0; index < x_positions.size(); ++index) {
+        elf3d::MaterialDescription description;
+        description.base_color = colors[index];
+        description.metallic_factor = metallic[index];
+        description.roughness_factor = roughness[index];
+        const auto material = scene->create_material(description);
+        if (!material) {
+            return material.error();
+        }
+        const auto model = scene->create_model_entity(mesh.value(), material.value());
+        if (!model) {
+            return model.error();
+        }
+        elf3d::Transform transform;
+        transform.translation = {x_positions[index], 0.0F, 0.0F};
+        const auto positioned = scene->set_local_transform(model.value(), transform);
+        if (!positioned) {
+            return positioned.error();
+        }
+    }
+    const auto camera_result = scene->create_perspective_camera_entity({});
+    if (!camera_result) {
+        return camera_result.error();
+    }
+    camera = camera_result.value();
+    return scene;
+}
 
 [[nodiscard]] int initialize_graphics(const Options& options, GlfwRuntime& glfw,
                                       std::unique_ptr<Window>& window) {
@@ -507,27 +600,35 @@ struct BenchmarkScene final {
     benchmark.runtime = std::move(runtime_result).value();
     elf3d::Engine& engine = benchmark.runtime->engine();
     const auto load_begin = std::chrono::steady_clock::now();
-    elf3d::Result<elf3d::LoadedScene> loaded_result =
-        engine.load_scene(path_to_utf8(options.model));
-    const auto load_end = std::chrono::steady_clock::now();
-    if (!loaded_result) {
-        return loaded_result.error();
+    if (path_to_utf8(options.model) == procedural_material_model) {
+        auto scene_result = create_material_scene(engine, benchmark.camera);
+        if (!scene_result) {
+            return scene_result.error();
+        }
+        benchmark.scene = std::move(scene_result).value();
+    } else {
+        elf3d::Result<elf3d::LoadedScene> loaded_result =
+            engine.load_scene(path_to_utf8(options.model));
+        if (!loaded_result) {
+            return loaded_result.error();
+        }
+        benchmark.scene = std::move(loaded_result).value().scene;
+        const elf3d::Result<elf3d::EntityId> camera =
+            benchmark.scene->create_perspective_camera_entity({});
+        if (!camera) {
+            return camera.error();
+        }
+        benchmark.camera = camera.value();
     }
-    benchmark.loaded = std::move(loaded_result).value();
-    const elf3d::Result<elf3d::EntityId> camera =
-        benchmark.loaded.scene->create_perspective_camera_entity({});
+    const auto load_end = std::chrono::steady_clock::now();
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
         engine.create_viewport(options.extent);
-    if (!camera) {
-        return camera.error();
-    }
     if (!viewport_result) {
         return viewport_result.error();
     }
-    benchmark.camera = camera.value();
     benchmark.viewport = std::move(viewport_result).value();
     const elf3d::Result<void> framed =
-        benchmark.viewport->reset_view(*benchmark.loaded.scene, benchmark.camera);
+        benchmark.viewport->reset_view(*benchmark.scene, benchmark.camera);
     if (!framed) {
         return framed.error();
     }
@@ -542,9 +643,9 @@ struct BenchmarkScene final {
         const bool event_scenario =
             options.scenario == Scenario::orbit_anchor || options.scenario == Scenario::pick;
         const elf3d::Result<void> result =
-            event_scenario ? benchmark.viewport->render(*benchmark.loaded.scene, benchmark.camera)
-                           : execute_frame(options, frame, *benchmark.viewport,
-                                           *benchmark.loaded.scene, benchmark.camera);
+            event_scenario ? benchmark.viewport->render(*benchmark.scene, benchmark.camera)
+                           : execute_frame(options, frame, *benchmark.viewport, *benchmark.scene,
+                                           benchmark.camera);
         if (!result) {
             return result.error();
         }
@@ -566,7 +667,7 @@ measure(const Options& options, BenchmarkScene& benchmark, GLFWwindow& window) {
         const auto begin = std::chrono::steady_clock::now();
         const elf3d::Result<void> result =
             execute_frame(options, options.warmup_frames + frame, *benchmark.viewport,
-                          *benchmark.loaded.scene, benchmark.camera);
+                          *benchmark.scene, benchmark.camera);
         if (!result) {
             return result.error();
         }
@@ -590,7 +691,8 @@ measure(const Options& options, BenchmarkScene& benchmark, GLFWwindow& window) {
 }
 
 [[nodiscard]] int run(const Options& options) {
-    if (!std::filesystem::is_regular_file(options.model)) {
+    if (path_to_utf8(options.model) != procedural_material_model &&
+        !std::filesystem::is_regular_file(options.model)) {
         std::cerr << "Model does not exist: " << path_to_utf8(options.model) << '\n';
         return 3;
     }

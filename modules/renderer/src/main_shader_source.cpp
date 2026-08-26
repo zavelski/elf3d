@@ -51,6 +51,8 @@ uniform vec3 u_light_direction;
 uniform vec4 u_light_color;
 uniform float u_ambient_intensity;
 uniform float u_diffuse_intensity;
+uniform float u_environment_intensity;
+uniform float u_environment_rotation;
 uniform float u_metallic_factor;
 uniform float u_roughness_factor;
 uniform vec3 u_emissive_factor;
@@ -68,6 +70,9 @@ uniform sampler2D u_base_color_texture;
 uniform sampler2D u_metallic_roughness_texture;
 uniform sampler2D u_occlusion_texture;
 uniform sampler2D u_emissive_texture;
+uniform samplerCube u_diffuse_environment;
+uniform samplerCube u_specular_environment;
+uniform sampler2D u_environment_brdf_lut;
 uniform int u_texture_texcoord_sets[4];
 uniform vec2 u_texture_offsets[4];
 uniform vec2 u_texture_scales[4];
@@ -89,6 +94,15 @@ vec3 safe_normalize(vec3 value, vec3 fallback)
 {
     float length_squared = dot(value, value);
     return length_squared > 0.00000001 ? value * inversesqrt(length_squared) : fallback;
+}
+
+vec3 rotate_environment_direction(vec3 direction)
+{
+    float sine = sin(u_environment_rotation);
+    float cosine = cos(u_environment_rotation);
+    return vec3(cosine * direction.x - sine * direction.z,
+                direction.y,
+                sine * direction.x + cosine * direction.z);
 }
 
 bool clipping_contains_point(vec3 world_position)
@@ -197,11 +211,27 @@ void main()
             ? mix(1.0, texture(u_occlusion_texture, mapped_uv(2)).r,
                   clamp(u_occlusion_strength, 0.0, 1.0))
             : 1.0;
+        vec3 indirect_fresnel =
+            f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow(1.0 - n_dot_v, 5.0);
+        vec3 indirect_diffuse_weight = (vec3(1.0) - indirect_fresnel) * (1.0 - metallic);
+        vec3 irradiance = texture(u_diffuse_environment,
+                                  rotate_environment_direction(normal)).rgb;
+        vec3 environment_diffuse = irradiance * base_color.rgb / pi;
+        vec3 reflection = reflect(-view_direction, normal);
+        vec3 prefiltered = textureLod(u_specular_environment,
+                                      rotate_environment_direction(reflection),
+                                      roughness * 7.0).rgb;
+        vec2 environment_brdf = texture(u_environment_brdf_lut,
+                                        vec2(n_dot_v, roughness)).rg;
+        vec3 environment_specular =
+            prefiltered * (f0 * environment_brdf.x + environment_brdf.y);
+        vec3 indirect = (indirect_diffuse_weight * environment_diffuse + environment_specular) *
+                        u_environment_intensity * occlusion;
         vec3 ambient = base_color.rgb * (1.0 - metallic) * u_ambient_intensity * occlusion;
         vec3 emissive_sample = u_has_emissive_texture
             ? texture(u_emissive_texture, mapped_uv(3)).rgb : vec3(1.0);
         vec3 emissive = u_emissive_factor * emissive_sample;
-        linear_color = max(direct + ambient + emissive, vec3(0.0));
+        linear_color = max(direct + indirect + ambient + emissive, vec3(0.0));
     }
     linear_color = mix(linear_color, u_highlight_color.rgb,
                        clamp(u_highlight_strength, 0.0, 1.0));

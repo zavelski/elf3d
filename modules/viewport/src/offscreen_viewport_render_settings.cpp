@@ -40,10 +40,10 @@ void OffscreenViewport::set_basic_lighting(const BasicLighting& lighting) noexce
     lighting_.color = math::clamp_color(lighting.color);
     lighting_.ambient_intensity = std::isfinite(lighting.ambient_intensity)
                                       ? std::clamp(lighting.ambient_intensity, 0.0F, 2.0F)
-                                      : 0.08F;
+                                      : 0.0F;
     lighting_.diffuse_intensity = std::isfinite(lighting.diffuse_intensity)
                                       ? std::clamp(lighting.diffuse_intensity, 0.0F, 10.0F)
-                                      : 3.0F;
+                                      : 2.0F;
     if (previous.direction != lighting_.direction || previous.color != lighting_.color ||
         previous.ambient_intensity != lighting_.ambient_intensity ||
         previous.diffuse_intensity != lighting_.diffuse_intensity) {
@@ -53,6 +53,46 @@ void OffscreenViewport::set_basic_lighting(const BasicLighting& lighting) noexce
 
 BasicLighting OffscreenViewport::basic_lighting() const noexcept {
     return lighting_;
+}
+
+void OffscreenViewport::set_environment_lighting(const EnvironmentLighting& lighting) noexcept {
+    EnvironmentLighting sanitized;
+    sanitized.intensity =
+        std::isfinite(lighting.intensity) ? std::clamp(lighting.intensity, 0.0F, 8.0F) : 1.0F;
+    if (std::isfinite(lighting.rotation_radians)) {
+        constexpr float revolution = 6.28318530718F;
+        sanitized.rotation_radians = std::remainder(lighting.rotation_radians, revolution);
+    }
+    if (sanitized != environment_lighting_) {
+        environment_lighting_ = sanitized;
+        ++render_revision_;
+    }
+}
+
+EnvironmentLighting OffscreenViewport::environment_lighting() const noexcept {
+    return environment_lighting_;
+}
+
+void OffscreenViewport::set_display_transform(const DisplayTransform& transform) noexcept {
+    DisplayTransform sanitized;
+    sanitized.exposure_ev = std::isfinite(transform.exposure_ev)
+                                ? std::clamp(transform.exposure_ev, -8.0F, 8.0F)
+                                : 0.0F;
+    sanitized.tone_mapping = transform.tone_mapping == ToneMappingMode::none ||
+                                     transform.tone_mapping == ToneMappingMode::pbr_neutral
+                                 ? transform.tone_mapping
+                                 : ToneMappingMode::pbr_neutral;
+    if (sanitized != display_transform_) {
+        display_transform_ = sanitized;
+        if (render_target_ != nullptr) {
+            render_target_->set_display_transform(display_transform_);
+        }
+        ++render_revision_;
+    }
+}
+
+DisplayTransform OffscreenViewport::display_transform() const noexcept {
+    return display_transform_;
 }
 
 void OffscreenViewport::set_render_shading_mode(RenderShadingMode mode) noexcept {

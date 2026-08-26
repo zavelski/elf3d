@@ -128,6 +128,9 @@ if (!viewport_result) {
 }
 auto viewport = std::move(viewport_result).value();
 
+viewport->set_environment_lighting({1.0F, 0.0F});
+viewport->set_display_transform({0.0F, elf3d::ToneMappingMode::pbr_neutral});
+
 auto camera_result = scene->create_perspective_camera_entity({});
 if (!camera_result) {
     report_error(camera_result.error());
@@ -155,6 +158,14 @@ Hosts may select diagnostic `RenderShadingMode::unlit`, retain a rendered
 texture until `Scene::revision()` or `Viewport::render_revision()` changes,
 and keep the default standard PBR path unchanged.
 
+`EnvironmentLighting` controls the renderer-owned neutral studio fill and
+reflection intensity plus its world-Y rotation. `DisplayTransform` controls
+fixed exposure in EV and selects PBR Neutral or the diagnostic no-tone-map
+path. The defaults are environment intensity `1`, rotation `0`, exposure
+`0 EV`, and PBR Neutral. Environment intensity is clamped to `[0, 8]`, exposure
+to `[-8, 8]`, and invalid values are sanitized; each effective change advances
+`Viewport::render_revision()` without mutating Scene state.
+
 ## Main API Areas
 
 - `Document`: CPU-side ownership of all imported scenes, the optional authored
@@ -173,9 +184,9 @@ and keep the default standard PBR path unchanged.
 - `Scene`: hierarchy, transforms, cameras, model-backed loaded data,
   Scene-created convenience assets, visibility, bounds, surface-anchor
   creation/resolution, statistics, and retained-Document export.
-- `Viewport`: rendering, navigation, picking, selection, visibility, explicit
-  clipping, projection, resolved-anchor visibility, generic overlays, and
-  statistics.
+- `Viewport`: rendering, neutral studio/environment and display-transform
+  controls, navigation, picking, selection, visibility, explicit clipping,
+  projection, resolved-anchor visibility, generic overlays, and statistics.
 - `Result<T>` and `Error`: expected operation results and error context.
 
 Identical model/runtime POD vocabulary is declared once in

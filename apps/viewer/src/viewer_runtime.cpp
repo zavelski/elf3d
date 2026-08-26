@@ -496,7 +496,7 @@ void build_viewer_panels(ViewerAssembly& runtime, ApplicationUiContext& applicat
                          ImGuiID dockspace_id, ViewerCommandDispatcher& commands) {
     ViewerFrameContext state = frame_context(runtime);
     SceneSession& scene = runtime.scene;
-    build_rendering_panel(dockspace_id, state, scene);
+    build_rendering_panel(dockspace_id, state, scene, *runtime.viewport);
     update_demo_cube_animation(state, scene, state.interaction.frame_delta_seconds);
     build_3d_view(ViewPanelContext{dockspace_id, state, *runtime.viewport, scene, runtime.tools,
                                    application, runtime.viewport_interaction_owner,

@@ -79,6 +79,7 @@ out/build/windows-model-debug/lib/Debug/elf3d_model.lib
 | `elf3d_viewer` | Desktop reference viewer |
 | `elf3d_public_api_examples` | Compile-checks the canonical public integration examples |
 | `elf3d_render_benchmark` | Optional hidden-context rendering benchmark |
+| `elf3d_render_quality_capture` | Optional reproducible PNG/metadata capture tool |
 
 Set `ELF3D_BUILD_VIEWER=OFF` when only the SDK/framework products are required.
 Set `ELF3D_BUILD_APP=OFF` or `ELF3D_BUILD_EMBED=OFF` to omit the corresponding
@@ -89,7 +90,8 @@ requires the application framework, and the performance benchmark requires the
 embedding integration. Standard CMake testing can be controlled with
 `BUILD_TESTING`. The performance benchmark defaults to `OFF`; set
 `ELF3D_BUILD_PERFORMANCE_BENCHMARK=ON` to include it in a custom engine build.
-The checked-in full presets already do so.
+The checked-in full presets already do so and therefore build both rendering
+tools.
 
 Validate all four checked-in preset option and target contracts without
 compiling them:

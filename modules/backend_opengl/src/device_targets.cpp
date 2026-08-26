@@ -49,6 +49,8 @@ constexpr char display_resolve_fragment_shader_source[] = R"glsl(#version 410 co
 in vec2 v_texcoord;
 
 uniform sampler2D u_linear_color_texture;
+uniform float u_exposure_ev;
+uniform int u_tone_mapping;
 
 layout(location = 0) out vec4 fragment_color;
 
@@ -60,12 +62,102 @@ vec3 linear_to_srgb(vec3 linear_color)
                step(vec3(0.0031308), linear_color));
 }
 
+float sanitize_component(float value)
+{
+    return isnan(value) || isinf(value) || value < 0.0 ? 0.0 : value;
+}
+
+vec3 pbr_neutral_tone_mapping(vec3 color)
+{
+    const float start_compression = 0.76;
+    const float desaturation = 0.15;
+    float darkest = min(color.r, min(color.g, color.b));
+    float offset = darkest < 0.08 ? darkest - 6.25 * darkest * darkest : 0.04;
+    color -= vec3(offset);
+    float peak = max(color.r, max(color.g, color.b));
+    if (peak < start_compression) {
+        return color;
+    }
+    float distance_to_white = 1.0 - start_compression;
+    float compressed_peak =
+        1.0 - distance_to_white * distance_to_white /
+                  (peak + distance_to_white - start_compression);
+    color *= compressed_peak / peak;
+    float desaturation_weight =
+        1.0 - 1.0 / (desaturation * (peak - compressed_peak) + 1.0);
+    return mix(color, vec3(compressed_peak), desaturation_weight);
+}
+
 void main()
 {
     vec4 linear_color = texture(u_linear_color_texture, v_texcoord);
-    fragment_color = vec4(linear_to_srgb(linear_color.rgb), linear_color.a);
+    vec3 sanitized = vec3(sanitize_component(linear_color.r),
+                          sanitize_component(linear_color.g),
+                          sanitize_component(linear_color.b));
+    vec3 exposed = sanitized * exp2(u_exposure_ev);
+    vec3 display_linear = u_tone_mapping == 1 ? pbr_neutral_tone_mapping(exposed)
+                                               : max(exposed, vec3(0.0));
+    fragment_color = vec4(linear_to_srgb(display_linear), clamp(linear_color.a, 0.0, 1.0));
 }
 )glsl";
+
+struct DisplayResolveResources final {
+    GLuint program = 0;
+    GLuint vertex_array = 0;
+    GLint texture_uniform = -1;
+    GLint exposure_uniform = -1;
+    GLint tone_mapping_uniform = -1;
+
+    [[nodiscard]] bool valid() const noexcept {
+        return program != 0 && vertex_array != 0 && texture_uniform >= 0 && exposure_uniform >= 0 &&
+               tone_mapping_uniform >= 0;
+    }
+};
+
+[[nodiscard]] Result<GLuint> create_display_resolve_program() {
+    Result<GLuint> vertex_result =
+        compile_shader(GL_VERTEX_SHADER, display_resolve_vertex_shader_source);
+    if (!vertex_result) {
+        return vertex_result.error();
+    }
+    const GLuint vertex_shader = vertex_result.value();
+    Result<GLuint> fragment_result =
+        compile_shader(GL_FRAGMENT_SHADER, display_resolve_fragment_shader_source);
+    if (!fragment_result) {
+        glDeleteShader(vertex_shader);
+        return fragment_result.error();
+    }
+    Result<GLuint> program_result = link_program(vertex_shader, fragment_result.value());
+    glDeleteShader(vertex_shader);
+    glDeleteShader(fragment_result.value());
+    return program_result;
+}
+
+[[nodiscard]] Result<DisplayResolveResources> create_display_resolve_resources() {
+    AllocationStateGuard allocation_guard;
+    Result<GLuint> program_result = create_display_resolve_program();
+    if (!program_result) {
+        return program_result.error();
+    }
+    DisplayResolveResources resources;
+    resources.program = program_result.value();
+    glGenVertexArrays(1, &resources.vertex_array);
+    if (resources.vertex_array == 0) {
+        glDeleteProgram(resources.program);
+        return Error{ErrorCode::gpu_buffer_creation_failed,
+                     "OpenGL failed to allocate viewport display resolve resources"};
+    }
+    resources.texture_uniform = glGetUniformLocation(resources.program, "u_linear_color_texture");
+    resources.exposure_uniform = glGetUniformLocation(resources.program, "u_exposure_ev");
+    resources.tone_mapping_uniform = glGetUniformLocation(resources.program, "u_tone_mapping");
+    if (!resources.valid()) {
+        glDeleteProgram(resources.program);
+        glDeleteVertexArrays(1, &resources.vertex_array);
+        return Error{ErrorCode::shader_linking_failed,
+                     "The viewport display resolve shader is missing a required uniform"};
+    }
+    return resources;
+}
 
 void configure_framebuffer_clear_state(GLuint framebuffer, Extent2D extent) noexcept {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
@@ -278,6 +370,13 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         return {};
     }
 
+    void set_display_transform(const DisplayTransform& transform) noexcept override {
+        if (display_transform_ != transform) {
+            display_transform_ = transform;
+            display_stale_ = true;
+        }
+    }
+
     [[nodiscard]] TextureHandle color_texture() const noexcept override {
         return color_texture_handle_;
     }
@@ -334,6 +433,9 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, linear_color_texture_);
         glUniform1i(resolve_texture_uniform_, 0);
+        glUniform1f(resolve_exposure_uniform_, display_transform_.exposure_ev);
+        glUniform1i(resolve_tone_mapping_uniform_,
+                    display_transform_.tone_mapping == ToneMappingMode::pbr_neutral ? 1 : 0);
         {
             const GpuTimingScope timing{*state_, GpuTimingKind::resolve};
             glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -349,51 +451,20 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
 
   private:
     [[nodiscard]] Result<void> ensure_display_resolve_resources() {
-        if (resolve_program_ != 0 && resolve_vertex_array_ != 0 && resolve_texture_uniform_ >= 0) {
+        if (resolve_program_ != 0 && resolve_vertex_array_ != 0 && resolve_texture_uniform_ >= 0 &&
+            resolve_exposure_uniform_ >= 0 && resolve_tone_mapping_uniform_ >= 0) {
             return {};
         }
 
-        AllocationStateGuard allocation_guard;
-        Result<GLuint> vertex_result =
-            compile_shader(GL_VERTEX_SHADER, display_resolve_vertex_shader_source);
-        if (!vertex_result) {
-            return vertex_result.error();
+        Result<DisplayResolveResources> resources = create_display_resolve_resources();
+        if (!resources) {
+            return resources.error();
         }
-        const GLuint vertex_shader = vertex_result.value();
-        Result<GLuint> fragment_result =
-            compile_shader(GL_FRAGMENT_SHADER, display_resolve_fragment_shader_source);
-        if (!fragment_result) {
-            glDeleteShader(vertex_shader);
-            return fragment_result.error();
-        }
-        const GLuint fragment_shader = fragment_result.value();
-        Result<GLuint> program_result = link_program(vertex_shader, fragment_shader);
-        glDeleteShader(vertex_shader);
-        glDeleteShader(fragment_shader);
-        if (!program_result) {
-            return program_result.error();
-        }
-
-        GLuint vertex_array = 0;
-        glGenVertexArrays(1, &vertex_array);
-        if (vertex_array == 0) {
-            glDeleteProgram(program_result.value());
-            return Error{ErrorCode::gpu_buffer_creation_failed,
-                         "OpenGL failed to allocate viewport display resolve resources"};
-        }
-
-        const GLuint program = program_result.value();
-        const GLint texture_uniform = glGetUniformLocation(program, "u_linear_color_texture");
-        if (texture_uniform < 0) {
-            glDeleteProgram(program);
-            glDeleteVertexArrays(1, &vertex_array);
-            return Error{ErrorCode::shader_linking_failed,
-                         "The viewport display resolve shader is missing a required uniform"};
-        }
-
-        resolve_program_ = program;
-        resolve_vertex_array_ = vertex_array;
-        resolve_texture_uniform_ = texture_uniform;
+        resolve_program_ = resources.value().program;
+        resolve_vertex_array_ = resources.value().vertex_array;
+        resolve_texture_uniform_ = resources.value().texture_uniform;
+        resolve_exposure_uniform_ = resources.value().exposure_uniform;
+        resolve_tone_mapping_uniform_ = resources.value().tone_mapping_uniform;
         return {};
     }
 
@@ -410,6 +481,8 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         resolve_vertex_array_ = 0;
         resolve_program_ = 0;
         resolve_texture_uniform_ = -1;
+        resolve_exposure_uniform_ = -1;
+        resolve_tone_mapping_uniform_ = -1;
     }
 
     void release() noexcept {
@@ -440,7 +513,10 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
     GLuint resolve_program_ = 0;
     GLuint resolve_vertex_array_ = 0;
     GLint resolve_texture_uniform_ = -1;
+    GLint resolve_exposure_uniform_ = -1;
+    GLint resolve_tone_mapping_uniform_ = -1;
     TextureHandle color_texture_handle_;
+    DisplayTransform display_transform_;
     bool display_stale_ = false;
 };
 

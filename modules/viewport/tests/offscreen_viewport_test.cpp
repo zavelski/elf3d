@@ -155,6 +155,77 @@ struct ViewportContext {
     return 0;
 }
 
+[[nodiscard]] int verify_environment_settings(ViewportContext& context) {
+    const std::uint64_t environment_revision = context.viewport->render_revision();
+    elf3d::EnvironmentLighting environment;
+    environment.intensity = 20.0F;
+    environment.rotation_radians = 9.42477796077F;
+    context.viewport->set_environment_lighting(environment);
+    const elf3d::EnvironmentLighting sanitized_environment =
+        context.viewport->environment_lighting();
+    if (sanitized_environment.intensity != 8.0F ||
+        !nearly_equal(std::abs(sanitized_environment.rotation_radians), 3.14159265359F) ||
+        context.viewport->render_revision() != environment_revision + 1) {
+        return 82;
+    }
+    context.viewport->set_environment_lighting(environment);
+    if (context.viewport->render_revision() != environment_revision + 1) {
+        return 83;
+    }
+    environment.intensity = std::numeric_limits<float>::quiet_NaN();
+    environment.rotation_radians = std::numeric_limits<float>::infinity();
+    context.viewport->set_environment_lighting(environment);
+    if (context.viewport->environment_lighting() != elf3d::EnvironmentLighting{}) {
+        return 84;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool has_sanitized_display(const ViewportContext& context,
+                                         std::uint64_t expected_revision) {
+    const elf3d::DisplayTransform display = context.viewport->display_transform();
+    return display.exposure_ev == 8.0F &&
+           display.tone_mapping == elf3d::ToneMappingMode::pbr_neutral &&
+           context.viewport->render_revision() == expected_revision;
+}
+
+[[nodiscard]] bool has_independent_default_viewport() {
+    FakeDevice second_device;
+    auto second = elf3d::viewport::OffscreenViewport::create(second_device, elf3d::Extent2D{});
+    return second && second.value()->environment_lighting() == elf3d::EnvironmentLighting{} &&
+           second.value()->display_transform() == elf3d::DisplayTransform{} &&
+           second.value()->basic_lighting().ambient_intensity == 0.0F &&
+           second.value()->basic_lighting().diffuse_intensity == 2.0F;
+}
+
+[[nodiscard]] int verify_display_settings(ViewportContext& context) {
+    const std::uint64_t display_revision = context.viewport->render_revision();
+    elf3d::DisplayTransform display;
+    display.exposure_ev = 20.0F;
+    display.tone_mapping = static_cast<elf3d::ToneMappingMode>(255);
+    context.viewport->set_display_transform(display);
+    if (!has_sanitized_display(context, display_revision + 1)) {
+        return 85;
+    }
+    context.viewport->set_display_transform(display);
+    if (context.viewport->render_revision() != display_revision + 1) {
+        return 86;
+    }
+    display.exposure_ev = -20.0F;
+    display.tone_mapping = elf3d::ToneMappingMode::none;
+    context.viewport->set_display_transform(display);
+    if (context.viewport->display_transform().exposure_ev != -8.0F ||
+        context.device_state().render_target == nullptr ||
+        context.device_state().render_target->display_transform !=
+            context.viewport->display_transform()) {
+        return 87;
+    }
+    if (!has_independent_default_viewport()) {
+        return 88;
+    }
+    return 0;
+}
+
 struct DynamicAnchorContext {
     elf3d::Extent2D target_extent{256U, 144U};
     std::size_t pixel_count = static_cast<std::size_t>(target_extent.width) *
@@ -669,9 +740,11 @@ has_independent_box_configuration(const elf3d::Result<std::uint32_t>& added_box,
 using ViewportStep = int (*)(ViewportContext&);
 
 [[nodiscard]] int run_viewport_steps(ViewportContext& context) {
-    constexpr std::array<ViewportStep, 13> steps{{
+    constexpr std::array<ViewportStep, 15> steps{{
         verify_empty_and_resize,
         verify_viewport_settings,
+        verify_environment_settings,
+        verify_display_settings,
         verify_dynamic_anchor_navigation,
         verify_eye_orbit,
         verify_disabled_focus_depth,

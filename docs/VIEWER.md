@@ -30,7 +30,7 @@ installed EmEditor, Notepad, or Notepad++. Missing editors are shown disabled.
 | **Scene Hierarchy** | Entity hierarchy, selection, and visibility |
 | **Model Information** | Scene statistics and load diagnostics |
 | **Selection** | Selected object and highlight settings |
-| **Rendering** | Background and lighting controls |
+| **Rendering** | Background, studio lighting, display transform, and camera evidence |
 | **Measurement** | Distance tool, units, and overlay style |
 | **Clipping** | Section plane and clipping boxes |
 | **Navigation Settings** | Navigation sensitivity and camera state |
@@ -47,6 +47,19 @@ p95, p99, maximum frame time, CPU/GPU phase timings, context details, resource
 and residency counters, and CSV capture. VSync, standard PBR, and 100% scale
 are the defaults. Idle 3D content reuses its last resolved texture while event
 processing, the interface, and window presentation continue normally.
+
+The Lighting subsection starts with the calibrated neutral studio profile:
+directional intensity `2.0`, environment intensity `1.0`, environment rotation
+`0 degrees`, exposure `0 EV`, PBR Neutral tone mapping, and legacy ambient
+`0.0`. Environment intensity is the normal fill/reflection control. Rotating
+the environment moves material highlights without changing geometry. **None
+(diagnostic)** disables tone mapping, and **Reset Lighting** restores the exact
+profile above. These controls are intentionally not saved in preferences; each
+launch starts from the standard profile.
+
+**Camera Evidence** displays and copies the camera local matrix, perspective
+field of view and depth range, viewport extent, and all current lighting,
+environment, and display-transform settings for repeatable comparisons.
 
 **Navigation Settings** includes the default-on focus-depth orbit anchor. Turn
 it off only to compare orbit-entry behavior; ordinary navigation retains the

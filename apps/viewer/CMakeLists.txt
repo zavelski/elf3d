@@ -12,6 +12,7 @@ add_executable(
     src/viewer_panels.cpp
     src/viewer_performance_csv.cpp
     src/viewer_preferences.cpp
+    src/viewer_rendering_controls.cpp
     src/viewer_retained_frame.cpp
     src/viewer_runtime.cpp
     src/viewer_scene_panels.cpp

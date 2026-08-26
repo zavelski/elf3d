@@ -86,6 +86,7 @@ struct RenderRequest {
     EntityId camera;
     Color4 clear_color;
     BasicLighting lighting;
+    EnvironmentLighting environment_lighting;
     ViewportRenderOptions options;
 };
 
@@ -109,6 +110,12 @@ class Renderer final {
         std::uint64_t engine_token = 0;
         std::unique_ptr<graphics::GraphicsPipeline> pipeline;
         std::unique_ptr<CacheState> cache;
+    };
+    struct EnvironmentResources final {
+        std::unique_ptr<graphics::TextureCube> diffuse;
+        std::unique_ptr<graphics::TextureCube> specular;
+        std::unique_ptr<graphics::Texture2D> brdf_lut;
+        std::uint64_t resident_bytes = 0;
     };
 
   public:
@@ -153,6 +160,12 @@ class Renderer final {
         srgb,
     };
 
+    struct RenderExecutionContext final {
+        const scene::VisibilityFilter& visibility;
+        const clipping::ClippingFilter& clipping_filter;
+        double total_begin = 0.0;
+    };
+
     struct RenderPass final {
         RenderRequest request;
         RenderList list;
@@ -169,6 +182,11 @@ class Renderer final {
 
     [[nodiscard]] Result<void> draw_render_items(const scene::Storage& scene,
                                                  graphics::RenderTarget& target, RenderPass& pass);
+    [[nodiscard]] Result<bool> ensure_environment_resources();
+    [[nodiscard]] Result<bool> prepare_environment(const RenderRequest& request);
+    [[nodiscard]] Result<RenderStatistics>
+    execute_render_pass(const scene::Storage& scene, graphics::RenderTarget& target,
+                        const RenderRequest& request, const RenderExecutionContext& execution);
     [[nodiscard]] Result<void> prepare_render_item(const scene::Storage& scene,
                                                    const RenderItem& item, RenderPass& pass,
                                                    std::vector<PreparedDraw>& prepared);
@@ -209,6 +227,7 @@ class Renderer final {
     std::uint64_t engine_token_ = 0;
     std::unique_ptr<graphics::GraphicsPipeline> pipeline_;
     std::unique_ptr<CacheState> cache_;
+    std::unique_ptr<EnvironmentResources> environment_;
 };
 
 } // namespace elf3d::renderer

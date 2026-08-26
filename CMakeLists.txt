@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.3.4)
 
 project(
     Elf3D
-    VERSION 0.10.2
+    VERSION 0.10.3
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
@@ -80,4 +80,5 @@ endif()
 
 if(ELF3D_BUILD_PERFORMANCE_BENCHMARK)
     add_subdirectory(tools/render-benchmark)
+    add_subdirectory(tools/render-quality-capture)
 endif()
