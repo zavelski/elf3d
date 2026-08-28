@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "studio_environment_test_source.h"
+
 namespace elf3d::renderer::tests {
 
 constexpr std::uintptr_t fake_resource_token = 1;
@@ -103,21 +105,30 @@ class FakePipeline final : public elf3d::graphics::GraphicsPipeline {
 };
 class FakeTexture final : public elf3d::graphics::Texture2D {
   public:
+    explicit FakeTexture(int& live_count) noexcept : live_count_(&live_count, 1U) {
+        ++live_count_.front();
+    }
+    ~FakeTexture() override {
+        --live_count_.front();
+    }
     [[nodiscard]] elf3d::Extent2D extent() const noexcept override {
         return {1, 1};
     }
     [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
         return fake_resource_token;
     }
+
+  private:
+    std::span<int> live_count_;
 };
 class FakeTextureCube final : public elf3d::graphics::TextureCube {
   public:
     FakeTextureCube(std::uint32_t extent, std::uint32_t mip_count, int& live_count) noexcept
-        : extent_(extent), mip_count_(mip_count), live_count_(&live_count) {
-        ++*live_count_;
+        : extent_(extent), mip_count_(mip_count), live_count_(&live_count, 1U) {
+        ++live_count_.front();
     }
     ~FakeTextureCube() override {
-        --*live_count_;
+        --live_count_.front();
     }
     [[nodiscard]] std::uint32_t extent() const noexcept override {
         return extent_;
@@ -132,7 +143,7 @@ class FakeTextureCube final : public elf3d::graphics::TextureCube {
   private:
     std::uint32_t extent_ = 0;
     std::uint32_t mip_count_ = 0;
-    int* live_count_ = nullptr;
+    std::span<int> live_count_;
 };
 
 struct FakeDeviceState {
@@ -160,6 +171,7 @@ struct FakeDeviceState {
     std::vector<TextureDescriptionSnapshot> texture_descriptions;
     std::vector<elf3d::graphics::DrawIndexedDescription> draws;
     std::vector<std::array<bool, elf3d::graphics::material_texture_count>> draw_texture_presence;
+    std::vector<bool> draw_environment_presence;
     std::vector<elf3d::graphics::PickingDrawDescription> picking_draws;
     std::vector<elf3d::graphics::VertexLayout> mesh_layouts;
     std::vector<std::size_t> mesh_uploaded_bytes;
@@ -189,8 +201,14 @@ class FakeDevice final : public elf3d::graphics::Device {
     void fail_cubemap_upload_at(int attempt) noexcept {
         failed_cubemap_upload_ = attempt;
     }
+    void fail_texture_upload_at(int attempt) noexcept {
+        failed_texture_upload_ = attempt;
+    }
     [[nodiscard]] int live_cubemap_count() const noexcept {
         return live_cubemap_count_;
+    }
+    [[nodiscard]] int live_texture_count() const noexcept {
+        return live_texture_count_;
     }
 
     [[nodiscard]] elf3d::GraphicsBackend backend() const noexcept override {
@@ -225,7 +243,12 @@ class FakeDevice final : public elf3d::graphics::Device {
         state_.texture_descriptions.push_back(FakeDeviceState::TextureDescriptionSnapshot{
             description.format, description.wrap_u, description.wrap_v, description.min_filter,
             description.mag_filter});
-        return std::unique_ptr<elf3d::graphics::Texture2D>{std::make_unique<FakeTexture>()};
+        if (state_.texture_upload_count == failed_texture_upload_) {
+            return elf3d::Error{elf3d::ErrorCode::graphics_initialization_failed,
+                                "Injected texture creation failure"};
+        }
+        return std::unique_ptr<elf3d::graphics::Texture2D>{
+            std::make_unique<FakeTexture>(live_texture_count_)};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::TextureCube>> create_texture_cube(
         const elf3d::graphics::TextureCubeDescription& description) noexcept override {
@@ -258,8 +281,15 @@ class FakeDevice final : public elf3d::graphics::Device {
                 description.textures.size() > index && description.textures[index] != nullptr;
         }
         state_.draw_texture_presence.push_back(texture_presence);
+        state_.draw_environment_presence.push_back(description.environment_cubemaps.size() == 2U &&
+                                                   description.environment_luts.size() == 1U &&
+                                                   description.environment_cubemaps[0] != nullptr &&
+                                                   description.environment_cubemaps[1] != nullptr &&
+                                                   description.environment_luts[0] != nullptr);
         elf3d::graphics::DrawIndexedDescription stored_description = description;
         stored_description.textures = {};
+        stored_description.environment_cubemaps = {};
+        stored_description.environment_luts = {};
         state_.draws.push_back(stored_description);
         return {};
     }
@@ -341,7 +371,9 @@ class FakeDevice final : public elf3d::graphics::Device {
     mutable double clock_milliseconds_ = 0.0;
     FakeDeviceState state_;
     int failed_cubemap_upload_ = -1;
+    int failed_texture_upload_ = -1;
     int live_cubemap_count_ = 0;
+    int live_texture_count_ = 0;
 };
 
 } // namespace elf3d::renderer::tests

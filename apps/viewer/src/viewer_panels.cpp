@@ -156,11 +156,11 @@ void draw_context_diagnostics(const ViewerFrameContext& state) {
 
 void draw_model_source_information(const SceneSession& scene) {
     const std::string source =
-        scene.is_imported() ? path_to_utf8(scene.source_path) : "Procedural cube demo";
+        scene.is_imported() ? path_to_utf8(scene.source_path) : "Empty scene";
     const std::string extension = scene.source_path.extension().string();
     ImGui::TextWrapped("Source: %s", source.c_str());
     ImGui::Text("Format: %s",
-                scene.is_imported() ? (extension == ".glb" ? "GLB" : "glTF") : "Procedural");
+                scene.is_imported() ? (extension == ".glb" ? "GLB" : "glTF") : "None");
     ImGui::Separator();
     ImGui::Text("Entities: %llu",
                 static_cast<unsigned long long>(scene.source_statistics.entities));
@@ -318,26 +318,6 @@ void build_model_information(ImGuiID dockspace_id, ViewerFrameContext& state,
     ImGui::PopStyleColor();
 }
 
-void build_demo_cube_rendering_controls(ViewerFrameContext& state, SceneSession& scene) {
-    if (scene.is_imported() || !scene.cube.has_value()) {
-        return;
-    }
-    ImGui::Separator();
-    ImGui::TextUnformatted("Demo Cube");
-    ImGui::Checkbox("Rotate cube", &state.rendering.rotate_cube);
-    const float speed_label_width =
-        ImGui::CalcTextSize("Speed").x + ImGui::GetStyle().ItemInnerSpacing.x;
-    ImGui::SetNextItemWidth(std::max(80.0F, ImGui::GetContentRegionAvail().x - speed_label_width));
-    ImGui::SliderFloat("Speed##CubeSpeed", &state.rendering.rotation_speed, 0.0F, 3.0F,
-                       "%.2f rad/s");
-    if (ImGui::Button("Reset transform")) {
-        reset_demo_cube_transform(state, scene);
-    }
-    if (color_control("Cube base color", state.rendering.cube_color)) {
-        apply_demo_cube_color(state, scene);
-    }
-}
-
 void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, SceneSession& scene,
                            const Viewport& viewport) {
     if (!state.shell.show_rendering_panel) {
@@ -351,7 +331,6 @@ void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, Scen
         const ScopedFont panel_font{state.presentation.panel_content_font};
         ImGui::TextUnformatted("Viewport");
         color_control("Clear color", state.rendering.clear_color);
-        build_demo_cube_rendering_controls(state, scene);
         build_lighting_controls(state);
         build_camera_evidence(state, scene, viewport);
         draw_performance_diagnostics(state);

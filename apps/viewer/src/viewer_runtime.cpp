@@ -123,7 +123,7 @@ struct ViewerAssembly {
         return viewport.error();
     }
     runtime.viewport = std::move(viewport).value();
-    elf3d::Result<SceneSession> scene = create_demo_scene(*runtime.engine);
+    elf3d::Result<SceneSession> scene = create_empty_scene(*runtime.engine);
     if (!scene) {
         return scene.error();
     }
@@ -297,8 +297,9 @@ void collect_viewer_shortcuts(ViewerAssembly& runtime, const InputSnapshot& inpu
 
 [[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
                                                       const CloseSceneCommand&) {
-    return execute_scene_workflow(workflow_context(runtime),
-                                  SceneReplacementRequest{SceneReplacementKind::close_to_demo, {}});
+    return execute_scene_workflow(
+        workflow_context(runtime),
+        SceneReplacementRequest{SceneReplacementKind::close_to_empty, {}});
 }
 
 [[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
@@ -497,7 +498,6 @@ void build_viewer_panels(ViewerAssembly& runtime, ApplicationUiContext& applicat
     ViewerFrameContext state = frame_context(runtime);
     SceneSession& scene = runtime.scene;
     build_rendering_panel(dockspace_id, state, scene, *runtime.viewport);
-    update_demo_cube_animation(state, scene, state.interaction.frame_delta_seconds);
     build_3d_view(ViewPanelContext{dockspace_id, state, *runtime.viewport, scene, runtime.tools,
                                    application, runtime.viewport_interaction_owner,
                                    runtime.viewport_interaction_region});
@@ -632,6 +632,7 @@ class ViewerApplication final : public Application {
     [[nodiscard]] Result<void> build_ui(ApplicationUiContext& context) noexcept override {
         try {
             build_viewer_frame_ui(runtime_, context);
+            initial_ui_frame_built_ = true;
             return {};
         } catch (const std::bad_alloc&) {
             fatal_viewer_allocation_failure();
@@ -666,12 +667,21 @@ class ViewerApplication final : public Application {
             return owner.error();
         }
         runtime_.viewport_interaction_owner = owner.value();
-        if (initial_model_path_.has_value()) {
-            static_cast<void>(execute_scene_workflow(
-                workflow_context(runtime_),
-                SceneReplacementRequest{SceneReplacementKind::open_model, *initial_model_path_}));
-        }
         return {};
+    }
+
+    void complete_deferred_startup() {
+        if (!initial_ui_frame_built_) {
+            return;
+        }
+        if (!initial_model_path_.has_value()) {
+            return;
+        }
+        std::string path = std::move(*initial_model_path_);
+        initial_model_path_.reset();
+        static_cast<void>(execute_scene_workflow(
+            workflow_context(runtime_),
+            SceneReplacementRequest{SceneReplacementKind::open_model, std::move(path)}));
     }
 
     [[nodiscard]] Result<void> validate_smoke_frame() const {
@@ -712,6 +722,7 @@ class ViewerApplication final : public Application {
         capture_frame_sample(runtime_, context);
         update_input_state(runtime_, context);
         synchronize_presentation_mode(runtime_, context);
+        complete_deferred_startup();
         advance_smoke_frame(context);
         if (runtime_.exit_requested) {
             context.request_exit();
@@ -722,6 +733,7 @@ class ViewerApplication final : public Application {
     std::filesystem::path asset_root_;
     std::optional<std::string> initial_model_path_;
     bool smoke_mode_ = false;
+    bool initial_ui_frame_built_ = false;
     std::uint32_t update_count_ = 0;
     ViewerAssembly runtime_;
 };

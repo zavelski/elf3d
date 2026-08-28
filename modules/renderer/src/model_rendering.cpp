@@ -122,13 +122,17 @@ runtime_material_description(const scene::RuntimeMaterialView& source) noexcept 
 RuntimeVertexBuffer runtime_vertex_buffer(const scene::RuntimePrimitiveView& primitive) {
     RuntimeVertexBuffer buffer;
     std::size_t stride = 6U;
-    if (primitive.vertex_layout() == scene::RuntimeVertexLayout::position_normal_texcoord) {
+    if (primitive.vertex_layout() == scene::RuntimeVertexLayout::textured) {
         buffer.layout = graphics::VertexLayout::position_normal_float3_texcoord_float2;
         stride = 8U;
     } else if (primitive.vertex_layout() == scene::RuntimeVertexLayout::full) {
         buffer.layout =
             graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4;
         stride = 14U;
+    } else if (primitive.vertex_layout() == scene::RuntimeVertexLayout::tangent) {
+        buffer.layout = graphics::VertexLayout::
+            position_normal_float3_texcoord2_float2_color_float4_tangent_float4;
+        stride = 18U;
     }
     buffer.vertex_count = static_cast<std::uint32_t>(primitive.vertex_count());
     buffer.values.resize(primitive.vertex_count() * stride);
@@ -147,7 +151,7 @@ RuntimeVertexBuffer runtime_vertex_buffer(const scene::RuntimePrimitiveView& pri
             buffer.values[base + 6U] = texcoord.x;
             buffer.values[base + 7U] = texcoord.y;
         }
-        if (stride == 14U) {
+        if (stride >= 14U) {
             const Float2 texcoord = primitive.texcoord1(index);
             const Color4 color = primitive.color(index);
             buffer.values[base + 8U] = texcoord.x;
@@ -156,6 +160,13 @@ RuntimeVertexBuffer runtime_vertex_buffer(const scene::RuntimePrimitiveView& pri
             buffer.values[base + 11U] = color.green;
             buffer.values[base + 12U] = color.blue;
             buffer.values[base + 13U] = color.alpha;
+        }
+        if (stride == 18U) {
+            const Float4 tangent = primitive.tangent(index);
+            buffer.values[base + 14U] = tangent.x;
+            buffer.values[base + 15U] = tangent.y;
+            buffer.values[base + 16U] = tangent.z;
+            buffer.values[base + 17U] = tangent.w;
         }
     }
     return buffer;

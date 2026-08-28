@@ -82,8 +82,10 @@ void verify_compile_time_contracts() noexcept {
 [[nodiscard]] bool has_expected_navigation_defaults() noexcept {
     const elf3d::TextureHandle texture;
     const elf3d::NavigationInput input;
+    const elf3d::OrbitNavigationSettings settings;
     return !texture.is_valid() && !input.pointer_hovered && !input.region_focused &&
-           !input.orbit_down && !input.pan_down && !input.zoom_down && input.wheel_delta == 0.0F;
+           !input.orbit_down && !input.pan_down && !input.zoom_down && input.wheel_delta == 0.0F &&
+           settings.orbit_sensitivity == 0.0025F;
 }
 
 [[nodiscard]] bool has_expected_rendering_defaults() noexcept {
@@ -92,9 +94,8 @@ void verify_compile_time_contracts() noexcept {
     const elf3d::DisplayTransform display;
     return lighting.direction == elf3d::Float3{-0.5F, -1.0F, -0.3F} &&
            lighting.diffuse_intensity == 2.0F && lighting.ambient_intensity == 0.0F &&
-           environment.intensity == 1.0F && environment.rotation_radians == 0.0F &&
-           display.exposure_ev == 0.0F &&
-           display.tone_mapping == elf3d::ToneMappingMode::pbr_neutral;
+           environment.intensity == 2.0F && environment.rotation_radians == 0.0F &&
+           display.exposure_ev == 0.0F && display.tone_mapping == elf3d::ToneMappingMode::standard;
 }
 
 [[nodiscard]] bool has_expected_scene_defaults() noexcept {

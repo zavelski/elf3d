@@ -312,6 +312,12 @@ Color4 RuntimePrimitiveView::color(std::size_t index) const noexcept {
     return compatibility_vertices_.first(index + 1U).back().color;
 }
 
+Float4 RuntimePrimitiveView::tangent(std::size_t index) const noexcept {
+    ELF3D_ASSERT(index < vertex_count());
+    return document_tangents_.empty() ? Float4{1.0F, 0.0F, 0.0F, 1.0F}
+                                      : document_tangents_.first(index + 1U).back();
+}
+
 RuntimeVertexLayout RuntimePrimitiveView::vertex_layout() const noexcept {
     return vertex_layout_;
 }
@@ -359,10 +365,13 @@ Storage::document_runtime_primitive(const ModelPrimitiveBinding& binding,
     result.document_texcoord0_ = primitive_result.value().data.texcoord0;
     result.document_texcoord1_ = primitive_result.value().data.texcoord1;
     result.document_colors_ = primitive_result.value().data.colors;
-    if (!result.document_texcoord1_.empty() || !result.document_colors_.empty()) {
+    result.document_tangents_ = primitive_result.value().data.tangents;
+    if (!result.document_tangents_.empty()) {
+        result.vertex_layout_ = RuntimeVertexLayout::tangent;
+    } else if (!result.document_texcoord1_.empty() || !result.document_colors_.empty()) {
         result.vertex_layout_ = RuntimeVertexLayout::full;
     } else if (!result.document_texcoord0_.empty()) {
-        result.vertex_layout_ = RuntimeVertexLayout::position_normal_texcoord;
+        result.vertex_layout_ = RuntimeVertexLayout::textured;
     }
     result.indices_ = primitive_result.value().data.indices;
     result.document_textures_ = {

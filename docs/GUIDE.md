@@ -35,9 +35,11 @@ dialog for **Open**, **Copy as path**, **Properties**, and optional editor
 commands. **Edit in EmEditor**, **Edit in Notepad**, and **Edit in Notepad++**
 are enabled only when the corresponding program is installed.
 
-Without a model, Elf3D shows its procedural demo cube. Loading is synchronous,
-so a large model can temporarily freeze the interface. If loading fails, the
-current scene remains open.
+Without a model, Elf3D starts with an empty 3D view. The initial empty viewport
+does not compile the main PBR pipeline or generate studio lighting resources,
+and a command-line model is opened only after the first interface frame.
+Loading is synchronous, so a large model can still temporarily freeze later
+frames. If loading fails, the current scene remains open.
 
 If you copy the viewer elsewhere, keep its `assets` directory beside the
 executable; it contains the UI font and toolbar icons.
@@ -265,17 +267,15 @@ The **Rendering** panel controls:
 - light direction;
 - directional light intensity;
 - environment intensity and rotation;
-- exposure and PBR Neutral tone mapping;
+- exposure and Standard, PBR Neutral, or diagnostic-none tone mapping;
 - compatibility-only legacy ambient intensity;
 - lighting reset.
 
-The default neutral studio environment provides fill and shaped reflections.
+The default energy-calibrated high-contrast studio environment provides fill
+and shaped rectangular reflections.
 Use environment intensity for ordinary brightness/reflection adjustment, and
 rotate it to reposition highlights. **Camera Evidence** copies the exact camera,
 projection, viewport, lighting, and display values for repeatable screenshots.
-
-When the demo cube is active, it also controls cube rotation, speed, transform
-reset, and base color.
 
 The **Model Information** panel is the first place to check when a model looks
 incomplete. It reports:
@@ -304,5 +304,5 @@ resource-limit diagnostics.
 - **Measurement**: cancel, clear, and settings.
 - **Help**: About Elf3D.
 
-**Close Scene** returns to the procedural cube. **Reload** is available only for
+**Close Scene** returns to an empty scene. **Reload** is available only for
 imported models.

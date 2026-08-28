@@ -97,6 +97,7 @@ struct PrimitiveDataView {
     std::span<const Float2> texcoord1;
     std::span<const Color4> colors;
     std::span<const std::uint32_t> indices;
+    std::span<const Float4> tangents;
 };
 
 struct PrimitiveData {
@@ -106,9 +107,11 @@ struct PrimitiveData {
     std::vector<Float2> texcoord1;
     std::vector<Color4> colors;
     std::vector<std::uint32_t> indices;
+    std::vector<Float4> tangents;
 
     [[nodiscard]] PrimitiveDataView view() const noexcept {
-        return PrimitiveDataView{positions, normals, texcoord0, texcoord1, colors, indices};
+        return PrimitiveDataView{positions, normals, texcoord0, texcoord1,
+                                 colors,    indices, tangents};
     }
 };
 

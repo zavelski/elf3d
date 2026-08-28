@@ -31,10 +31,6 @@ struct ViewPanelContext {
 [[nodiscard]] bool valid_box_for_commit(const ClippingBox& box) noexcept;
 [[nodiscard]] bool navigation_blocked_by_modal() noexcept;
 void set_viewport_error(ViewerFrameContext state, const Error& error);
-void reset_demo_cube_transform(ViewerFrameContext& state, SceneSession& scene);
-void update_demo_cube_animation(ViewerFrameContext& state, SceneSession& scene,
-                                double elapsed_seconds);
-void apply_demo_cube_color(ViewerFrameContext& state, SceneSession& scene);
 [[nodiscard]] RetainedViewportFrameKey viewport_frame_key(const ViewerFrameContext& state,
                                                           const SceneSession& scene,
                                                           const Viewport& viewport,

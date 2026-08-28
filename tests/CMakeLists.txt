@@ -94,6 +94,10 @@ if(TARGET glfw AND TARGET elf3d_embed)
     )
 
     target_compile_features(elf3d_opengl_render_smoke_test PRIVATE cxx_std_20)
+    target_compile_definitions(
+        elf3d_opengl_render_smoke_test
+        PRIVATE ELF3D_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    )
     target_link_libraries(
         elf3d_opengl_render_smoke_test
         PRIVATE

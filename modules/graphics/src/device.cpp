@@ -37,6 +37,12 @@ namespace {
             color.z + (compressed_peak - color.z) * weight};
 }
 
+[[nodiscard]] Float3 standard_tone_mapping(Float3 color) noexcept {
+    constexpr float calibration = 1.590579F;
+    return {1.0F - std::exp2(-calibration * color.x), 1.0F - std::exp2(-calibration * color.y),
+            1.0F - std::exp2(-calibration * color.z)};
+}
+
 } // namespace
 
 Color4 resolve_display_color(Color4 linear_color, const DisplayTransform& transform) noexcept {
@@ -46,11 +52,15 @@ Color4 resolve_display_color(Color4 linear_color, const DisplayTransform& transf
     const float multiplier = std::exp2(exposure_ev);
     Float3 color{sanitize(linear_color.red) * multiplier, sanitize(linear_color.green) * multiplier,
                  sanitize(linear_color.blue) * multiplier};
-    const ToneMappingMode mode = transform.tone_mapping == ToneMappingMode::none
-                                     ? ToneMappingMode::none
-                                     : ToneMappingMode::pbr_neutral;
+    const ToneMappingMode mode = transform.tone_mapping == ToneMappingMode::none ||
+                                         transform.tone_mapping == ToneMappingMode::pbr_neutral ||
+                                         transform.tone_mapping == ToneMappingMode::standard
+                                     ? transform.tone_mapping
+                                     : ToneMappingMode::standard;
     if (mode == ToneMappingMode::pbr_neutral) {
         color = pbr_neutral(color);
+    } else if (mode == ToneMappingMode::standard) {
+        color = standard_tone_mapping(color);
     }
     return {linear_to_srgb(color.x), linear_to_srgb(color.y), linear_to_srgb(color.z),
             std::isfinite(linear_color.alpha) ? std::clamp(linear_color.alpha, 0.0F, 1.0F) : 0.0F};

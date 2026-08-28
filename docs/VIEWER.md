@@ -12,10 +12,14 @@ The viewer accepts `.gltf` and `.glb` files through:
 - drag and drop;
 - the first command-line argument.
 
-**Reload** opens the current file again. **Close Scene** returns to the built-in
-demo scene. A failed load leaves the current scene open and displays an error.
+**Reload** opens the current file again. **Close Scene** returns to an empty
+scene. A failed load leaves the current scene open and displays an error.
 The toolbar file group contains Open followed by Save As; Reload remains in the
 File menu.
+
+At launch, the first interface frame uses an empty viewport without creating
+the main PBR pipeline or studio environment. A model passed on the command line
+is opened only after that first interface frame.
 
 Double-clicking a file in Save As chooses it as the save target and retains the
 replacement confirmation. Right-click a file in either model dialog to open it
@@ -37,7 +41,8 @@ installed EmEditor, Notepad, or Notepad++. Missing editors are shown disabled.
 | **Status Bar** | Active tool, viewport, and frame information |
 
 Use **View** to show or hide panels. **View > Reset Layout** restores the default
-docking arrangement.
+docking arrangement. The 3D viewport tab displays the loaded model filename,
+including its extension, and uses **3D View** when the scene is empty.
 
 ## Performance Diagnostics
 
@@ -48,11 +53,14 @@ and residency counters, and CSV capture. VSync, standard PBR, and 100% scale
 are the defaults. Idle 3D content reuses its last resolved texture while event
 processing, the interface, and window presentation continue normally.
 
-The Lighting subsection starts with the calibrated neutral studio profile:
-directional intensity `2.0`, environment intensity `1.0`, environment rotation
-`0 degrees`, exposure `0 EV`, PBR Neutral tone mapping, and legacy ambient
-`0.0`. Environment intensity is the normal fill/reflection control. Rotating
-the environment moves material highlights without changing geometry. **None
+The viewport clear color starts at RGBA `(213, 227, 240, 255)`.
+
+The Lighting subsection starts with the energy-calibrated high-contrast studio
+profile: directional intensity `2.0`, environment intensity `2.0`, environment
+rotation `0 degrees`, exposure `0 EV`, Standard tone mapping, and legacy
+ambient `0.0`. Environment intensity is the normal fill/reflection control. Rotating
+the environment moves material highlights without changing geometry. **PBR
+Neutral** remains available for Khronos reference comparisons, **None
 (diagnostic)** disables tone mapping, and **Reset Lighting** restores the exact
 profile above. These controls are intentionally not saved in preferences; each
 launch starts from the standard profile.

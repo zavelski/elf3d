@@ -8,6 +8,7 @@ set(ELF3D_GLFW_VERSION "3.4")
 set(ELF3D_GLFW_COMMIT_SHA "a74efa0d5628b74adc0426af4c5710e287fa7c2c")
 set(ELF3D_CGLTF_VERSION "1.15")
 set(ELF3D_CGLTF_COMMIT_SHA "360db1a95480fe102ae9c69b27c5d101167ff5ba")
+set(ELF3D_MIKKTSPACE_COMMIT_SHA "3e895b49d05ea07e4c2133156cfa94369e19e409")
 set(ELF3D_ZLIB_VERSION "1.3.1")
 set(ELF3D_LIBPNG_VERSION "1.6.58")
 set(ELF3D_LIBPNG_ARCHIVE_SHA256 "28eb403f51f0f7405249132cecfe82ea5c0ef97f1b32c5a65828814ae0d34775")
@@ -16,6 +17,7 @@ set(ELF3D_LIBJPEG_ARCHIVE_SHA256 "8b9eaa13242690ebd03e1728ab1edf97a81a78ed6e8362
 
 set(ELF3D_THIRD_PARTY_DIR "${PROJECT_SOURCE_DIR}/third_party")
 set(cgltf_SOURCE_DIR "${ELF3D_THIRD_PARTY_DIR}/cgltf")
+set(mikktspace_SOURCE_DIR "${ELF3D_THIRD_PARTY_DIR}/mikktspace")
 set(zlib_SOURCE_DIR "${ELF3D_THIRD_PARTY_DIR}/zlib")
 set(libpng_SOURCE_DIR "${ELF3D_THIRD_PARTY_DIR}/png")
 set(libjpeg_SOURCE_DIR "${ELF3D_THIRD_PARTY_DIR}/jpeg")
@@ -188,6 +190,25 @@ add_library(
     elf3d_third_party_cgltf
     STATIC
         ${PROJECT_SOURCE_DIR}/modules/gltf/src/cgltf_implementation.cpp
+)
+
+add_library(
+    elf3d_third_party_mikktspace
+    STATIC
+        ${mikktspace_SOURCE_DIR}/mikktspace.c
+        ${mikktspace_SOURCE_DIR}/mikktspace.h
+)
+target_compile_features(elf3d_third_party_mikktspace PRIVATE c_std_11)
+target_include_directories(
+    elf3d_third_party_mikktspace
+    SYSTEM PUBLIC
+        ${mikktspace_SOURCE_DIR}
+)
+set_target_properties(
+    elf3d_third_party_mikktspace
+    PROPERTIES
+        FOLDER "Third Party"
+        POSITION_INDEPENDENT_CODE ON
 )
 target_compile_features(elf3d_third_party_cgltf PRIVATE cxx_std_20)
 target_include_directories(elf3d_third_party_cgltf SYSTEM PRIVATE ${cgltf_SOURCE_DIR})

@@ -44,4 +44,9 @@ if(BUILD_TESTING)
             --metadata ${CMAKE_BINARY_DIR}/render-quality-test/material.json
             --validate-material true
     )
+    set_tests_properties(
+        elf3d.render_quality_material_pixels
+        PROPERTIES
+            SKIP_REGULAR_EXPRESSION "Hidden OpenGL 4\\.1 context initialization failed"
+    )
 endif()

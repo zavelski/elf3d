@@ -1,8 +1,7 @@
 #include "viewer_viewport.hpp"
+#include "viewer_browser.hpp"
 #include "viewer_input_math.hpp"
 
-#include "viewer_assets.hpp"
-#include "viewer_input_math.hpp"
 #include "viewer_ui.hpp"
 
 #include <elf3d/imgui/texture.h>
@@ -20,6 +19,18 @@
 #include <utility>
 
 namespace elf3d::viewer {
+
+namespace {
+
+[[nodiscard]] std::string viewport_window_title(const SceneSession& scene) {
+    if (!scene.is_imported()) {
+        return "3D View";
+    }
+
+    return file_name_label(scene.source_path) + "###3D View";
+}
+
+} // namespace
 
 elf3d::Extent2D content_extent_in_pixels(ImVec2 logical_size) noexcept {
     const ImVec2 scale = ImGui::GetIO().DisplayFramebufferScale;
@@ -191,52 +202,6 @@ viewport_input_from_framework(const ViewerFrameContext& state, const InputSnapsh
 void set_viewport_error(ViewerFrameContext state, const elf3d::Error& error) {
     state.notifications.viewport_error = error.message();
     state.rendering.framebuffer_valid = false;
-}
-
-void reset_demo_cube_transform(ViewerFrameContext& state, SceneSession& scene) {
-    state.rendering.rotation_angle = 0.0F;
-    if (!scene.cube.has_value()) {
-        return;
-    }
-
-    const elf3d::Result<void> reset_result =
-        scene.scene->set_local_transform(*scene.cube, elf3d::Transform{});
-    if (!reset_result) {
-        set_viewport_error(state, reset_result.error());
-    }
-}
-
-void update_demo_cube_animation(ViewerFrameContext& state, SceneSession& scene,
-                                double elapsed_seconds) {
-    if (scene.is_imported() || !state.rendering.rotate_cube || !scene.cube.has_value()) {
-        return;
-    }
-
-    state.rendering.rotation_angle = std::fmod(
-        state.rendering.rotation_angle +
-            state.rendering.rotation_speed * static_cast<float>(std::max(elapsed_seconds, 0.0)),
-        6.2831853072F);
-    elf3d::Transform cube_transform;
-    cube_transform.rotation = axis_angle({0.0F, 1.0F, 0.0F}, state.rendering.rotation_angle);
-    const elf3d::Result<void> transform_result =
-        scene.scene->set_local_transform(*scene.cube, cube_transform);
-    if (!transform_result) {
-        set_viewport_error(state, transform_result.error());
-    }
-}
-
-void apply_demo_cube_color(ViewerFrameContext& state, SceneSession& scene) {
-    if (scene.is_imported() || !scene.cube_material.has_value()) {
-        return;
-    }
-
-    const elf3d::Result<void> material_result = scene.scene->set_material_description(
-        *scene.cube_material, elf3d::MaterialDescription{elf3d::Color4{
-                                  state.rendering.cube_color[0], state.rendering.cube_color[1],
-                                  state.rendering.cube_color[2], state.rendering.cube_color[3]}});
-    if (!material_result) {
-        set_viewport_error(state, material_result.error());
-    }
 }
 
 bool color_control(const char* label, std::array<float, 4>& rgba) {
@@ -576,7 +541,8 @@ void build_3d_view(const ViewPanelContext& context) {
         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.94F, 0.94F, 0.94F, 1.0F});
-    const bool visible = begin_panel_window("3D View", &context.state.shell.show_3d_view,
+    const std::string window_title = viewport_window_title(context.scene);
+    const bool visible = begin_panel_window(window_title.c_str(), &context.state.shell.show_3d_view,
                                             context.state.presentation.panel_title_font, flags);
     if (visible) {
         draw_3d_view_content(context);

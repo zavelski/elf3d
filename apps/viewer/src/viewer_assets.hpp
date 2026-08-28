@@ -67,9 +67,8 @@ struct ToolbarIcons {
 
 [[nodiscard]] std::filesystem::path viewer_asset_root(int argument_count, char** arguments);
 [[nodiscard]] ToolbarIcons load_toolbar_icons(const std::filesystem::path& asset_root);
-[[nodiscard]] Result<SceneSession> create_demo_scene(Engine& engine);
+[[nodiscard]] Result<SceneSession> create_empty_scene(Engine& engine);
 [[nodiscard]] Result<SceneSession> load_model_scene(Engine& engine,
                                                     const std::filesystem::path& path);
-[[nodiscard]] Quaternion axis_angle(Float3 axis, float radians) noexcept;
 
 } // namespace elf3d::viewer

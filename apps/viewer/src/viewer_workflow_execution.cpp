@@ -57,7 +57,6 @@ void report_load_failure(ViewerNotificationState& notifications, const std::stri
         context.tools.clear_scene(context.scene.scene->id());
         context.scene = std::move(result).value();
         remember_model_directory(context.preferences, context.scene.source_path);
-        context.rendering.rotation_angle = 0.0F;
         context.rendering.statistics = {};
         context.hierarchy.last_revealed_selection.reset();
         return SceneReplacementOutcome{true, std::nullopt};
@@ -73,10 +72,11 @@ void report_load_failure(ViewerNotificationState& notifications, const std::stri
     }
 }
 
-[[nodiscard]] SceneReplacementOutcome replace_with_demo(const ViewerWorkflowContext& context) {
-    Result<SceneSession> replacement = create_demo_scene(context.engine);
+[[nodiscard]] SceneReplacementOutcome
+replace_with_empty_scene(const ViewerWorkflowContext& context) {
+    Result<SceneSession> replacement = create_empty_scene(context.engine);
     if (!replacement) {
-        report_load_failure(context.notifications, "Procedural cube demo", replacement.error());
+        report_load_failure(context.notifications, "Empty scene", replacement.error());
         return SceneReplacementOutcome{false, replacement.error()};
     }
     context.viewport.cancel_interaction();
@@ -98,9 +98,8 @@ perform_scene_replacement(const ViewerWorkflowContext& context,
     case SceneReplacementKind::dropped_file:
     case SceneReplacementKind::reload_model:
         return load_model(context, request.source_path);
-    case SceneReplacementKind::close_to_demo:
-    case SceneReplacementKind::create_demo:
-        return replace_with_demo(context);
+    case SceneReplacementKind::close_to_empty:
+        return replace_with_empty_scene(context);
     }
     return SceneReplacementOutcome{
         false, Error{ErrorCode::invalid_argument, "The scene workflow request is invalid"}};

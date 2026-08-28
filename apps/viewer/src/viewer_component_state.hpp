@@ -67,14 +67,10 @@ struct ViewerRenderingState {
     Extent2D view_dimensions;
     Extent2D render_target_dimensions;
     bool framebuffer_valid = false;
-    std::array<float, 4> clear_color{1.0F, 1.0F, 1.0F, 1.0F};
-    std::array<float, 4> cube_color{0.72F, 0.32F, 0.12F, 1.0F};
+    std::array<float, 4> clear_color{213.0F / 255.0F, 227.0F / 255.0F, 240.0F / 255.0F, 1.0F};
     BasicLighting lighting;
     EnvironmentLighting environment_lighting;
     DisplayTransform display_transform;
-    bool rotate_cube = true;
-    float rotation_speed = 0.8F;
-    float rotation_angle = 0.0F;
     RenderStatistics statistics;
     RenderShadingMode shading_mode = RenderShadingMode::standard;
     int diagnostic_render_scale_percent = 100;

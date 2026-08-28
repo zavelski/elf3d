@@ -25,10 +25,11 @@ struct BasicLighting {
 enum class ToneMappingMode : std::uint8_t {
     none,
     pbr_neutral,
+    standard,
 };
 
 struct EnvironmentLighting {
-    float intensity = 1.0F;
+    float intensity = 2.0F;
     float rotation_radians = 0.0F;
 
     bool operator==(const EnvironmentLighting&) const = default;
@@ -36,7 +37,7 @@ struct EnvironmentLighting {
 
 struct DisplayTransform {
     float exposure_ev = 0.0F;
-    ToneMappingMode tone_mapping = ToneMappingMode::pbr_neutral;
+    ToneMappingMode tone_mapping = ToneMappingMode::standard;
 
     bool operator==(const DisplayTransform&) const = default;
 };

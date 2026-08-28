@@ -177,6 +177,8 @@ create_textures(elf3d::Document& document, const elf3d::image::DecodedImage& dec
     primitive.normals = {{0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}};
     primitive.texcoord0 = {{0.0F, 0.0F}, {1.0F, 0.0F}, {0.0F, 1.0F}};
     primitive.indices = {0U, 1U, 2U};
+    primitive.tangents = {
+        {1.0F, 0.0F, 0.0F, 1.0F}, {1.0F, 0.0F, 0.0F, 1.0F}, {1.0F, 0.0F, 0.0F, 1.0F}};
     if (!document.create_primitive(mesh.value(), material.value(), std::move(primitive))) {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                             "Could not create exporter test primitive"};
@@ -266,12 +268,33 @@ create_textures(elf3d::Document& document, const elf3d::image::DecodedImage& dec
     const auto material = document.material_at(0U);
     const auto png_image = document.image_at(0U);
     const auto jpeg_image = document.image_at(1U);
-    if (!first_scene || !selected_scene || !material || !png_image || !jpeg_image) {
+    const auto primitive = document.primitive_at(0U);
+    if (!first_scene) {
         return false;
     }
-    return scene_selection_matches(document, first_scene.value(), selected_scene.value()) &&
-           material_matches(material.value().description) &&
-           image_sources_match(png_image.value(), jpeg_image.value(), jpeg);
+    if (!selected_scene) {
+        return false;
+    }
+    if (!material) {
+        return false;
+    }
+    if (!png_image) {
+        return false;
+    }
+    if (!jpeg_image) {
+        return false;
+    }
+    if (!primitive) {
+        return false;
+    }
+    const std::array<bool, 4> matches{
+        scene_selection_matches(document, first_scene.value(), selected_scene.value()),
+        material_matches(material.value().description),
+        image_sources_match(png_image.value(), jpeg_image.value(), jpeg),
+        primitive.value().data.tangents.size() == 3U &&
+            primitive.value().data.tangents[0] == elf3d::Float4{1.0F, 0.0F, 0.0F, 1.0F},
+    };
+    return std::all_of(matches.begin(), matches.end(), [](bool value) { return value; });
 }
 
 [[nodiscard]] bool round_trip(const std::filesystem::path& path, const elf3d::Document& document,
@@ -290,17 +313,27 @@ create_textures(elf3d::Document& document, const elf3d::image::DecodedImage& dec
                                               std::span<const std::byte> jpeg) {
     const std::filesystem::path gltf = directory / "automatic.gltf";
     const std::filesystem::path glb = directory / "automatic.glb";
-    if (!round_trip(gltf, document, jpeg) || !round_trip(glb, document, jpeg)) {
+    if (!round_trip(gltf, document, jpeg)) {
+        return false;
+    }
+    if (!round_trip(glb, document, jpeg)) {
         return false;
     }
     const auto jpeg_sidecar = read_bytes(directory / "automatic.image_1.jpg");
     const auto json = read_text(gltf);
-    return json && json->starts_with("{\n\t\"asset\": {\n") &&
-           json->find("\"componentType\": 5121") != std::string::npos &&
-           json->find("\"componentType\": 5123") != std::string::npos &&
-           std::filesystem::is_regular_file(directory / "automatic.image_0.png") &&
-           jpeg_sidecar.has_value() && same_bytes(*jpeg_sidecar, jpeg) &&
-           !std::filesystem::exists(directory / "automatic.image_0.jpg");
+    if (!json || !jpeg_sidecar) {
+        return false;
+    }
+    const std::array<bool, 7> matches{
+        json->starts_with("{\n\t\"asset\": {\n"),
+        json->find("\"TANGENT\"") != std::string::npos,
+        json->find("\"componentType\": 5121") != std::string::npos,
+        json->find("\"componentType\": 5123") != std::string::npos,
+        std::filesystem::is_regular_file(directory / "automatic.image_0.png"),
+        same_bytes(*jpeg_sidecar, jpeg),
+        !std::filesystem::exists(directory / "automatic.image_0.jpg"),
+    };
+    return std::all_of(matches.begin(), matches.end(), [](bool value) { return value; });
 }
 
 [[nodiscard]] bool absent_default_round_trip(const std::filesystem::path& path,

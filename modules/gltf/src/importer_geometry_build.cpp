@@ -45,6 +45,66 @@ enum class NormalImportOutcome : std::uint8_t {
     unusable,
 };
 
+enum class TangentImportOutcome : std::uint8_t {
+    authored,
+    missing,
+    unusable,
+};
+
+[[nodiscard]] Result<bool> normalize_tangent(Float4& tangent, std::string_view context) {
+    const float length_squared =
+        tangent.x * tangent.x + tangent.y * tangent.y + tangent.z * tangent.z;
+    const bool valid_components = std::isfinite(tangent.x) && std::isfinite(tangent.y) &&
+                                  std::isfinite(tangent.z) && std::isfinite(tangent.w);
+    if (!valid_components || (tangent.w != -1.0F && tangent.w != 1.0F)) {
+        return Error{ErrorCode::invalid_accessor,
+                     std::string{context} + " contains an unusable TANGENT value"};
+    }
+    if (!std::isfinite(length_squared) || length_squared <= 0.000000000001F) {
+        return false;
+    }
+    const float inverse_length = 1.0F / std::sqrt(length_squared);
+    tangent.x *= inverse_length;
+    tangent.y *= inverse_length;
+    tangent.z *= inverse_length;
+    return true;
+}
+
+[[nodiscard]] Result<TangentImportOutcome> import_authored_tangents(PrimitiveBuildState& state) {
+    const cgltf_accessor* accessor =
+        cgltf_find_accessor(&state.source, cgltf_attribute_type_tangent, 0);
+    if (accessor == nullptr) {
+        return TangentImportOutcome::missing;
+    }
+    if (accessor->count != state.position_accessor->count ||
+        accessor->component_type != cgltf_component_type_r_32f) {
+        return Error{ErrorCode::invalid_accessor,
+                     state.context +
+                         " TANGENT must be a floating-point VEC4 matching POSITION count"};
+    }
+    Result<std::vector<float>> tangents = unpack_float4(*accessor, state.context + " TANGENT");
+    if (!tangents) {
+        return tangents.error();
+    }
+    std::vector<Float4> imported(state.vertex_count);
+    bool usable = true;
+    for (std::size_t index = 0; index < state.vertex_count; ++index) {
+        Float4 tangent{tangents.value()[index * 4U], tangents.value()[index * 4U + 1U],
+                       tangents.value()[index * 4U + 2U], tangents.value()[index * 4U + 3U]};
+        const Result<bool> normalized = normalize_tangent(tangent, state.context);
+        if (!normalized) {
+            return normalized.error();
+        }
+        usable = usable && normalized.value();
+        imported[index] = tangent;
+    }
+    if (!usable) {
+        return TangentImportOutcome::unusable;
+    }
+    state.data.tangents = std::move(imported);
+    return TangentImportOutcome::authored;
+}
+
 [[nodiscard]] Result<void> import_positions(PrimitiveBuildState& state) {
     state.position_accessor = cgltf_find_accessor(&state.source, cgltf_attribute_type_position, 0);
     if (state.position_accessor == nullptr) {
@@ -237,8 +297,67 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     return generate_normal_fallback(state, outcome.value());
 }
 
+[[nodiscard]] Result<void> generate_missing_tangents(PrimitiveBuildState& state) {
+    if (!state.data.tangents.empty() || state.source.material == nullptr ||
+        state.source.material->unlit != 0 ||
+        state.source.material->normal_texture.texture == nullptr) {
+        return {};
+    }
+    Result<TextureMapping> mapping =
+        texture_mapping(state.source.material->normal_texture, state.context + " normal texture");
+    if (!mapping) {
+        return mapping.error();
+    }
+    if (!state.available_texcoords[mapping.value().texcoord_set]) {
+        add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::geometry,
+                       ModelLoadDiagnosticCode::normal_map_fallback,
+                       "The normal texture UV set is unavailable; the texture is preserved but "
+                       "geometric normals will be used",
+                       state.context);
+        return {};
+    }
+    Result<bool> generated = generate_mikktspace_tangents(state.data, mapping.value().texcoord_set);
+    if (!generated) {
+        return generated.error();
+    }
+    if (!generated.value()) {
+        add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::geometry,
+                       ModelLoadDiagnosticCode::normal_map_fallback,
+                       "Could not generate a usable MikkTSpace tangent basis; the normal texture "
+                       "is preserved but geometric normals will be used",
+                       state.context);
+    }
+    return {};
+}
+
+[[nodiscard]] Result<void> import_tangents(PrimitiveBuildState& state) {
+    const Result<TangentImportOutcome> authored = import_authored_tangents(state);
+    if (!authored) {
+        return authored.error();
+    }
+    if (authored.value() == TangentImportOutcome::unusable) {
+        add_diagnostic(
+            state.import_state.diagnostics, ModelLoadDiagnosticCategory::geometry,
+            ModelLoadDiagnosticCode::normal_map_fallback,
+            "Ignored unusable authored tangents; MikkTSpace replacements are generated when "
+            "the material requires tangent-space normal mapping",
+            state.context);
+    }
+    state.data.indices = state.indices;
+    return generate_missing_tangents(state);
+}
+
+[[nodiscard]] Result<void> account_converted_vertices(PrimitiveBuildState& state) {
+    if (!checked_add(state.import_state.converted_vertices,
+                     static_cast<std::uint64_t>(state.data.positions.size()),
+                     maximum_imported_vertices)) {
+        return Error{ErrorCode::resource_limit_exceeded,
+                     "MikkTSpace vertex splitting exceeds the document vertex limit"};
+    }
+    return {};
+}
+
 [[nodiscard]] Result<void> store_primitive(PrimitiveBuildState& state, ImportedMesh& result) {
-    state.data.indices = std::move(state.indices);
     if (!result.mesh.has_value()) {
         const Result<MeshId> created = state.import_state.builder.create_mesh(
             state.mesh.name != nullptr ? std::string_view{state.mesh.name} : std::string_view{});
@@ -290,6 +409,12 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     }
     if (const Result<void> normals = import_normals(state); !normals) {
         return normals.error();
+    }
+    if (const Result<void> tangents = import_tangents(state); !tangents) {
+        return tangents.error();
+    }
+    if (const Result<void> vertices = account_converted_vertices(state); !vertices) {
+        return vertices.error();
     }
     return store_primitive(state, result);
 }

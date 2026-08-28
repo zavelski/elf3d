@@ -42,6 +42,16 @@ namespace {
            nearly_equal(encoded_once.red, 0.735357F, 0.0001F);
 }
 
+[[nodiscard]] bool standard_preserves_dark_material_detail() noexcept {
+    const elf3d::Color4 dark_linear{0.02F, 0.02F, 0.02F, 1.0F};
+    const elf3d::Color4 standard =
+        elf3d::graphics::resolve_display_color(dark_linear, elf3d::DisplayTransform{});
+    elf3d::DisplayTransform neutral;
+    neutral.tone_mapping = elf3d::ToneMappingMode::pbr_neutral;
+    const elf3d::Color4 pbr_neutral = elf3d::graphics::resolve_display_color(dark_linear, neutral);
+    return standard.red > pbr_neutral.red * 3.0F && standard.red < 0.2F;
+}
+
 [[nodiscard]] bool sanitization_invariants() noexcept {
     const elf3d::Color4 invalid = elf3d::graphics::resolve_display_color(
         {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -1.0F,
@@ -53,7 +63,8 @@ namespace {
 } // namespace
 
 int elf3d_display_transform_test() {
-    return neutral_invariants() && exposure_and_transfer_invariants() && sanitization_invariants()
+    return neutral_invariants() && exposure_and_transfer_invariants() &&
+                   standard_preserves_dark_material_detail() && sanitization_invariants()
                ? 0
                : 1;
 }

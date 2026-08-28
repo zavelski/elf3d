@@ -21,6 +21,15 @@ struct Float3 {
     bool operator==(const Float3&) const = default;
 };
 
+struct Float4 {
+    float x = 0.0F;
+    float y = 0.0F;
+    float z = 0.0F;
+    float w = 0.0F;
+
+    bool operator==(const Float4&) const = default;
+};
+
 struct Quaternion {
     float x = 0.0F;
     float y = 0.0F;

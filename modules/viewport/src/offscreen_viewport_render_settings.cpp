@@ -58,7 +58,7 @@ BasicLighting OffscreenViewport::basic_lighting() const noexcept {
 void OffscreenViewport::set_environment_lighting(const EnvironmentLighting& lighting) noexcept {
     EnvironmentLighting sanitized;
     sanitized.intensity =
-        std::isfinite(lighting.intensity) ? std::clamp(lighting.intensity, 0.0F, 8.0F) : 1.0F;
+        std::isfinite(lighting.intensity) ? std::clamp(lighting.intensity, 0.0F, 8.0F) : 2.0F;
     if (std::isfinite(lighting.rotation_radians)) {
         constexpr float revolution = 6.28318530718F;
         sanitized.rotation_radians = std::remainder(lighting.rotation_radians, revolution);
@@ -79,9 +79,10 @@ void OffscreenViewport::set_display_transform(const DisplayTransform& transform)
                                 ? std::clamp(transform.exposure_ev, -8.0F, 8.0F)
                                 : 0.0F;
     sanitized.tone_mapping = transform.tone_mapping == ToneMappingMode::none ||
-                                     transform.tone_mapping == ToneMappingMode::pbr_neutral
+                                     transform.tone_mapping == ToneMappingMode::pbr_neutral ||
+                                     transform.tone_mapping == ToneMappingMode::standard
                                  ? transform.tone_mapping
-                                 : ToneMappingMode::pbr_neutral;
+                                 : ToneMappingMode::standard;
     if (sanitized != display_transform_) {
         display_transform_ = sanitized;
         if (render_target_ != nullptr) {

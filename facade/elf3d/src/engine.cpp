@@ -23,6 +23,7 @@ import elf.scene;
 import elf.viewport;
 
 #include "engine_access.h"
+#include "studio_environment_resource.h"
 #include "viewport_impl.h"
 
 namespace elf3d {
@@ -254,7 +255,8 @@ detail::EngineAccess::create(const detail::EngineCreateOptions& options) noexcep
 
         auto impl = std::make_unique<Engine::Impl>();
         Result<std::unique_ptr<renderer::Renderer>> renderer_result =
-            renderer::Renderer::create(std::move(device_result).value(), impl->engine_token);
+            renderer::Renderer::create(std::move(device_result).value(), impl->engine_token,
+                                       detail::create_studio_environment_source());
         if (!renderer_result) {
             return renderer_result.error();
         }

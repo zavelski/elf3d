@@ -12,6 +12,7 @@
 *.ico binary
 *.ttf binary
 *.glb binary
+*.ibl binary
 *.zip binary
 *.7z binary
 *.tar binary

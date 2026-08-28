@@ -52,9 +52,18 @@ targets; it does not link the viewer or use private implementation includes.
 
 The context-dependent `elf3d.render_quality_material_pixels` test renders a
 generated white/dielectric/polished-metal/rough-metal scene and enforces the
-neutral studio's luminance, clipping, and highlight criteria. The optional
+high-contrast studio's luminance, clipping, and shaped-highlight criteria. It
+also renders the environment-only scene at `0` and `+10` degrees and requires
+measurable polished- and rough-metal highlight motion without excessive
+diffuse motion.
+The optional
 `elf3d_render_quality_capture` executable can write a resolved PNG plus
 path-free JSON camera/settings metadata for local comparisons.
+
+`elf3d.studio_environment_bake` runs the offline baker in `--verify` mode. It
+requires byte-for-byte equality with the checked-in v3 resource; the baker also
+guards the v1-calibrated source energy, fixed resource size, and unchanged BRDF
+LUT bytes.
 
 The model-only suite stops before renderer, backend OpenGL, viewport, Standard
 Application Framework, embedding integration, ImGui, GLFW, and viewer targets.

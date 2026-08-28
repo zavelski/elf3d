@@ -58,6 +58,7 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/modules/image/tests/image_decoder_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_exporter_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_importer_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_tangent_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_metadata_round_trip_test.cpp
 )
 elf3d_configure_group_test(elf3d_import_tests)
@@ -84,6 +85,7 @@ target_link_libraries(
 add_test(NAME elf3d.image_decode COMMAND elf3d_import_tests --case image_decode)
 add_test(NAME elf3d.model_gltf_export COMMAND elf3d_import_tests --case model_gltf_export)
 add_test(NAME elf3d.model_gltf_import COMMAND elf3d_import_tests --case model_gltf_import)
+add_test(NAME elf3d.model_gltf_tangent COMMAND elf3d_import_tests --case model_gltf_tangent)
 add_test(NAME elf3d.model_gltf_metadata COMMAND elf3d_import_tests --case gltf_metadata)
 
 add_executable(
@@ -91,6 +93,7 @@ add_executable(
         model_test_driver.cpp
         ${PROJECT_SOURCE_DIR}/modules/model/tests/model_document_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/model/tests/model_processing_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/model/tests/model_tangent_test.cpp
 )
 elf3d_configure_group_test(elf3d_model_tests)
 elf3d_link_object_libraries(
@@ -105,6 +108,7 @@ target_include_directories(
 )
 add_test(NAME elf3d.model_document COMMAND elf3d_model_tests --case model_document)
 add_test(NAME elf3d.model_processing COMMAND elf3d_model_tests --case model_processing)
+add_test(NAME elf3d.model_tangent COMMAND elf3d_model_tests --case model_tangent)
 
 if(NOT ELF3D_BUILD_ENGINE)
     add_test(
@@ -150,6 +154,7 @@ add_executable(
     elf3d_view_tests
         view_test_driver.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_environment_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_layout_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_frustum_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_document_test.cpp

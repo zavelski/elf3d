@@ -141,31 +141,43 @@ void apply_clipping_description(const clipping::ClippingFilter& filter,
     }
 }
 
-Result<std::unique_ptr<Renderer>> Renderer::create(std::unique_ptr<graphics::Device> device,
-                                                   std::uint64_t engine_token) {
-    if (!device || engine_token == 0) {
+Result<std::unique_ptr<Renderer>>
+Renderer::create(std::unique_ptr<graphics::Device> device, std::uint64_t engine_token,
+                 std::unique_ptr<StudioEnvironmentSource> environment_source) {
+    if (!device || engine_token == 0 || !environment_source) {
         return Error{ErrorCode::graphics_shutdown,
-                     "Renderer creation requires an active graphics device and engine identity"};
+                     "Renderer creation requires a graphics device, engine identity, and studio "
+                     "environment source"};
     }
 
-    const graphics::GraphicsPipelineDescription description{
-        main_vertex_shader_source(), main_fragment_shader_source(),
-        graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4};
-    Result<std::unique_ptr<graphics::GraphicsPipeline>> pipeline_result =
-        device->create_graphics_pipeline(description);
-    if (!pipeline_result) {
-        return pipeline_result.error();
-    }
-    Resources resources{std::move(device), engine_token, std::move(pipeline_result).value(),
+    Resources resources{std::move(device), engine_token, std::move(environment_source),
                         std::make_unique<CacheState>()};
     return std::make_unique<Renderer>(ConstructionKey{}, std::move(resources));
 }
 
 Renderer::Renderer(ConstructionKey, Resources resources) noexcept
     : device_(std::move(resources.device)), engine_token_(resources.engine_token),
-      pipeline_(std::move(resources.pipeline)), cache_(std::move(resources.cache)) {}
+      environment_source_(std::move(resources.environment_source)),
+      cache_(std::move(resources.cache)) {}
 
 Renderer::~Renderer() = default;
+
+Result<bool> Renderer::ensure_pipeline_resources() {
+    if (pipeline_ != nullptr) {
+        return false;
+    }
+    const graphics::GraphicsPipelineDescription description{
+        main_vertex_shader_source(), main_fragment_shader_source(),
+        graphics::VertexLayout::
+            position_normal_float3_texcoord2_float2_color_float4_tangent_float4};
+    Result<std::unique_ptr<graphics::GraphicsPipeline>> pipeline_result =
+        device_->create_graphics_pipeline(description);
+    if (!pipeline_result) {
+        return pipeline_result.error();
+    }
+    pipeline_ = std::move(pipeline_result).value();
+    return true;
+}
 
 Result<bool> Renderer::prepare_environment(const RenderRequest& request) {
     if (request.options.shading_mode != RenderShadingMode::standard) {
@@ -201,7 +213,7 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
         return Error{ErrorCode::foreign_engine_object,
                      "The scene was created by a different Elf3D engine instance"};
     }
-    if (!device_ || !pipeline_) {
+    if (!device_ || !cache_) {
         return Error{ErrorCode::graphics_shutdown, "Renderer graphics resources are unavailable"};
     }
     const double total_begin = device_->monotonic_time_milliseconds();
@@ -216,30 +228,37 @@ Result<RenderStatistics> Renderer::render(const scene::Storage& scene_storage,
         return statistics;
     }
 
-    return execute_render_pass(scene_storage, target, request,
-                               {visibility, clipping_filter, total_begin});
+    return execute_render_pass(
+        scene_storage, target, request,
+        {std::span{&visibility, 1U}, std::span{&clipping_filter, 1U}, total_begin});
 }
 
 Result<RenderStatistics> Renderer::execute_render_pass(const scene::Storage& scene_storage,
                                                        graphics::RenderTarget& target,
                                                        const RenderRequest& request,
                                                        const RenderExecutionContext& execution) {
-    Result<bool> environment_result = prepare_environment(request);
-    if (!environment_result) {
-        return environment_result.error();
-    }
-    const bool environment_prepared = environment_result.value();
-
     const double list_begin = device_->monotonic_time_milliseconds();
     Result<RenderList> list_result =
-        build_render_list(scene_storage, request.camera, target.extent(), execution.visibility,
-                          execution.clipping_filter);
+        build_render_list(scene_storage, request.camera, target.extent(),
+                          execution.visibility.front(), execution.clipping_filter.front());
     if (!list_result) {
         return list_result.error();
     }
 
     const double list_end = device_->monotonic_time_milliseconds();
-    RenderPass pass{request, std::move(list_result).value(), execution.clipping_filter, {}};
+    RenderPass pass{request, std::move(list_result).value(), execution.clipping_filter.front(), {}};
+    bool environment_prepared = false;
+    if (!pass.list.items.empty()) {
+        const Result<bool> pipeline_result = ensure_pipeline_resources();
+        if (!pipeline_result) {
+            return pipeline_result.error();
+        }
+        Result<bool> environment_result = prepare_environment(request);
+        if (!environment_result) {
+            return environment_result.error();
+        }
+        environment_prepared = environment_result.value();
+    }
     pass.statistics.cpu_render_list_milliseconds = list_end - list_begin;
     pass.statistics.candidate_primitives = pass.list.candidate_primitives;
     pass.statistics.visible_primitives = static_cast<std::uint64_t>(pass.list.items.size());
@@ -250,9 +269,11 @@ Result<RenderStatistics> Renderer::execute_render_pass(const scene::Storage& sce
     pass.statistics.clipping_bounds_rejected = pass.list.clipping_bounds_rejected;
     pass.statistics.clipping_bounds_intersecting = pass.list.clipping_bounds_intersecting;
     const double submission_begin = device_->monotonic_time_milliseconds();
-    const Result<void> items_result = draw_render_items(scene_storage, target, pass);
-    if (!items_result) {
-        return items_result.error();
+    if (!pass.list.items.empty()) {
+        const Result<void> items_result = draw_render_items(scene_storage, target, pass);
+        if (!items_result) {
+            return items_result.error();
+        }
     }
     const Result<void> overlay_result = draw_render_overlay(target, pass);
     if (!overlay_result) {
@@ -294,6 +315,12 @@ Result<void> Renderer::draw_render_items(const scene::Storage& scene,
     std::vector<graphics::StaticMesh*> meshes;
     std::vector<graphics::DrawIndexedDescription> descriptions;
     std::vector<std::array<graphics::Texture2D*, graphics::material_texture_count>> texture_sets;
+    std::array<graphics::TextureCube*, 2> environment_cubemaps{};
+    std::array<graphics::Texture2D*, 1> environment_luts{};
+    if (environment_ != nullptr) {
+        environment_cubemaps = {environment_->diffuse.get(), environment_->specular.get()};
+        environment_luts = {environment_->brdf_lut.get()};
+    }
     meshes.reserve(prepared.size());
     descriptions.reserve(prepared.size());
     texture_sets.reserve(prepared.size());
@@ -303,13 +330,14 @@ Result<void> Renderer::draw_render_items(const scene::Storage& scene,
         texture_sets.emplace_back();
         auto& textures = texture_sets.back();
         for (std::size_t index = 0; index < textures.size(); ++index) {
-            if (packet.has_textures[index]) {
-                textures[index] =
-                    &texture(scene.id(), packet.document_images[index], packet.image_indices[index],
-                             packet.texture_indices[index]);
+            if (draw.has_textures[index]) {
+                textures[index] = &texture(scene.id(), draw.document_images[index],
+                                           draw.image_indices[index], draw.texture_indices[index]);
             }
         }
         draw.description.textures = textures;
+        draw.description.environment_cubemaps = environment_cubemaps;
+        draw.description.environment_luts = environment_luts;
         meshes.push_back(&mesh(scene.id(), packet.document_mesh, packet.mesh_index));
         descriptions.push_back(draw.description);
     }
@@ -341,10 +369,59 @@ Result<void> Renderer::prepare_render_item(const scene::Storage& scene, const Re
     PreparedDraw& prepared_draw = prepared.back();
     prepared_draw.packet_index = packet_result.value();
     prepared_draw.material_identity = item.material_identity;
-    for (const bool has_texture : packet.has_textures) {
+    prepared_draw.texture_indices = packet.texture_indices;
+    prepared_draw.image_indices = packet.image_indices;
+    prepared_draw.document_images = packet.document_images;
+    prepared_draw.has_textures = packet.has_textures;
+    const Result<void> textures =
+        prepare_render_item_textures(scene, item, packet, pass, prepared_draw);
+    if (!textures) {
+        return textures.error();
+    }
+    for (const bool has_texture : prepared_draw.has_textures) {
         pass.statistics.texture_bindings += static_cast<std::uint64_t>(has_texture);
     }
-    graphics::DrawIndexedDescription& draw = prepared_draw.description;
+    configure_draw_description(packet, item, pass, prepared_draw);
+
+    ++pass.statistics.draw_calls;
+    const graphics::StaticMesh& gpu_mesh =
+        mesh(scene.id(), packet.document_mesh, packet.mesh_index);
+    pass.statistics.vertices += gpu_mesh.vertex_count();
+    pass.statistics.indices += gpu_mesh.index_count();
+    pass.statistics.triangles += gpu_mesh.index_count() / 3;
+    return {};
+}
+
+Result<void> Renderer::prepare_render_item_textures(const scene::Storage& scene,
+                                                    const RenderItem& item,
+                                                    const DrawPacket& packet, RenderPass& pass,
+                                                    PreparedDraw& prepared) {
+    const bool standard_lit =
+        !packet.material.unlit && pass.request.options.shading_mode == RenderShadingMode::standard;
+    if (!standard_lit) {
+        return {};
+    }
+    const Result<scene::RuntimePrimitiveView> primitive =
+        scene.runtime_primitive(item.entity, item.primitive_index);
+    if (!primitive) {
+        return primitive.error();
+    }
+    DrawPacket texture_packet = packet;
+    const Result<void> textures = prepare_draw_textures(scene, primitive.value(), texture_packet,
+                                                        pass.statistics.gpu_texture_uploads, true);
+    if (!textures) {
+        return textures.error();
+    }
+    prepared.texture_indices = texture_packet.texture_indices;
+    prepared.image_indices = texture_packet.image_indices;
+    prepared.document_images = texture_packet.document_images;
+    prepared.has_textures = texture_packet.has_textures;
+    return {};
+}
+
+void Renderer::configure_draw_description(const DrawPacket& packet, const RenderItem& item,
+                                          const RenderPass& pass, PreparedDraw& prepared) const {
+    graphics::DrawIndexedDescription& draw = prepared.description;
     draw.model_matrix = item.model_matrix.elements;
     draw.view_matrix = pass.list.view_matrix.elements;
     draw.projection_matrix = pass.list.projection_matrix.elements;
@@ -357,13 +434,9 @@ Result<void> Renderer::prepare_render_item(const scene::Storage& scene, const Re
     draw.diffuse_intensity = pass.request.lighting.diffuse_intensity;
     draw.environment_intensity = pass.request.environment_lighting.intensity;
     draw.environment_rotation_radians = pass.request.environment_lighting.rotation_radians;
-    if (environment_ != nullptr) {
-        draw.diffuse_environment = environment_->diffuse.get();
-        draw.specular_environment = environment_->specular.get();
-        draw.environment_brdf_lut = environment_->brdf_lut.get();
-    }
     draw.metallic_factor = packet.material.metallic_factor;
     draw.roughness_factor = packet.material.roughness_factor;
+    draw.normal_scale = packet.material.normal_scale;
     draw.emissive_factor = packet.material.emissive_factor;
     draw.occlusion_strength = packet.material.occlusion_strength;
     draw.ior = packet.material.ior;
@@ -374,10 +447,10 @@ Result<void> Renderer::prepare_render_item(const scene::Storage& scene, const Re
         draw.highlight_color = highlight->color;
         draw.highlight_strength = std::clamp(highlight->strength, 0.0F, 1.0F);
     }
-    draw.texture_mappings = {packet.material.base_color_texture_mapping,
-                             packet.material.metallic_roughness_texture_mapping,
-                             packet.material.occlusion_texture_mapping,
-                             packet.material.emissive_texture_mapping};
+    draw.texture_mappings = {
+        packet.material.base_color_texture_mapping,
+        packet.material.metallic_roughness_texture_mapping, packet.material.normal_texture_mapping,
+        packet.material.occlusion_texture_mapping, packet.material.emissive_texture_mapping};
     draw.alpha_mode = packet.material.alpha_mode;
     draw.alpha_cutoff = packet.material.alpha_cutoff;
     draw.unlit =
@@ -385,14 +458,6 @@ Result<void> Renderer::prepare_render_item(const scene::Storage& scene, const Re
     draw.double_sided = packet.material.double_sided;
     draw.front_face_clockwise = item.orientation_reversed;
     apply_clipping_description(pass.clipping_filter, draw);
-
-    ++pass.statistics.draw_calls;
-    const graphics::StaticMesh& gpu_mesh =
-        mesh(scene.id(), packet.document_mesh, packet.mesh_index);
-    pass.statistics.vertices += gpu_mesh.vertex_count();
-    pass.statistics.indices += gpu_mesh.index_count();
-    pass.statistics.triangles += gpu_mesh.index_count() / 3;
-    return {};
 }
 
 void Renderer::synchronize_draw_packet_cache(const scene::Storage& scene) {
@@ -439,9 +504,8 @@ Result<std::size_t> Renderer::cached_draw_packet_index(const scene::Storage& sce
     packet.mesh_index = mesh_index.value();
     packet.document_mesh = primitive.value().document_primitive.is_valid();
     packet.material = runtime_material_description(primitive.value().material_view);
-    std::uint64_t ignored_texture_bindings = 0;
-    const Result<void> textures = prepare_draw_textures(
-        scene, primitive.value(), packet, statistics.gpu_texture_uploads, ignored_texture_bindings);
+    const Result<void> textures = prepare_draw_textures(scene, primitive.value(), packet,
+                                                        statistics.gpu_texture_uploads, false);
     if (!textures) {
         return textures.error();
     }
@@ -499,16 +563,23 @@ const graphics::Device& Renderer::device() const noexcept {
 Result<void> Renderer::prepare_draw_textures(const scene::Storage& scene_storage,
                                              const scene::RuntimePrimitiveView& primitive,
                                              DrawPacket& packet, std::uint64_t& upload_count,
-                                             std::uint64_t& texture_bindings) {
+                                             bool include_normal_texture) {
     constexpr std::array<scene::RuntimeMaterialTextureSlot, graphics::material_texture_count>
         texture_slots{scene::RuntimeMaterialTextureSlot::base_color,
                       scene::RuntimeMaterialTextureSlot::metallic_roughness,
+                      scene::RuntimeMaterialTextureSlot::normal,
                       scene::RuntimeMaterialTextureSlot::occlusion,
                       scene::RuntimeMaterialTextureSlot::emissive};
     constexpr std::array<TextureColorSpace, graphics::material_texture_count> texture_color_spaces{
         TextureColorSpace::srgb, TextureColorSpace::linear, TextureColorSpace::linear,
-        TextureColorSpace::srgb};
+        TextureColorSpace::linear, TextureColorSpace::srgb};
     for (std::size_t index = 0; index < texture_slots.size(); ++index) {
+        constexpr std::size_t normal_texture_index = 2U;
+        if (index == normal_texture_index &&
+            (!include_normal_texture ||
+             primitive.vertex_layout() != scene::RuntimeVertexLayout::tangent)) {
+            continue;
+        }
         if (!primitive.material_view.has_texture(texture_slots[index])) {
             continue;
         }
@@ -526,7 +597,6 @@ Result<void> Renderer::prepare_draw_textures(const scene::Storage& scene_storage
         packet.image_indices[index] = static_cast<std::size_t>(texture.value().image_identity);
         packet.document_images[index] = texture.value().document_image;
         packet.has_textures[index] = true;
-        ++texture_bindings;
     }
     return {};
 }

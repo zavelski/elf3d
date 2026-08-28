@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.10.5
+
+- Added glTF tangent-space normal mapping with authored-tangent import/export,
+  deterministic MikkTSpace generation, UV transforms, normal scale, and
+  mirrored-transform handling.
+- Added the embedded, lazily uploaded studio IBL v3 with shaped softbox
+  reflections, calibrated scene brightness, and Standard tone mapping as the
+  default display path.
+- Improved glTF compatibility by regenerating unusable zero-length tangents
+  and approximating required `KHR_materials_pbrSpecularGlossiness` materials
+  through the supported metallic-roughness path.
+- Made viewer startup present an empty interface before deferred model loading,
+  removed the procedural demo cube, set the default clear color to
+  `(213, 227, 240, 255)`, and halved the default mouse-orbit sensitivity.
+- Made the 3D viewport tab display the loaded model filename, including its
+  extension.
+
 ## 0.10.3
 
 - Added a calibrated renderer-owned neutral studio IBL profile with diffuse

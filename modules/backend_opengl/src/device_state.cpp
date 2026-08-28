@@ -291,9 +291,9 @@ AllocationStateGuard::~AllocationStateGuard() {
 }
 
 RenderStateGuard::RenderStateGuard() noexcept {
-    constexpr std::array<GLenum, 5> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
-                                                     GL_TEXTURE3, GL_TEXTURE6};
-    constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE4, GL_TEXTURE5};
+    constexpr std::array<GLenum, 6> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
+                                                     GL_TEXTURE3, GL_TEXTURE4, GL_TEXTURE7};
+    constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE5, GL_TEXTURE6};
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer_);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_framebuffer_);
     glGetIntegerv(GL_VIEWPORT, viewport_);
@@ -338,9 +338,9 @@ RenderStateGuard::RenderStateGuard() noexcept {
 }
 
 RenderStateGuard::~RenderStateGuard() {
-    constexpr std::array<GLenum, 5> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
-                                                     GL_TEXTURE3, GL_TEXTURE6};
-    constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE4, GL_TEXTURE5};
+    constexpr std::array<GLenum, 6> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
+                                                     GL_TEXTURE3, GL_TEXTURE4, GL_TEXTURE7};
+    constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE5, GL_TEXTURE6};
     set_enabled(GL_SCISSOR_TEST, scissor_enabled_);
     set_enabled(GL_FRAMEBUFFER_SRGB, framebuffer_srgb_enabled_);
     set_enabled(GL_DEPTH_TEST, depth_test_enabled_);

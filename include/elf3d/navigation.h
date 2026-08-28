@@ -37,7 +37,7 @@ struct OrbitNavigationSettings {
     // Maximum pointer travel that remains a click rather than a navigation drag.
     float drag_threshold_pixels = 4.0F;
     // Radians applied per pointer pixel during orbit drags.
-    float orbit_sensitivity = 0.005F;
+    float orbit_sensitivity = 0.0025F;
     // Multiplier applied to screen-space pan world units per pixel.
     float pan_sensitivity = 1.0F;
     // Exponential wheel multiplier used as distance *= exp(-wheel * sensitivity).

@@ -146,6 +146,7 @@ struct ImportState {
     std::optional<SamplerId> default_sampler;
     std::optional<MaterialId> default_material;
     std::vector<ModelLoadDiagnostic>& diagnostics;
+    std::uint64_t converted_vertices = 0;
 };
 
 struct ImportedTextureView {
@@ -165,6 +166,7 @@ struct ConstructedDocument {
 };
 
 using TexcoordAvailability = std::array<bool, maximum_texture_coordinate_sets>;
+inline constexpr std::uint64_t maximum_imported_vertices = 50000000;
 
 struct PrimitiveTextureState {
     const TexcoordAvailability& available_texcoords;
@@ -210,6 +212,8 @@ void decode_image_json_strings(cgltf_data& data) noexcept;
 unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_view context);
 [[nodiscard]] Result<std::vector<float>> unpack_float2(const cgltf_accessor& accessor,
                                                        std::string_view context);
+[[nodiscard]] Result<std::vector<float>> unpack_float4(const cgltf_accessor& accessor,
+                                                       std::string_view context);
 [[nodiscard]] Result<std::vector<float>> unpack_color(const cgltf_accessor& accessor,
                                                       std::string_view context);
 [[nodiscard]] Result<TextureMapping> texture_mapping(const cgltf_texture_view& view,
@@ -232,6 +236,8 @@ material_uses_unavailable_texcoord(const cgltf_material& material,
 void generate_normals(std::span<const Float3> positions, std::vector<Float3>& normals,
                       std::span<const std::uint32_t> indices, std::uint64_t& degenerate_count,
                       std::uint64_t& fallback_count);
+[[nodiscard]] Result<bool> generate_mikktspace_tangents(PrimitiveData& data,
+                                                        std::uint32_t texcoord_set);
 [[nodiscard]] Result<MaterialId> material_for(ImportState& state, const cgltf_material* material,
                                               const TexcoordAvailability& available_texcoords);
 [[nodiscard]] Result<ImportedMesh> import_mesh(ImportState& state, const cgltf_mesh& mesh,

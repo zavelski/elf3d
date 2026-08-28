@@ -26,6 +26,7 @@ import elf.renderer;
 import elf.scene;
 import elf.viewport;
 
+#include "../../renderer/tests/studio_environment_test_source.h"
 #include "offscreen_viewport_test_support.h"
 
 namespace {
@@ -57,7 +58,8 @@ struct ViewportContext {
 
 [[nodiscard]] int prepare_viewport_context(ViewportContext& context) {
     auto owned_device = std::make_unique<FakeDevice>();
-    auto renderer = elf3d::renderer::Renderer::create(std::move(owned_device), 1);
+    auto renderer = elf3d::renderer::Renderer::create(
+        std::move(owned_device), 1, elf3d::renderer::tests::make_test_studio_environment_source());
     if (!renderer) {
         return 1;
     }
@@ -103,10 +105,10 @@ struct ViewportContext {
 
 [[nodiscard]] bool has_initial_picking_targets(const FakeDeviceState& state) {
     return state.picking_targets.size() == 2 &&
-           state.picking_targets[0]->extent() == elf3d::Extent2D{320, 180} &&
-           state.picking_targets[1]->extent() == elf3d::Extent2D{256, 144} &&
-           state.picking_targets[0]->resize_count == 1 &&
-           state.picking_targets[1]->resize_count == 1;
+           state.picking_targets[0].front().extent() == elf3d::Extent2D{320, 180} &&
+           state.picking_targets[1].front().extent() == elf3d::Extent2D{256, 144} &&
+           state.picking_targets[0].front().resize_count == 1 &&
+           state.picking_targets[1].front().resize_count == 1;
 }
 
 [[nodiscard]] int verify_empty_and_resize(ViewportContext& context) {
@@ -185,7 +187,7 @@ struct ViewportContext {
                                          std::uint64_t expected_revision) {
     const elf3d::DisplayTransform display = context.viewport->display_transform();
     return display.exposure_ev == 8.0F &&
-           display.tone_mapping == elf3d::ToneMappingMode::pbr_neutral &&
+           display.tone_mapping == elf3d::ToneMappingMode::standard &&
            context.viewport->render_revision() == expected_revision;
 }
 
@@ -215,8 +217,8 @@ struct ViewportContext {
     display.tone_mapping = elf3d::ToneMappingMode::none;
     context.viewport->set_display_transform(display);
     if (context.viewport->display_transform().exposure_ev != -8.0F ||
-        context.device_state().render_target == nullptr ||
-        context.device_state().render_target->display_transform !=
+        context.device_state().render_target.empty() ||
+        context.device_state().render_target.front().display_transform !=
             context.viewport->display_transform()) {
         return 87;
     }
@@ -295,8 +297,8 @@ struct DynamicAnchorContext {
     if (!update_navigation(context, anchor_context.input)) {
         return 843;
     }
-    anchor_context.input.pointer_position_pixels = {32.0F, 16.0F};
-    anchor_context.input.pointer_delta_pixels = {16.0F, 0.0F};
+    anchor_context.input.pointer_position_pixels = {48.0F, 16.0F};
+    anchor_context.input.pointer_delta_pixels = {32.0F, 0.0F};
     if (!update_navigation(context, anchor_context.input)) {
         return 844;
     }
@@ -305,8 +307,8 @@ struct DynamicAnchorContext {
     if (!has_expected_focus_statistics(state, statistics, anchor_context.target_extent)) {
         return 845;
     }
-    if (state.picking_targets.size() != 2 || state.picking_targets[0]->resize_count != 1 ||
-        state.picking_targets[1]->resize_count != 1) {
+    if (state.picking_targets.size() != 2 || state.picking_targets[0].front().resize_count != 1 ||
+        state.picking_targets[1].front().resize_count != 1) {
         return 847;
     }
     return 0;
@@ -314,8 +316,8 @@ struct DynamicAnchorContext {
 
 [[nodiscard]] int finish_dynamic_orbit(ViewportContext& context,
                                        DynamicAnchorContext& anchor_context) {
-    anchor_context.input.pointer_position_pixels = {48.0F, 16.0F};
-    anchor_context.input.pointer_delta_pixels = {16.0F, 0.0F};
+    anchor_context.input.pointer_position_pixels = {80.0F, 16.0F};
+    anchor_context.input.pointer_delta_pixels = {32.0F, 0.0F};
     if (!update_navigation(context, anchor_context.input) ||
         context.device_state().picking_depths_read_count != 1) {
         return 846;
@@ -661,7 +663,8 @@ has_independent_box_configuration(const elf3d::Result<std::uint32_t>& added_box,
 
 [[nodiscard]] int verify_independent_clipping(ViewportContext& context) {
     auto second_device = std::make_unique<FakeDevice>();
-    auto second_renderer = elf3d::renderer::Renderer::create(std::move(second_device), 1);
+    auto second_renderer = elf3d::renderer::Renderer::create(
+        std::move(second_device), 1, elf3d::renderer::tests::make_test_studio_environment_source());
     if (!second_renderer) {
         return 829;
     }
@@ -729,9 +732,9 @@ has_independent_box_configuration(const elf3d::Result<std::uint32_t>& added_box,
         return 10;
     }
     const auto& targets = context.device_state().picking_targets;
-    if (targets.size() != 2 || targets[0]->extent() != elf3d::Extent2D{0, 180} ||
-        targets[1]->extent() != elf3d::Extent2D{} || targets[0]->resize_count != 2 ||
-        targets[1]->resize_count != 2) {
+    if (targets.size() != 2 || targets[0].front().extent() != elf3d::Extent2D{0, 180} ||
+        targets[1].front().extent() != elf3d::Extent2D{} || targets[0].front().resize_count != 2 ||
+        targets[1].front().resize_count != 2) {
         return 101;
     }
     return 0;

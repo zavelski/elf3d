@@ -364,6 +364,31 @@ void clear_preserved_metadata(ExportData& result) noexcept {
     return {};
 }
 
+[[nodiscard]] Result<void> append_tangent_attribute(const PrimitiveView& primitive,
+                                                    BinaryBuilder& binary,
+                                                    std::vector<ByteRange>& views,
+                                                    std::vector<Accessor>& accessors,
+                                                    PrimitiveOutput& output) {
+    if (primitive.data.tangents.empty()) {
+        return {};
+    }
+    const Result<ByteRange> bytes = binary.append_tangents(primitive.data.tangents);
+    if (!bytes) {
+        return bytes.error();
+    }
+    const Result<std::uint32_t> view = append_buffer_view(views, bytes.value());
+    if (!view) {
+        return view.error();
+    }
+    const Result<std::uint32_t> tangents = append_accessor(
+        accessors, {view.value(), 5126U, primitive.data.tangents.size(), "VEC4", std::nullopt});
+    if (!tangents) {
+        return tangents.error();
+    }
+    output.tangents = tangents.value();
+    return {};
+}
+
 [[nodiscard]] Result<void> append_index_attribute(const PrimitiveView& primitive,
                                                   BinaryBuilder& binary,
                                                   std::vector<ByteRange>& views,
@@ -411,6 +436,11 @@ append_primitive(const PrimitiveView& primitive, const ExportData& document, Bin
             append_color_attribute(primitive, binary, views, accessors, output);
         !colors) {
         return colors.error();
+    }
+    if (const Result<void> tangents =
+            append_tangent_attribute(primitive, binary, views, accessors, output);
+        !tangents) {
+        return tangents.error();
     }
     if (const Result<void> indices =
             append_index_attribute(primitive, binary, views, accessors, output);

@@ -111,9 +111,9 @@ class FakePickingTarget final : public elf3d::graphics::PickingTarget {
 
 struct FakeDeviceState {
     elf3d::Extent2D latest_render_target_extent;
-    FakeRenderTarget* render_target = nullptr;
+    std::span<FakeRenderTarget> render_target;
     elf3d::Extent2D last_picking_read_extent;
-    std::vector<FakePickingTarget*> picking_targets;
+    std::vector<std::span<FakePickingTarget>> picking_targets;
     std::optional<elf3d::graphics::PickingPixel> picking_pixel;
     std::vector<float> picking_depths;
     elf3d::Float2 last_picking_read_position;
@@ -151,14 +151,14 @@ class FakeDevice final : public elf3d::graphics::Device {
     create_render_target(elf3d::Extent2D initial_extent) noexcept override {
         state_.latest_render_target_extent = initial_extent;
         auto target = std::make_unique<FakeRenderTarget>(initial_extent);
-        state_.render_target = target.get();
+        state_.render_target = std::span{target.get(), 1U};
         return std::unique_ptr<elf3d::graphics::RenderTarget>{std::move(target)};
     }
 
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::PickingTarget>>
     create_picking_target(elf3d::Extent2D initial_extent) noexcept override {
         auto target = std::make_unique<FakePickingTarget>(initial_extent);
-        state_.picking_targets.push_back(target.get());
+        state_.picking_targets.emplace_back(target.get(), 1U);
         return std::unique_ptr<elf3d::graphics::PickingTarget>{std::move(target)};
     }
 

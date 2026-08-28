@@ -37,6 +37,7 @@ enum class VertexLayout {
     position_normal_float3,
     position_normal_float3_texcoord_float2,
     position_normal_float3_texcoord2_float2_color_float4,
+    position_normal_float3_texcoord2_float2_color_float4_tangent_float4,
 };
 enum class TextureFormat {
     rgba8_unorm,
@@ -59,7 +60,7 @@ enum class TextureFilterMode {
 class StaticMesh;
 class Texture2D;
 class TextureCube;
-inline constexpr std::size_t material_texture_count = 4;
+inline constexpr std::size_t material_texture_count = 5;
 struct Texture2DDescription {
     Extent2D extent;
     TextureFormat format = TextureFormat::rgba8_unorm;
@@ -108,16 +109,16 @@ struct DrawIndexedDescription {
     float roughness_factor = 1.0F;
     Float3 emissive_factor;
     float occlusion_strength = 1.0F;
+    float normal_scale = 1.0F;
     float ior = 1.5F;
     float specular_factor = 1.0F;
     Float3 specular_color_factor{1.0F, 1.0F, 1.0F};
     Color4 highlight_color{1.0F, 0.55F, 0.05F, 1.0F};
     float highlight_strength = 0.0F;
-    // Temporary observers ordered as base color, metallic-roughness, occlusion, emissive.
+    // Temporary observers ordered as base color, metallic-roughness, normal, occlusion, emissive.
     std::span<Texture2D* const> textures;
-    TextureCube* diffuse_environment = nullptr;
-    TextureCube* specular_environment = nullptr;
-    Texture2D* environment_brdf_lut = nullptr;
+    std::span<TextureCube* const> environment_cubemaps;
+    std::span<Texture2D* const> environment_luts;
     float environment_intensity = 0.0F;
     float environment_rotation_radians = 0.0F;
     std::array<TextureMapping, material_texture_count> texture_mappings{};

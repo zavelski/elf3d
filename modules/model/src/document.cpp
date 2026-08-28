@@ -217,11 +217,28 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     if (matching_attribute_count(data.normals.size(), positions) &&
         matching_attribute_count(data.texcoord0.size(), positions) &&
         matching_attribute_count(data.texcoord1.size(), positions) &&
-        matching_attribute_count(data.colors.size(), positions)) {
+        matching_attribute_count(data.colors.size(), positions) &&
+        matching_attribute_count(data.tangents.size(), positions)) {
         return {};
     }
     return Error{ErrorCode::invalid_mesh_data,
                  "Primitive attribute arrays must be empty or match POSITION count"};
+}
+
+[[nodiscard]] Result<void> validate_tangents(std::span<const Float4> tangents) noexcept {
+    constexpr float minimum_length_squared = 0.000000000001F;
+    for (const Float4 tangent : tangents) {
+        const float length_squared =
+            tangent.x * tangent.x + tangent.y * tangent.y + tangent.z * tangent.z;
+        if (!std::isfinite(tangent.x) || !std::isfinite(tangent.y) || !std::isfinite(tangent.z) ||
+            !std::isfinite(tangent.w) || !std::isfinite(length_squared) ||
+            length_squared <= minimum_length_squared || (tangent.w != -1.0F && tangent.w != 1.0F)) {
+            return Error{
+                ErrorCode::invalid_accessor,
+                "Primitive tangents must contain finite non-zero XYZ and W equal to -1 or +1"};
+        }
+    }
+    return {};
 }
 
 [[nodiscard]] Result<void> validate_normals(std::span<const Float3> normals) noexcept {
@@ -291,6 +308,9 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     if (const Result<void> result = validate_colors(data.colors); !result) {
         return result.error();
     }
+    if (const Result<void> result = validate_tangents(data.tangents); !result) {
+        return result.error();
+    }
     return validate_indices(data.indices, data.positions.size());
 }
 
@@ -302,6 +322,7 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     result.texcoord1.assign(view.texcoord1.begin(), view.texcoord1.end());
     result.colors.assign(view.colors.begin(), view.colors.end());
     result.indices.assign(view.indices.begin(), view.indices.end());
+    result.tangents.assign(view.tangents.begin(), view.tangents.end());
     return result;
 }
 

@@ -17,7 +17,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -273,12 +272,6 @@ constexpr std::array<ToolbarIconSpec, static_cast<std::size_t>(ToolbarIcon::coun
     return icons;
 }
 
-elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
-    const float half_angle = radians * 0.5F;
-    const float sine = std::sin(half_angle);
-    return elf3d::Quaternion{axis.x * sine, axis.y * sine, axis.z * sine, std::cos(half_angle)};
-}
-
 [[nodiscard]] elf3d::Result<elf3d::EntityId> create_viewer_camera(elf3d::Scene& scene) {
     const elf3d::Result<elf3d::EntityId> camera_result =
         scene.create_perspective_camera_entity(elf3d::PerspectiveCameraDescription{});
@@ -295,64 +288,18 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
     return camera_result.value();
 }
 
-[[nodiscard]] elf3d::Result<SceneSession> create_demo_scene(elf3d::Engine& engine) {
+[[nodiscard]] elf3d::Result<SceneSession> create_empty_scene(elf3d::Engine& engine) {
     elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.create_scene();
     if (!scene_result) {
         return scene_result.error();
     }
     std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
 
-    constexpr float low = -0.5F;
-    constexpr float high = 0.5F;
-    const std::array<elf3d::VertexPositionNormal, 24> vertices{{
-        {{low, low, high}, {0.0F, 0.0F, 1.0F}},   {{high, low, high}, {0.0F, 0.0F, 1.0F}},
-        {{high, high, high}, {0.0F, 0.0F, 1.0F}}, {{low, high, high}, {0.0F, 0.0F, 1.0F}},
-        {{high, low, low}, {0.0F, 0.0F, -1.0F}},  {{low, low, low}, {0.0F, 0.0F, -1.0F}},
-        {{low, high, low}, {0.0F, 0.0F, -1.0F}},  {{high, high, low}, {0.0F, 0.0F, -1.0F}},
-        {{high, low, high}, {1.0F, 0.0F, 0.0F}},  {{high, low, low}, {1.0F, 0.0F, 0.0F}},
-        {{high, high, low}, {1.0F, 0.0F, 0.0F}},  {{high, high, high}, {1.0F, 0.0F, 0.0F}},
-        {{low, low, low}, {-1.0F, 0.0F, 0.0F}},   {{low, low, high}, {-1.0F, 0.0F, 0.0F}},
-        {{low, high, high}, {-1.0F, 0.0F, 0.0F}}, {{low, high, low}, {-1.0F, 0.0F, 0.0F}},
-        {{low, high, high}, {0.0F, 1.0F, 0.0F}},  {{high, high, high}, {0.0F, 1.0F, 0.0F}},
-        {{high, high, low}, {0.0F, 1.0F, 0.0F}},  {{low, high, low}, {0.0F, 1.0F, 0.0F}},
-        {{low, low, low}, {0.0F, -1.0F, 0.0F}},   {{high, low, low}, {0.0F, -1.0F, 0.0F}},
-        {{high, low, high}, {0.0F, -1.0F, 0.0F}}, {{low, low, high}, {0.0F, -1.0F, 0.0F}},
-    }};
-    const std::array<std::uint32_t, 36> indices{{
-        0,  1,  2,  0,  2,  3,  4,  5,  6,  4,  6,  7,  8,  9,  10, 8,  10, 11,
-        12, 13, 14, 12, 14, 15, 16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23,
-    }};
-
-    const elf3d::Result<elf3d::MeshHandle> mesh_result =
-        scene->create_mesh(elf3d::MeshDataView{vertices, indices});
-    if (!mesh_result) {
-        return mesh_result.error();
-    }
-    const elf3d::Result<elf3d::MaterialHandle> material_result = scene->create_material(
-        elf3d::MaterialDescription{elf3d::Color4{0.72F, 0.32F, 0.12F, 1.0F}});
-    if (!material_result) {
-        return material_result.error();
-    }
-    const elf3d::Result<elf3d::EntityId> cube_result =
-        scene->create_model_entity(mesh_result.value(), material_result.value());
-    if (!cube_result) {
-        return cube_result.error();
-    }
-
     const elf3d::Result<elf3d::EntityId> camera_result = create_viewer_camera(*scene);
     if (!camera_result) {
         return camera_result.error();
     }
-    const std::optional<elf3d::Bounds3> bounds = scene->world_bounds();
-
-    return SceneSession{std::move(scene),
-                        camera_result.value(),
-                        cube_result.value(),
-                        material_result.value(),
-                        {},
-                        elf3d::SceneStatistics{2, 1, 1, 1, 1, 24, 36, 12},
-                        bounds,
-                        true};
+    return SceneSession{std::move(scene), camera_result.value(), {}, {}, std::nullopt, false};
 }
 
 [[nodiscard]] elf3d::Result<SceneSession> load_model_scene(elf3d::Engine& engine,
@@ -370,14 +317,8 @@ elf3d::Quaternion axis_angle(elf3d::Float3 axis, float radians) noexcept {
         return camera_result.error();
     }
 
-    SceneSession result{std::move(scene),
-                        camera_result.value(),
-                        std::nullopt,
-                        std::nullopt,
-                        path,
-                        source_statistics,
-                        bounds,
-                        true};
+    SceneSession result{
+        std::move(scene), camera_result.value(), path, source_statistics, bounds, true};
     result.load_report = std::move(loaded.report);
     return result;
 }

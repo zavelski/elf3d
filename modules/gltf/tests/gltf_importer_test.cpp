@@ -222,7 +222,8 @@ supported_resource_statistics_match(const elf3d::DocumentStatistics& statistics)
     return scene && primitive && loaded.default_scene == scene.value().id &&
            document.default_scene() == scene.value().id &&
            primitive.value().data.indices.size() == 3U && primitive.value().data.indices[0] == 0U &&
-           primitive.value().data.indices[1] == 1U && primitive.value().data.indices[2] == 2U;
+           primitive.value().data.indices[1] == 1U && primitive.value().data.indices[2] == 2U &&
+           primitive.value().data.tangents.empty();
 }
 
 [[nodiscard]] bool supported_material_matches(const elf3d::Document& document) {
@@ -303,8 +304,8 @@ supported_resource_statistics_match(const elf3d::DocumentStatistics& statistics)
     }
     return has_diagnostic(loaded.value().report,
                           elf3d::ModelLoadDiagnosticCode::normal_map_fallback)
-               ? 0
-               : 5;
+               ? 5
+               : 0;
 }
 
 [[nodiscard]] bool sampler_matches(const elf3d::Document& document, std::size_t texture_index,
@@ -653,6 +654,47 @@ using GeometryTest = int (*)(const TemporaryDirectory&);
     return 0;
 }
 
+[[nodiscard]] bool
+specular_glossiness_factors_match(const elf3d::ModelMaterialDescription& description) noexcept {
+    return description.base_color == elf3d::Color4{0.25F, 0.5F, 0.75F, 0.8F} &&
+           nearly_equal(description.metallic_factor, 0.0F) &&
+           nearly_equal(description.roughness_factor, 0.6F);
+}
+
+[[nodiscard]] bool
+specular_glossiness_textures_match(const elf3d::ModelMaterialDescription& description) noexcept {
+    return description.base_color_texture.is_valid() &&
+           !description.metallic_roughness_texture.is_valid();
+}
+
+[[nodiscard]] bool
+required_specular_glossiness_material_matches(const elf3d::Document& document) noexcept {
+    const auto material = document.material_at(0U);
+    return material && specular_glossiness_factors_match(material.value().description) &&
+           specular_glossiness_textures_match(material.value().description);
+}
+
+[[nodiscard]] int test_required_specular_glossiness_fallback(const TemporaryDirectory& temporary) {
+    const std::filesystem::path path = temporary.path() / "required_specular_glossiness.gltf";
+    constexpr std::string_view json =
+        R"json({"asset":{"version":"2.0"},"extensionsUsed":["KHR_materials_pbrSpecularGlossiness"],"extensionsRequired":["KHR_materials_pbrSpecularGlossiness"],"buffers":[{"uri":"specular_glossiness.bin","byteLength":96}],"bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":36},{"buffer":0,"byteOffset":72,"byteLength":24}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"}],"images":[{"uri":"specular_glossiness.png"}],"textures":[{"source":0},{"source":0}],"materials":[{"extensions":{"KHR_materials_pbrSpecularGlossiness":{"diffuseFactor":[0.25,0.5,0.75,0.8],"diffuseTexture":{"index":0},"specularFactor":[0.2,0.3,0.4],"glossinessFactor":0.4,"specularGlossinessTexture":{"index":1}}}}],"meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2},"material":0}]}],"nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]})json";
+    if (!write_bytes(temporary.path() / "specular_glossiness.bin", textured_geometry()) ||
+        !write_bytes(temporary.path() / "specular_glossiness.png",
+                     std::as_bytes(std::span{asymmetric_png})) ||
+        !write_text(path, json)) {
+        return 6;
+    }
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded) {
+        return 7;
+    }
+    if (!required_specular_glossiness_material_matches(loaded.value().document) ||
+        !has_diagnostic(loaded.value().report, elf3d::ModelLoadDiagnosticCode::material_fallback)) {
+        return 8;
+    }
+    return 0;
+}
+
 [[nodiscard]] int test_malformed_and_missing_normals(const TemporaryDirectory& temporary) {
     const std::filesystem::path malformed_path = temporary.path() / "malformed.gltf";
     if (!write_text(malformed_path, "{not-json") || elf3d::load_document(malformed_path.string())) {
@@ -711,8 +753,9 @@ using DiagnosticTest = int (*)(const TemporaryDirectory&);
     if (!write_bytes(temporary.path() / "plain.bin", triangle_positions())) {
         return 1;
     }
-    constexpr std::array<DiagnosticTest, 5> tests{{
+    constexpr std::array<DiagnosticTest, 6> tests{{
         test_optional_diagnostics,
+        test_required_specular_glossiness_fallback,
         test_required_extension_error,
         test_malformed_and_missing_normals,
         test_node_limit,

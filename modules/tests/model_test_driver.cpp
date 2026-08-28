@@ -3,6 +3,7 @@
 
 int elf3d_model_document_test();
 int elf3d_model_processing_test();
+int elf3d_model_tangent_test();
 
 namespace {
 
@@ -22,6 +23,9 @@ int main(int argument_count, char** arguments) {
     }
     if (test_case == "model_processing") {
         return elf3d_model_processing_test();
+    }
+    if (test_case == "model_tangent") {
+        return elf3d_model_tangent_test();
     }
 
     std::cerr << "Unknown model test case: " << test_case << '\n';

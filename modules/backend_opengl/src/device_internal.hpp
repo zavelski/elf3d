@@ -191,7 +191,7 @@ class RenderStateGuard final {
     GLint vertex_array_ = 0;
     GLint array_buffer_ = 0;
     GLint active_texture_ = GL_TEXTURE0;
-    std::array<GLint, 5> texture_2d_units_{};
+    std::array<GLint, 6> texture_2d_units_{};
     std::array<GLint, 2> texture_cube_units_{};
     GLint depth_function_ = GL_LESS;
     GLint blend_source_rgb_ = GL_ONE;
@@ -217,6 +217,7 @@ struct UniformLocations {
     GLint projection = -1;
     GLint normal = -1;
     GLint vertex_layout = -1;
+    GLint orientation_sign = -1;
     GLint base_color = -1;
     GLint camera_world_position = -1;
     GLint light_direction = -1;
@@ -229,6 +230,7 @@ struct UniformLocations {
     GLint roughness_factor = -1;
     GLint emissive_factor = -1;
     GLint occlusion_strength = -1;
+    GLint normal_scale = -1;
     GLint ior = -1;
     GLint specular_factor = -1;
     GLint specular_color_factor = -1;
@@ -236,10 +238,12 @@ struct UniformLocations {
     GLint highlight_strength = -1;
     GLint has_base_color_texture = -1;
     GLint has_metallic_roughness_texture = -1;
+    GLint has_normal_texture = -1;
     GLint has_occlusion_texture = -1;
     GLint has_emissive_texture = -1;
     GLint base_color_texture = -1;
     GLint metallic_roughness_texture = -1;
+    GLint normal_texture = -1;
     GLint occlusion_texture = -1;
     GLint emissive_texture = -1;
     GLint diffuse_environment = -1;

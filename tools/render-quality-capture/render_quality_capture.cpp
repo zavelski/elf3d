@@ -35,6 +35,9 @@
 
 namespace {
 
+constexpr elf3d::Color4 default_viewer_clear_color{213.0F / 255.0F, 227.0F / 255.0F,
+                                                   240.0F / 255.0F, 1.0F};
+
 constexpr std::string_view procedural_model = "procedural-material";
 
 enum class CameraMode { authored_first, authored_opposite, fit_front, fit_back, matrix };
@@ -228,6 +231,10 @@ template <typename Value>
         return false;
     }
     if (name == "--tone") {
+        if (value == "standard") {
+            options.display.tone_mapping = elf3d::ToneMappingMode::standard;
+            return true;
+        }
         if (value == "pbr-neutral") {
             options.display.tone_mapping = elf3d::ToneMappingMode::pbr_neutral;
             return true;
@@ -489,7 +496,7 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
         }
         capture.scene = std::move(scene_result).value();
         capture.model_alias = std::string{procedural_model};
-        capture.model_hash = "procedural-material-v1";
+        capture.model_hash = "procedural-material-v1-standard";
     } else {
         auto loaded = engine.load_scene(path_to_utf8(options.model));
         if (!loaded) {
@@ -658,7 +665,10 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
            << ", \"near\": " << capture.projection.near_plane
            << ", \"far\": " << capture.projection.far_plane
            << "},\n  \"viewport\": {\"width\": " << options.extent.width
-           << ", \"height\": " << options.extent.height << "},\n  \"lighting\": {"
+           << ", \"height\": " << options.extent.height << ", \"clear_color\": ["
+           << default_viewer_clear_color.red << ", " << default_viewer_clear_color.green << ", "
+           << default_viewer_clear_color.blue << ", " << default_viewer_clear_color.alpha
+           << "]},\n  \"lighting\": {"
            << "\"direction\": [" << options.lighting.direction.x << ", "
            << options.lighting.direction.y << ", " << options.lighting.direction.z << "], "
            << "\"directional_intensity\": " << options.lighting.diffuse_intensity << ", "
@@ -667,8 +677,9 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
            << "\"environment_rotation_radians\": " << options.environment.rotation_radians
            << "},\n  \"display\": {\"exposure_ev\": " << options.display.exposure_ev
            << ", \"tone_mapping\": \""
-           << (options.display.tone_mapping == elf3d::ToneMappingMode::none ? "none"
-                                                                            : "pbr_neutral")
+           << (options.display.tone_mapping == elf3d::ToneMappingMode::none          ? "none"
+               : options.display.tone_mapping == elf3d::ToneMappingMode::pbr_neutral ? "pbr_neutral"
+                                                                                     : "standard")
            << "\"},\n  \"shading\": \""
            << (options.shading == elf3d::RenderShadingMode::unlit ? "unlit" : "standard")
            << "\",\n  \"renderer\": {\"vendor\": \""
@@ -774,6 +785,35 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
                                 static_cast<double>(values.size());
 }
 
+[[nodiscard]] double region_mean_absolute_rgb_difference(const std::vector<unsigned char>& first,
+                                                         const std::vector<unsigned char>& second,
+                                                         elf3d::Extent2D extent, int center_x,
+                                                         int center_y, int radius) noexcept {
+    std::uint64_t accumulated = 0;
+    std::uint64_t channel_count = 0;
+    for (int y = center_y - radius; y <= center_y + radius; ++y) {
+        for (int x = center_x - radius; x <= center_x + radius; ++x) {
+            const int dx = x - center_x;
+            const int dy = y - center_y;
+            if (x < 0 || y < 0 || x >= static_cast<int>(extent.width) ||
+                y >= static_cast<int>(extent.height) || dx * dx + dy * dy > radius * radius) {
+                continue;
+            }
+            const std::size_t offset =
+                (static_cast<std::size_t>(y) * extent.width + static_cast<std::size_t>(x)) * 4U;
+            for (std::size_t channel = 0; channel < 3; ++channel) {
+                const int difference = static_cast<int>(first[offset + channel]) -
+                                       static_cast<int>(second[offset + channel]);
+                accumulated += static_cast<std::uint64_t>(std::abs(difference));
+                ++channel_count;
+            }
+        }
+    }
+    return channel_count == 0U
+               ? 0.0
+               : static_cast<double>(accumulated) / (static_cast<double>(channel_count) * 255.0);
+}
+
 [[nodiscard]] elf3d::Result<void>
 validate_material_capture(const Options& options, CaptureScene& scene,
                           const std::vector<unsigned char>& front_pixels) {
@@ -789,6 +829,45 @@ validate_material_capture(const Options& options, CaptureScene& scene,
         return elf3d::Error{elf3d::ErrorCode::empty_scene_geometry,
                             "Material validation scene has no visible bounds"};
     }
+
+    elf3d::BasicLighting environment_only = options.lighting;
+    environment_only.ambient_intensity = 0.0F;
+    environment_only.diffuse_intensity = 0.0F;
+    elf3d::EnvironmentLighting unrotated_environment = options.environment;
+    unrotated_environment.rotation_radians = 0.0F;
+    scene.viewport->set_basic_lighting(environment_only);
+    scene.viewport->set_environment_lighting(unrotated_environment);
+    const auto unrotated_rendered = scene.viewport->render(*scene.scene, scene.camera);
+    if (!unrotated_rendered) {
+        return unrotated_rendered.error();
+    }
+    auto unrotated_pixels_result = read_resolved_pixels(options, scene);
+    if (!unrotated_pixels_result) {
+        return unrotated_pixels_result.error();
+    }
+    elf3d::EnvironmentLighting rotated_environment = unrotated_environment;
+    rotated_environment.rotation_radians = 0.174532925F;
+    scene.viewport->set_environment_lighting(rotated_environment);
+    const auto rotated_rendered = scene.viewport->render(*scene.scene, scene.camera);
+    if (!rotated_rendered) {
+        return rotated_rendered.error();
+    }
+    auto rotated_pixels_result = read_resolved_pixels(options, scene);
+    if (!rotated_pixels_result) {
+        return rotated_pixels_result.error();
+    }
+    const double white_motion = region_mean_absolute_rgb_difference(unrotated_pixels_result.value(),
+                                                                    rotated_pixels_result.value(),
+                                                                    options.extent, 333, 360, 92);
+    const double polished_motion = region_mean_absolute_rgb_difference(
+        unrotated_pixels_result.value(), rotated_pixels_result.value(), options.extent, 741, 360,
+        92);
+    const double rough_motion = region_mean_absolute_rgb_difference(unrotated_pixels_result.value(),
+                                                                    rotated_pixels_result.value(),
+                                                                    options.extent, 946, 360, 92);
+
+    scene.viewport->set_basic_lighting(options.lighting);
+    scene.viewport->set_environment_lighting(options.environment);
     const elf3d::Float4x4 back_matrix =
         fitted_camera_matrix(*bounds, options.extent, scene.projection, true);
     const auto positioned = scene.scene->set_local_matrix(scene.camera, back_matrix);
@@ -815,13 +894,18 @@ validate_material_capture(const Options& options, CaptureScene& scene,
     const double polished_p99 = percentile(polished, 0.99);
     const double rough_median = percentile(rough, 0.5);
     const double rough_p99 = percentile(rough, 0.99);
-    const bool passes = white_front_median >= 0.55 && white_front_median <= 0.90 &&
-                        white_back_median >= 0.25 &&
-                        white_front_median / white_back_median <= 2.5 && white_p99 < 0.995 &&
-                        polished_median > 0.08 && polished_p99 - polished_median >= 0.25 &&
-                        fraction_above(polished, 0.75) >= 0.01 &&
-                        rough_p99 - rough_median < polished_p99 - polished_median &&
-                        fraction_above(rough, 0.55) > fraction_above(polished, 0.55);
+    const bool passes =
+        white_front_median >= 0.72 && white_front_median <= 0.85 && white_back_median >= 0.77 &&
+        white_back_median <= 0.90 && white_front_median / white_back_median >= 0.85 &&
+        white_front_median / white_back_median <= 1.0 && white_p99 >= 0.85 && white_p99 < 0.95 &&
+        polished_median >= 0.53 && polished_median <= 0.70 &&
+        polished_p99 - polished_median >= 0.38 && polished_p99 - polished_median <= 0.50 &&
+        fraction_above(polished, 0.75) >= 0.04 &&
+        rough_p99 - rough_median < polished_p99 - polished_median &&
+        rough_p99 - rough_median >= 0.10 && rough_p99 - rough_median <= 0.25 &&
+        fraction_above(rough, 0.55) > fraction_above(polished, 0.55) && polished_motion >= 0.018 &&
+        polished_motion >= 1.5 * white_motion && rough_motion >= 0.013 &&
+        rough_motion < polished_motion;
     std::cout << std::fixed << std::setprecision(6)
               << "material_metrics white_front_median=" << white_front_median
               << " white_back_median=" << white_back_median
@@ -829,11 +913,15 @@ validate_material_capture(const Options& options, CaptureScene& scene,
               << " white_p99=" << white_p99 << " polished_median=" << polished_median
               << " polished_contrast=" << polished_p99 - polished_median
               << " polished_fraction_above_075=" << fraction_above(polished, 0.75)
-              << " rough_contrast=" << rough_p99 - rough_median << '\n';
+              << " rough_contrast=" << rough_p99 - rough_median
+              << " white_rotation_motion=" << white_motion
+              << " polished_rotation_motion=" << polished_motion
+              << " rough_rotation_motion=" << rough_motion << '\n';
     return passes ? elf3d::Result<void>{}
                   : elf3d::Result<void>{elf3d::Error{
                         elf3d::ErrorCode::draw_submission_failed,
-                        "Procedural material capture did not satisfy the neutral studio gates"}};
+                        "Procedural material capture did not satisfy the high-contrast studio "
+                        "gates"}};
 }
 
 [[nodiscard]] int capture(const Options& options) {
@@ -855,6 +943,7 @@ validate_material_capture(const Options& options, CaptureScene& scene,
         return 7;
     }
     CaptureScene scene = std::move(capture_result).value();
+    scene.viewport->set_clear_color(default_viewer_clear_color);
     scene.viewport->set_basic_lighting(options.lighting);
     scene.viewport->set_environment_lighting(options.environment);
     scene.viewport->set_display_transform(options.display);

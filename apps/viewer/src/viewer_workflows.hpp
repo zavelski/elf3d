@@ -27,8 +27,7 @@ enum class SceneReplacementKind {
     open_model,
     dropped_file,
     reload_model,
-    close_to_demo,
-    create_demo,
+    close_to_empty,
 };
 
 struct SceneReplacementRequest {

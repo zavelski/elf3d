@@ -21,6 +21,9 @@ import elf.renderer;
 import elf.scene;
 
 #include "renderer_test_support.h"
+
+int elf3d_renderer_environment_failure_test();
+
 namespace {
 using elf3d::renderer::tests::FakeDevice;
 using elf3d::renderer::tests::FakeDeviceState;
@@ -188,14 +191,31 @@ struct RendererContext {
     }
     return prepare_entities(context);
 }
-[[nodiscard]] bool has_expected_shader_sources(const FakeDeviceState& device) {
+[[nodiscard]] bool has_expected_vertex_shader_source(const FakeDeviceState& device) {
     return device.vertex_shader_source.find("a_texcoord1") != std::string::npos &&
            device.vertex_shader_source.find("a_color") != std::string::npos &&
-           device.fragment_shader_source.find("mapped_uv") != std::string::npos &&
+           device.vertex_shader_source.find("a_tangent") != std::string::npos;
+}
+
+[[nodiscard]] bool has_expected_material_shader_source(const FakeDeviceState& device) {
+    return device.fragment_shader_source.find("mapped_uv") != std::string::npos &&
+           device.fragment_shader_source.find("mapped_surface_normal") != std::string::npos &&
+           device.fragment_shader_source.find("u_normal_texture") != std::string::npos &&
            device.fragment_shader_source.find("u_alpha_mode") != std::string::npos &&
-           device.fragment_shader_source.find("u_emissive_texture") != std::string::npos &&
-           device.fragment_shader_source.find("u_specular_environment") != std::string::npos &&
-           device.fragment_shader_source.find("u_environment_brdf_lut") != std::string::npos;
+           device.fragment_shader_source.find("u_emissive_texture") != std::string::npos;
+}
+
+[[nodiscard]] bool has_expected_environment_shader_source(const FakeDeviceState& device) {
+    return device.fragment_shader_source.find("u_specular_environment") != std::string::npos &&
+           device.fragment_shader_source.find("u_environment_brdf_lut") != std::string::npos &&
+           device.fragment_shader_source.find("ibl_specular_weight") != std::string::npos &&
+           device.fragment_shader_source.find("multiple_scattering") != std::string::npos;
+}
+
+[[nodiscard]] bool has_expected_shader_sources(const FakeDeviceState& device) {
+    return has_expected_vertex_shader_source(device) &&
+           has_expected_material_shader_source(device) &&
+           has_expected_environment_shader_source(device);
 }
 [[nodiscard]] int verify_renderer_creation(RendererContext& context) {
     if (elf3d::renderer::build_render_list(context.scene, context.non_camera, {640, 360})
@@ -204,12 +224,15 @@ struct RendererContext {
         return 2;
     }
     auto owned_device = std::make_unique<FakeDevice>();
-    auto renderer = elf3d::renderer::Renderer::create(std::move(owned_device), engine_token);
+    auto renderer = elf3d::renderer::Renderer::create(
+        std::move(owned_device), engine_token,
+        elf3d::renderer::tests::make_test_studio_environment_source());
     if (!renderer) {
         return 3;
     }
     context.renderer = std::move(renderer.value());
-    if (!has_expected_shader_sources(context.device_state())) {
+    if (!context.device_state().vertex_shader_source.empty() ||
+        !context.device_state().fragment_shader_source.empty()) {
         return 31;
     }
     return 0;
@@ -289,19 +312,26 @@ has_expected_environment_diagnostics(const elf3d::RenderStatistics& first,
 }
 
 [[nodiscard]] bool has_expected_material_core(const FakeDeviceState& device) {
-    return !device.draws.empty() && !device.draw_texture_presence.empty() &&
-           device.draw_texture_presence[0][2] && device.draw_texture_presence[0][3] &&
-           device.draws[0].emissive_factor == elf3d::Float3{0.2F, 0.3F, 0.4F} &&
-           nearly_equal(device.draws[0].ior, 1.33F) &&
-           nearly_equal(device.draws[0].specular_factor, 0.75F) && device.draws[0].unlit &&
-           device.draws[0].alpha_mode == elf3d::AlphaMode::mask &&
-           nearly_equal(device.draws[0].alpha_cutoff, 0.35F);
+    if (device.draws.empty() || device.draw_texture_presence.empty()) {
+        return false;
+    }
+    const std::array<bool, 9> matches{
+        !device.draw_texture_presence[0][2],
+        device.draw_texture_presence[0][3],
+        device.draw_texture_presence[0][4],
+        device.draws[0].emissive_factor == elf3d::Float3{0.2F, 0.3F, 0.4F},
+        nearly_equal(device.draws[0].ior, 1.33F),
+        nearly_equal(device.draws[0].specular_factor, 0.75F),
+        device.draws[0].unlit,
+        device.draws[0].alpha_mode == elf3d::AlphaMode::mask,
+        nearly_equal(device.draws[0].alpha_cutoff, 0.35F),
+    };
+    return std::all_of(matches.begin(), matches.end(), [](bool value) { return value; });
 }
 
 [[nodiscard]] bool has_expected_environment_parameters(const FakeDeviceState& device) {
-    return !device.draws.empty() && device.draws[0].diffuse_environment != nullptr &&
-           device.draws[0].specular_environment != nullptr &&
-           device.draws[0].environment_brdf_lut != nullptr &&
+    return !device.draws.empty() && !device.draw_environment_presence.empty() &&
+           device.draw_environment_presence[0] &&
            nearly_equal(device.draws[0].environment_intensity, 1.5F) &&
            nearly_equal(device.draws[0].environment_rotation_radians, 0.75F);
 }
@@ -323,6 +353,7 @@ has_expected_environment_diagnostics(const elf3d::RenderStatistics& first,
     const auto second = context.renderer->render(context.scene, context.target,
                                                  render_request(context.camera, {}, environment));
     if (!has_expected_render_counts(first, second, context.device_state()) ||
+        !has_expected_shader_sources(context.device_state()) ||
         !has_expected_texture_uploads(context.device_state()) ||
         !has_expected_texture_mapping(context.device_state()) ||
         !has_expected_material_parameters(context.device_state()) ||
@@ -732,31 +763,6 @@ using RendererStep = int (*)(RendererContext&);
     return 0;
 }
 
-[[nodiscard]] int verify_environment_failure_cleanup() {
-    constexpr std::uint64_t failure_engine_token = 23;
-    const elf3d::SceneId scene_id =
-        elf3d::detail::SceneHandleAccess::create_scene(failure_engine_token, 1);
-    elf3d::scene::Storage scene{scene_id};
-    const auto camera = scene.create_perspective_camera({});
-    if (!camera) {
-        return 58;
-    }
-    auto device = std::make_unique<FakeDevice>();
-    FakeDevice* device_observer = device.get();
-    device_observer->fail_cubemap_upload_at(2);
-    auto renderer = elf3d::renderer::Renderer::create(std::move(device), failure_engine_token);
-    if (!renderer) {
-        return 58;
-    }
-    FakeRenderTarget target;
-    const auto render = renderer.value()->render(scene, target, render_request(camera.value()));
-    if (render || render.error().code() != elf3d::ErrorCode::graphics_initialization_failed ||
-        device_observer->live_cubemap_count() != 0) {
-        return 58;
-    }
-    return 0;
-}
-
 [[nodiscard]] int verify_environment_shared_across_targets(RendererContext& context) {
     FakeRenderTarget additional_target;
     const auto render =
@@ -782,5 +788,5 @@ int elf3d_renderer_test() {
         return steps;
     }
     const int shared_environment = verify_environment_shared_across_targets(context);
-    return shared_environment != 0 ? shared_environment : verify_environment_failure_cleanup();
+    return shared_environment != 0 ? shared_environment : elf3d_renderer_environment_failure_test();
 }

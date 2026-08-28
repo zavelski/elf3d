@@ -157,6 +157,7 @@ add_library(
         gltf/src/importer_material.cpp
         gltf/src/importer_metadata.cpp
         gltf/src/importer_texture.cpp
+        gltf/src/tangent_space.cpp
         gltf/src/importer_validation.cpp
         gltf/src/importer.cpp
 )
@@ -184,6 +185,7 @@ target_link_libraries(
         elf3d_image_modules
         elf3d_third_party_png
         elf3d_third_party_cgltf
+        elf3d_third_party_mikktspace
 )
 
 add_library(elf3d_model STATIC)
@@ -208,6 +210,7 @@ target_link_libraries(
         elf3d_third_party_png
         elf3d_third_party_jpeg
         elf3d_third_party_cgltf
+        elf3d_third_party_mikktspace
 )
 set_target_properties(
     elf3d_model

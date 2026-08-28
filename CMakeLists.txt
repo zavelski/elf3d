@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.3.4)
 
 project(
     Elf3D
-    VERSION 0.10.3
+    VERSION 0.10.5
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
@@ -54,6 +54,10 @@ endif()
 include(cmake/compiler_options.cmake)
 include(cmake/dependencies.cmake)
 include(CTest)
+
+if(ELF3D_BUILD_ENGINE)
+    add_subdirectory(tools/studio-environment-baker)
+endif()
 
 add_subdirectory(modules)
 

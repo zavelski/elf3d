@@ -344,6 +344,7 @@ void append_primitive_attributes(std::string& output, const PrimitiveOutput& pri
         }
     };
     optional_attribute("NORMAL", primitive.normals);
+    optional_attribute("TANGENT", primitive.tangents);
     optional_attribute("TEXCOORD_0", primitive.texcoord0);
     optional_attribute("TEXCOORD_1", primitive.texcoord1);
     optional_attribute("COLOR_0", primitive.colors);

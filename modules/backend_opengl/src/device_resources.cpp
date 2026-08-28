@@ -227,6 +227,8 @@ class OpenGLGraphicsPipeline final : public graphics::GraphicsPipeline {
 };
 
 [[nodiscard]] Result<std::size_t> mesh_vertex_stride(graphics::VertexLayout layout) noexcept {
+    constexpr graphics::VertexLayout tangent_layout =
+        graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4_tangent_float4;
     switch (layout) {
     case graphics::VertexLayout::position_normal_float3:
         return sizeof(float) * 6;
@@ -234,6 +236,8 @@ class OpenGLGraphicsPipeline final : public graphics::GraphicsPipeline {
         return sizeof(float) * 8;
     case graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4:
         return sizeof(float) * 14;
+    case tangent_layout:
+        return sizeof(float) * 18;
     }
     return Error{ErrorCode::unsupported_vertex_layout,
                  "The OpenGL backend does not support the requested vertex layout"};
@@ -290,13 +294,21 @@ void configure_mesh_attributes(graphics::VertexLayout layout, std::size_t vertex
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride,
                               reinterpret_cast<const void*>(sizeof(float) * 6));
     }
-    if (layout == graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4) {
+    if (layout == graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4 ||
+        layout == graphics::VertexLayout::
+                      position_normal_float3_texcoord2_float2_color_float4_tangent_float4) {
         glEnableVertexAttribArray(3);
         glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, stride,
                               reinterpret_cast<const void*>(sizeof(float) * 8));
         glEnableVertexAttribArray(4);
         glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, stride,
                               reinterpret_cast<const void*>(sizeof(float) * 10));
+    }
+    if (layout == graphics::VertexLayout::
+                      position_normal_float3_texcoord2_float2_color_float4_tangent_float4) {
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride,
+                              reinterpret_cast<const void*>(sizeof(float) * 14));
     }
 }
 
@@ -485,6 +497,7 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
                             glGetUniformLocation(program, "u_projection"),
                             glGetUniformLocation(program, "u_normal_matrix"),
                             glGetUniformLocation(program, "u_vertex_layout"),
+                            glGetUniformLocation(program, "u_orientation_sign"),
                             glGetUniformLocation(program, "u_base_color"),
                             glGetUniformLocation(program, "u_camera_world_position"),
                             glGetUniformLocation(program, "u_light_direction"),
@@ -497,6 +510,7 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
                             glGetUniformLocation(program, "u_roughness_factor"),
                             glGetUniformLocation(program, "u_emissive_factor"),
                             glGetUniformLocation(program, "u_occlusion_strength"),
+                            glGetUniformLocation(program, "u_normal_scale"),
                             glGetUniformLocation(program, "u_ior"),
                             glGetUniformLocation(program, "u_specular_factor"),
                             glGetUniformLocation(program, "u_specular_color_factor"),
@@ -504,10 +518,12 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
                             glGetUniformLocation(program, "u_highlight_strength"),
                             glGetUniformLocation(program, "u_has_base_color_texture"),
                             glGetUniformLocation(program, "u_has_metallic_roughness_texture"),
+                            glGetUniformLocation(program, "u_has_normal_texture"),
                             glGetUniformLocation(program, "u_has_occlusion_texture"),
                             glGetUniformLocation(program, "u_has_emissive_texture"),
                             glGetUniformLocation(program, "u_base_color_texture"),
                             glGetUniformLocation(program, "u_metallic_roughness_texture"),
+                            glGetUniformLocation(program, "u_normal_texture"),
                             glGetUniformLocation(program, "u_occlusion_texture"),
                             glGetUniformLocation(program, "u_emissive_texture"),
                             glGetUniformLocation(program, "u_diffuse_environment"),
@@ -531,7 +547,8 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
 
 [[nodiscard]] bool transform_locations_valid(const UniformLocations& locations) noexcept {
     return locations.model >= 0 && locations.view >= 0 && locations.projection >= 0 &&
-           locations.normal >= 0 && locations.vertex_layout >= 0 && locations.base_color >= 0;
+           locations.normal >= 0 && locations.vertex_layout >= 0 &&
+           locations.orientation_sign >= 0 && locations.base_color >= 0;
 }
 
 [[nodiscard]] bool direct_lighting_locations_valid(const UniformLocations& locations) noexcept {
@@ -543,7 +560,8 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
 [[nodiscard]] bool indirect_lighting_locations_valid(const UniformLocations& locations) noexcept {
     return locations.environment_intensity >= 0 && locations.environment_rotation >= 0 &&
            locations.metallic_factor >= 0 && locations.roughness_factor >= 0 &&
-           locations.emissive_factor >= 0 && locations.occlusion_strength >= 0;
+           locations.emissive_factor >= 0 && locations.occlusion_strength >= 0 &&
+           locations.normal_scale >= 0;
 }
 
 [[nodiscard]] bool lighting_locations_valid(const UniformLocations& locations) noexcept {
@@ -559,8 +577,9 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
 
 [[nodiscard]] bool material_texture_locations_valid(const UniformLocations& locations) noexcept {
     return locations.has_base_color_texture >= 0 && locations.has_metallic_roughness_texture >= 0 &&
-           locations.has_occlusion_texture >= 0 && locations.has_emissive_texture >= 0 &&
-           locations.base_color_texture >= 0 && locations.metallic_roughness_texture >= 0 &&
+           locations.has_normal_texture >= 0 && locations.has_occlusion_texture >= 0 &&
+           locations.has_emissive_texture >= 0 && locations.base_color_texture >= 0 &&
+           locations.metallic_roughness_texture >= 0 && locations.normal_texture >= 0 &&
            locations.occlusion_texture >= 0 && locations.emissive_texture >= 0;
 }
 
@@ -585,11 +604,11 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
 }
 
 void configure_texture_sampler_uniforms(GLuint program, const UniformLocations& uniforms) noexcept {
-    const std::array<GLint, 7> locations{
+    const std::array<GLint, 8> locations{
         uniforms.base_color_texture,   uniforms.metallic_roughness_texture,
-        uniforms.occlusion_texture,    uniforms.emissive_texture,
-        uniforms.diffuse_environment,  uniforms.specular_environment,
-        uniforms.environment_brdf_lut,
+        uniforms.normal_texture,       uniforms.occlusion_texture,
+        uniforms.emissive_texture,     uniforms.diffuse_environment,
+        uniforms.specular_environment, uniforms.environment_brdf_lut,
     };
     for (std::size_t index = 0; index < locations.size(); ++index) {
         glProgramUniform1i(program, locations[index], static_cast<GLint>(index));
@@ -695,9 +714,10 @@ Result<std::unique_ptr<graphics::GraphicsPipeline>>
 create_graphics_pipeline(std::shared_ptr<OpenGLDeviceState> state,
                          const graphics::GraphicsPipelineDescription& description) noexcept {
     if (description.vertex_layout !=
-        graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4) {
+        graphics::VertexLayout::
+            position_normal_float3_texcoord2_float2_color_float4_tangent_float4) {
         return Error{ErrorCode::unsupported_vertex_layout,
-                     "The PBR pipeline requires position, normal, two UV sets, and color"};
+                     "The PBR pipeline requires position, normal, two UV sets, color, and tangent"};
     }
 
     try {

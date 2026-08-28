@@ -56,7 +56,7 @@ Document API exposes read-only metadata views and no raw-metadata setter.
 | Images | PNG and JPEG from local files, data URIs, and buffer views |
 | Scene data | All scenes, authored default selection or absence, hierarchy, names, TRS, matrices, and perspective cameras |
 | Geometry | Indexed or non-indexed triangles, triangle strips, and triangle fans |
-| Attributes | Positions, normals, generated normals, UV0, UV1, and vertex color |
+| Attributes | Positions, normals, generated normals, authored/generated tangents, UV0, UV1, and vertex color |
 | Sparse data | Sparse vertex attributes |
 
 Keep external buffers and images at the paths referenced by the `.gltf` file.
@@ -71,15 +71,24 @@ The viewer displays:
 - metallic and roughness factors and textures;
 - opaque, alpha-mask, and alpha-blend materials;
 - emissive and occlusion values and textures;
+- tangent-space normal textures, including scale, UV selection, and texture transform;
 - double-sided and unlit materials;
 - texture-coordinate selection and `KHR_texture_transform`;
 - emissive strength, IOR, specular factors, and supported quantized attributes.
 
-Core metallic-roughness materials receive built-in neutral studio
+Core metallic-roughness materials receive built-in high-contrast studio
 image-based lighting, including diffuse irradiance and roughness-dependent
 specular reflections. This environment is renderer-owned rather than imported
-from the glTF file. Authored scene lights, shadows, external HDR environments,
-skyboxes, and tangent-space normal mapping remain unsupported.
+from the glTF file. Missing or zero-length authored tangents for normal-mapped
+triangle meshes are generated with MikkTSpace; incompatible UV data falls back
+to geometric normals and is reported in Model Information. Invalid tangent
+accessor structure and non-finite tangent data remain load errors. Authored scene
+lights, shadows, external HDR environments, and skyboxes remain unsupported.
+
+Legacy models that require `KHR_materials_pbrSpecularGlossiness` open through a
+documented metallic-roughness approximation. Diffuse color and texture plus the
+scalar glossiness value are retained; the specular-glossiness texture is not
+represented and Model Information reports the material fallback.
 
 ## Diagnostics
 

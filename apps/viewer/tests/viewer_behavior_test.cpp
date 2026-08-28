@@ -258,7 +258,7 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
     }
     workflow.fail(elf3d::Error{elf3d::ErrorCode::invalid_argument, "Expected workflow failure"});
     if (!failed_workflow_matches(workflow) ||
-        workflow.activate(SceneReplacementRequest{SceneReplacementKind::close_to_demo, {}}) !=
+        workflow.activate(SceneReplacementRequest{SceneReplacementKind::close_to_empty, {}}) !=
             WorkflowActivation::frame_limit_reached) {
         return 23;
     }
@@ -269,12 +269,12 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
     using namespace elf3d::viewer;
     SceneReplacementWorkflow workflow;
     workflow.begin_frame();
-    if (workflow.activate(SceneReplacementRequest{SceneReplacementKind::close_to_demo, {}}) !=
+    if (workflow.activate(SceneReplacementRequest{SceneReplacementKind::close_to_empty, {}}) !=
         WorkflowActivation::accepted) {
         return 24;
     }
     const std::optional<SceneReplacementRequest> request = workflow.begin_execution();
-    if (!request.has_value() || request->kind != SceneReplacementKind::close_to_demo) {
+    if (!request.has_value() || request->kind != SceneReplacementKind::close_to_empty) {
         return 25;
     }
     workflow.succeed();
@@ -322,6 +322,11 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
     SceneHierarchyComponentState hierarchy;
     ViewerPresentationResources presentation;
     PendingFileInputState pending_files;
+    constexpr std::array<float, 4> expected_clear_color{213.0F / 255.0F, 227.0F / 255.0F,
+                                                        240.0F / 255.0F, 1.0F};
+    if (rendering.clear_color != expected_clear_color) {
+        return 43;
+    }
     ViewerFrameContext frame{shell,       rendering, performance,  diagnostics,  notifications,
                              interaction, hierarchy, presentation, pending_files};
     frame.shell.show_3d_view = false;

@@ -42,12 +42,16 @@ constexpr std::uint64_t engine_token = 11;
         data.colors = {
             {1.0F, 0.0F, 0.0F, 1.0F}, {0.0F, 1.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F, 1.0F}};
     }
+    if (layout_index >= 3U) {
+        data.tangents = {
+            {1.0F, 0.0F, 0.0F, 1.0F}, {1.0F, 0.0F, 0.0F, 1.0F}, {1.0F, 0.0F, 0.0F, 1.0F}};
+    }
     return data;
 }
 
 [[nodiscard]] bool add_layout_primitives(elf3d::Document& document, elf3d::MeshId mesh,
                                          elf3d::MaterialId material,
-                                         std::array<elf3d::PrimitiveId, 3>& primitives) {
+                                         std::array<elf3d::PrimitiveId, 4>& primitives) {
     for (std::size_t index = 0; index < primitives.size(); ++index) {
         const auto primitive = document.create_primitive(mesh, material, layout_triangle(index));
         if (!primitive) {
@@ -59,12 +63,14 @@ constexpr std::uint64_t engine_token = 11;
 }
 
 [[nodiscard]] bool has_expected_layout_uploads(const FakeDeviceState& device) {
-    constexpr std::array<elf3d::graphics::VertexLayout, 3> layouts{{
+    constexpr std::array<elf3d::graphics::VertexLayout, 4> layouts{{
         elf3d::graphics::VertexLayout::position_normal_float3,
         elf3d::graphics::VertexLayout::position_normal_float3_texcoord_float2,
         elf3d::graphics::VertexLayout::position_normal_float3_texcoord2_float2_color_float4,
+        elf3d::graphics::VertexLayout::
+            position_normal_float3_texcoord2_float2_color_float4_tangent_float4,
     }};
-    constexpr std::array<std::size_t, 3> bytes{{72U, 96U, 168U}};
+    constexpr std::array<std::size_t, 4> bytes{{72U, 96U, 168U, 216U}};
     return device.mesh_layouts ==
                std::vector<elf3d::graphics::VertexLayout>{layouts.begin(), layouts.end()} &&
            device.mesh_uploaded_bytes == std::vector<std::size_t>{bytes.begin(), bytes.end()};
@@ -86,7 +92,7 @@ struct LayoutScene {
     if (!mesh || !material) {
         return 1;
     }
-    std::array<elf3d::PrimitiveId, 3> primitives;
+    std::array<elf3d::PrimitiveId, 4> primitives;
     if (!add_layout_primitives(document, mesh.value(), material.value(), primitives)) {
         return 1;
     }
@@ -115,7 +121,7 @@ struct LayoutScene {
     if (!first || !second) {
         return false;
     }
-    return first.value().gpu_buffer_uploads == 3 && second.value().gpu_buffer_uploads == 0 &&
+    return first.value().gpu_buffer_uploads == 4 && second.value().gpu_buffer_uploads == 0 &&
            has_expected_layout_uploads(device);
 }
 
@@ -125,8 +131,9 @@ struct LayoutScene {
     if (prepared != 0) {
         return prepared;
     }
-    auto renderer_result =
-        elf3d::renderer::Renderer::create(std::make_unique<FakeDevice>(), engine_token);
+    auto renderer_result = elf3d::renderer::Renderer::create(
+        std::make_unique<FakeDevice>(), engine_token,
+        elf3d::renderer::tests::make_test_studio_environment_source());
     if (!renderer_result) {
         return 3;
     }

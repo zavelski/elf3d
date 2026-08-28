@@ -48,6 +48,7 @@ struct AccessorDescription {
 struct PrimitiveOutput {
     std::uint32_t positions = 0;
     std::optional<std::uint32_t> normals;
+    std::optional<std::uint32_t> tangents;
     std::optional<std::uint32_t> texcoord0;
     std::optional<std::uint32_t> texcoord1;
     std::optional<std::uint32_t> colors;
@@ -125,6 +126,20 @@ class BinaryBuilder final {
             append_float(value.green);
             append_float(value.blue);
             append_float(value.alpha);
+        }
+        return range.value();
+    }
+
+    [[nodiscard]] Result<ByteRange> append_tangents(std::span<const Float4> values) {
+        const Result<ByteRange> range = reserve(values.size(), 16U);
+        if (!range) {
+            return range.error();
+        }
+        for (const Float4 value : values) {
+            append_float(value.x);
+            append_float(value.y);
+            append_float(value.z);
+            append_float(value.w);
         }
         return range.value();
     }

@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -108,8 +109,8 @@ struct ForeignGlState {
     GLint program = 0;
     GLint vertex_array = 0;
     GLint active_texture = 0;
-    std::array<GLint, 7> textures_2d{};
-    std::array<GLint, 7> textures_cube{};
+    std::array<GLint, 8> textures_2d{};
+    std::array<GLint, 8> textures_cube{};
     GLboolean blend = GL_FALSE;
     GLboolean depth_test = GL_FALSE;
     GLboolean cull_face = GL_FALSE;
@@ -124,7 +125,7 @@ class ForeignGlObjects final {
     ~ForeignGlObjects() {
         glUseProgram(0);
         glBindVertexArray(0);
-        for (std::size_t index = 0; index < 7; ++index) {
+        for (std::size_t index = 0; index < 8; ++index) {
             glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
             glBindTexture(GL_TEXTURE_2D, 0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
@@ -227,7 +228,7 @@ class ForeignGlObjects final {
     glViewport(3, 4, 17, 19);
     glUseProgram(objects.program);
     glBindVertexArray(objects.vertex_array);
-    for (std::size_t index = 0; index < 7; ++index) {
+    for (std::size_t index = 0; index < 8; ++index) {
         glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
         glBindTexture(GL_TEXTURE_2D, objects.texture_2d);
         glBindTexture(GL_TEXTURE_CUBE_MAP, objects.texture_cube);
@@ -387,7 +388,7 @@ class ForeignGlObjects final {
     const std::uint8_t green_channel = pixels[center + 1U];
     const std::uint8_t blue_channel = pixels[center + 2U];
     const std::uint8_t alpha_channel = pixels[center + 3U];
-    if (!in_range(red_channel, 130U, 145U) || !in_range(green_channel, 180U, 196U) ||
+    if (!in_range(red_channel, 130U, 145U) || !in_range(green_channel, 162U, 184U) ||
         blue_channel > 8U || alpha_channel < 250U) {
         std::cerr << "Unexpected linear-blend sRGB pixel: R=" << static_cast<unsigned>(red_channel)
                   << " G=" << static_cast<unsigned>(green_channel)
@@ -415,6 +416,87 @@ read_center_pixel(elf3d::EmbeddedRuntime& runtime, const SmokeFixture& fixture) 
     constexpr std::size_t center = ((32U * 64U) + 32U) * 4U;
     return std::array<std::uint8_t, 4>{pixels[center], pixels[center + 1U], pixels[center + 2U],
                                        pixels[center + 3U]};
+}
+
+struct NormalMapPixelSample final {
+    std::array<std::uint8_t, 4> pixel{};
+    elf3d::RenderStatistics statistics;
+};
+
+[[nodiscard]] std::optional<NormalMapPixelSample>
+render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem::path& path) {
+    auto loaded = runtime.engine().load_scene(path.string());
+    auto viewport = runtime.engine().create_viewport({64U, 64U});
+    if (!loaded || !viewport) {
+        return std::nullopt;
+    }
+    std::unique_ptr<elf3d::Scene> scene = std::move(loaded).value().scene;
+    const auto camera = scene->create_perspective_camera_entity({});
+    if (!camera) {
+        return std::nullopt;
+    }
+    elf3d::Transform camera_transform;
+    camera_transform.translation.z = 3.0F;
+    if (!scene->set_local_transform(camera.value(), camera_transform)) {
+        return std::nullopt;
+    }
+    std::unique_ptr<elf3d::Viewport> fixture_viewport = std::move(viewport).value();
+    fixture_viewport->set_clear_color({0.0F, 0.0F, 0.0F, 1.0F});
+    elf3d::EnvironmentLighting environment;
+    environment.intensity = 0.0F;
+    fixture_viewport->set_environment_lighting(environment);
+    if (!fixture_viewport->render(*scene, camera.value())) {
+        return std::nullopt;
+    }
+    SmokeFixture fixture{std::move(scene), std::move(fixture_viewport), {}, camera.value()};
+    const auto pixel = read_center_pixel(runtime, fixture);
+    if (!pixel) {
+        return std::nullopt;
+    }
+    return NormalMapPixelSample{*pixel, fixture.viewport->render_statistics()};
+}
+
+[[nodiscard]] unsigned pixel_rgb_difference(const std::array<std::uint8_t, 4>& first,
+                                            const std::array<std::uint8_t, 4>& second) noexcept {
+    unsigned difference = 0;
+    for (std::size_t index = 0; index < 3U; ++index) {
+        const int delta = static_cast<int>(first[index]) - static_cast<int>(second[index]);
+        difference += static_cast<unsigned>(delta < 0 ? -delta : delta);
+    }
+    return difference;
+}
+
+[[nodiscard]] int verify_tangent_space_normal_mapping(elf3d::EmbeddedRuntime& runtime) {
+    const std::filesystem::path fixtures =
+        std::filesystem::path{ELF3D_TEST_SOURCE_DIR} / "tests" / "fixtures" / "normal_mapping";
+    const auto geometric = render_normal_map_fixture(runtime, fixtures / "geometric.gltf");
+    const auto flat = render_normal_map_fixture(runtime, fixtures / "flat.gltf");
+    const auto tilted = render_normal_map_fixture(runtime, fixtures / "tilted.gltf");
+    const auto scale_zero = render_normal_map_fixture(runtime, fixtures / "scale_zero.gltf");
+    if (!geometric || !flat || !tilted || !scale_zero) {
+        return fail(38, "Normal-map pixel fixtures could not be rendered");
+    }
+    if (pixel_rgb_difference(geometric->pixel, flat->pixel) > 6U ||
+        pixel_rgb_difference(geometric->pixel, scale_zero->pixel) > 6U) {
+        return fail(39, "Flat or zero-scale normal map did not match geometric-normal output");
+    }
+    if (pixel_rgb_difference(geometric->pixel, tilted->pixel) < 8U ||
+        flat->statistics.gpu_texture_uploads != 1U ||
+        geometric->statistics.gpu_texture_uploads != 0U) {
+        std::cerr << "Normal-map pixels geometric=" << static_cast<unsigned>(geometric->pixel[0])
+                  << ',' << static_cast<unsigned>(geometric->pixel[1]) << ','
+                  << static_cast<unsigned>(geometric->pixel[2])
+                  << " flat=" << static_cast<unsigned>(flat->pixel[0]) << ','
+                  << static_cast<unsigned>(flat->pixel[1]) << ','
+                  << static_cast<unsigned>(flat->pixel[2])
+                  << " tilted=" << static_cast<unsigned>(tilted->pixel[0]) << ','
+                  << static_cast<unsigned>(tilted->pixel[1]) << ','
+                  << static_cast<unsigned>(tilted->pixel[2])
+                  << " uploads=" << geometric->statistics.gpu_texture_uploads << ','
+                  << flat->statistics.gpu_texture_uploads << '\n';
+        return fail(40, "Tilted normal map did not perturb lighting or upload lazily");
+    }
+    return 0;
 }
 
 [[nodiscard]] int verify_lazy_display_invalidation(elf3d::EmbeddedRuntime& runtime,
@@ -495,9 +577,7 @@ read_center_pixel(elf3d::EmbeddedRuntime& runtime, const SmokeFixture& fixture) 
                : fail(32, "Viewport rendering disturbed a foreign timer query");
 }
 
-[[nodiscard]] int run_render_smoke(elf3d::EmbeddedRuntime& runtime) {
-    elf3d::Engine& engine = runtime.engine();
-    SmokeFixture fixture;
+[[nodiscard]] int prepare_smoke_fixture(elf3d::Engine& engine, SmokeFixture& fixture) {
     const int objects = create_public_objects(engine, fixture);
     if (objects != 0) {
         return objects;
@@ -511,10 +591,10 @@ read_center_pixel(elf3d::EmbeddedRuntime& runtime, const SmokeFixture& fixture) 
     if (entities != 0) {
         return entities;
     }
-    const int camera_roles = verify_camera_role_errors(fixture);
-    if (camera_roles != 0) {
-        return camera_roles;
-    }
+    return verify_camera_role_errors(fixture);
+}
+
+[[nodiscard]] int verify_smoke_rendering(elf3d::EmbeddedRuntime& runtime, SmokeFixture& fixture) {
     const int rendered = render_scene(fixture);
     if (rendered != 0) {
         return rendered;
@@ -532,7 +612,21 @@ read_center_pixel(elf3d::EmbeddedRuntime& runtime, const SmokeFixture& fixture) 
         return foreign_timer;
     }
     const int pixel = verify_rendered_pixel(runtime, fixture);
-    return pixel != 0 ? pixel : verify_lazy_display_invalidation(runtime, fixture);
+    if (pixel != 0) {
+        return pixel;
+    }
+    return verify_tangent_space_normal_mapping(runtime);
+}
+
+[[nodiscard]] int run_render_smoke(elf3d::EmbeddedRuntime& runtime) {
+    SmokeFixture fixture;
+    const int camera_roles = prepare_smoke_fixture(runtime.engine(), fixture);
+    if (camera_roles != 0) {
+        return camera_roles;
+    }
+    const int normal_mapping = verify_smoke_rendering(runtime, fixture);
+    return normal_mapping != 0 ? normal_mapping
+                               : verify_lazy_display_invalidation(runtime, fixture);
 }
 
 [[nodiscard]] int

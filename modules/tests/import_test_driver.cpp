@@ -3,6 +3,7 @@
 
 int elf3d_image_decode_test();
 int elf3d_gltf_import_test();
+int elf3d_gltf_tangent_test();
 int elf3d_gltf_export_test();
 int elf3d_gltf_metadata_round_trip_test();
 
@@ -24,6 +25,9 @@ int main(int argument_count, char** arguments) {
     }
     if (test_case == "model_gltf_import") {
         return elf3d_gltf_import_test();
+    }
+    if (test_case == "model_gltf_tangent") {
+        return elf3d_gltf_tangent_test();
     }
     if (test_case == "model_gltf_export") {
         return elf3d_gltf_export_test();

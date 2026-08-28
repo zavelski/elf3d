@@ -88,6 +88,12 @@ vec3 pbr_neutral_tone_mapping(vec3 color)
     return mix(color, vec3(compressed_peak), desaturation_weight);
 }
 
+vec3 standard_tone_mapping(vec3 color)
+{
+    const float calibration = 1.590579;
+    return vec3(1.0) - exp2(-calibration * color);
+}
+
 void main()
 {
     vec4 linear_color = texture(u_linear_color_texture, v_texcoord);
@@ -95,8 +101,12 @@ void main()
                           sanitize_component(linear_color.g),
                           sanitize_component(linear_color.b));
     vec3 exposed = sanitized * exp2(u_exposure_ev);
-    vec3 display_linear = u_tone_mapping == 1 ? pbr_neutral_tone_mapping(exposed)
-                                               : max(exposed, vec3(0.0));
+    vec3 display_linear = max(exposed, vec3(0.0));
+    if (u_tone_mapping == 1) {
+        display_linear = pbr_neutral_tone_mapping(exposed);
+    } else if (u_tone_mapping == 2) {
+        display_linear = standard_tone_mapping(exposed);
+    }
     fragment_color = vec4(linear_to_srgb(display_linear), clamp(linear_color.a, 0.0, 1.0));
 }
 )glsl";
@@ -434,8 +444,13 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         glBindTexture(GL_TEXTURE_2D, linear_color_texture_);
         glUniform1i(resolve_texture_uniform_, 0);
         glUniform1f(resolve_exposure_uniform_, display_transform_.exposure_ev);
-        glUniform1i(resolve_tone_mapping_uniform_,
-                    display_transform_.tone_mapping == ToneMappingMode::pbr_neutral ? 1 : 0);
+        int tone_mapping = 0;
+        if (display_transform_.tone_mapping == ToneMappingMode::pbr_neutral) {
+            tone_mapping = 1;
+        } else if (display_transform_.tone_mapping == ToneMappingMode::standard) {
+            tone_mapping = 2;
+        }
+        glUniform1i(resolve_tone_mapping_uniform_, tone_mapping);
         {
             const GpuTimingScope timing{*state_, GpuTimingKind::resolve};
             glDrawArrays(GL_TRIANGLES, 0, 3);

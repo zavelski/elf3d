@@ -10,6 +10,33 @@
 namespace elf3d::viewer {
 namespace {
 
+[[nodiscard]] const char* tone_mapping_name(ToneMappingMode mode) noexcept {
+    if (mode == ToneMappingMode::none) {
+        return "none";
+    }
+    return mode == ToneMappingMode::pbr_neutral ? "pbr_neutral" : "standard";
+}
+
+void build_tone_mapping_control(DisplayTransform& display) {
+    constexpr std::array<const char*, 3> modes{{"Standard", "PBR Neutral", "None (diagnostic)"}};
+    int selected = 0;
+    if (display.tone_mapping == ToneMappingMode::pbr_neutral) {
+        selected = 1;
+    } else if (display.tone_mapping == ToneMappingMode::none) {
+        selected = 2;
+    }
+    if (!ImGui::Combo("Tone mapping", &selected, modes.data(), static_cast<int>(modes.size()))) {
+        return;
+    }
+    if (selected == 1) {
+        display.tone_mapping = ToneMappingMode::pbr_neutral;
+    } else if (selected == 2) {
+        display.tone_mapping = ToneMappingMode::none;
+    } else {
+        display.tone_mapping = ToneMappingMode::standard;
+    }
+}
+
 [[nodiscard]] std::string camera_evidence_text(const ViewerFrameContext& state,
                                                const SceneSession& session,
                                                const Viewport& viewport) {
@@ -43,10 +70,7 @@ namespace {
            << "environment_rotation_radians="
            << state.rendering.environment_lighting.rotation_radians << '\n'
            << "exposure_ev=" << state.rendering.display_transform.exposure_ev << '\n'
-           << "tone_mapping="
-           << (state.rendering.display_transform.tone_mapping == ToneMappingMode::none
-                   ? "none"
-                   : "pbr_neutral");
+           << "tone_mapping=" << tone_mapping_name(state.rendering.display_transform.tone_mapping);
     return stream.str();
 }
 
@@ -78,14 +102,7 @@ void build_lighting_controls(ViewerFrameContext& state) {
     }
     ImGui::SliderFloat("Exposure", &state.rendering.display_transform.exposure_ev, -4.0F, 4.0F,
                        "%.2f EV");
-    constexpr std::array<const char*, 2> tone_mapping_modes{{"PBR Neutral", "None (diagnostic)"}};
-    int tone_mapping =
-        state.rendering.display_transform.tone_mapping == ToneMappingMode::none ? 1 : 0;
-    if (ImGui::Combo("Tone mapping", &tone_mapping, tone_mapping_modes.data(),
-                     static_cast<int>(tone_mapping_modes.size()))) {
-        state.rendering.display_transform.tone_mapping =
-            tone_mapping == 1 ? ToneMappingMode::none : ToneMappingMode::pbr_neutral;
-    }
+    build_tone_mapping_control(state.rendering.display_transform);
     if (ImGui::Button("Reset Lighting")) {
         state.rendering.lighting = BasicLighting{};
         state.rendering.environment_lighting = EnvironmentLighting{};

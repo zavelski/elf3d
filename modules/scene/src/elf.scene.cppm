@@ -42,7 +42,7 @@ enum class RuntimeMaterialTextureSlot : std::uint8_t {
     occlusion,
     emissive,
 };
-enum class RuntimeVertexLayout : std::uint8_t { position_normal, position_normal_texcoord, full };
+enum class RuntimeVertexLayout : std::uint8_t { position_normal, textured, full, tangent };
 struct RuntimeTextureTransform {
     Float2 offset;
     Float2 scale{1.0F, 1.0F};
@@ -110,6 +110,7 @@ class RuntimePrimitiveView final {
     [[nodiscard]] Float2 texcoord0(std::size_t index) const noexcept;
     [[nodiscard]] Float2 texcoord1(std::size_t index) const noexcept;
     [[nodiscard]] Color4 color(std::size_t index) const noexcept;
+    [[nodiscard]] Float4 tangent(std::size_t index) const noexcept;
     [[nodiscard]] RuntimeVertexLayout vertex_layout() const noexcept;
 
   private:
@@ -120,6 +121,7 @@ class RuntimePrimitiveView final {
     std::span<const Float2> document_texcoord0_;
     std::span<const Float2> document_texcoord1_;
     std::span<const Color4> document_colors_;
+    std::span<const Float4> document_tangents_;
     std::span<const std::uint32_t> indices_;
     std::array<TextureAssetHandle, 5> compatibility_textures_;
     std::array<TextureId, 5> document_textures_;

@@ -112,6 +112,24 @@ Check project-owned C++ formatting with pinned `clang-format` 22.1.8:
 .\cmake\check-format.ps1
 ```
 
+## Regenerating the Built-in Studio Environment
+
+The checked-in v3 IBL is canonical generated data. Ordinary builds embed it
+but do not rebake it. After an intentional change to the analytic studio
+profile or baker, regenerate and verify it from a Release build:
+
+```powershell
+cmake --build --preset windows-release `
+    --target elf3d_studio_environment_baker --parallel
+.\out\build\windows-release\bin\Release\elf3d_studio_environment_baker.exe `
+    --output .\modules\renderer\assets\studio_environment_v3.ibl
+.\out\build\windows-release\bin\Release\elf3d_studio_environment_baker.exe `
+    --verify .\modules\renderer\assets\studio_environment_v3.ibl
+```
+
+Commit the baker and regenerated asset together. The normal build embeds only
+v3 in `elf3d.dll`; no sidecar IBL file is shipped.
+
 ## Common Problems
 
 - If CMake cannot locate Visual Studio, run the commands from a Visual Studio

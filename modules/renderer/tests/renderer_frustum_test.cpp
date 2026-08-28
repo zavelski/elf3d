@@ -138,8 +138,9 @@ struct FrustumScene {
     if (!list || !has_expected_culling(list.value())) {
         return 3;
     }
-    auto renderer_result =
-        elf3d::renderer::Renderer::create(std::make_unique<FakeDevice>(), engine_token);
+    auto renderer_result = elf3d::renderer::Renderer::create(
+        std::make_unique<FakeDevice>(), engine_token,
+        elf3d::renderer::tests::make_test_studio_environment_source());
     if (!renderer_result) {
         return 4;
     }

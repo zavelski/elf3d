@@ -143,13 +143,14 @@ struct MaterialBuildState {
         state.description.base_color_texture = texture.value().texture;
         state.description.base_color_texture_mapping = texture.value().mapping;
     }
-    if (pbr.specular_glossiness_texture.texture != nullptr) {
-        add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::material,
-                       ModelLoadDiagnosticCode::material_fallback,
-                       "KHR_materials_pbrSpecularGlossiness diffuse data was approximated, "
-                       "but its specular-glossiness texture is ignored",
-                       state.context);
-    }
+    const std::string message =
+        pbr.specular_glossiness_texture.texture != nullptr
+            ? "KHR_materials_pbrSpecularGlossiness was approximated as a dielectric "
+              "metallic-roughness material; its specular-glossiness texture is ignored"
+            : "KHR_materials_pbrSpecularGlossiness was approximated as a dielectric "
+              "metallic-roughness material";
+    add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::material,
+                   ModelLoadDiagnosticCode::material_fallback, message, state.context);
     return {};
 }
 
@@ -199,13 +200,6 @@ void apply_material_factors(MaterialBuildState& state) {
         state.description.normal_texture = texture.value().texture;
         state.description.normal_texture_mapping = texture.value().mapping;
         state.description.normal_scale = source.normal_texture.scale;
-        if (state.description.normal_texture.is_valid()) {
-            add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::material,
-                           ModelLoadDiagnosticCode::normal_map_fallback,
-                           "Normal texture was imported and preserved but is not rendered because "
-                           "Elf3D does not yet have a complete tangent-space path",
-                           state.context);
-        }
     }
     if (source.occlusion_texture.texture != nullptr) {
         Result<ImportedTextureView> texture = import_material_texture(

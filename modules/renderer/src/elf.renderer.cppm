@@ -5,9 +5,11 @@ module;
 #include <elf3d/rendering.h>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <vector>
 
 export module elf.renderer;
@@ -100,6 +102,12 @@ struct RenderRequest {
                                                    const scene::VisibilityFilter& visibility,
                                                    const clipping::ClippingFilter& clipping_filter);
 
+class StudioEnvironmentSource {
+  public:
+    virtual ~StudioEnvironmentSource() = default;
+    [[nodiscard]] virtual Result<std::span<const std::byte>> bytes() noexcept = 0;
+};
+
 class Renderer final {
   private:
     struct ConstructionKey final {};
@@ -108,7 +116,7 @@ class Renderer final {
     struct Resources final {
         std::unique_ptr<graphics::Device> device;
         std::uint64_t engine_token = 0;
-        std::unique_ptr<graphics::GraphicsPipeline> pipeline;
+        std::unique_ptr<StudioEnvironmentSource> environment_source;
         std::unique_ptr<CacheState> cache;
     };
     struct EnvironmentResources final {
@@ -120,7 +128,8 @@ class Renderer final {
 
   public:
     [[nodiscard]] static Result<std::unique_ptr<Renderer>>
-    create(std::unique_ptr<graphics::Device> device, std::uint64_t engine_token);
+    create(std::unique_ptr<graphics::Device> device, std::uint64_t engine_token,
+           std::unique_ptr<StudioEnvironmentSource> environment_source);
 
     Renderer(ConstructionKey, Resources resources) noexcept;
 
@@ -161,8 +170,8 @@ class Renderer final {
     };
 
     struct RenderExecutionContext final {
-        const scene::VisibilityFilter& visibility;
-        const clipping::ClippingFilter& clipping_filter;
+        std::span<const scene::VisibilityFilter> visibility;
+        std::span<const clipping::ClippingFilter> clipping_filter;
         double total_begin = 0.0;
     };
 
@@ -176,12 +185,16 @@ class Renderer final {
     struct PreparedDraw final {
         std::size_t packet_index = 0;
         std::array<std::size_t, graphics::material_texture_count> texture_indices{};
+        std::array<std::size_t, graphics::material_texture_count> image_indices{};
+        std::array<bool, graphics::material_texture_count> document_images{};
+        std::array<bool, graphics::material_texture_count> has_textures{};
         std::uint64_t material_identity = 0;
         graphics::DrawIndexedDescription description;
     };
 
     [[nodiscard]] Result<void> draw_render_items(const scene::Storage& scene,
                                                  graphics::RenderTarget& target, RenderPass& pass);
+    [[nodiscard]] Result<bool> ensure_pipeline_resources();
     [[nodiscard]] Result<bool> ensure_environment_resources();
     [[nodiscard]] Result<bool> prepare_environment(const RenderRequest& request);
     [[nodiscard]] Result<RenderStatistics>
@@ -190,6 +203,13 @@ class Renderer final {
     [[nodiscard]] Result<void> prepare_render_item(const scene::Storage& scene,
                                                    const RenderItem& item, RenderPass& pass,
                                                    std::vector<PreparedDraw>& prepared);
+    [[nodiscard]] Result<void> prepare_render_item_textures(const scene::Storage& scene,
+                                                            const RenderItem& item,
+                                                            const DrawPacket& packet,
+                                                            RenderPass& pass,
+                                                            PreparedDraw& prepared);
+    void configure_draw_description(const DrawPacket& packet, const RenderItem& item,
+                                    const RenderPass& pass, PreparedDraw& prepared) const;
     [[nodiscard]] std::uint64_t
     count_material_switches(const std::vector<PreparedDraw>& prepared) const noexcept;
     [[nodiscard]] Result<std::size_t> cached_draw_packet_index(const scene::Storage& scene,
@@ -204,7 +224,7 @@ class Renderer final {
                                                      const scene::RuntimePrimitiveView& primitive,
                                                      DrawPacket& packet,
                                                      std::uint64_t& upload_count,
-                                                     std::uint64_t& texture_bindings);
+                                                     bool include_normal_texture);
     [[nodiscard]] Result<std::size_t> cached_mesh(SceneId scene_id,
                                                   const scene::RuntimePrimitiveView& primitive,
                                                   RenderStatistics& statistics);
@@ -225,6 +245,7 @@ class Renderer final {
 
     std::unique_ptr<graphics::Device> device_;
     std::uint64_t engine_token_ = 0;
+    std::unique_ptr<StudioEnvironmentSource> environment_source_;
     std::unique_ptr<graphics::GraphicsPipeline> pipeline_;
     std::unique_ptr<CacheState> cache_;
     std::unique_ptr<EnvironmentResources> environment_;

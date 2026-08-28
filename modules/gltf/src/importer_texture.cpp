@@ -75,6 +75,31 @@ unpack_float3(const cgltf_accessor& accessor, ErrorCode error_code, std::string_
     }
 }
 
+[[nodiscard]] Result<std::vector<float>> unpack_float4(const cgltf_accessor& accessor,
+                                                       std::string_view context) {
+    if (accessor.count > std::numeric_limits<std::size_t>::max() / 4) {
+        return Error{ErrorCode::size_overflow,
+                     std::string{context} + " accessor size overflows addressable memory"};
+    }
+    if (accessor.type != cgltf_type_vec4 || accessor.count == 0) {
+        return Error{ErrorCode::invalid_accessor,
+                     std::string{context} + " requires a non-empty VEC4 accessor"};
+    }
+    try {
+        const std::size_t float_count = static_cast<std::size_t>(accessor.count) * 4;
+        std::vector<float> values(float_count);
+        if (cgltf_accessor_unpack_floats(&accessor, values.data(), float_count) != float_count) {
+            return Error{ErrorCode::invalid_accessor,
+                         std::string{context} + " could not be decoded from its accessor"};
+        }
+        return values;
+    } catch (const std::bad_alloc&) {
+        fatal_gltf_allocation_failure();
+    } catch (...) {
+        fatal_unexpected_gltf_boundary_exception();
+    }
+}
+
 [[nodiscard]] Result<std::vector<float>> unpack_color(const cgltf_accessor& accessor,
                                                       std::string_view context) {
     const std::size_t components = accessor.type == cgltf_type_vec3   ? 3U

@@ -46,7 +46,6 @@ constexpr std::size_t maximum_node_hierarchy_depth = 8192;
 constexpr cgltf_size maximum_mesh_count = 65536;
 constexpr cgltf_size maximum_primitive_count = 262144;
 constexpr cgltf_size maximum_accessor_count = 262144;
-constexpr std::uint64_t maximum_total_vertices = 50000000;
 constexpr std::uint64_t maximum_total_indices = 150000000;
 constexpr std::size_t signed_32_bit_maximum = 2147483647ULL;
 constexpr std::size_t glb_buffer_alignment = 4U;
@@ -184,6 +183,7 @@ void add_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
 [[nodiscard]] bool supported_required_extension(std::string_view extension) noexcept {
     return extension == "KHR_texture_transform" || extension == "KHR_materials_unlit" ||
            extension == "KHR_materials_emissive_strength" || extension == "KHR_materials_ior" ||
+           extension == "KHR_materials_pbrSpecularGlossiness" ||
            extension == "KHR_mesh_quantization";
 }
 
@@ -512,7 +512,7 @@ struct ResourceTotals {
         cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0);
     if (positions != nullptr &&
         !checked_add(totals.vertices, static_cast<std::uint64_t>(positions->count),
-                     maximum_total_vertices)) {
+                     maximum_imported_vertices)) {
         return Error{ErrorCode::resource_limit_exceeded,
                      "The glTF vertex count exceeds the importer limit"};
     }
