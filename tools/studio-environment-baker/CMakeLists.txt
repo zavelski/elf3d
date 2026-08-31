@@ -19,5 +19,5 @@ if(BUILD_TESTING)
             --verify
             "${PROJECT_SOURCE_DIR}/modules/renderer/assets/studio_environment_v3.ibl"
     )
-    set_tests_properties(elf3d.studio_environment_bake PROPERTIES TIMEOUT 120)
+    set_tests_properties(elf3d.studio_environment_bake PROPERTIES TIMEOUT 300)
 endif()

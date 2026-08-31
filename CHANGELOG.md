@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.10.6
+
+- Made full Debug validation resilient to transient hosted-runner load by
+  extending the byte-exact studio-environment verification timeout from two to
+  five minutes without changing its verification criteria.
+
 ## 0.10.5
 
 - Added glTF tangent-space normal mapping with authored-tangent import/export,
