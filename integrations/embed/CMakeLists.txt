@@ -23,3 +23,4 @@ set_target_properties(
 )
 
 elf3d_enable_warnings(elf3d_embed)
+elf3d_group_sources(elf3d_embed)

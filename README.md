@@ -74,8 +74,8 @@ own window and loop use the separately named embedding integration.
 
 ## Download the viewer
 
-Download the current
-[Elf3D 0.10.6 Windows x64 package](https://github.com/zavelski/elf3d/releases/tag/v0.10.6),
+This source version is **0.10.7**. Download a published
+[Windows x64 viewer package](https://github.com/zavelski/elf3d/releases/latest),
 extract it, and run `elf3d_viewer.exe`.
 
 Requirements:

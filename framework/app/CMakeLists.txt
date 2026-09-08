@@ -37,8 +37,9 @@ set_target_properties(
 )
 
 elf3d_enable_warnings(elf3d_app)
+elf3d_group_sources(elf3d_app)
 
-if(BUILD_TESTING)
+if(ELF3D_BUILD_TESTING)
     add_executable(
         elf3d_app_smoke_test
         tests/application_smoke_test.cpp

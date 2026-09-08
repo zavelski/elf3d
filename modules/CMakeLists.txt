@@ -142,6 +142,10 @@ target_link_libraries(
 add_library(
     elf3d_gltf_modules
     OBJECT
+        gltf/src/buffer_layout_repair.hpp
+        gltf/src/exporter_internal.hpp
+        gltf/src/exporter_json_internal.hpp
+        gltf/src/importer_internal.hpp
         gltf/src/exporter.cpp
         gltf/src/exporter_image.cpp
         gltf/src/exporter_json.cpp
@@ -221,6 +225,22 @@ set_target_properties(
 )
 elf3d_enable_warnings(elf3d_model)
 
+if(NOT ELF3D_BUILD_ENGINE)
+    target_sources(
+        elf3d_model
+        PRIVATE
+            ${PROJECT_SOURCE_DIR}/include/elf3d/core/api.h
+            ${PROJECT_SOURCE_DIR}/include/elf3d/core/assert.h
+            ${PROJECT_SOURCE_DIR}/include/elf3d/core/diagnostics.h
+            ${PROJECT_SOURCE_DIR}/include/elf3d/core/error.h
+            ${PROJECT_SOURCE_DIR}/include/elf3d/core/result.h
+            ${PROJECT_SOURCE_DIR}/include/elf3d/math/value_types.h
+            ${PROJECT_SOURCE_DIR}/include/elf3d/model.h
+            ${PROJECT_SOURCE_DIR}/include/elf3d/model_ids.h
+            ${PROJECT_SOURCE_DIR}/include/elf3d/model_types.h
+    )
+endif()
+
 if(ELF3D_BUILD_ENGINE)
 
 add_library(
@@ -247,6 +267,7 @@ target_link_libraries(
 add_library(
     elf3d_opengl_modules
     OBJECT
+        backend_opengl/src/device_internal.hpp
         backend_opengl/src/device.cpp
         backend_opengl/src/device_indexed_draw.cpp
         backend_opengl/src/device_overlay.cpp
@@ -276,6 +297,7 @@ target_link_libraries(
 add_library(
     elf3d_interaction_modules
     OBJECT
+        navigation/src/orbit_navigation_detail.h
         navigation/src/orbit_navigation_state.cpp
         navigation/src/orbit_navigation.cpp
         navigation/src/orbit_navigation_update.cpp
@@ -342,6 +364,11 @@ target_link_libraries(
 
 endif()
 
-if(BUILD_TESTING)
+get_property(elf3d_module_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(module_target IN LISTS elf3d_module_targets)
+    elf3d_group_sources(${module_target})
+endforeach()
+
+if(ELF3D_BUILD_TESTING)
     add_subdirectory(tests)
 endif()

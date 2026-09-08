@@ -1,6 +1,22 @@
 add_executable(
     elf3d_viewer
     WIN32
+    src/viewer_application.hpp
+    src/viewer_assets.hpp
+    src/viewer_browser.hpp
+    src/viewer_chrome.hpp
+    src/viewer_commands.hpp
+    src/viewer_component_state.hpp
+    src/viewer_components.hpp
+    src/viewer_input_math.hpp
+    src/viewer_performance.hpp
+    src/viewer_rendering_controls.hpp
+    src/viewer_scene_session.hpp
+    src/viewer_tools.hpp
+    src/viewer_ui.hpp
+    src/viewer_viewport.hpp
+    src/viewer_workflow_execution.hpp
+    src/viewer_workflows.hpp
     src/main.cpp
     src/viewer_assets.cpp
     src/viewer_browser.cpp
@@ -57,11 +73,15 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/assets"
         "$<TARGET_FILE_DIR:elf3d_viewer>/assets"
 )
-set_target_properties(elf3d_viewer PROPERTIES FOLDER "Elf3D/Applications")
+set_target_properties(elf3d_viewer PROPERTIES
+    FOLDER "Elf3D/Applications"
+    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:elf3d_viewer>"
+)
 
 elf3d_enable_warnings(elf3d_viewer)
+elf3d_group_sources(elf3d_viewer)
 
-if(BUILD_TESTING)
+if(ELF3D_BUILD_TESTING)
     add_executable(
         elf3d_viewer_behavior_tests
         tests/viewer_behavior_test.cpp

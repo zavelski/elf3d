@@ -11,7 +11,7 @@ set_target_properties(
 )
 elf3d_enable_warnings(elf3d_studio_environment_baker)
 
-if(BUILD_TESTING)
+if(ELF3D_BUILD_TESTING)
     add_test(
         NAME elf3d.studio_environment_bake
         COMMAND

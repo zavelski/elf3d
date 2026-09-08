@@ -32,7 +32,7 @@ target_link_libraries(
 set_target_properties(elf3d_render_quality_capture PROPERTIES FOLDER "Elf3D/Tools")
 elf3d_enable_warnings(elf3d_render_quality_capture)
 
-if(BUILD_TESTING)
+if(ELF3D_BUILD_TESTING)
     add_test(
         NAME elf3d.render_quality_material_pixels
         COMMAND
@@ -40,8 +40,8 @@ if(BUILD_TESTING)
             --model procedural-material
             --extent 1280x720
             --camera fit-front
-            --output ${CMAKE_BINARY_DIR}/render-quality-test/material.png
-            --metadata ${CMAKE_BINARY_DIR}/render-quality-test/material.json
+            --output ${PROJECT_BINARY_DIR}/render-quality-test/material.png
+            --metadata ${PROJECT_BINARY_DIR}/render-quality-test/material.json
             --validate-material true
     )
     set_tests_properties(

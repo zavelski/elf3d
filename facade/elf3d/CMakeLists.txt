@@ -5,9 +5,37 @@ add_library(
         src/engine_access.h
         src/scene.cpp
         src/viewport.cpp
+        src/viewport_impl.h
         src/viewport_navigation.cpp
 )
 add_library(elf3d::elf3d ALIAS elf3d)
+
+target_sources(
+    elf3d
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include/elf3d/assets.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/clipping.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/core/api.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/core/assert.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/core/diagnostics.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/core/error.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/core/result.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/elf3d.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/graphics.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/math/value_types.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/model.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/model_ids.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/model_types.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/navigation.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/picking.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/projection.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/rendering.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/scene.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/scene_load.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/selection.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/surface_anchor.h
+        ${PROJECT_SOURCE_DIR}/include/elf3d/viewport.h
+)
 
 if(WIN32)
     enable_language(RC)
@@ -85,3 +113,4 @@ set_target_properties(
 )
 
 elf3d_enable_warnings(elf3d)
+elf3d_group_sources(elf3d)

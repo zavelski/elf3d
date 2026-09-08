@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.3.4)
 
 project(
     Elf3D
-    VERSION 0.10.6
+    VERSION 0.10.7
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
@@ -14,11 +14,27 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>")
+foreach(kind IN ITEMS RUNTIME LIBRARY ARCHIVE)
+    if(NOT DEFINED CMAKE_${kind}_OUTPUT_DIRECTORY)
+        if(kind STREQUAL "ARCHIVE")
+            set(CMAKE_${kind}_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib/$<CONFIG>")
+        else()
+            set(CMAKE_${kind}_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin/$<CONFIG>")
+        endif()
+    endif()
+endforeach()
 
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+if(PROJECT_IS_TOP_LEVEL)
+    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+    include(CTest)
+    set(elf3d_testing_default "${BUILD_TESTING}")
+else()
+    set(elf3d_testing_default OFF)
+endif()
+option(ELF3D_BUILD_TESTING "Build and register Elf3D tests" ${elf3d_testing_default})
+if(ELF3D_BUILD_TESTING)
+    enable_testing()
+endif()
 
 option(ELF3D_BUILD_ENGINE "Build the full Elf3D engine and rendering stack" ON)
 option(
@@ -31,7 +47,7 @@ option(
     "Build the explicit host-owned embedding integration"
     ${ELF3D_BUILD_ENGINE}
 )
-option(ELF3D_BUILD_VIEWER "Build the Elf3D reference viewer" ON)
+option(ELF3D_BUILD_VIEWER "Build the Elf3D reference viewer" ${PROJECT_IS_TOP_LEVEL})
 option(ELF3D_BUILD_PERFORMANCE_BENCHMARK "Build the non-CTest render benchmark" OFF)
 if((ELF3D_BUILD_APP OR ELF3D_BUILD_EMBED OR ELF3D_BUILD_VIEWER) AND NOT ELF3D_BUILD_ENGINE)
     message(FATAL_ERROR "Elf3D application, embedding, and viewer targets require ELF3D_BUILD_ENGINE")
@@ -45,15 +61,15 @@ endif()
 
 set(
     elf3d_local_validation
-    "${CMAKE_SOURCE_DIR}/.internal/cmake/local-validation.cmake"
+    "${PROJECT_SOURCE_DIR}/.internal/cmake/local-validation.cmake"
 )
-if(EXISTS "${elf3d_local_validation}")
+if(PROJECT_IS_TOP_LEVEL AND EXISTS "${elf3d_local_validation}")
     include("${elf3d_local_validation}")
 endif()
 
 include(cmake/compiler_options.cmake)
+include(cmake/ide.cmake)
 include(cmake/dependencies.cmake)
-include(CTest)
 
 if(ELF3D_BUILD_ENGINE)
     add_subdirectory(tools/studio-environment-baker)
@@ -76,9 +92,12 @@ endif()
 
 if(ELF3D_BUILD_VIEWER)
     add_subdirectory(apps/viewer)
+    if(PROJECT_IS_TOP_LEVEL)
+        set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT elf3d_viewer)
+    endif()
 endif()
 
-if(BUILD_TESTING AND ELF3D_BUILD_ENGINE)
+if(ELF3D_BUILD_TESTING AND ELF3D_BUILD_ENGINE)
     add_subdirectory(tests)
 endif()
 

@@ -67,6 +67,17 @@ jobs:
         run: cmake --build --preset windows-debug --parallel 4
       - name: Test
         run: ctest --preset windows-debug --output-on-failure
+      - name: Configure external application
+        run: >-
+          cmake -S examples/external_application -B out/build/external-application
+          -G "Visual Studio 17 2022" -A x64
+          "-DELF3D_SOURCE_DIR=$env:GITHUB_WORKSPACE"
+      - name: Build external application
+        run: >-
+          cmake --build out/build/external-application --config Debug
+          --target elf3d_external_application --parallel 4
+      - name: Test external application
+        run: ctest --test-dir out/build/external-application -C Debug --output-on-failure
 
   windows-model-debug:
     name: Windows model-only Debug

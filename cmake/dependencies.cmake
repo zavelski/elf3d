@@ -231,7 +231,7 @@ set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(
     ${ELF3D_THIRD_PARTY_DIR}/glfw
-    ${CMAKE_BINARY_DIR}/third_party/glfw
+    ${PROJECT_BINARY_DIR}/third_party/glfw
     EXCLUDE_FROM_ALL
 )
 

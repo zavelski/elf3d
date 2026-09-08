@@ -14,6 +14,7 @@
       "binaryDir": "${sourceDir}/out/build/windows-debug",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
+        "ELF3D_BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "ELF3D_BUILD_APP": "ON",
         "ELF3D_BUILD_EMBED": "ON",
@@ -30,6 +31,7 @@
       "binaryDir": "${sourceDir}/out/build/windows-release",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
+        "ELF3D_BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "ELF3D_BUILD_APP": "ON",
         "ELF3D_BUILD_EMBED": "ON",
@@ -46,6 +48,7 @@
       "binaryDir": "${sourceDir}/out/build/windows-model-debug",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
+        "ELF3D_BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "ELF3D_BUILD_APP": "OFF",
         "ELF3D_BUILD_EMBED": "OFF",
@@ -62,6 +65,7 @@
       "binaryDir": "${sourceDir}/out/build/windows-model-release",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
+        "ELF3D_BUILD_TESTING": "ON",
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "ELF3D_BUILD_APP": "OFF",
         "ELF3D_BUILD_EMBED": "OFF",

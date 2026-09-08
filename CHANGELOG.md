@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.10.7
+
+- Improved Visual Studio navigation with explicit project headers and source
+  filters matching repository directories, keeping module interfaces beside
+  their implementations.
+- Set the standalone viewer as the initial startup project, configured its
+  debugger working directory beside the executable, and added a generated
+  study solution filter containing the viewer's complete dependency tree.
+- Added `ELF3D_BUILD_TESTING` and dependency-friendly viewer defaults so
+  external applications retain their own tests, startup target, and output
+  directories when building with shared Elf3D sources.
+- Added a standalone public-header application example, independent Windows
+  Debug CI coverage, expanded build/IDE contracts, and manual debugging guides.
+- Preserved the public C++ interface, internal C++ modules, and existing product
+  and third-party build structure.
+
 ## 0.10.6
 
 - Made full Debug validation resilient to transient hosted-runner load by

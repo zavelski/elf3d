@@ -7,6 +7,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot 'check-ide-contracts.ps1')
+
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 }
@@ -242,6 +244,7 @@ foreach ($contract in $contracts) {
         throw "Configure preset '$($contract.Name)' must use Visual Studio 2022 x64."
     }
     Assert-CacheValue -Preset $configurePreset -Variable "BUILD_TESTING" -Expected "ON"
+    Assert-CacheValue -Preset $configurePreset -Variable "ELF3D_BUILD_TESTING" -Expected "ON"
     Assert-CacheValue -Preset $configurePreset -Variable "CMAKE_CONFIGURATION_TYPES" `
         -Expected "Debug;Release"
     Assert-CacheValue -Preset $configurePreset -Variable "ELF3D_BUILD_ENGINE" `
@@ -296,6 +299,44 @@ try {
         $targets = Read-ConfiguredTargets -BuildDirectory $buildDirectory
         Assert-TargetContract -PresetName $contract.Name -Targets $targets `
             -RequiredTargets $contract.RequiredTargets -ForbiddenTargets $contract.ForbiddenTargets
+        Assert-TargetContract -PresetName $contract.Name -Targets $targets `
+            -RequiredTargets @('elf3d_foundation_tests', 'elf3d_model_tests') -ForbiddenTargets @()
+        Assert-IdeContract -BuildDirectory $buildDirectory -RepositoryPath $repositoryPath `
+            -Engine ($contract.Engine -eq 'ON')
+    }
+    $externalBuild = Join-Path $runRoot 'external-application'
+    & cmake -S (Join-Path $repositoryPath 'examples/external_application') -B $externalBuild `
+        -G 'Visual Studio 17 2022' -A x64 "-DELF3D_SOURCE_DIR=$repositoryPath"
+    if ($LASTEXITCODE -ne 0) { throw 'External application configure failed.' }
+    Assert-ExternalApplicationContract -BuildDirectory $externalBuild -RepositoryPath $repositoryPath
+
+    # A dependency must also honor explicit opt-ins without taking over the parent.
+    & cmake -S (Join-Path $repositoryPath 'examples/external_application') -B $externalBuild `
+        -DELF3D_BUILD_TESTING=ON -DELF3D_BUILD_VIEWER=ON
+    if ($LASTEXITCODE -ne 0) { throw 'External application explicit opt-in configure failed.' }
+    $externalProjects = @(Read-SolutionProjects (Join-Path $externalBuild 'Elf3DExternalApplication.sln'))
+    $dependencyProjects = @(Read-SolutionProjects (Join-Path $externalBuild 'elf3d/Elf3D.sln'))
+    if ($externalProjects[0].Name -ne 'elf3d_external_application' -or
+        'elf3d_viewer' -notin $dependencyProjects.Name -or 'elf3d_app_smoke_test' -notin $dependencyProjects.Name) {
+        throw 'Explicit Elf3D dependency options or parent startup project were not preserved.'
+    }
+
+    # On a fresh standalone configure the Elf3D default follows BUILD_TESTING.
+    $noTestsBuild = Join-Path $runRoot 'standalone-no-tests'
+    & cmake --preset windows-model-debug -S $repositoryPath -B $noTestsBuild `
+        -DBUILD_TESTING=OFF -U ELF3D_BUILD_TESTING
+    if ($LASTEXITCODE -ne 0) { throw 'Standalone testing-default configure failed.' }
+    $cache = Get-Content -LiteralPath (Join-Path $noTestsBuild 'CMakeCache.txt') -Raw
+    $noTestsProjects = @(Read-SolutionProjects (Join-Path $noTestsBuild 'Elf3D.sln'))
+    if ($cache -notmatch '(?m)^ELF3D_BUILD_TESTING:BOOL=OFF\r?$' -or
+        @($noTestsProjects | Where-Object { $_.Name -match '^elf3d_.*tests$' }).Count -ne 0) {
+        throw 'Standalone ELF3D_BUILD_TESTING did not default to BUILD_TESTING=OFF.'
+    }
+    & cmake -S $repositoryPath -B $noTestsBuild -DELF3D_BUILD_TESTING=ON
+    if ($LASTEXITCODE -ne 0) { throw 'Standalone explicit testing configure failed.' }
+    $enabledProjects = @(Read-SolutionProjects (Join-Path $noTestsBuild 'Elf3D.sln'))
+    if ('elf3d_model_tests' -notin $enabledProjects.Name) {
+        throw 'Explicit ELF3D_BUILD_TESTING=ON must take precedence over BUILD_TESTING=OFF.'
     }
     Write-Host "All Elf3D preset contracts passed."
 }

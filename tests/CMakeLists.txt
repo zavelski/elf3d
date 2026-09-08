@@ -143,6 +143,6 @@ if(TARGET glfw AND TARGET elf3d_embed)
 endif()
 
 set(elf3d_internal_tests "${PROJECT_SOURCE_DIR}/.internal/cmake/internal-tests.cmake")
-if(EXISTS "${elf3d_internal_tests}")
+if(PROJECT_IS_TOP_LEVEL AND EXISTS "${elf3d_internal_tests}")
     include("${elf3d_internal_tests}")
 endif()
