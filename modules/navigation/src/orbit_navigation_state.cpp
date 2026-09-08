@@ -2,6 +2,7 @@ module;
 
 #include "orbit_navigation_detail.h"
 #include <elf3d/core/assert.h>
+#include <elf3d/navigation.h>
 
 #include <algorithm>
 #include <cmath>

@@ -1,9 +1,9 @@
-import elf.core;
-
 #include <elf3d/core/diagnostics.h>
 #include <elf3d/core/result.h>
 
 #include <string>
+
+import elf.core;
 
 namespace {
 

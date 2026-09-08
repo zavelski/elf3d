@@ -2,15 +2,16 @@
   "version": 6,
   "cmakeMinimumRequired": {
     "major": 4,
-    "minor": 3,
-    "patch": 4
+    "minor": 4,
+    "patch": 3
   },
   "configurePresets": [
     {
       "name": "windows-debug",
       "displayName": "Windows x64 Debug",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
+      "toolset": "v145,host=x64",
       "binaryDir": "${sourceDir}/out/build/windows-debug",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
@@ -26,8 +27,9 @@
     {
       "name": "windows-release",
       "displayName": "Windows x64 Release",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
+      "toolset": "v145,host=x64",
       "binaryDir": "${sourceDir}/out/build/windows-release",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
@@ -43,8 +45,9 @@
     {
       "name": "windows-model-debug",
       "displayName": "Windows x64 Model Debug",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
+      "toolset": "v145,host=x64",
       "binaryDir": "${sourceDir}/out/build/windows-model-debug",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
@@ -60,8 +63,9 @@
     {
       "name": "windows-model-release",
       "displayName": "Windows x64 Model Release",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
+      "toolset": "v145,host=x64",
       "binaryDir": "${sourceDir}/out/build/windows-model-release",
       "cacheVariables": {
         "BUILD_TESTING": "ON",

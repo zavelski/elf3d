@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$CMakeExecutable = "cmake",
-    [string]$ExpectedVersion = "4.3.4"
+    [string]$ExpectedVersion = "4.4.3"
 )
 
 Set-StrictMode -Version Latest

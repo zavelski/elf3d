@@ -1,5 +1,3 @@
-#include "studio_environment_resource.h"
-
 #include <elf3d/core/result.h>
 
 #define NOMINMAX
@@ -13,6 +11,7 @@
 import elf.renderer;
 
 #include "resource_ids.h"
+#include "studio_environment_resource.h"
 
 namespace elf3d::detail {
 namespace {

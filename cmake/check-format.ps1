@@ -2,7 +2,7 @@
 param(
     [string]$RepositoryRoot = "",
     [string]$ClangFormatExecutable = "clang-format",
-    [string]$ExpectedVersion = "22.1.8"
+    [string]$ExpectedVersion = "23.1.0"
 )
 
 Set-StrictMode -Version Latest

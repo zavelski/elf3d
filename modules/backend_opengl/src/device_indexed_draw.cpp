@@ -23,6 +23,16 @@ module elf.backend.opengl;
 
 import elf.graphics;
 
+// Use the imported graphics types; global-fragment forward declarations create different types.
+namespace elf3d::backend::opengl::device_detail {
+[[nodiscard]] Result<RenderTargetView> render_target_view(graphics::RenderTarget& target) noexcept;
+void mark_render_target_stale(graphics::RenderTarget& target) noexcept;
+[[nodiscard]] Result<MeshView> mesh_view(graphics::StaticMesh& mesh) noexcept;
+[[nodiscard]] Result<PipelineView> pipeline_view(graphics::GraphicsPipeline& pipeline) noexcept;
+[[nodiscard]] Result<GLuint> texture_object(const graphics::Texture2D* texture) noexcept;
+[[nodiscard]] Result<GLuint> texture_cube_object(const graphics::TextureCube* texture) noexcept;
+} // namespace elf3d::backend::opengl::device_detail
+
 namespace elf3d::backend::opengl::device_detail {
 namespace {
 

@@ -74,7 +74,7 @@ own window and loop use the separately named embedding integration.
 
 ## Download the viewer
 
-This source version is **0.10.7**. Download a published
+This source version is **0.11.0**. Download a published
 [Windows x64 viewer package](https://github.com/zavelski/elf3d/releases/latest),
 extract it, and run `elf3d_viewer.exe`.
 
@@ -82,7 +82,8 @@ Requirements:
 
 - Windows x64;
 - an OpenGL 4.1-capable graphics driver;
-- Microsoft Visual C++ Redistributable for Visual Studio 2022.
+- Microsoft Visual C++ v14 x64 Redistributable, at least as recent as the
+  MSVC 19.51 build tools used for this release. The IDE is not required to run it.
 
 Open a model from **File > Open...**, pass its path as the first command-line
 argument, or drop it onto the viewer. Use **File > Save As...** to export the
@@ -90,8 +91,10 @@ retained model as `.gltf` or `.glb`.
 
 ## Build from source
 
-Install Visual Studio 2022 with the v143 Desktop development with C++ toolset
-and CMake 4.3.4. From the repository root:
+Install Visual Studio 2026 or newer with Desktop development with C++ (native
+MSVC 19.50 or newer), standalone CMake 4.4.3, and PowerShell 7.6.5 or newer.
+The current presets select v145/x64 and generate `.slnx` solutions. Recreate
+existing build directories when upgrading the toolchain. From the repository root:
 
 ```powershell
 cmake --preset windows-debug

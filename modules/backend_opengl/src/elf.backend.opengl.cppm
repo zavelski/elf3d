@@ -10,10 +10,6 @@ export module elf.backend.opengl;
 import elf.core;
 import elf.graphics;
 
-export namespace elf3d::graphics {
-class Device;
-}
-
 export namespace elf3d::backend::opengl {
 
 using GraphicsProcedure = void (*)();

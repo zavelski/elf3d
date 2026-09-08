@@ -5,12 +5,28 @@
 The supported build configuration is:
 
 - Windows x64;
-- Visual Studio 2022 with the v143 Desktop development with C++ toolset;
-- CMake 4.3.4;
+- Visual Studio 2026 or newer with Desktop development with C++ and native MSVC
+  19.50 or newer; the current presets select v145, x64 host and target tools;
+- CMake 4.4.3;
+- PowerShell 7.6.5 or newer for automation;
 - an OpenGL 4.1-capable graphics driver for viewer and graphics tests.
 
 All required third-party source is included in the repository. A normal
 configure and build does not download dependencies.
+
+Use standalone CMake, CTest and CPack from the same installation. The CMake
+bundled with Visual Studio may be older than the required version. The current
+toolchain is VS 2026 18.9.2, MSVC 19.51.36256.0, Windows SDK 10.0.26100.0,
+CMake 4.4.3 and clang-format 23.1.0. Run `cmake/check-windows-environment.ps1`
+to inspect discovery before configuring.
+
+CMake generates native `.slnx` solutions. When upgrading the compiler or
+generator, preserve personal debugger settings and recreate the entire build
+directory, including nested solutions and compiler module artifacts. Removing
+only `CMakeCache.txt` does not remove stale projects. Older Visual Studio
+generators, old MSVC compilers, and v143 overrides fail explicitly. Newer
+eligible generations are permitted; select their generator/toolset in a new
+build directory. C++20 and the Debug `/MDd` / Release `/MD` runtime remain required.
 
 ## Debug Build
 
@@ -107,11 +123,11 @@ external-application configuration, without compiling them:
 The public CI runs the full and model-only Debug profiles independently and
 builds/tests the standalone external-application example in the full Debug job.
 Scheduled and manually dispatched workflows also run both Release profiles.
-Every CI job pins CMake 4.3.4; older CMake releases are not a supported
+Every CI job pins CMake 4.4.3; older CMake releases are not a supported
 compatibility target. CI limits builds to four parallel jobs for predictable
 resource use on hosted runners.
 
-Check project-owned C++ formatting with pinned `clang-format` 22.1.8:
+Check project-owned C++ formatting with pinned `clang-format` 23.1.0:
 
 ```powershell
 .\cmake\check-format.ps1
@@ -120,7 +136,7 @@ Check project-owned C++ formatting with pinned `clang-format` 22.1.8:
 ## Visual Studio Study and Debugging
 
 After `cmake --preset windows-debug`, open
-`out/build/windows-debug/Elf3D.sln` in Visual Studio 2022. Select `Debug | x64`.
+`out/build/windows-debug/Elf3D.slnx` in Visual Studio 2026. Select `Debug | x64`.
 In a fresh standalone solution, `elf3d_viewer` is the startup project; press F5
 to build and debug it. If Visual Studio has retained a different startup choice
 in its local user settings, right-click `elf3d_viewer` and select **Set as
@@ -144,7 +160,7 @@ For a smaller study view, run from the repository root:
 Open the resulting `Elf3D-Study.slnf` in the same directory. It contains viewer
 and the complete recursive `ProjectReference` closure, including third-party
 and CMake dependencies. The script reads the existing generated solution;
-it neither builds nor changes the full `.sln`. Regenerate the filter after
+it neither builds nor changes the full `.slnx`. Regenerate the filter after
 changing targets/dependencies. Tests and unrelated tools remain accessible
 through the full solution. The filter uses the same binaries and build tree.
 
@@ -173,7 +189,7 @@ Validate the example without creating an application outside this repository:
 
 ```powershell
 cmake -S examples/external_application -B out/build/external-application `
-    -G "Visual Studio 17 2022" -A x64 "-DELF3D_SOURCE_DIR=$((Get-Location).Path)"
+    -G "Visual Studio 18 2026" -A x64 -T v145,host=x64 "-DELF3D_SOURCE_DIR=$((Get-Location).Path)"
 cmake --build out/build/external-application --config Debug `
     --target elf3d_external_application --parallel 4
 ctest --test-dir out/build/external-application -C Debug --output-on-failure
@@ -199,7 +215,7 @@ Elf3D defaults its viewer and tests to `OFF` when included as a dependency;
 the parent's `BUILD_TESTING` remains independent. Explicit
 `ELF3D_BUILD_VIEWER=ON` and `ELF3D_BUILD_TESTING=ON` opt back in. With
 `EXCLUDE_FROM_ALL`, optional targets unrelated to the application are available
-in CMake's nested `elf3d/Elf3D.sln`; they do not appear automatically in the
+in CMake's nested `elf3d/Elf3D.slnx`; they do not appear automatically in the
 parent solution or build with the application. Build those targets separately
 before running the additional Elf3D tests. Other product options retain their
 existing defaults.

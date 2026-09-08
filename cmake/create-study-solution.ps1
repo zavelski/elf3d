@@ -7,26 +7,21 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot 'solution-projects.ps1')
+
 $buildPath = (Resolve-Path -LiteralPath $BuildDirectory).Path
-$solutionPath = Join-Path $buildPath "Elf3D.sln"
+$solutionPath = Join-Path $buildPath "Elf3D.slnx"
 if (-not (Test-Path -LiteralPath $solutionPath -PathType Leaf)) {
-    throw "Elf3D.sln was not found in '$buildPath'. Configure a full Visual Studio preset first."
+    throw "Elf3D.slnx was not found in '$buildPath'. Configure a full Visual Studio preset first."
 }
 
-# Keep the paths recorded in the solution: slnf projects are relative to the sln.
+# Keep solution-relative paths for the solution filter.
 $projects = @{}
 $viewer = $null
-foreach ($line in Get-Content -LiteralPath $solutionPath) {
-    if ($line -match '^Project\("[^"]+"\) = "([^"]+)", "([^"]+\.vcxproj)",') {
-        $name = $Matches[1]
-        $relativePath = $Matches[2]
-        $absolutePath = [System.IO.Path]::GetFullPath(
-            [System.IO.Path]::Combine($buildPath, $relativePath)
-        )
-        $projects[$absolutePath] = $relativePath
-        if ($name -eq "elf3d_viewer") {
-            $viewer = $absolutePath
-        }
+foreach ($entry in Read-SolutionProjects $solutionPath) {
+    $projects[$entry.Path] = $entry.RelativePath
+    if ($entry.Name -eq 'elf3d_viewer') {
+        $viewer = $entry.Path
     }
 }
 if ($null -eq $viewer) {
@@ -50,8 +45,12 @@ while ($pending.Count -gt 0) {
         throw "Referenced project '$projectPath' does not exist. Regenerate the solution."
     }
     [xml]$project = Get-Content -LiteralPath $projectPath -Raw
-    foreach ($reference in $project.SelectNodes("//*[local-name()='ProjectReference'][@Include]")) {
+    # ItemDefinitionGroup also contains ProjectReference defaults without Include.
+    foreach ($reference in $project.SelectNodes("//*[local-name()='ItemGroup']/*[local-name()='ProjectReference']")) {
         $referencePath = $reference.GetAttribute("Include")
+        if ([string]::IsNullOrWhiteSpace($referencePath)) {
+            throw "ProjectReference in '$projectPath' is missing a valid Include path."
+        }
         $absoluteReference = [System.IO.Path]::GetFullPath(
             [System.IO.Path]::Combine((Split-Path -Parent $projectPath), $referencePath)
         )
@@ -61,7 +60,7 @@ while ($pending.Count -gt 0) {
 
 $filter = [ordered]@{
     solution = [ordered]@{
-        path = "Elf3D.sln"
+        path = "Elf3D.slnx"
         projects = @($visited | ForEach-Object { $projects[$_] } | Sort-Object)
     }
 }

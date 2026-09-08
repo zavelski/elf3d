@@ -18,6 +18,13 @@ and Elf3D's default/explicit testing and viewer options. It removes temporary
 trees after completion (`-KeepBuilds` retains them). It does not compile or
 provide evidence of Visual Studio UI behavior.
 
+The same gate checks XML solution folders and `DefaultStartup`, deterministic
+study filters, missing/duplicate project references, v145/x64 and CRT settings,
+effective compiler/MSBuild versions, repeated configuration, and rejection of
+unsupported toolchains. Nested solutions must use `.slnx` too. Focused parser
+and discovery checks can run without compiling or accessing a private model:
+`cmake/check-solution-contracts.ps1`.
+
 ## Automated Tests
 
 Configure, build, and run the Debug suite:
@@ -89,7 +96,7 @@ and teardown.
 
 CI runs the full Debug suite and an independent model-only Debug suite for
 every push and pull request. A weekly schedule and manual dispatch additionally
-run both Release suites. All jobs use the project's current pinned CMake 4.3.4
+run both Release suites. All jobs use the project's current pinned CMake 4.4.3
 baseline rather than testing older CMake compatibility. The standard hosted
 Windows environment does not guarantee an OpenGL 4.1 runtime, so the
 context-dependent application, viewer, rendering, and integration smoke tests

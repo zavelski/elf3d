@@ -12,7 +12,7 @@ are welcome.
 4. Update the relevant public documentation.
 5. Preserve all third-party copyright and license notices.
 
-Check project-owned C++ with the CI-pinned `clang-format` 22.1.8 before
+Check project-owned C++ with the CI-pinned `clang-format` 23.1.0 before
 submitting:
 
 ```powershell

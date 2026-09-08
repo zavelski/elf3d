@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 import elf.assets;
 import elf.graphics;

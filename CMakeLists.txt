@@ -1,11 +1,15 @@
-cmake_minimum_required(VERSION 4.3.4)
+cmake_minimum_required(VERSION 4.4.3)
+
+include(cmake/windows-toolchain.cmake)
 
 project(
     Elf3D
-    VERSION 0.10.7
+    VERSION 0.11.0
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
+
+elf3d_check_windows_compiler()
 
 set(ELF3D_LICENSE_SPDX "MIT")
 

@@ -25,6 +25,13 @@ module elf.backend.opengl;
 
 import elf.graphics;
 
+// Use the imported graphics types; global-fragment forward declarations create different types.
+namespace elf3d::backend::opengl::device_detail {
+[[nodiscard]] Result<PickingTargetView>
+picking_target_view(graphics::PickingTarget& target) noexcept;
+[[nodiscard]] Result<MeshView> mesh_view(graphics::StaticMesh& mesh) noexcept;
+} // namespace elf3d::backend::opengl::device_detail
+
 namespace elf3d::backend::opengl::device_detail {
 namespace {
 

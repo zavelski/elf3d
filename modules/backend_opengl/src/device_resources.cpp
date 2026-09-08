@@ -25,6 +25,7 @@ module elf.backend.opengl;
 import elf.graphics;
 
 namespace elf3d::backend::opengl::device_detail {
+[[nodiscard]] bool is_opengl_texture(const graphics::Texture2D* texture) noexcept;
 namespace {
 
 class OpenGLTexture2D final : public graphics::Texture2D {

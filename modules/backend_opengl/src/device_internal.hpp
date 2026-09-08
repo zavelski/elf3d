@@ -17,25 +17,6 @@
 #include <unordered_map>
 #include <vector>
 
-namespace elf3d::graphics {
-class Device;
-class GraphicsPipeline;
-class PickingTarget;
-class RenderTarget;
-class StaticMesh;
-class Texture2D;
-class TextureCube;
-struct DrawIndexedDescription;
-struct IndexedDrawBatchItem;
-struct DrawOverlayDescription;
-struct GraphicsPipelineDescription;
-struct PickingDrawDescription;
-struct PickingDrawBatchItem;
-struct StaticMeshDescription;
-struct Texture2DDescription;
-struct TextureCubeDescription;
-} // namespace elf3d::graphics
-
 namespace elf3d::backend::opengl::device_detail {
 
 inline constexpr char missing_loader_message[] =
@@ -51,7 +32,6 @@ inline constexpr char thread_failure_message[] =
 [[noreturn]] void fatal_opengl_allocation_failure() noexcept;
 [[noreturn]] void fatal_unexpected_opengl_boundary_exception() noexcept;
 [[nodiscard]] std::uintptr_t opengl_resource_token() noexcept;
-[[nodiscard]] bool is_opengl_texture(const graphics::Texture2D* texture) noexcept;
 
 class ColorTextureResolver {
   public:
@@ -292,41 +272,6 @@ struct PipelineView {
     std::optional<float>* environment_rotation = nullptr;
 };
 
-[[nodiscard]] Result<std::unique_ptr<graphics::RenderTarget>>
-create_render_target(std::shared_ptr<OpenGLDeviceState> state, Extent2D initial_extent) noexcept;
-[[nodiscard]] Result<std::unique_ptr<graphics::PickingTarget>>
-create_picking_target(std::shared_ptr<OpenGLDeviceState> state, Extent2D initial_extent) noexcept;
-[[nodiscard]] Result<RenderTargetView> render_target_view(graphics::RenderTarget& target) noexcept;
-[[nodiscard]] Result<PickingTargetView>
-picking_target_view(graphics::PickingTarget& target) noexcept;
-void mark_render_target_stale(graphics::RenderTarget& target) noexcept;
-
-[[nodiscard]] Result<std::unique_ptr<graphics::StaticMesh>>
-create_static_mesh(std::shared_ptr<OpenGLDeviceState> state,
-                   const graphics::StaticMeshDescription& description) noexcept;
-[[nodiscard]] Result<std::unique_ptr<graphics::Texture2D>>
-create_texture_2d(std::shared_ptr<OpenGLDeviceState> state,
-                  const graphics::Texture2DDescription& description) noexcept;
-[[nodiscard]] Result<std::unique_ptr<graphics::TextureCube>>
-create_texture_cube(std::shared_ptr<OpenGLDeviceState> state,
-                    const graphics::TextureCubeDescription& description) noexcept;
-[[nodiscard]] Result<std::unique_ptr<graphics::GraphicsPipeline>>
-create_graphics_pipeline(std::shared_ptr<OpenGLDeviceState> state,
-                         const graphics::GraphicsPipelineDescription& description) noexcept;
-[[nodiscard]] Result<MeshView> mesh_view(graphics::StaticMesh& mesh) noexcept;
-[[nodiscard]] Result<PipelineView> pipeline_view(graphics::GraphicsPipeline& pipeline) noexcept;
-[[nodiscard]] Result<GLuint> texture_object(const graphics::Texture2D* texture) noexcept;
-[[nodiscard]] Result<GLuint> texture_cube_object(const graphics::TextureCube* texture) noexcept;
-
-[[nodiscard]] Result<void>
-draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
-             graphics::StaticMesh& mesh,
-             const graphics::DrawIndexedDescription& description) noexcept;
-[[nodiscard]] Result<void>
-draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
-                   std::span<graphics::StaticMesh* const> meshes,
-                   std::span<const graphics::DrawIndexedDescription> descriptions) noexcept;
-
 struct OverlayResources {
     GLuint program = 0;
     GLuint vertex_array = 0;
@@ -334,9 +279,6 @@ struct OverlayResources {
     GLint color_uniform = -1;
 };
 
-[[nodiscard]] Result<void>
-draw_overlay(OverlayResources& resources, graphics::RenderTarget& target,
-             const graphics::DrawOverlayDescription& description) noexcept;
 void release_overlay_resources(OverlayResources& resources) noexcept;
 
 struct PickingResources {
@@ -364,18 +306,6 @@ struct PickingReadback {
     float depth = 1.0F;
 };
 
-[[nodiscard]] Result<void>
-draw_picking_indexed(PickingResources& resources, graphics::PickingTarget& target,
-                     graphics::StaticMesh& mesh,
-                     const graphics::PickingDrawDescription& description) noexcept;
-[[nodiscard]] Result<void>
-draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
-                   std::span<graphics::StaticMesh* const> meshes,
-                   std::span<const graphics::PickingDrawDescription> descriptions) noexcept;
-[[nodiscard]] Result<std::optional<PickingReadback>>
-read_picking_pixel(graphics::PickingTarget& target, Float2 position_pixels) noexcept;
-[[nodiscard]] Result<std::vector<float>>
-read_picking_depths(graphics::PickingTarget& target) noexcept;
 void release_picking_resources(PickingResources& resources) noexcept;
 
 } // namespace elf3d::backend::opengl::device_detail

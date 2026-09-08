@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.3.4)
+cmake_minimum_required(VERSION 4.4.3)
 project(Elf3DExternalApplication LANGUAGES C CXX)
 
 set(ELF3D_SOURCE_DIR "" CACHE PATH "Path to the shared Elf3D source checkout")

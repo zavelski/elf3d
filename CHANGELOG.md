@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.11.0
+
+- Moved Windows source builds to Visual Studio 2026 or newer with native
+  MSVC 19.50 or newer, CMake 4.4.3, and PowerShell 7.6.5 or newer. All four
+  presets select v145 with x64 host and target tools.
+- Adopted native CMake-generated `.slnx` solutions throughout, including
+  nested dependencies and the existing `Elf3D-Study.slnf` viewer filter.
+- Expanded startup, project-reference, toolchain, CRT, regeneration and
+  external-application contracts, with explicit rejection of older toolchains.
+- Fixed declaration visibility and include/import ordering exposed by the
+  new compiler, preserving C++20, public C++ interfaces and runtime behavior.
+- Updated Windows CI to the Visual Studio 2026 runner and pinned formatting
+  to clang-format 23.1.0. Rebuilt binaries and dependencies with MSVC 19.51;
+  the viewer requires a sufficiently recent Microsoft Visual C++ v14 x64 runtime.
+
 ## 0.10.7
 
 - Improved Visual Studio navigation with explicit project headers and source

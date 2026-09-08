@@ -1,6 +1,8 @@
 module;
 
+#include <elf3d/assets.h>
 #include <elf3d/core/assert.h>
+#include <elf3d/model.h>
 
 #include <array>
 #include <cstddef>

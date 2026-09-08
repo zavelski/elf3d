@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot 'check-ide-contracts.ps1')
+& (Join-Path $PSScriptRoot 'check-solution-contracts.ps1')
 
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -148,6 +149,32 @@ if ($null -eq (Get-Command cmake -ErrorAction SilentlyContinue)) {
     throw "CMake is required to validate preset contracts."
 }
 
+$legacyFiles = if (Test-Path -LiteralPath (Join-Path $repositoryPath '.git')) {
+    $files = @(& git -C $repositoryPath ls-files --cached --others --exclude-standard -- '*.sln')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect source solution files.' }
+    $files
+} else {
+    # Source archives have no Git metadata; do not inspect a parent repository.
+    Get-ChildItem -LiteralPath $repositoryPath -Force |
+        Where-Object { $_.Name -notin 'out', '.local' } |
+        ForEach-Object {
+            if ($_.PSIsContainer) {
+                Get-ChildItem -LiteralPath $_.FullName -Recurse -File -Filter '*.sln'
+            } elseif ($_.Extension -eq '.sln') { $_ }
+        } | Select-Object -ExpandProperty FullName
+}
+$legacyFiles = @($legacyFiles)
+if ($legacyFiles.Count) { throw "Legacy source solutions are unsupported: $($legacyFiles -join ', ')." }
+foreach ($relative in @('CMakePresets.json', 'CMakeLists.txt', '.github/workflows/ci.yml',
+    'examples/external_application/CMakeLists.txt', 'cmake/create-study-solution.ps1',
+    '.agents/skills/elf3d-corpus/scripts/run-corpus.ps1')) {
+    $path = Join-Path $repositoryPath $relative
+    if (-not (Test-Path -LiteralPath $path)) { continue } # Internal scripts are absent in public exports.
+    if ((Get-Content -LiteralPath $path -Raw) -match 'Visual Studio 17 2022|Microsoft Visual Studio[/\\]+2022|windows-2022|\bv143\b|\.sln["'']') {
+        throw "Active source configuration '$relative' still selects an unsupported toolchain/solution."
+    }
+}
+
 $contracts = @(
     [pscustomobject]@{
         Name = "windows-debug"
@@ -233,15 +260,15 @@ $contracts = @(
 
 $presets = Get-Content -LiteralPath $presetPath -Raw | ConvertFrom-Json
 $minimum = $presets.cmakeMinimumRequired
-if ($minimum.major -ne 4 -or $minimum.minor -ne 3 -or $minimum.patch -ne 4) {
-    throw "CMakePresets.json must declare the supported CMake baseline 4.3.4."
+if ($minimum.major -ne 4 -or $minimum.minor -ne 4 -or $minimum.patch -ne 3) {
+    throw "CMakePresets.json must declare the supported CMake baseline 4.4.3."
 }
 foreach ($contract in $contracts) {
     $configurePreset = Get-NamedEntry -Entries @($presets.configurePresets) `
         -Name $contract.Name -Kind "configure preset"
-    if ($configurePreset.generator -ne "Visual Studio 17 2022" -or
-        $configurePreset.architecture -ne "x64") {
-        throw "Configure preset '$($contract.Name)' must use Visual Studio 2022 x64."
+    if ($configurePreset.generator -ne "Visual Studio 18 2026" -or
+        $configurePreset.architecture -ne "x64" -or $configurePreset.toolset -ne "v145,host=x64") {
+        throw "Configure preset '$($contract.Name)' must use Visual Studio 2026 x64."
     }
     Assert-CacheValue -Preset $configurePreset -Variable "BUILD_TESTING" -Expected "ON"
     Assert-CacheValue -Preset $configurePreset -Variable "ELF3D_BUILD_TESTING" -Expected "ON"
@@ -296,6 +323,10 @@ try {
             throw "CMake configure failed for preset '$($contract.Name)' with exit code $LASTEXITCODE."
         }
 
+        # Regeneration must not accumulate duplicate projects or legacy solutions.
+        & cmake --preset $contract.Name -S $repositoryPath -B $buildDirectory
+        if ($LASTEXITCODE -ne 0) { throw "Repeated configure failed for '$($contract.Name)'." }
+
         $targets = Read-ConfiguredTargets -BuildDirectory $buildDirectory
         Assert-TargetContract -PresetName $contract.Name -Targets $targets `
             -RequiredTargets $contract.RequiredTargets -ForbiddenTargets $contract.ForbiddenTargets
@@ -306,7 +337,7 @@ try {
     }
     $externalBuild = Join-Path $runRoot 'external-application'
     & cmake -S (Join-Path $repositoryPath 'examples/external_application') -B $externalBuild `
-        -G 'Visual Studio 17 2022' -A x64 "-DELF3D_SOURCE_DIR=$repositoryPath"
+        -G 'Visual Studio 18 2026' -A x64 -T v145,host=x64 "-DELF3D_SOURCE_DIR=$repositoryPath"
     if ($LASTEXITCODE -ne 0) { throw 'External application configure failed.' }
     Assert-ExternalApplicationContract -BuildDirectory $externalBuild -RepositoryPath $repositoryPath
 
@@ -314,9 +345,9 @@ try {
     & cmake -S (Join-Path $repositoryPath 'examples/external_application') -B $externalBuild `
         -DELF3D_BUILD_TESTING=ON -DELF3D_BUILD_VIEWER=ON
     if ($LASTEXITCODE -ne 0) { throw 'External application explicit opt-in configure failed.' }
-    $externalProjects = @(Read-SolutionProjects (Join-Path $externalBuild 'Elf3DExternalApplication.sln'))
-    $dependencyProjects = @(Read-SolutionProjects (Join-Path $externalBuild 'elf3d/Elf3D.sln'))
-    if ($externalProjects[0].Name -ne 'elf3d_external_application' -or
+    $externalProjects = @(Read-SolutionProjects (Join-Path $externalBuild 'Elf3DExternalApplication.slnx'))
+    $dependencyProjects = @(Read-SolutionProjects (Join-Path $externalBuild 'elf3d/Elf3D.slnx'))
+    if ((Get-SolutionStartupProject $externalProjects).Name -ne 'elf3d_external_application' -or
         'elf3d_viewer' -notin $dependencyProjects.Name -or 'elf3d_app_smoke_test' -notin $dependencyProjects.Name) {
         throw 'Explicit Elf3D dependency options or parent startup project were not preserved.'
     }
@@ -327,14 +358,14 @@ try {
         -DBUILD_TESTING=OFF -U ELF3D_BUILD_TESTING
     if ($LASTEXITCODE -ne 0) { throw 'Standalone testing-default configure failed.' }
     $cache = Get-Content -LiteralPath (Join-Path $noTestsBuild 'CMakeCache.txt') -Raw
-    $noTestsProjects = @(Read-SolutionProjects (Join-Path $noTestsBuild 'Elf3D.sln'))
+    $noTestsProjects = @(Read-SolutionProjects (Join-Path $noTestsBuild 'Elf3D.slnx'))
     if ($cache -notmatch '(?m)^ELF3D_BUILD_TESTING:BOOL=OFF\r?$' -or
         @($noTestsProjects | Where-Object { $_.Name -match '^elf3d_.*tests$' }).Count -ne 0) {
         throw 'Standalone ELF3D_BUILD_TESTING did not default to BUILD_TESTING=OFF.'
     }
     & cmake -S $repositoryPath -B $noTestsBuild -DELF3D_BUILD_TESTING=ON
     if ($LASTEXITCODE -ne 0) { throw 'Standalone explicit testing configure failed.' }
-    $enabledProjects = @(Read-SolutionProjects (Join-Path $noTestsBuild 'Elf3D.sln'))
+    $enabledProjects = @(Read-SolutionProjects (Join-Path $noTestsBuild 'Elf3D.slnx'))
     if ('elf3d_model_tests' -notin $enabledProjects.Name) {
         throw 'Explicit ELF3D_BUILD_TESTING=ON must take precedence over BUILD_TESTING=OFF.'
     }
