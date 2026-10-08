@@ -102,7 +102,8 @@ struct ClippingToolOverlay {
     std::array<OverlayLineSegment, 4 + maximum_clipping_boxes * 12> lines;
     std::size_t line_count = 0;
 
-    [[nodiscard]] std::span<const OverlayLineSegment> line_span() const noexcept {
+    [[nodiscard]] std::span<const OverlayLineSegment> line_span() const noexcept
+    {
         return {lines.data(), line_count};
     }
 };
@@ -161,11 +162,13 @@ struct MeasurementOverlay {
     std::size_t line_count = 0;
     std::size_t marker_count = 0;
 
-    [[nodiscard]] std::span<const OverlayLineSegment> line_span() const noexcept {
+    [[nodiscard]] std::span<const OverlayLineSegment> line_span() const noexcept
+    {
         return {lines.data(), line_count};
     }
 
-    [[nodiscard]] std::span<const OverlayPointMarker> marker_span() const noexcept {
+    [[nodiscard]] std::span<const OverlayPointMarker> marker_span() const noexcept
+    {
         return {markers.data(), marker_count};
     }
 };

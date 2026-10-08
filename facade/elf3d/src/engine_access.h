@@ -27,14 +27,15 @@ struct NativeTextureView {
     std::uintptr_t value = 0;
     Extent2D extent;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return api != NativeGraphicsApi::none && value != 0 && extent.width != 0 &&
                extent.height != 0;
     }
 };
 
 // Private cross-target construction and presentation boundary. This header is
-// not installed and is available only to the standard and embedding owners.
+// not installed and is available only to the standard framework and native boundary tests.
 class ELF3D_API EngineAccess final {
   public:
     [[nodiscard]] static Result<std::unique_ptr<Engine>>

@@ -66,7 +66,7 @@ set(forbidden_targets
     elf3d_public_api_test
     elf3d_opengl_render_smoke_test
     elf3d_model_quick_test
-    elf3d_module_import_smoke
+    elf3d_header_contract_smoke
 )
 foreach(target IN LISTS forbidden_targets)
     string(FIND "${target_directories}" "/${target}.dir" target_position)

@@ -28,13 +28,6 @@ try {
     if ($projects.Count -ne 2 -or (Get-SolutionStartupProject $projects).Name -ne 'elf3d_viewer') {
         throw 'Root/nested project paths or explicit startup metadata were not read.'
     }
-    & (Join-Path $PSScriptRoot 'create-study-solution.ps1') -BuildDirectory $root
-    $filterPath = Join-Path $root 'Elf3D-Study.slnf'
-    $hash = (Get-FileHash $filterPath).Hash
-    & (Join-Path $PSScriptRoot 'create-study-solution.ps1') -BuildDirectory $root
-    $filter = Get-Content $filterPath -Raw | ConvertFrom-Json
-    if ($hash -ne (Get-FileHash $filterPath).Hash -or $filter.solution.projects.Count -ne 2 -or
-        $filter.solution.path -ne 'Elf3D.slnx') { throw 'Study-filter closure or determinism failed.' }
     Assert-Rejected { Read-SolutionProjects (Join-Path $root 'absent.slnx') } 'does not exist|Cannot find'
     Assert-Rejected { Read-SolutionProjects (Join-Path $root 'legacy.sln') } 'only .slnx'
     '<Solution><Project/></Solution>' | Set-Content $solution
@@ -44,18 +37,9 @@ try {
     '<Solution><Project Path="utility.vcxproj"/><Project Path="./UTILITY.vcxproj"/></Solution>' | Set-Content $solution
     Assert-Rejected { Read-SolutionProjects $solution } 'Duplicate'
     '<Solution><Project Path="utility.vcxproj"/></Solution>' | Set-Content $solution
-    Assert-Rejected { & (Join-Path $PSScriptRoot 'create-study-solution.ps1') -BuildDirectory $root } 'no elf3d_viewer'
     Assert-Rejected { Get-SolutionStartupProject @(Read-SolutionProjects $solution) } 'exactly one'
     '<Solution><Project Path="utility.vcxproj" DefaultStartup="true"/><Project Path="nested/elf3d_viewer.vcxproj" DefaultStartup="true"/></Solution>' | Set-Content $solution
     Assert-Rejected { Get-SolutionStartupProject @(Read-SolutionProjects $solution) } 'exactly one'
-    $validXml | Set-Content $solution
-    '<Project><ItemGroup><ProjectReference Include="outside.vcxproj"/></ItemGroup></Project>' | Set-Content $viewer
-    Assert-Rejected { & (Join-Path $PSScriptRoot 'create-study-solution.ps1') -BuildDirectory $root } 'does not belong'
-    foreach ($invalidReference in @('<ProjectReference/>', '<ProjectReference Include=" "/>')) {
-        "<Project><ItemGroup>$invalidReference</ItemGroup></Project>" | Set-Content $viewer
-        Assert-Rejected { & (Join-Path $PSScriptRoot 'create-study-solution.ps1') -BuildDirectory $root } 'missing a valid Include'
-    }
-
     # Exercise compiler policy without depending on old IDE/toolset installation.
     $toolchain = (Join-Path $PSScriptRoot 'windows-toolchain.cmake').Replace('\', '/')
     $probe = Join-Path $root 'toolchain.cmake'
@@ -80,7 +64,7 @@ elf3d_check_windows_compiler()
     $cmakeCommand = Get-Command cmake -CommandType Application | Select-Object -First 1
     $tools = Resolve-Elf3DCMakeTools -CMakePath $cmakeCommand.Source
     Assert-Rejected { Resolve-Elf3DCMakeTools -CMakePath $tools.CMake -CTestPath $tools.CMake } 'stable ctest version'
-    Write-Host 'Solution XML, study closure, discovery, and toolchain failure contracts passed.'
+    Write-Host 'Solution XML, discovery, and toolchain failure contracts passed.'
 } finally {
     $resolved = (Resolve-Path -LiteralPath $root).Path
     if (-not $resolved.StartsWith($outputRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {

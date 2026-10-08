@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/backend_opengl.h>
 
 #include <elf3d/graphics.h>
 
@@ -10,6 +10,7 @@ module;
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/graphics.h>
 #include <memory>
 #include <new>
 #include <optional>
@@ -20,10 +21,6 @@ module;
 #include <type_traits>
 #include <utility>
 #include <vector>
-
-module elf.backend.opengl;
-
-import elf.graphics;
 
 // Use the imported graphics types; global-fragment forward declarations create different types.
 namespace elf3d::backend::opengl::device_detail {
@@ -76,9 +73,12 @@ using namespace device_detail;
 class OpenGLDevice final : public graphics::Device {
   public:
     explicit OpenGLDevice(std::shared_ptr<OpenGLDeviceState> state) noexcept
-        : state_(std::move(state)) {}
+        : state_(std::move(state))
+    {
+    }
 
-    ~OpenGLDevice() override {
+    ~OpenGLDevice() override
+    {
         if (state_->can_destroy_objects()) {
             release_picking_resources(picking_resources_);
             release_overlay_resources(overlay_resources_);
@@ -86,13 +86,15 @@ class OpenGLDevice final : public graphics::Device {
         state_->shut_down();
     }
 
-    [[nodiscard]] double monotonic_time_milliseconds() const noexcept override {
+    [[nodiscard]] double monotonic_time_milliseconds() const noexcept override
+    {
         const auto elapsed = std::chrono::steady_clock::now().time_since_epoch();
         return std::chrono::duration<double, std::milli>(elapsed).count();
     }
 
     [[nodiscard]] graphics::GpuTimingSample
-    delayed_gpu_timing(graphics::GpuTimingPass pass) noexcept override {
+    delayed_gpu_timing(graphics::GpuTimingPass pass) noexcept override
+    {
         GpuTimingKind kind = GpuTimingKind::main;
         switch (pass) {
         case graphics::GpuTimingPass::main:
@@ -104,26 +106,31 @@ class OpenGLDevice final : public graphics::Device {
             kind = GpuTimingKind::resolve;
             break;
         }
+
         const GpuTimingResult timing = state_->latest_gpu_timing(kind);
         return graphics::GpuTimingSample{timing.milliseconds, timing.available};
     }
 
-    [[nodiscard]] GraphicsBackend backend() const noexcept override {
+    [[nodiscard]] GraphicsBackend backend() const noexcept override
+    {
         return GraphicsBackend::opengl;
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::RenderTarget>>
-    create_render_target(Extent2D initial_extent) noexcept override {
+    create_render_target(Extent2D initial_extent) noexcept override
+    {
         return device_detail::create_render_target(state_, initial_extent);
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::PickingTarget>>
-    create_picking_target(Extent2D initial_extent) noexcept override {
+    create_picking_target(Extent2D initial_extent) noexcept override
+    {
         return device_detail::create_picking_target(state_, initial_extent);
     }
 
     [[nodiscard]] Result<graphics::NativeTextureView>
-    native_texture_view(TextureHandle texture) const noexcept override {
+    native_texture_view(TextureHandle texture) const noexcept override
+    {
         Result<OpenGLTextureView> view = state_->native_texture_view(texture);
         if (!view) {
             return view.error();
@@ -133,7 +140,8 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::StaticMesh>>
-    create_static_mesh(const graphics::StaticMeshDescription& description) noexcept override {
+    create_static_mesh(const graphics::StaticMeshDescription& description) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -142,7 +150,8 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::Texture2D>>
-    create_texture_2d(const graphics::Texture2DDescription& description) noexcept override {
+    create_texture_2d(const graphics::Texture2DDescription& description) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -151,7 +160,8 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::TextureCube>>
-    create_texture_cube(const graphics::TextureCubeDescription& description) noexcept override {
+    create_texture_cube(const graphics::TextureCubeDescription& description) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -160,7 +170,8 @@ class OpenGLDevice final : public graphics::Device {
     }
 
     [[nodiscard]] Result<std::unique_ptr<graphics::GraphicsPipeline>> create_graphics_pipeline(
-        const graphics::GraphicsPipelineDescription& description) noexcept override {
+        const graphics::GraphicsPipelineDescription& description) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -171,7 +182,8 @@ class OpenGLDevice final : public graphics::Device {
     [[nodiscard]] Result<void>
     draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
                  graphics::StaticMesh& mesh,
-                 const graphics::DrawIndexedDescription& description) noexcept override {
+                 const graphics::DrawIndexedDescription& description) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -182,18 +194,21 @@ class OpenGLDevice final : public graphics::Device {
     [[nodiscard]] Result<void> draw_indexed_batch(
         graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
         std::span<graphics::StaticMesh* const> meshes,
-        std::span<const graphics::DrawIndexedDescription> descriptions) noexcept override {
+        std::span<const graphics::DrawIndexedDescription> descriptions) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
         }
+
         const GpuTimingScope timing{*state_, GpuTimingKind::main};
         return device_detail::draw_indexed_batch(target, pipeline, meshes, descriptions);
     }
 
     [[nodiscard]] Result<void>
     draw_overlay(graphics::RenderTarget& target,
-                 const graphics::DrawOverlayDescription& description) noexcept override {
+                 const graphics::DrawOverlayDescription& description) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -203,7 +218,8 @@ class OpenGLDevice final : public graphics::Device {
 
     [[nodiscard]] Result<void>
     draw_picking_indexed(graphics::PickingTarget& target, graphics::StaticMesh& mesh,
-                         const graphics::PickingDrawDescription& description) noexcept override {
+                         const graphics::PickingDrawDescription& description) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -213,21 +229,25 @@ class OpenGLDevice final : public graphics::Device {
 
     [[nodiscard]] Result<void> draw_picking_batch(
         graphics::PickingTarget& target, std::span<graphics::StaticMesh* const> meshes,
-        std::span<const graphics::PickingDrawDescription> descriptions) noexcept override {
+        std::span<const graphics::PickingDrawDescription> descriptions) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
         }
+
         const GpuTimingScope timing{*state_, GpuTimingKind::picking};
         return device_detail::draw_picking_batch(picking_resources_, target, meshes, descriptions);
     }
 
     [[nodiscard]] Result<std::optional<graphics::PickingPixel>>
-    read_picking_pixel(graphics::PickingTarget& target, Float2 position_pixels) noexcept override {
+    read_picking_pixel(graphics::PickingTarget& target, Float2 position_pixels) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
         }
+
         Result<std::optional<PickingReadback>> readback =
             device_detail::read_picking_pixel(target, position_pixels);
         if (!readback) {
@@ -236,13 +256,15 @@ class OpenGLDevice final : public graphics::Device {
         if (!readback.value().has_value()) {
             return std::optional<graphics::PickingPixel>{};
         }
+
         const PickingReadback& pixel = *readback.value();
         return std::optional<graphics::PickingPixel>{graphics::PickingPixel{
             pixel.object_id, pixel.primitive_index, pixel.instance_index, pixel.depth}};
     }
 
     [[nodiscard]] Result<std::vector<float>>
-    read_picking_depths(graphics::PickingTarget& target) noexcept override {
+    read_picking_depths(graphics::PickingTarget& target) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -258,7 +280,8 @@ class OpenGLDevice final : public graphics::Device {
 
 } // namespace
 
-Result<std::unique_ptr<graphics::Device>> create_device(const DeviceOptions& options) noexcept {
+Result<std::unique_ptr<graphics::Device>> create_device(const DeviceOptions& options) noexcept
+{
     if (options.load_procedure == nullptr) {
         return Error{ErrorCode::missing_graphics_procedure_loader, missing_loader_message};
     }

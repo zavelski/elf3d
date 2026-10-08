@@ -107,39 +107,48 @@ class Document::Storage final {
 
     [[nodiscard]] std::uint64_t token() const noexcept;
 
-    [[nodiscard]] bool owns(DocumentSceneId id) const noexcept {
+    [[nodiscard]] bool owns(DocumentSceneId id) const noexcept
+    {
         return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
-    [[nodiscard]] bool owns(NodeId id) const noexcept {
+    [[nodiscard]] bool owns(NodeId id) const noexcept
+    {
         return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
-    [[nodiscard]] bool owns(MeshId id) const noexcept {
+    [[nodiscard]] bool owns(MeshId id) const noexcept
+    {
         return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
-    [[nodiscard]] bool owns(PrimitiveId id) const noexcept {
+    [[nodiscard]] bool owns(PrimitiveId id) const noexcept
+    {
         return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
-    [[nodiscard]] bool owns(MaterialId id) const noexcept {
+    [[nodiscard]] bool owns(MaterialId id) const noexcept
+    {
         return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
-    [[nodiscard]] bool owns(ImageId id) const noexcept {
+    [[nodiscard]] bool owns(ImageId id) const noexcept
+    {
         return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
-    [[nodiscard]] bool owns(TextureId id) const noexcept {
+    [[nodiscard]] bool owns(TextureId id) const noexcept
+    {
         return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
-    [[nodiscard]] bool owns(SamplerId id) const noexcept {
+    [[nodiscard]] bool owns(SamplerId id) const noexcept
+    {
         return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
     }
 
-    [[nodiscard]] Result<SceneRecord*> mutable_scene(DocumentSceneId id) noexcept {
+    [[nodiscard]] Result<SceneRecord*> mutable_scene(DocumentSceneId id) noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_document_scene_id,
                          "The scene identifier does not belong to this document"};
@@ -152,7 +161,8 @@ class Document::Storage final {
         return &scenes[index];
     }
 
-    [[nodiscard]] Result<const SceneRecord*> scene(DocumentSceneId id) const noexcept {
+    [[nodiscard]] Result<const SceneRecord*> scene(DocumentSceneId id) const noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_document_scene_id,
                          "The scene identifier does not belong to this document"};
@@ -165,7 +175,8 @@ class Document::Storage final {
         return &scenes[index];
     }
 
-    [[nodiscard]] Result<NodeRecord*> mutable_node(NodeId id) noexcept {
+    [[nodiscard]] Result<NodeRecord*> mutable_node(NodeId id) noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_node_id,
                          "The node identifier does not belong to this document"};
@@ -178,7 +189,8 @@ class Document::Storage final {
         return &nodes[index];
     }
 
-    [[nodiscard]] Result<const NodeRecord*> node(NodeId id) const noexcept {
+    [[nodiscard]] Result<const NodeRecord*> node(NodeId id) const noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_node_id,
                          "The node identifier does not belong to this document"};
@@ -191,7 +203,8 @@ class Document::Storage final {
         return &nodes[index];
     }
 
-    [[nodiscard]] Result<MeshRecord*> mutable_mesh(MeshId id) noexcept {
+    [[nodiscard]] Result<MeshRecord*> mutable_mesh(MeshId id) noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_mesh_id,
                          "The mesh identifier does not belong to this document"};
@@ -204,7 +217,8 @@ class Document::Storage final {
         return &meshes[index];
     }
 
-    [[nodiscard]] Result<const MeshRecord*> mesh(MeshId id) const noexcept {
+    [[nodiscard]] Result<const MeshRecord*> mesh(MeshId id) const noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_mesh_id,
                          "The mesh identifier does not belong to this document"};
@@ -217,7 +231,8 @@ class Document::Storage final {
         return &meshes[index];
     }
 
-    [[nodiscard]] Result<PrimitiveRecord*> mutable_primitive(PrimitiveId id) noexcept {
+    [[nodiscard]] Result<PrimitiveRecord*> mutable_primitive(PrimitiveId id) noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_primitive_id,
                          "The primitive identifier does not belong to this document"};
@@ -230,7 +245,8 @@ class Document::Storage final {
         return &primitives[index];
     }
 
-    [[nodiscard]] Result<const PrimitiveRecord*> primitive(PrimitiveId id) const noexcept {
+    [[nodiscard]] Result<const PrimitiveRecord*> primitive(PrimitiveId id) const noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_primitive_id,
                          "The primitive identifier does not belong to this document"};
@@ -243,7 +259,8 @@ class Document::Storage final {
         return &primitives[index];
     }
 
-    [[nodiscard]] Result<const MaterialRecord*> material(MaterialId id) const noexcept {
+    [[nodiscard]] Result<const MaterialRecord*> material(MaterialId id) const noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_material_id,
                          "The material identifier does not belong to this document"};
@@ -256,7 +273,8 @@ class Document::Storage final {
         return &materials[index];
     }
 
-    [[nodiscard]] Result<const ImageRecord*> image(ImageId id) const noexcept {
+    [[nodiscard]] Result<const ImageRecord*> image(ImageId id) const noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_image_id,
                          "The image identifier does not belong to this document"};
@@ -269,7 +287,8 @@ class Document::Storage final {
         return &images[index];
     }
 
-    [[nodiscard]] Result<const TextureRecord*> texture(TextureId id) const noexcept {
+    [[nodiscard]] Result<const TextureRecord*> texture(TextureId id) const noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_texture_id,
                          "The texture identifier does not belong to this document"};
@@ -282,7 +301,8 @@ class Document::Storage final {
         return &textures[index];
     }
 
-    [[nodiscard]] Result<const SamplerRecord*> sampler(SamplerId id) const noexcept {
+    [[nodiscard]] Result<const SamplerRecord*> sampler(SamplerId id) const noexcept
+    {
         if (!owns(id)) {
             return Error{ErrorCode::invalid_sampler_id,
                          "The sampler identifier does not belong to this document"};
@@ -296,7 +316,8 @@ class Document::Storage final {
     }
 
     [[nodiscard]] bool
-    valid_material_textures(const ModelMaterialDescription& description) const noexcept {
+    valid_material_textures(const ModelMaterialDescription& description) const noexcept
+    {
         return valid_texture_or_empty(description.base_color_texture) &&
                valid_texture_or_empty(description.metallic_roughness_texture) &&
                valid_texture_or_empty(description.normal_texture) &&
@@ -304,14 +325,15 @@ class Document::Storage final {
                valid_texture_or_empty(description.emissive_texture);
     }
 
-    [[nodiscard]] Result<void> reject_parent_cycle(NodeId child_id,
-                                                   NodeId parent_id) const noexcept {
+    [[nodiscard]] Result<void> reject_parent_cycle(NodeId child_id, NodeId parent_id) const noexcept
+    {
         std::optional<NodeId> ancestor = parent_id;
         while (ancestor.has_value()) {
             if (*ancestor == child_id) {
                 return Error{ErrorCode::hierarchy_cycle,
                              "The parent assignment would create a document node cycle"};
             }
+
             const Result<const NodeRecord*> ancestor_record = node(*ancestor);
             if (!ancestor_record) {
                 return ancestor_record.error();
@@ -321,10 +343,12 @@ class Document::Storage final {
         return {};
     }
 
-    void detach_from_existing_parent(NodeRecord& child, NodeId child_id) noexcept {
+    void detach_from_existing_parent(NodeRecord& child, NodeId child_id) noexcept
+    {
         if (!child.parent.has_value()) {
             return;
         }
+
         Result<NodeRecord*> old_parent = mutable_node(*child.parent);
         if (!old_parent) {
             return;
@@ -333,7 +357,8 @@ class Document::Storage final {
         siblings.erase(std::remove(siblings.begin(), siblings.end(), child_id), siblings.end());
     }
 
-    void remove_scene_root_entries(NodeId node_id) noexcept {
+    void remove_scene_root_entries(NodeId node_id) noexcept
+    {
         for (SceneRecord& scene_record : scenes) {
             scene_record.roots.erase(
                 std::remove(scene_record.roots.begin(), scene_record.roots.end(), node_id),
@@ -341,8 +366,10 @@ class Document::Storage final {
         }
     }
 
-    void update_mesh_bounds(MeshRecord& mesh) noexcept {
+    void update_mesh_bounds(MeshRecord& mesh) noexcept
+    {
         mesh.bounds.reset();
+
         for (const PrimitiveId primitive_id : mesh.primitives) {
             const Result<const PrimitiveRecord*> primitive_result = primitive(primitive_id);
             if (!primitive_result) {
@@ -354,7 +381,8 @@ class Document::Storage final {
         }
     }
 
-    [[nodiscard]] DocumentStatistics statistics() const noexcept {
+    [[nodiscard]] DocumentStatistics statistics() const noexcept
+    {
         DocumentStatistics result;
         result.scenes = static_cast<std::uint64_t>(scenes.size());
         result.nodes = static_cast<std::uint64_t>(nodes.size());
@@ -371,7 +399,8 @@ class Document::Storage final {
         return result;
     }
 
-    void note_mutation() noexcept {
+    void note_mutation() noexcept
+    {
         preserved_metadata_stale = preserved_metadata_stale || has_preserved_metadata;
     }
 
@@ -392,7 +421,8 @@ class Document::Storage final {
   private:
     std::uint64_t owner_token_ = 0;
 
-    void accumulate_node_statistics(DocumentStatistics& statistics) const noexcept {
+    void accumulate_node_statistics(DocumentStatistics& statistics) const noexcept
+    {
         for (const NodeRecord& node : nodes) {
             if (node.perspective_camera.has_value()) {
                 ++statistics.perspective_cameras;
@@ -400,7 +430,8 @@ class Document::Storage final {
         }
     }
 
-    void accumulate_primitive_statistics(DocumentStatistics& statistics) const noexcept {
+    void accumulate_primitive_statistics(DocumentStatistics& statistics) const noexcept
+    {
         for (const PrimitiveRecord& primitive : primitives) {
             statistics.vertices += static_cast<std::uint64_t>(primitive.data.positions.size());
             statistics.indices += static_cast<std::uint64_t>(primitive.data.indices.size());
@@ -408,13 +439,15 @@ class Document::Storage final {
         }
     }
 
-    void accumulate_image_statistics(DocumentStatistics& statistics) const noexcept {
+    void accumulate_image_statistics(DocumentStatistics& statistics) const noexcept
+    {
         for (const ImageRecord& image : images) {
             statistics.decoded_image_bytes += static_cast<std::uint64_t>(image.pixels.size());
         }
     }
 
-    void accumulate_material_statistics(DocumentStatistics& statistics) const noexcept {
+    void accumulate_material_statistics(DocumentStatistics& statistics) const noexcept
+    {
         for (const MaterialRecord& material : materials) {
             statistics.materials_with_base_color_textures +=
                 material.description.base_color_texture.is_valid() ? 1U : 0U;
@@ -429,7 +462,8 @@ class Document::Storage final {
         }
     }
 
-    [[nodiscard]] bool valid_texture_or_empty(TextureId texture_id) const noexcept {
+    [[nodiscard]] bool valid_texture_or_empty(TextureId texture_id) const noexcept
+    {
         return !texture_id.is_valid() || static_cast<bool>(texture(texture_id));
     }
 };

@@ -83,10 +83,20 @@ class ApplicationContext final {
     const GraphicsContextSnapshot* graphics_context_ = nullptr;
 };
 
+struct ApplicationFrameStatistics {
+    // Zero-based index of successfully completed frames in this application run.
+    std::uint64_t frame_index = 0;
+    // Wall time from event collection through the completed presentation swap.
+    double wall_milliseconds = 0.0;
+};
+
 class ApplicationUpdateContext final {
   public:
     [[nodiscard]] Engine& engine() const noexcept;
     [[nodiscard]] double elapsed_seconds() const noexcept;
+    // Absent in the first update. Failed or exit-only frames are not published.
+    [[nodiscard]] std::optional<ApplicationFrameStatistics>
+    previous_frame_statistics() const noexcept;
     [[nodiscard]] Extent2D window_extent() const noexcept;
     [[nodiscard]] Extent2D framebuffer_extent() const noexcept;
     [[nodiscard]] float dpi_scale() const noexcept;
@@ -110,6 +120,7 @@ class ApplicationUpdateContext final {
 
     Engine* engine_ = nullptr;
     double elapsed_seconds_ = 0.0;
+    std::optional<ApplicationFrameStatistics> previous_frame_statistics_;
     Extent2D window_extent_;
     Extent2D framebuffer_extent_;
     float dpi_scale_ = 1.0F;

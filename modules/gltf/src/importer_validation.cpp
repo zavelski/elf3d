@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/assert.h>
 #include <elf3d/core/error.h>
@@ -17,6 +17,8 @@ module;
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <elf3d/core/diagnostics.h>
+#include <elf3d/internal/image.h>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -26,12 +28,6 @@ module;
 #include <string_view>
 #include <utility>
 #include <vector>
-
-module elf.gltf;
-
-import elf.core;
-import elf.image;
-import elf.model;
 
 namespace elf3d::gltf::importer_detail {
 
@@ -49,19 +45,23 @@ constexpr cgltf_size maximum_accessor_count = 262144;
 constexpr std::uint64_t maximum_total_indices = 150000000;
 constexpr std::size_t signed_32_bit_maximum = 2147483647ULL;
 constexpr std::size_t glb_buffer_alignment = 4U;
-[[noreturn]] void fatal_gltf_allocation_failure() noexcept {
+[[noreturn]] void fatal_gltf_allocation_failure() noexcept
+{
     fatal_error("Elf3D glTF importer memory allocation failed");
 }
 
-[[noreturn]] void fatal_unexpected_gltf_boundary_exception() noexcept {
+[[noreturn]] void fatal_unexpected_gltf_boundary_exception() noexcept
+{
     fatal_error("Elf3D glTF importer encountered an unexpected exception");
 }
 
 [[nodiscard]] std::optional<std::size_t>
-next_aligned_buffer_offset(std::size_t offset, std::size_t size, std::size_t bin_size) noexcept {
+next_aligned_buffer_offset(std::size_t offset, std::size_t size, std::size_t bin_size) noexcept
+{
     if (offset > bin_size || size > bin_size - offset) {
         return std::nullopt;
     }
+
     const std::size_t end = offset + size;
     const std::size_t padding =
         (glb_buffer_alignment - end % glb_buffer_alignment) % glb_buffer_alignment;
@@ -79,11 +79,13 @@ struct LayoutStep {
 
 [[nodiscard]] std::optional<LayoutStep> inspect_layout_step(const GlbBufferViewLayout& view,
                                                             std::size_t expected_offset,
-                                                            std::size_t bin_size) noexcept {
+                                                            std::size_t bin_size) noexcept
+{
     const bool repairs_offset = view.offset != expected_offset;
     if (repairs_offset && (view.offset != 0U || expected_offset <= signed_32_bit_maximum)) {
         return std::nullopt;
     }
+
     const std::optional<std::size_t> next =
         next_aligned_buffer_offset(expected_offset, view.size, bin_size);
     if (!next.has_value()) {
@@ -93,7 +95,8 @@ struct LayoutStep {
 }
 
 [[nodiscard]] std::optional<std::size_t>
-count_repaired_offsets(std::size_t bin_size, std::span<const GlbBufferViewLayout> views) noexcept {
+count_repaired_offsets(std::size_t bin_size, std::span<const GlbBufferViewLayout> views) noexcept
+{
     std::size_t expected_offset = 0U;
     std::size_t final_end = 0U;
     std::size_t repaired_offsets = 0U;
@@ -114,12 +117,14 @@ count_repaired_offsets(std::size_t bin_size, std::span<const GlbBufferViewLayout
     return repaired_offsets;
 }
 
-void apply_recovered_offsets(std::size_t bin_size, std::span<GlbBufferViewLayout> views) noexcept {
+void apply_recovered_offsets(std::size_t bin_size, std::span<GlbBufferViewLayout> views) noexcept
+{
     std::size_t expected_offset = 0U;
     for (GlbBufferViewLayout& view : views) {
         if (view.offset == 0U && expected_offset > signed_32_bit_maximum) {
             view.offset = expected_offset;
         }
+
         const std::optional<std::size_t> next =
             next_aligned_buffer_offset(expected_offset, view.size, bin_size);
         ELF3D_ASSERT(next.has_value());
@@ -127,7 +132,8 @@ void apply_recovered_offsets(std::size_t bin_size, std::span<GlbBufferViewLayout
     }
 }
 
-[[nodiscard]] bool can_inspect_signed_glb_layout(const cgltf_data& data) noexcept {
+[[nodiscard]] bool can_inspect_signed_glb_layout(const cgltf_data& data) noexcept
+{
     return data.file_type == cgltf_file_type_glb && data.bin_size > signed_32_bit_maximum &&
            data.buffers_count == 1U && data.buffers != nullptr && data.buffer_views_count != 0U &&
            data.buffer_views != nullptr && data.buffers[0].uri == nullptr &&
@@ -136,19 +142,23 @@ void apply_recovered_offsets(std::size_t bin_size, std::span<GlbBufferViewLayout
 
 GlbBufferLayoutRepair
 recover_signed_glb_buffer_layout(std::size_t bin_size,
-                                 std::span<GlbBufferViewLayout> views) noexcept {
+                                 std::span<GlbBufferViewLayout> views) noexcept
+{
     if (bin_size <= signed_32_bit_maximum || views.empty()) {
         return {};
     }
+
     const std::optional<std::size_t> repaired_offsets = count_repaired_offsets(bin_size, views);
     if (!repaired_offsets.has_value()) {
         return {};
     }
+
     apply_recovered_offsets(bin_size, views);
     return GlbBufferLayoutRepair{bin_size, *repaired_offsets + 1U};
 }
 
-std::size_t repair_signed_glb_buffer_layout(cgltf_data& data) {
+std::size_t repair_signed_glb_buffer_layout(cgltf_data& data)
+{
     if (!can_inspect_signed_glb_layout(data)) {
         return 0U;
     }
@@ -162,6 +172,7 @@ std::size_t repair_signed_glb_buffer_layout(cgltf_data& data) {
         }
         views.push_back(GlbBufferViewLayout{view.offset, view.size});
     }
+
     const GlbBufferLayoutRepair repair = recover_signed_glb_buffer_layout(data.bin_size, views);
     if (repair.repaired_fields == 0U) {
         return 0U;
@@ -175,24 +186,28 @@ std::size_t repair_signed_glb_buffer_layout(cgltf_data& data) {
 
 void add_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
                     ModelLoadDiagnosticCategory category, ModelLoadDiagnosticCode code,
-                    std::string message, std::optional<std::string> source_context) {
+                    std::string message, std::optional<std::string> source_context)
+{
     diagnostics.push_back(ModelLoadDiagnostic{ModelLoadDiagnosticSeverity::warning, category, code,
                                               std::move(message), std::move(source_context)});
 }
 
-[[nodiscard]] bool supported_required_extension(std::string_view extension) noexcept {
+[[nodiscard]] bool supported_required_extension(std::string_view extension) noexcept
+{
     return extension == "KHR_texture_transform" || extension == "KHR_materials_unlit" ||
            extension == "KHR_materials_emissive_strength" || extension == "KHR_materials_ior" ||
            extension == "KHR_materials_pbrSpecularGlossiness" ||
            extension == "KHR_mesh_quantization";
 }
 
-[[nodiscard]] bool extension_has_full_support(std::string_view extension) noexcept {
+[[nodiscard]] bool extension_has_full_support(std::string_view extension) noexcept
+{
     return supported_required_extension(extension) || extension == "KHR_materials_specular";
 }
 
 void add_optional_extension_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
-                                       std::string_view extension) {
+                                       std::string_view extension)
+{
     ModelLoadDiagnosticCategory category = ModelLoadDiagnosticCategory::extension;
     ModelLoadDiagnosticCode code = ModelLoadDiagnosticCode::unsupported_optional_extension;
     std::string behavior = "is unsupported and was ignored";
@@ -228,12 +243,14 @@ void add_optional_extension_diagnostic(std::vector<ModelLoadDiagnostic>& diagnos
                    std::string{extension});
 }
 
-[[nodiscard]] bool supported_primitive_type(cgltf_primitive_type type) noexcept {
+[[nodiscard]] bool supported_primitive_type(cgltf_primitive_type type) noexcept
+{
     return type == cgltf_primitive_type_triangles || type == cgltf_primitive_type_triangle_strip ||
            type == cgltf_primitive_type_triangle_fan;
 }
 
-[[nodiscard]] bool texture_failure_can_fallback(ErrorCode code) noexcept {
+[[nodiscard]] bool texture_failure_can_fallback(ErrorCode code) noexcept
+{
     switch (code) {
     case ErrorCode::unsupported_image_mime_type:
     case ErrorCode::unsupported_image_extension:
@@ -252,7 +269,8 @@ struct alignas(std::max_align_t) AllocationHeader {
     std::size_t size = 0;
 };
 
-[[nodiscard]] void* bounded_allocate(void* user, cgltf_size size) noexcept {
+[[nodiscard]] void* bounded_allocate(void* user, cgltf_size size) noexcept
+{
     auto* context = static_cast<AllocationContext*>(user);
     if (context == nullptr || size > maximum_cgltf_allocation_bytes ||
         context->live_bytes > maximum_cgltf_allocation_bytes - size ||
@@ -269,7 +287,8 @@ struct alignas(std::max_align_t) AllocationHeader {
     return header + 1;
 }
 
-void bounded_deallocate(void* user, void* data) noexcept {
+void bounded_deallocate(void* user, void* data) noexcept
+{
     if (data == nullptr) {
         return;
     }
@@ -289,27 +308,23 @@ struct FileReadMessages {
 
 [[nodiscard]] Result<std::vector<std::byte>> read_file_bytes(const std::filesystem::path& path,
                                                              std::uintmax_t size,
-                                                             const FileReadMessages& messages) {
-    try {
-        std::vector<std::byte> bytes(static_cast<std::size_t>(size));
-        std::ifstream stream{path, std::ios::binary};
-        if (!stream) {
-            return Error{messages.error_code, messages.open_failure};
-        }
-        stream.read(reinterpret_cast<char*>(bytes.data()),
-                    static_cast<std::streamsize>(bytes.size()));
-        if (!stream) {
-            return Error{messages.error_code, messages.read_failure};
-        }
-        return bytes;
-    } catch (const std::bad_alloc&) {
-        fatal_gltf_allocation_failure();
-    } catch (...) {
-        fatal_unexpected_gltf_boundary_exception();
+                                                             const FileReadMessages& messages)
+{
+    std::vector<std::byte> bytes(static_cast<std::size_t>(size));
+    std::ifstream stream{path, std::ios::binary};
+    if (!stream) {
+        return Error{messages.error_code, messages.open_failure};
     }
+
+    stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    if (!stream) {
+        return Error{messages.error_code, messages.read_failure};
+    }
+    return bytes;
 }
 
-[[nodiscard]] Result<std::uintmax_t> source_file_size(const std::filesystem::path& path) {
+[[nodiscard]] Result<std::uintmax_t> source_file_size(const std::filesystem::path& path)
+{
     std::error_code filesystem_error;
     const std::uintmax_t file_size = std::filesystem::file_size(path, filesystem_error);
     if (filesystem_error) {
@@ -333,7 +348,8 @@ struct FileReadMessages {
     return file_size;
 }
 
-[[nodiscard]] Result<std::vector<std::byte>> read_source(const std::filesystem::path& path) {
+[[nodiscard]] Result<std::vector<std::byte>> read_source(const std::filesystem::path& path)
+{
     const Result<std::uintmax_t> size = source_file_size(path);
     if (!size) {
         return size.error();
@@ -344,14 +360,16 @@ struct FileReadMessages {
     return read_file_bytes(path, size.value(), messages);
 }
 
-[[nodiscard]] std::string lower_extension(const std::filesystem::path& path) {
+[[nodiscard]] std::string lower_extension(const std::filesystem::path& path)
+{
     std::string extension = path.extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
                    [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
     return extension;
 }
 
-[[nodiscard]] ErrorCode parse_error_code(cgltf_result result, ErrorCode format_error) noexcept {
+[[nodiscard]] ErrorCode parse_error_code(cgltf_result result, ErrorCode format_error) noexcept
+{
     switch (result) {
     case cgltf_result_data_too_short:
     case cgltf_result_invalid_json:
@@ -366,7 +384,8 @@ struct FileReadMessages {
     }
 }
 
-[[nodiscard]] std::string_view parse_error_message(cgltf_result result, bool is_glb) noexcept {
+[[nodiscard]] std::string_view parse_error_message(cgltf_result result, bool is_glb) noexcept
+{
     switch (result) {
     case cgltf_result_data_too_short:
         return is_glb ? "The GLB file is truncated" : "The glTF source is truncated";
@@ -384,13 +403,15 @@ struct FileReadMessages {
     }
 }
 
-[[nodiscard]] Error parse_error(cgltf_result result, bool is_glb) {
+[[nodiscard]] Error parse_error(cgltf_result result, bool is_glb)
+{
     const ErrorCode format_error = is_glb ? ErrorCode::malformed_glb : ErrorCode::malformed_gltf;
     return Error{parse_error_code(result, format_error), parse_error_message(result, is_glb)};
 }
 
 [[nodiscard]] bool checked_add(std::uint64_t& total, std::uint64_t value,
-                               std::uint64_t maximum) noexcept {
+                               std::uint64_t maximum) noexcept
+{
     if (value > maximum || total > maximum - value) {
         return false;
     }
@@ -400,7 +421,8 @@ struct FileReadMessages {
 
 [[nodiscard]] std::optional<std::uint64_t>
 expanded_triangle_index_count(const cgltf_primitive& primitive,
-                              std::uint64_t source_index_count) noexcept {
+                              std::uint64_t source_index_count) noexcept
+{
     if (primitive.type == cgltf_primitive_type_triangle_strip ||
         primitive.type == cgltf_primitive_type_triangle_fan) {
         if (source_index_count < 3) {
@@ -417,7 +439,8 @@ expanded_triangle_index_count(const cgltf_primitive& primitive,
 [[nodiscard]] Result<std::size_t> trace_node_path(const cgltf_data& data, std::size_t start,
                                                   std::vector<std::uint8_t>& states,
                                                   const std::vector<std::size_t>& depths,
-                                                  std::vector<std::size_t>& path) {
+                                                  std::vector<std::size_t>& path)
+{
     std::size_t current = start;
     while (states[current] == 0U) {
         states[current] = 1U;
@@ -445,7 +468,8 @@ expanded_triangle_index_count(const cgltf_primitive& primitive,
 [[nodiscard]] Result<void> finish_node_path(std::vector<std::size_t>& path,
                                             std::vector<std::uint8_t>& states,
                                             std::vector<std::size_t>& depths,
-                                            std::size_t parent_depth) {
+                                            std::size_t parent_depth)
+{
     while (!path.empty()) {
         const std::size_t index = path.back();
         path.pop_back();
@@ -459,7 +483,8 @@ expanded_triangle_index_count(const cgltf_primitive& primitive,
     return {};
 }
 
-[[nodiscard]] Result<void> validate_node_hierarchy(const cgltf_data& data) {
+[[nodiscard]] Result<void> validate_node_hierarchy(const cgltf_data& data)
+{
     std::vector<std::uint8_t> states(data.nodes_count, 0U);
     std::vector<std::size_t> depths(data.nodes_count, 0U);
     std::vector<std::size_t> path;
@@ -468,6 +493,7 @@ expanded_triangle_index_count(const cgltf_primitive& primitive,
         if (states[start] == 2U) {
             continue;
         }
+
         path.clear();
         const Result<std::size_t> parent_depth = trace_node_path(data, start, states, depths, path);
         if (!parent_depth) {
@@ -489,7 +515,8 @@ struct ResourceTotals {
     std::uint64_t indices = 0;
 };
 
-[[nodiscard]] Result<void> validate_buffer_limits(const cgltf_data& data, ResourceTotals& totals) {
+[[nodiscard]] Result<void> validate_buffer_limits(const cgltf_data& data, ResourceTotals& totals)
+{
     for (cgltf_size index = 0; index < data.buffers_count; ++index) {
         const cgltf_buffer& buffer = data.buffers[index];
         const bool embedded_glb_buffer =
@@ -507,7 +534,8 @@ struct ResourceTotals {
 }
 
 [[nodiscard]] Result<void> validate_primitive_limits(const cgltf_primitive& primitive,
-                                                     ResourceTotals& totals) {
+                                                     ResourceTotals& totals)
+{
     const cgltf_accessor* positions =
         cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0);
     if (positions != nullptr &&
@@ -516,6 +544,7 @@ struct ResourceTotals {
         return Error{ErrorCode::resource_limit_exceeded,
                      "The glTF vertex count exceeds the importer limit"};
     }
+
     const std::uint64_t source_index_count =
         primitive.indices != nullptr ? static_cast<std::uint64_t>(primitive.indices->count)
         : positions != nullptr       ? static_cast<std::uint64_t>(positions->count)
@@ -530,7 +559,8 @@ struct ResourceTotals {
     return {};
 }
 
-[[nodiscard]] Result<void> validate_mesh_limits(const cgltf_data& data, ResourceTotals& totals) {
+[[nodiscard]] Result<void> validate_mesh_limits(const cgltf_data& data, ResourceTotals& totals)
+{
     for (cgltf_size mesh_index = 0; mesh_index < data.meshes_count; ++mesh_index) {
         const cgltf_mesh& mesh = data.meshes[mesh_index];
         if (mesh.primitives_count > maximum_primitive_count - totals.primitive_count) {
@@ -550,7 +580,8 @@ struct ResourceTotals {
     return {};
 }
 
-[[nodiscard]] Result<void> validate_resource_limits(const cgltf_data& data) {
+[[nodiscard]] Result<void> validate_resource_limits(const cgltf_data& data)
+{
     if (data.nodes_count > maximum_node_count || data.meshes_count > maximum_mesh_count ||
         data.accessors_count > maximum_accessor_count) {
         return Error{ErrorCode::resource_limit_exceeded,
@@ -563,7 +594,8 @@ struct ResourceTotals {
     return validate_mesh_limits(data, totals);
 }
 
-[[nodiscard]] Result<void> validate_required_extensions(const cgltf_data& data) {
+[[nodiscard]] Result<void> validate_required_extensions(const cgltf_data& data)
+{
     for (cgltf_size index = 0; index < data.extensions_required_count; ++index) {
         const char* extension = data.extensions_required[index];
         const std::string_view name = extension != nullptr ? extension : "<unnamed>";
@@ -591,7 +623,8 @@ struct ResourceTotals {
     return {};
 }
 
-[[nodiscard]] Result<void> validate_buffer_uris(const cgltf_data& data) {
+[[nodiscard]] Result<void> validate_buffer_uris(const cgltf_data& data)
+{
     for (cgltf_size index = 0; index < data.buffers_count; ++index) {
         const char* uri = data.buffers[index].uri;
         if (uri == nullptr || std::string_view{uri}.starts_with("data:")) {
@@ -606,7 +639,8 @@ struct ResourceTotals {
     return {};
 }
 
-[[nodiscard]] Result<ModelImageMimeType> mime_from_text(std::string_view mime) {
+[[nodiscard]] Result<ModelImageMimeType> mime_from_text(std::string_view mime)
+{
     if (mime == "image/png") {
         return ModelImageMimeType::png;
     }
@@ -617,7 +651,8 @@ struct ResourceTotals {
                  "Supported glTF image MIME types are image/png and image/jpeg"};
 }
 
-void decode_image_json_strings(cgltf_data& data) noexcept {
+void decode_image_json_strings(cgltf_data& data) noexcept
+{
     for (cgltf_size index = 0; index < data.images_count; ++index) {
         cgltf_image& source = data.images[index];
         if (source.mime_type != nullptr) {
@@ -629,7 +664,8 @@ void decode_image_json_strings(cgltf_data& data) noexcept {
     }
 }
 
-[[nodiscard]] Result<ModelImageMimeType> mime_from_extension(const std::filesystem::path& path) {
+[[nodiscard]] Result<ModelImageMimeType> mime_from_extension(const std::filesystem::path& path)
+{
     const std::string extension = lower_extension(path);
     if (extension == ".png") {
         return ModelImageMimeType::png;
@@ -642,7 +678,8 @@ void decode_image_json_strings(cgltf_data& data) noexcept {
 }
 
 [[nodiscard]] bool encoded_matches(ModelImageMimeType mime,
-                                   std::span<const std::byte> bytes) noexcept {
+                                   std::span<const std::byte> bytes) noexcept
+{
     if (mime == ModelImageMimeType::png) {
         constexpr std::uint8_t signature[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
         if (bytes.size() < std::size(signature)) {
@@ -660,7 +697,8 @@ void decode_image_json_strings(cgltf_data& data) noexcept {
            std::to_integer<std::uint8_t>(bytes[2]) == 0xffU;
 }
 
-[[nodiscard]] Result<std::uintmax_t> image_file_size(const std::filesystem::path& path) {
+[[nodiscard]] Result<std::uintmax_t> image_file_size(const std::filesystem::path& path)
+{
     std::error_code filesystem_error;
     const std::uintmax_t size = std::filesystem::file_size(path, filesystem_error);
     if (filesystem_error) {
@@ -679,7 +717,8 @@ void decode_image_json_strings(cgltf_data& data) noexcept {
     return size;
 }
 
-[[nodiscard]] Result<std::vector<std::byte>> read_image_file(const std::filesystem::path& path) {
+[[nodiscard]] Result<std::vector<std::byte>> read_image_file(const std::filesystem::path& path)
+{
     const Result<std::uintmax_t> size = image_file_size(path);
     if (!size) {
         return size.error();

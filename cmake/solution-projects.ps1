@@ -5,6 +5,9 @@ function Read-SolutionProjects {
     if ([System.IO.Path]::GetExtension($SolutionPath) -ne '.slnx') {
         throw 'Elf3D supports only .slnx solutions. Regenerate with Visual Studio 2026 or newer.'
     }
+    if (-not (Test-Path -LiteralPath $SolutionPath -PathType Leaf)) {
+        throw "Solution '$SolutionPath' does not exist. Regenerate the solution."
+    }
     $solutionFile = (Resolve-Path -LiteralPath $SolutionPath -ErrorAction Stop).Path
     $directory = Split-Path -Parent $solutionFile
     [xml]$solution = Get-Content -LiteralPath $solutionFile -Raw

@@ -10,23 +10,15 @@ add_library(
         ${PROJECT_SOURCE_DIR}/examples/procedural_scene.cpp
         ${PROJECT_SOURCE_DIR}/examples/picking_and_selection.cpp
         ${PROJECT_SOURCE_DIR}/examples/document_roundtrip.cpp
-        ${PROJECT_SOURCE_DIR}/examples/multi_viewport.cpp
 )
 target_compile_features(elf3d_public_api_examples PRIVATE cxx_std_20)
 target_link_libraries(elf3d_public_api_examples PRIVATE elf3d::elf3d)
-if(TARGET elf3d_embed)
-    target_sources(
-        elf3d_public_api_examples
-        PRIVATE
-            ${PROJECT_SOURCE_DIR}/examples/embedded_viewer.cpp
-    )
-    target_link_libraries(elf3d_public_api_examples PRIVATE elf3d::embed)
-endif()
 if(TARGET elf3d_app)
     target_sources(
         elf3d_public_api_examples
         PRIVATE
             ${PROJECT_SOURCE_DIR}/examples/standard_application.cpp
+            ${PROJECT_SOURCE_DIR}/examples/multi_viewport.cpp
     )
     target_link_libraries(elf3d_public_api_examples PRIVATE elf3d::app)
 endif()
@@ -87,13 +79,15 @@ if(TARGET elf3d_app)
     set_tests_properties(elf3d.measurement_copy_adapt PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
-if(TARGET glfw AND TARGET elf3d_embed)
+if(TARGET elf3d_app)
     add_executable(
         elf3d_opengl_render_smoke_test
         opengl_render_smoke_test.cpp
+        scene_allocation_failure.cpp
     )
 
     target_compile_features(elf3d_opengl_render_smoke_test PRIVATE cxx_std_20)
+    target_include_directories(elf3d_opengl_render_smoke_test PRIVATE ${PROJECT_SOURCE_DIR}/facade/elf3d/src)
     target_compile_definitions(
         elf3d_opengl_render_smoke_test
         PRIVATE ELF3D_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
@@ -101,7 +95,7 @@ if(TARGET glfw AND TARGET elf3d_embed)
     target_link_libraries(
         elf3d_opengl_render_smoke_test
         PRIVATE
-            elf3d::embed
+            elf3d::app
             elf3d::third_party_glad
             glfw
     )
@@ -115,6 +109,19 @@ if(TARGET glfw AND TARGET elf3d_embed)
 
     add_test(NAME elf3d.opengl_render_smoke COMMAND elf3d_opengl_render_smoke_test)
     set_tests_properties(elf3d.opengl_render_smoke PROPERTIES SKIP_RETURN_CODE 77)
+
+    if(MSVC)
+        add_test(
+            NAME elf3d.scene_allocation_failure
+            COMMAND ${CMAKE_COMMAND}
+                "-DELF3D_FAILURE_EXECUTABLE=$<TARGET_FILE:elf3d_opengl_render_smoke_test>"
+                "-DELF3D_FAILURE_ARGUMENT=--allocation-failure"
+                "-DELF3D_FAILURE_SCENARIOS=scene_create;scene_snapshot;scene_name;scene_visibility;scene_bounds"
+                -P "${PROJECT_SOURCE_DIR}/cmake/check-fatal-boundaries.cmake"
+            CONFIGURATIONS Debug
+        )
+        set_tests_properties(elf3d.scene_allocation_failure PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    endif()
 
     add_executable(
         elf3d_model_quick_test
@@ -130,9 +137,7 @@ if(TARGET glfw AND TARGET elf3d_embed)
     target_link_libraries(
         elf3d_model_quick_test
         PRIVATE
-            elf3d::embed
-            elf3d::third_party_glad
-            glfw
+            elf3d::app
     )
     set_target_properties(elf3d_model_quick_test PROPERTIES FOLDER "Elf3D/Tests")
 
@@ -143,6 +148,13 @@ if(TARGET glfw AND TARGET elf3d_embed)
 endif()
 
 set(elf3d_internal_tests "${PROJECT_SOURCE_DIR}/.internal/cmake/internal-tests.cmake")
+if(TARGET elf3d_app)
+    file(GLOB elf3d_integration_contracts CONFIGURE_DEPENDS
+        ${PROJECT_SOURCE_DIR}/framework/app/include/elf3d/app/*.h
+        ${PROJECT_SOURCE_DIR}/integrations/imgui/include/elf3d/imgui/*.h)
+    elf3d_add_header_contracts(elf3d_integration_header_contracts ${elf3d_integration_contracts})
+    target_link_libraries(elf3d_integration_header_contracts PRIVATE elf3d::app elf3d::imgui)
+endif()
 if(PROJECT_IS_TOP_LEVEL AND EXISTS "${elf3d_internal_tests}")
     include("${elf3d_internal_tests}")
 endif()

@@ -4,8 +4,14 @@ Standard: c++20
 ColumnLimit: 100
 IndentWidth: 4
 UseTab: Never
-BreakBeforeBraces: Attach
-AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterControlStatement: Never
+AllowShortFunctionsOnASingleLine: None
+MaxEmptyLinesToKeep: 1
+KeepEmptyLines:
+  AtStartOfBlock: false
 SortIncludes: CaseSensitive
 DerivePointerAlignment: false
 PointerAlignment: Left

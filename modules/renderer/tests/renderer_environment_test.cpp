@@ -7,15 +7,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/graphics.h>
+#include <elf3d/internal/renderer.h>
+#include <elf3d/internal/scene.h>
 #include <memory>
 #include <span>
 #include <utility>
 #include <vector>
-
-import elf.assets;
-import elf.graphics;
-import elf.renderer;
-import elf.scene;
 
 #include "renderer_test_support.h"
 
@@ -43,17 +42,20 @@ struct EnvironmentContext final {
     FakeRenderTarget target;
 };
 
-[[nodiscard]] elf3d::renderer::RenderRequest render_request(elf3d::EntityId camera) {
+[[nodiscard]] elf3d::renderer::RenderRequest render_request(elf3d::EntityId camera)
+{
     return {camera};
 }
 
-[[nodiscard]] bool add_model(elf3d::scene::Storage& scene) {
+[[nodiscard]] bool add_model(elf3d::scene::Storage& scene)
+{
     const auto mesh = scene.create_mesh({test_vertices, test_indices});
     const auto material = scene.create_material({});
     return mesh && material && scene.create_model(mesh.value(), material.value());
 }
 
-[[nodiscard]] bool prepare_context(EnvironmentContext& context, std::vector<std::byte> resource) {
+[[nodiscard]] bool prepare_context(EnvironmentContext& context, std::vector<std::byte> resource)
+{
     const auto camera = context.scene.create_perspective_camera({});
     if (!camera) {
         return false;
@@ -77,7 +79,8 @@ struct EnvironmentContext final {
     return true;
 }
 
-[[nodiscard]] bool empty_render_defers_resource(EnvironmentContext& context) {
+[[nodiscard]] bool empty_render_defers_resource(EnvironmentContext& context)
+{
     const auto render =
         context.renderer->render(context.scene, context.target, render_request(context.camera));
     const FakeDeviceState& state = context.device.front().state();
@@ -86,7 +89,8 @@ struct EnvironmentContext final {
            state.vertex_shader_source.empty() && state.fragment_shader_source.empty();
 }
 
-[[nodiscard]] bool unlit_render_defers_resource(EnvironmentContext& context) {
+[[nodiscard]] bool unlit_render_defers_resource(EnvironmentContext& context)
+{
     auto request = render_request(context.camera);
     request.options.shading_mode = elf3d::RenderShadingMode::unlit;
     const auto render = context.renderer->render(context.scene, context.target, request);
@@ -96,7 +100,8 @@ struct EnvironmentContext final {
            context.device.front().state().texture_upload_count == 0;
 }
 
-[[nodiscard]] bool standard_resource_is_shared(EnvironmentContext& context) {
+[[nodiscard]] bool standard_resource_is_shared(EnvironmentContext& context)
+{
     const auto first =
         context.renderer->render(context.scene, context.target, render_request(context.camera));
     FakeRenderTarget additional_target;
@@ -109,7 +114,8 @@ struct EnvironmentContext final {
            context.device.front().state().texture_upload_count == 1;
 }
 
-[[nodiscard]] int verify_valid_resource_is_lazy_and_shared() {
+[[nodiscard]] int verify_valid_resource_is_lazy_and_shared()
+{
     EnvironmentContext context;
     if (!prepare_context(context, elf3d::renderer::tests::valid_studio_environment_bytes()) ||
         !empty_render_defers_resource(context) || !add_model(context.scene)) {
@@ -121,12 +127,14 @@ struct EnvironmentContext final {
     return standard_resource_is_shared(context) ? 0 : 60;
 }
 
-[[nodiscard]] bool invalid_resource_is_rejected(std::vector<std::byte> resource) {
+[[nodiscard]] bool invalid_resource_is_rejected(std::vector<std::byte> resource)
+{
     EnvironmentContext context;
     if (!prepare_context(context, std::move(resource)) || !empty_render_defers_resource(context) ||
         !add_model(context.scene)) {
         return false;
     }
+
     const auto render =
         context.renderer->render(context.scene, context.target, render_request(context.camera));
     return !render && render.error().code() == elf3d::ErrorCode::graphics_initialization_failed &&
@@ -135,7 +143,8 @@ struct EnvironmentContext final {
            context.device.front().state().texture_upload_count == 0;
 }
 
-[[nodiscard]] int verify_invalid_resources() {
+[[nodiscard]] int verify_invalid_resources()
+{
     std::vector<std::byte> invalid_magic = elf3d::renderer::tests::valid_studio_environment_bytes();
     invalid_magic.front() = std::byte{0};
     std::vector<std::byte> invalid_version =
@@ -157,7 +166,8 @@ struct EnvironmentContext final {
                : 61;
 }
 
-[[nodiscard]] bool upload_failure_is_transactional(bool fail_brdf) {
+[[nodiscard]] bool upload_failure_is_transactional(bool fail_brdf)
+{
     EnvironmentContext context;
     if (!prepare_context(context, elf3d::renderer::tests::valid_studio_environment_bytes()) ||
         !empty_render_defers_resource(context) || !add_model(context.scene)) {
@@ -168,6 +178,7 @@ struct EnvironmentContext final {
     } else {
         context.device.front().fail_cubemap_upload_at(2);
     }
+
     const auto render =
         context.renderer->render(context.scene, context.target, render_request(context.camera));
     return !render && render.error().code() == elf3d::ErrorCode::graphics_initialization_failed &&
@@ -177,11 +188,13 @@ struct EnvironmentContext final {
 
 } // namespace
 
-int elf3d_renderer_environment_failure_test() {
+int elf3d_renderer_environment_failure_test()
+{
     const int valid = verify_valid_resource_is_lazy_and_shared();
     if (valid != 0) {
         return valid;
     }
+
     const int invalid = verify_invalid_resources();
     if (invalid != 0) {
         return invalid;

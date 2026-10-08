@@ -8,22 +8,13 @@ add_library(
         src/texture.cpp
         src/viewport_texture.h
 )
-add_library(elf3d::imgui ALIAS elf3d_imgui)
+elf3d_target_interface(elf3d_imgui)
 
-target_compile_features(elf3d_imgui PUBLIC cxx_std_20)
 target_include_directories(
     elf3d_imgui
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/facade/elf3d/src
-)
-target_link_libraries(
-    elf3d_imgui
-    PUBLIC
-        elf3d::elf3d
-        elf3d::third_party_imgui
 )
 set_target_properties(
     elf3d_imgui
@@ -34,3 +25,8 @@ set_target_properties(
 
 elf3d_enable_warnings(elf3d_imgui)
 elf3d_group_sources(elf3d_imgui)
+if(ELF3D_BUILD_COMPONENT STREQUAL "imgui")
+    elf3d_check_prerequisites(elf3d_imgui elf3d glfw)
+endif()
+
+elf3d_enable_pch(elf3d_imgui integration)

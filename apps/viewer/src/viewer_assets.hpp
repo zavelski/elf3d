@@ -60,7 +60,8 @@ enum class ToolbarIcon : std::size_t {
 
 struct ToolbarIcons {
     std::array<ToolbarTexture, static_cast<std::size_t>(ToolbarIcon::count)> textures;
-    [[nodiscard]] const ToolbarTexture& texture(ToolbarIcon icon) const noexcept {
+    [[nodiscard]] const ToolbarTexture& texture(ToolbarIcon icon) const noexcept
+    {
         return textures[static_cast<std::size_t>(icon)];
     }
 };

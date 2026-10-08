@@ -7,13 +7,12 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/math.h>
+#include <elf3d/internal/navigation.h>
+#include <elf3d/internal/scene.h>
 #include <optional>
 #include <utility>
-
-import elf.assets;
-import elf.math;
-import elf.navigation;
-import elf.scene;
 
 #include "orbit_navigation_test_support.h"
 
@@ -27,7 +26,8 @@ constexpr float click_threshold = 4.0F;
 has_expected_dynamic_turn(const SceneFixture& fixture,
                           const elf3d::navigation::OrbitNavigationController& navigation,
                           const elf3d::NavigationSnapshot& before,
-                          const elf3d::NavigationSnapshot& after, elf3d::Float3 fixed_center) {
+                          const elf3d::NavigationSnapshot& after, elf3d::Float3 fixed_center)
+{
     return !nearly_equal(after.yaw_radians, before.yaw_radians) &&
            after.distance < before.distance &&
            length(subtract(after.pivot, fixed_center)) <= 32.0F && navigation.has_screen_anchor() &&
@@ -36,7 +36,8 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
 
 [[nodiscard]] int prepare_forward_turn(SceneFixture& fixture,
                                        elf3d::navigation::OrbitNavigationController& navigation,
-                                       elf3d::NavigationInput& input) {
+                                       elf3d::NavigationInput& input)
+{
     if (!navigation.reset_view(fixture.scene, fixture.camera, {800, 600})) {
         return 116;
     }
@@ -55,7 +56,8 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
     return 0;
 }
 
-[[nodiscard]] int verify_forward_turn() {
+[[nodiscard]] int verify_forward_turn()
+{
     SceneFixture forward_turn_fixture = make_scene(4, {99'000'000.0F, -1'000'000.0F, -1'000'000.0F},
                                                    {101'000'000.0F, 1'000'000.0F, 1'000'000.0F});
     elf3d::navigation::OrbitNavigationController forward_turn_navigation;
@@ -65,6 +67,7 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
     if (prepared != 0) {
         return prepared;
     }
+
     const elf3d::NavigationSnapshot before_first_forward_turn = forward_turn_navigation.snapshot();
     const elf3d::Float3 fixed_dynamic_center = before_first_forward_turn.pivot;
     forward_turn_input.pointer_position_pixels = {120.0F, 10.0F};
@@ -74,6 +77,7 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
                                         {800, 600}, forward_turn_input, click_threshold)) {
         return 119;
     }
+
     const elf3d::NavigationSnapshot after_first_forward_turn = forward_turn_navigation.snapshot();
     if (!has_expected_dynamic_turn(forward_turn_fixture, forward_turn_navigation,
                                    before_first_forward_turn, after_first_forward_turn,
@@ -87,6 +91,7 @@ has_expected_dynamic_turn(const SceneFixture& fixture,
                                         {800, 600}, forward_turn_input, click_threshold)) {
         return 121;
     }
+
     const elf3d::NavigationSnapshot after_second_forward_turn = forward_turn_navigation.snapshot();
     if (!has_expected_dynamic_turn(forward_turn_fixture, forward_turn_navigation,
                                    after_first_forward_turn, after_second_forward_turn,
@@ -128,7 +133,8 @@ struct FrameRateSequence {
     float pointer_delta_x = 0.0F;
 };
 
-[[nodiscard]] FrameRateContext make_frame_rate_context() {
+[[nodiscard]] FrameRateContext make_frame_rate_context()
+{
     return FrameRateContext{
         {make_scene(5, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F})},
         {make_scene(8, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F})},
@@ -136,7 +142,8 @@ struct FrameRateSequence {
     };
 }
 
-[[nodiscard]] bool prepare_frame_rate_lane(FrameRateLane& lane) {
+[[nodiscard]] bool prepare_frame_rate_lane(FrameRateLane& lane)
+{
     if (!lane.navigation.reset_view(lane.fixture.scene, lane.fixture.camera, {800, 600})) {
         return false;
     }
@@ -155,7 +162,8 @@ struct FrameRateSequence {
                                              lane.navigation.snapshot().pivot);
 }
 
-[[nodiscard]] bool advance_frame_rate_lane(FrameRateLane& lane, FrameRateSequence sequence) {
+[[nodiscard]] bool advance_frame_rate_lane(FrameRateLane& lane, FrameRateSequence sequence)
+{
     lane.input.frame_delta_seconds = sequence.delta_seconds;
     lane.input.pointer_delta_pixels = {sequence.pointer_delta_x, 0.0F};
     lane.input.move_forward_down = true;
@@ -169,7 +177,8 @@ struct FrameRateSequence {
     return true;
 }
 
-[[nodiscard]] bool frame_rate_lanes_match(const FrameRateLane& left, const FrameRateLane& right) {
+[[nodiscard]] bool frame_rate_lanes_match(const FrameRateLane& left, const FrameRateLane& right)
+{
     const elf3d::NavigationSnapshot a = left.navigation.snapshot();
     const elf3d::NavigationSnapshot b = right.navigation.snapshot();
     return nearly_equal(a.yaw_radians, b.yaw_radians) &&
@@ -180,7 +189,8 @@ struct FrameRateSequence {
            left.navigation.has_screen_anchor() && right.navigation.has_screen_anchor();
 }
 
-[[nodiscard]] int verify_frame_rate_invariance() {
+[[nodiscard]] int verify_frame_rate_invariance()
+{
     FrameRateContext context = make_frame_rate_context();
     if (!prepare_frame_rate_lane(context.hz30) || !prepare_frame_rate_lane(context.hz60) ||
         !prepare_frame_rate_lane(context.hz144)) {
@@ -207,14 +217,16 @@ struct PanContext {
     elf3d::NavigationInput mouse_input;
 };
 
-[[nodiscard]] PanContext make_pan_context() {
+[[nodiscard]] PanContext make_pan_context()
+{
     return PanContext{
         make_scene(6, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F}),
         make_scene(7, {-1.0F, -2.0F, -3.0F}, {4.0F, 5.0F, 6.0F}),
     };
 }
 
-[[nodiscard]] int prepare_pan_context(PanContext& context) {
+[[nodiscard]] int prepare_pan_context(PanContext& context)
+{
     if (!context.combined_navigation.reset_view(context.combined_fixture.scene,
                                                 context.combined_fixture.camera, {800, 600}) ||
         !context.mouse_navigation.reset_view(context.mouse_fixture.scene,
@@ -245,7 +257,8 @@ struct PanContext {
     return 0;
 }
 
-[[nodiscard]] int verify_initial_combined_pan(const PanContext& context) {
+[[nodiscard]] int verify_initial_combined_pan(const PanContext& context)
+{
     const elf3d::Float3 combined_pan_offset =
         subtract(camera_position(context.combined_fixture.scene, context.combined_fixture.camera),
                  camera_position(context.mouse_fixture.scene, context.mouse_fixture.camera));
@@ -262,7 +275,8 @@ struct PanContext {
     return 0;
 }
 
-[[nodiscard]] int verify_pan_key_release(PanContext& context) {
+[[nodiscard]] int verify_pan_key_release(PanContext& context)
+{
     context.combined_input.move_forward_down = false;
     context.combined_input.pointer_delta_pixels = {};
     context.mouse_input = context.combined_input;
@@ -281,7 +295,8 @@ struct PanContext {
     return 0;
 }
 
-[[nodiscard]] int verify_mouse_only_pan(PanContext& context) {
+[[nodiscard]] int verify_mouse_only_pan(PanContext& context)
+{
     const elf3d::Float3 position_before_mouse_only_pan =
         camera_position(context.combined_fixture.scene, context.combined_fixture.camera);
     context.combined_input.pointer_delta_pixels = {20.0F, 10.0F};
@@ -299,7 +314,8 @@ struct PanContext {
     return 0;
 }
 
-void release_pan(PanContext& context) {
+void release_pan(PanContext& context)
+{
     context.combined_input.zoom_down = false;
     context.combined_input.pointer_delta_pixels = {};
     context.mouse_input = context.combined_input;
@@ -311,35 +327,42 @@ void release_pan(PanContext& context) {
                                                       context.mouse_input, click_threshold));
 }
 
-[[nodiscard]] int verify_combined_pan() {
+[[nodiscard]] int verify_combined_pan()
+{
     PanContext context = make_pan_context();
     const int prepared = prepare_pan_context(context);
     if (prepared != 0) {
         return prepared;
     }
+
     const int initial_pan = verify_initial_combined_pan(context);
     if (initial_pan != 0) {
         return initial_pan;
     }
+
     const int released_key = verify_pan_key_release(context);
     if (released_key != 0) {
         return released_key;
     }
+
     const int mouse_only_pan = verify_mouse_only_pan(context);
     if (mouse_only_pan != 0) {
         return mouse_only_pan;
     }
+
     release_pan(context);
     return 0;
 }
 
 } // namespace
 
-int elf3d_navigation_continuous_motion_test() {
+int elf3d_navigation_continuous_motion_test()
+{
     const int forward = verify_forward_turn();
     if (forward != 0) {
         return forward;
     }
+
     const int frame_rate = verify_frame_rate_invariance();
     if (frame_rate != 0) {
         return frame_rate;

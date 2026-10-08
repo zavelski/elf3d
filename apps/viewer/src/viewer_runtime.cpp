@@ -1,4 +1,5 @@
 #include "viewer_application.hpp"
+#include "viewer_runtime_state.hpp"
 
 #include "viewer_assets.hpp"
 #include "viewer_browser.hpp"
@@ -26,7 +27,8 @@
 namespace elf3d::viewer {
 namespace {
 
-void retain_frame_sample(ViewerFrameContext& state, const ViewerFrameSample& sample) {
+void retain_frame_sample(ViewerFrameContext& state, const ViewerFrameSample& sample)
+{
     ++state.performance.captured_frame_count;
     state.performance.frame_samples.push_back(sample);
     const std::size_t maximum_samples = state.performance.capture_csv ? 10000U : 600U;
@@ -41,53 +43,33 @@ void retain_frame_sample(ViewerFrameContext& state, const ViewerFrameSample& sam
 
 } // namespace
 
-[[noreturn]] void fatal_viewer_allocation_failure() noexcept {
+[[noreturn]] void fatal_viewer_allocation_failure() noexcept
+{
     fatal_error("Elf3D viewer memory allocation failed");
 }
 
-[[noreturn]] void fatal_unexpected_viewer_exception() noexcept {
+[[noreturn]] void fatal_unexpected_viewer_exception() noexcept
+{
     fatal_error("Elf3D viewer encountered an unexpected exception");
 }
 
-struct ViewerAssembly {
-    elf3d::Engine* engine = nullptr;
-    std::unique_ptr<elf3d::Viewport> viewport;
-    SceneSession scene;
-    ToolCoordinator tools;
-    ViewerShellState shell;
-    ViewerRenderingState rendering;
-    ViewerPerformanceState performance;
-    ViewerGraphicsDiagnosticsState diagnostics;
-    ViewerNotificationState notifications;
-    ViewerInteractionFrameState interaction;
-    SceneHierarchyComponentState hierarchy;
-    ViewerPresentationResources presentation;
-    PendingFileInputState pending_files;
-    FileBrowserState browser;
-    ViewerPreferencesState preferences;
-    SceneReplacementWorkflow scene_workflow;
-    ModelSaveWorkflow save_workflow;
-    ExternalEditorWorkflow external_editor_workflow;
-    ToolbarIcons toolbar_icons;
-    InteractionOwnerId viewport_interaction_owner;
-    InteractionRegionId viewport_interaction_region;
-    bool exit_requested = false;
-};
-
-[[nodiscard]] ViewerFrameContext frame_context(ViewerAssembly& runtime) noexcept {
+[[nodiscard]] ViewerFrameContext frame_context(ViewerAssembly& runtime) noexcept
+{
     return ViewerFrameContext{runtime.shell,       runtime.rendering,     runtime.performance,
                               runtime.diagnostics, runtime.notifications, runtime.interaction,
                               runtime.hierarchy,   runtime.presentation,  runtime.pending_files};
 }
 
-[[nodiscard]] ViewerWorkflowContext workflow_context(ViewerAssembly& runtime) noexcept {
+[[nodiscard]] ViewerWorkflowContext workflow_context(ViewerAssembly& runtime) noexcept
+{
     return ViewerWorkflowContext{*runtime.engine,       *runtime.viewport, runtime.rendering,
                                  runtime.notifications, runtime.hierarchy, runtime.preferences,
                                  runtime.scene,         runtime.tools,     runtime.scene_workflow,
                                  runtime.save_workflow};
 }
 
-[[nodiscard]] ViewerCapabilitySnapshot viewer_capabilities(const ViewerAssembly& runtime) noexcept {
+[[nodiscard]] ViewerCapabilitySnapshot viewer_capabilities(const ViewerAssembly& runtime) noexcept
+{
     ViewerCapabilitySnapshot result;
     result.scene = runtime.scene.scene->id();
     result.selected_entity = runtime.viewport->selected_entity();
@@ -116,7 +98,8 @@ struct ViewerAssembly {
     return result;
 }
 
-[[nodiscard]] Result<void> initialize_viewer_engine(ViewerAssembly& runtime, Engine& engine) {
+[[nodiscard]] Result<void> initialize_viewer_engine(ViewerAssembly& runtime, Engine& engine)
+{
     runtime.engine = &engine;
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport = runtime.engine->create_viewport({});
     if (!viewport) {
@@ -132,7 +115,8 @@ struct ViewerAssembly {
 }
 
 void initialize_viewer_presentation(ViewerAssembly& runtime,
-                                    const std::filesystem::path& asset_root, float dpi_scale) {
+                                    const std::filesystem::path& asset_root, float dpi_scale)
+{
     const std::string font_path = path_to_utf8(asset_root / "font" / "DroidSans.ttf");
     runtime.toolbar_icons = load_toolbar_icons(asset_root);
     runtime.presentation.main_font =
@@ -145,7 +129,8 @@ void initialize_viewer_presentation(ViewerAssembly& runtime,
 }
 
 void capture_context_diagnostics(const GraphicsContextSnapshot& graphics,
-                                 ViewerGraphicsDiagnosticsState& diagnostics) {
+                                 ViewerGraphicsDiagnosticsState& diagnostics)
+{
     diagnostics.gl_vendor = graphics.vendor_name;
     diagnostics.gl_renderer = graphics.device_name;
     diagnostics.gl_version = graphics.api_version;
@@ -162,7 +147,8 @@ void capture_context_diagnostics(const GraphicsContextSnapshot& graphics,
 }
 
 void collect_save_shortcut(const InputSnapshot& input, const ViewerCapabilitySnapshot& capabilities,
-                           ViewerCommandDispatcher& commands) {
+                           ViewerCommandDispatcher& commands)
+{
     if (capabilities.scene_imported && !navigation_blocked_by_modal() && input.modifiers.control &&
         input.modifiers.shift && input.key(InputKey::s).pressed && !input.text_input_owned) {
         commands.emit(ShowSaveDialogCommand{});
@@ -171,7 +157,8 @@ void collect_save_shortcut(const InputSnapshot& input, const ViewerCapabilitySna
 
 void collect_camera_shortcuts(const InputSnapshot& input,
                               const ViewerCapabilitySnapshot& capabilities,
-                              ViewerCommandDispatcher& commands) {
+                              ViewerCommandDispatcher& commands)
+{
     if (!capabilities.view_available || !capabilities.visible_content || input.text_input_owned ||
         navigation_blocked_by_modal()) {
         return;
@@ -185,19 +172,22 @@ void collect_camera_shortcuts(const InputSnapshot& input,
 }
 
 [[nodiscard]] bool tool_shortcuts_available(const ViewerAssembly& runtime,
-                                            const InputSnapshot& input) noexcept {
+                                            const InputSnapshot& input) noexcept
+{
     return runtime.shell.show_3d_view && has_nonzero_extent(runtime.rendering.view_dimensions) &&
            !input.text_input_owned && !navigation_blocked_by_modal();
 }
 
-[[nodiscard]] bool selection_shortcut_pressed(const InputSnapshot& input) noexcept {
+[[nodiscard]] bool selection_shortcut_pressed(const InputSnapshot& input) noexcept
+{
     return !input.button(InputButton::left).down && !input.button(InputButton::right).down &&
            !input.modifiers.control && !input.modifiers.shift && input.key(InputKey::s).pressed;
 }
 
 void collect_tool_shortcuts(ViewerAssembly& runtime, const InputSnapshot& input,
                             const ViewerCapabilitySnapshot& capabilities,
-                            ViewerCommandDispatcher& commands) {
+                            ViewerCommandDispatcher& commands)
+{
     if (!capabilities.view_available || !tool_shortcuts_available(runtime, input)) {
         return;
     }
@@ -214,7 +204,8 @@ void collect_tool_shortcuts(ViewerAssembly& runtime, const InputSnapshot& input,
 
 void collect_escape_shortcut(ViewerAssembly& runtime, const InputSnapshot& input,
                              const ViewerCapabilitySnapshot& capabilities,
-                             ViewerCommandDispatcher& commands) {
+                             ViewerCommandDispatcher& commands)
+{
     if (!runtime.shell.show_3d_view || input.text_input_owned || navigation_blocked_by_modal() ||
         !input.key(InputKey::escape).pressed) {
         return;
@@ -228,218 +219,16 @@ void collect_escape_shortcut(ViewerAssembly& runtime, const InputSnapshot& input
 
 void collect_viewer_shortcuts(ViewerAssembly& runtime, const InputSnapshot& input,
                               const ViewerCapabilitySnapshot& capabilities,
-                              ViewerCommandDispatcher& commands) {
+                              ViewerCommandDispatcher& commands)
+{
     collect_save_shortcut(input, capabilities, commands);
     collect_camera_shortcuts(input, capabilities, commands);
     collect_tool_shortcuts(runtime, input, capabilities, commands);
     collect_escape_shortcut(runtime, input, capabilities, commands);
 }
 
-[[nodiscard]] Result<void> toggle_section_plane(ViewerAssembly& runtime) {
-    elf3d::SectionPlane plane = runtime.viewport->clipping_snapshot().section_plane;
-    plane.enabled = !plane.enabled;
-    if (plane.enabled) {
-        const elf3d::Result<std::optional<elf3d::Bounds3>> bounds =
-            runtime.viewport->visible_bounds(*runtime.scene.scene);
-        if (bounds && bounds.value().has_value()) {
-            plane.point = bounds_center(*bounds.value());
-        }
-    }
-    return runtime.viewport->set_section_plane(plane);
-}
-
-[[nodiscard]] Result<void> flip_section_plane(ViewerAssembly& runtime) {
-    elf3d::SectionPlane plane = runtime.viewport->clipping_snapshot().section_plane;
-    plane.retained_half_space = plane.retained_half_space == elf3d::PlaneHalfSpace::positive
-                                    ? elf3d::PlaneHalfSpace::negative
-                                    : elf3d::PlaneHalfSpace::positive;
-    return runtime.viewport->set_section_plane(plane);
-}
-
-[[nodiscard]] ViewerCommandCompletion command_failed(const Error& error) noexcept {
-    return ViewerCommandCompletion{ViewerCommandOutcomeStatus::failed, error, false};
-}
-
-[[nodiscard]] ViewerCommandCompletion command_result(const Result<void>& result) noexcept {
-    return result ? ViewerCommandCompletion{} : command_failed(result.error());
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ExitViewerCommand&) noexcept {
-    runtime.exit_requested = true;
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ShowOpenDialogCommand&) noexcept {
-    runtime.browser.request_open_modal = true;
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ShowSaveDialogCommand&) noexcept {
-    runtime.browser.request_save_modal = true;
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ResetViewerLayoutCommand&) noexcept {
-    runtime.shell.reset_dock_layout = true;
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ReloadSceneCommand&) {
-    return execute_scene_workflow(workflow_context(runtime),
-                                  SceneReplacementRequest{SceneReplacementKind::reload_model,
-                                                          path_to_utf8(runtime.scene.source_path)});
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const CloseSceneCommand&) {
-    return execute_scene_workflow(
-        workflow_context(runtime),
-        SceneReplacementRequest{SceneReplacementKind::close_to_empty, {}});
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const FitViewCommand&) noexcept {
-    return command_result(
-        runtime.viewport->fit_to_scene(*runtime.scene.scene, runtime.scene.camera));
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ResetViewCommand&) noexcept {
-    return command_result(runtime.viewport->reset_view(*runtime.scene.scene, runtime.scene.camera));
-}
-
-[[nodiscard]] ViewerCommandCompletion
-execute_command(ViewerAssembly& runtime, const ShowViewerPanelCommand& command) noexcept {
-    if (command.panel == ViewerPanel::clipping) {
-        runtime.shell.show_clipping_panel = true;
-    }
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion
-execute_command(ViewerAssembly& runtime, const ActivateViewerToolCommand& command) noexcept {
-    runtime.tools.activate(command.tool);
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ToggleSectionPlaneCommand&) noexcept {
-    return command_result(toggle_section_plane(runtime));
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const FlipSectionPlaneCommand&) noexcept {
-    return command_result(flip_section_plane(runtime));
-}
-
-[[nodiscard]] ViewerCommandCompletion
-execute_command(ViewerAssembly& runtime, const AddClippingBoxFromBoundsCommand&) noexcept {
-    const Result<std::uint32_t> result = runtime.tools.clipping().add_box_from_visible_bounds(
-        *runtime.scene.scene, *runtime.viewport);
-    return result ? ViewerCommandCompletion{} : command_failed(result.error());
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ClearClippingCommand&) noexcept {
-    runtime.viewport->clear_clipping();
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion
-execute_command(ViewerAssembly& runtime, const ToggleClippingHelpersCommand&) noexcept {
-    runtime.tools.clipping().set_helpers_visible(!runtime.tools.clipping().helpers_visible());
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const FitClippedContentCommand&) noexcept {
-    return command_result(
-        runtime.viewport->fit_to_scene(*runtime.scene.scene, runtime.scene.camera));
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ClearSelectionCommand&) noexcept {
-    runtime.viewport->clear_selection();
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const CancelMeasurementCommand&) noexcept {
-    runtime.tools.measurement().cancel_incomplete();
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ClearMeasurementCommand&) noexcept {
-    runtime.tools.measurement().clear();
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const SelectEntityCommand& command) noexcept {
-    return command_result(
-        runtime.viewport->set_selected_entity(*runtime.scene.scene, command.entity));
-}
-
-[[nodiscard]] ViewerCommandCompletion
-execute_command(ViewerAssembly& runtime, const SetEntityVisibilityCommand& command) noexcept {
-    const Result<void> result =
-        command.visible && command.scope == EntityVisibilityScope::entity_and_ancestors
-            ? runtime.scene.scene->show_entity_and_ancestors(command.entity)
-            : runtime.scene.scene->set_entity_local_visibility(command.entity, command.visible);
-    if (result) {
-        invalidate_hierarchy_snapshot(runtime.scene);
-    }
-    return command_result(result);
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ShowAllEntitiesCommand&) noexcept {
-    const Result<void> result = runtime.scene.scene->show_all_entities();
-    if (result) {
-        invalidate_hierarchy_snapshot(runtime.scene);
-    }
-    return command_result(result);
-}
-
-[[nodiscard]] ViewerCommandCompletion
-execute_command(ViewerAssembly& runtime, const IsolateEntityCommand& command) noexcept {
-    return command_result(runtime.viewport->isolate_entity(*runtime.scene.scene, command.entity));
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ExitIsolationCommand&) noexcept {
-    runtime.viewport->clear_isolation();
-    return {};
-}
-
-[[nodiscard]] ViewerCommandCompletion execute_command(ViewerAssembly& runtime,
-                                                      const ViewerCommand& command) {
-    return std::visit([&runtime](const auto& value) { return execute_command(runtime, value); },
-                      command);
-}
-
-void dispatch_viewer_commands(ViewerAssembly& runtime, ViewerCommandDispatcher& commands) {
-    std::optional<ViewerCommandDispatch> dispatch = commands.take_next(runtime.scene.scene->id());
-    while (dispatch.has_value()) {
-        const ViewerCommandCompletion completion = execute_command(runtime, dispatch->command);
-        if (completion.error.has_value()) {
-            set_viewport_error(frame_context(runtime), *completion.error);
-        }
-        commands.complete(*dispatch, completion);
-        dispatch = commands.take_next(runtime.scene.scene->id());
-    }
-    if (commands.enqueue_error().has_value()) {
-        set_viewport_error(frame_context(runtime), *commands.enqueue_error());
-    }
-}
-
-void handle_pending_model_files(ViewerAssembly& runtime) {
+void handle_pending_model_files(ViewerAssembly& runtime)
+{
     if (runtime.pending_files.dropped_path.has_value()) {
         std::string path = std::move(*runtime.pending_files.dropped_path);
         runtime.pending_files.dropped_path.reset();
@@ -457,6 +246,7 @@ void handle_pending_model_files(ViewerAssembly& runtime) {
         runtime.notifications.load_failure = LoadFailure{"Dropped file", error};
         runtime.notifications.request_error_modal = true;
     }
+
     const FileBrowserFrameInput browser_input{runtime.interaction.escape_pressed,
                                               runtime.interaction.primary_double_clicked};
     const std::optional<FileDialogResult> open_result =
@@ -470,6 +260,7 @@ void handle_pending_model_files(ViewerAssembly& runtime) {
             set_viewport_error(frame_context(runtime), *completion.error);
         }
     }
+
     const std::optional<FileDialogResult> save_result =
         build_save_modal(runtime.browser, runtime.preferences, runtime.scene, browser_input,
                          runtime.external_editor_workflow);
@@ -494,7 +285,8 @@ void handle_pending_model_files(ViewerAssembly& runtime) {
 }
 
 void build_viewer_panels(ViewerAssembly& runtime, ApplicationUiContext& application,
-                         ImGuiID dockspace_id, ViewerCommandDispatcher& commands) {
+                         ImGuiID dockspace_id, ViewerCommandDispatcher& commands)
+{
     ViewerFrameContext state = frame_context(runtime);
     SceneSession& scene = runtime.scene;
     build_rendering_panel(dockspace_id, state, scene, *runtime.viewport);
@@ -517,7 +309,8 @@ void build_viewer_panels(ViewerAssembly& runtime, ApplicationUiContext& applicat
     state.shell.apply_dock_layout = false;
 }
 
-void build_viewer_frame_ui(ViewerAssembly& runtime, ApplicationUiContext& application) {
+void build_viewer_frame_ui(ViewerAssembly& runtime, ApplicationUiContext& application)
+{
     runtime.scene_workflow.begin_frame();
     runtime.save_workflow.begin_frame();
     ViewerFrameContext state = frame_context(runtime);
@@ -535,7 +328,8 @@ void build_viewer_frame_ui(ViewerAssembly& runtime, ApplicationUiContext& applic
     dispatch_viewer_commands(runtime, commands);
 }
 
-void capture_frame_sample(ViewerAssembly& runtime, const ApplicationUpdateContext& context) {
+void capture_frame_sample(ViewerAssembly& runtime, const ApplicationUpdateContext& context)
+{
     ViewerFrameContext state = frame_context(runtime);
     if (state.rendering.viewport_rendered_this_frame) {
         state.rendering.statistics = runtime.viewport->render_statistics();
@@ -552,6 +346,7 @@ void capture_frame_sample(ViewerAssembly& runtime, const ApplicationUpdateContex
     if (state.rendering.viewport_rendered_this_frame) {
         sample.render = state.rendering.statistics;
     }
+
     const Result<PickingStatistics> picking = runtime.viewport->picking_statistics();
     if (picking &&
         (picking.value().lifetime_gpu_requests != state.performance.sampled_picking_gpu_requests ||
@@ -573,7 +368,8 @@ void capture_frame_sample(ViewerAssembly& runtime, const ApplicationUpdateContex
     state.rendering.viewport_rendered_this_frame = false;
 }
 
-void update_input_state(ViewerAssembly& runtime, const ApplicationUpdateContext& context) {
+void update_input_state(ViewerAssembly& runtime, const ApplicationUpdateContext& context)
+{
     runtime.interaction.frame_delta_seconds = context.elapsed_seconds();
     runtime.interaction.application_focused = context.focused();
     runtime.interaction.escape_pressed = context.input().key(InputKey::escape).pressed;
@@ -593,7 +389,8 @@ void update_input_state(ViewerAssembly& runtime, const ApplicationUpdateContext&
 }
 
 void synchronize_presentation_mode(ViewerAssembly& runtime,
-                                   ApplicationUpdateContext& context) noexcept {
+                                   ApplicationUpdateContext& context) noexcept
+{
     if (runtime.rendering.vsync_enabled == runtime.rendering.vsync_applied) {
         return;
     }
@@ -607,9 +404,12 @@ class ViewerApplication final : public Application {
     ViewerApplication(std::filesystem::path asset_root,
                       std::optional<std::string> initial_model_path, bool smoke_mode)
         : asset_root_(std::move(asset_root)), initial_model_path_(std::move(initial_model_path)),
-          smoke_mode_(smoke_mode) {}
+          smoke_mode_(smoke_mode)
+    {
+    }
 
-    [[nodiscard]] Result<void> start(ApplicationContext& context) noexcept override {
+    [[nodiscard]] Result<void> start(ApplicationContext& context) noexcept override
+    {
         try {
             return start_impl(context);
         } catch (const std::bad_alloc&) {
@@ -619,7 +419,8 @@ class ViewerApplication final : public Application {
         }
     }
 
-    [[nodiscard]] Result<void> update(ApplicationUpdateContext& context) noexcept override {
+    [[nodiscard]] Result<void> update(ApplicationUpdateContext& context) noexcept override
+    {
         try {
             return update_impl(context);
         } catch (const std::bad_alloc&) {
@@ -629,7 +430,8 @@ class ViewerApplication final : public Application {
         }
     }
 
-    [[nodiscard]] Result<void> build_ui(ApplicationUiContext& context) noexcept override {
+    [[nodiscard]] Result<void> build_ui(ApplicationUiContext& context) noexcept override
+    {
         try {
             build_viewer_frame_ui(runtime_, context);
             initial_ui_frame_built_ = true;
@@ -641,7 +443,8 @@ class ViewerApplication final : public Application {
         }
     }
 
-    void stop(ApplicationContext& context) noexcept override {
+    void stop(ApplicationContext& context) noexcept override
+    {
         if (runtime_.viewport_interaction_owner.is_valid()) {
             context.interaction_arbiter().destroy_owner(runtime_.viewport_interaction_owner);
         }
@@ -653,11 +456,13 @@ class ViewerApplication final : public Application {
     }
 
   private:
-    [[nodiscard]] Result<void> start_impl(ApplicationContext& context) {
+    [[nodiscard]] Result<void> start_impl(ApplicationContext& context)
+    {
         const Result<void> initialized = initialize_viewer_engine(runtime_, context.engine());
         if (!initialized) {
             return initialized.error();
         }
+
         load_viewer_preferences(runtime_.preferences);
         capture_context_diagnostics(context.graphics_context(), runtime_.diagnostics);
         initialize_viewer_presentation(runtime_, asset_root_, context.dpi_scale());
@@ -670,13 +475,15 @@ class ViewerApplication final : public Application {
         return {};
     }
 
-    void complete_deferred_startup() {
+    void complete_deferred_startup()
+    {
         if (!initial_ui_frame_built_) {
             return;
         }
         if (!initial_model_path_.has_value()) {
             return;
         }
+
         std::string path = std::move(*initial_model_path_);
         initial_model_path_.reset();
         static_cast<void>(execute_scene_workflow(
@@ -684,7 +491,8 @@ class ViewerApplication final : public Application {
             SceneReplacementRequest{SceneReplacementKind::open_model, std::move(path)}));
     }
 
-    [[nodiscard]] Result<void> validate_smoke_frame() const {
+    [[nodiscard]] Result<void> validate_smoke_frame() const
+    {
         if (smoke_mode_ && (runtime_.presentation.main_font == nullptr ||
                             ImGui::GetIO().FontDefault != runtime_.presentation.main_font ||
                             std::string_view{runtime_.presentation.main_font->GetDebugName()} !=
@@ -699,7 +507,8 @@ class ViewerApplication final : public Application {
         return {};
     }
 
-    void advance_smoke_frame(ApplicationUpdateContext& context) {
+    void advance_smoke_frame(ApplicationUpdateContext& context)
+    {
         if (!smoke_mode_) {
             return;
         }
@@ -713,12 +522,14 @@ class ViewerApplication final : public Application {
         }
     }
 
-    [[nodiscard]] Result<void> update_impl(ApplicationUpdateContext& context) {
+    [[nodiscard]] Result<void> update_impl(ApplicationUpdateContext& context)
+    {
         ++update_count_;
         const Result<void> smoke_frame = validate_smoke_frame();
         if (!smoke_frame) {
             return smoke_frame.error();
         }
+
         capture_frame_sample(runtime_, context);
         update_input_state(runtime_, context);
         synchronize_presentation_mode(runtime_, context);
@@ -738,17 +549,20 @@ class ViewerApplication final : public Application {
     ViewerAssembly runtime_;
 };
 
-[[nodiscard]] bool environment_cannot_create_context(ErrorCode code) noexcept {
+[[nodiscard]] bool environment_cannot_create_context(ErrorCode code) noexcept
+{
     return code == ErrorCode::graphics_initialization_failed ||
            code == ErrorCode::graphics_context_unavailable ||
            code == ErrorCode::unsupported_graphics_version;
 }
 
-[[nodiscard]] const char* first_viewer_argument(int argument_count, char** arguments) noexcept {
+[[nodiscard]] const char* first_viewer_argument(int argument_count, char** arguments) noexcept
+{
     return argument_count >= 2 && arguments != nullptr ? arguments[1] : nullptr;
 }
 
-int run_viewer_entry(int argument_count, char** arguments) {
+int run_viewer_entry(int argument_count, char** arguments)
+{
     try {
         const char* first_argument = first_viewer_argument(argument_count, arguments);
         const bool smoke_mode =

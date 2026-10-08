@@ -61,9 +61,8 @@ bounds, and camera fitting.
 
 ## Presentation Integration
 
-The standard application framework owns rendering and presentation. An
-explicit embedding host creates `EmbeddedRuntime`, keeps its compatible OpenGL
-context current while creating, resizing, rendering, resolving, and destroying
-viewport resources, and presents the non-owning view returned by
-`EmbeddedRuntime::native_texture_view()`. The host must not delete or modify the
-native texture.
+The standard application framework owns the graphics context, queued rendering,
+display resolve, and presentation. Applications queue Viewport rendering during
+`build_ui`. `Viewport::read_color_pixels()` reads the last rendered display image
+into caller-owned RGBA8 storage without exposing native graphics handles. Read
+it in the following `update`, before queueing another render.

@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
@@ -11,17 +11,13 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/core/diagnostics.h>
+#include <elf3d/internal/math.h>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
-
-module elf.gltf;
-
-import elf.core;
-import elf.math;
-import elf.model;
 
 namespace elf3d::gltf::importer_detail {
 
@@ -51,7 +47,8 @@ enum class TangentImportOutcome : std::uint8_t {
     unusable,
 };
 
-[[nodiscard]] Result<bool> normalize_tangent(Float4& tangent, std::string_view context) {
+[[nodiscard]] Result<bool> normalize_tangent(Float4& tangent, std::string_view context)
+{
     const float length_squared =
         tangent.x * tangent.x + tangent.y * tangent.y + tangent.z * tangent.z;
     const bool valid_components = std::isfinite(tangent.x) && std::isfinite(tangent.y) &&
@@ -63,6 +60,7 @@ enum class TangentImportOutcome : std::uint8_t {
     if (!std::isfinite(length_squared) || length_squared <= 0.000000000001F) {
         return false;
     }
+
     const float inverse_length = 1.0F / std::sqrt(length_squared);
     tangent.x *= inverse_length;
     tangent.y *= inverse_length;
@@ -70,7 +68,8 @@ enum class TangentImportOutcome : std::uint8_t {
     return true;
 }
 
-[[nodiscard]] Result<TangentImportOutcome> import_authored_tangents(PrimitiveBuildState& state) {
+[[nodiscard]] Result<TangentImportOutcome> import_authored_tangents(PrimitiveBuildState& state)
+{
     const cgltf_accessor* accessor =
         cgltf_find_accessor(&state.source, cgltf_attribute_type_tangent, 0);
     if (accessor == nullptr) {
@@ -82,10 +81,12 @@ enum class TangentImportOutcome : std::uint8_t {
                      state.context +
                          " TANGENT must be a floating-point VEC4 matching POSITION count"};
     }
+
     Result<std::vector<float>> tangents = unpack_float4(*accessor, state.context + " TANGENT");
     if (!tangents) {
         return tangents.error();
     }
+
     std::vector<Float4> imported(state.vertex_count);
     bool usable = true;
     for (std::size_t index = 0; index < state.vertex_count; ++index) {
@@ -105,12 +106,14 @@ enum class TangentImportOutcome : std::uint8_t {
     return TangentImportOutcome::authored;
 }
 
-[[nodiscard]] Result<void> import_positions(PrimitiveBuildState& state) {
+[[nodiscard]] Result<void> import_positions(PrimitiveBuildState& state)
+{
     state.position_accessor = cgltf_find_accessor(&state.source, cgltf_attribute_type_position, 0);
     if (state.position_accessor == nullptr) {
         return Error{ErrorCode::missing_position_accessor,
                      state.context + " does not contain POSITION"};
     }
+
     Result<std::vector<float>> positions =
         unpack_float3(*state.position_accessor, ErrorCode::missing_position_accessor,
                       state.context + " POSITION");
@@ -131,7 +134,8 @@ enum class TangentImportOutcome : std::uint8_t {
     return {};
 }
 
-[[nodiscard]] Result<void> import_primitive_indices(PrimitiveBuildState& state) {
+[[nodiscard]] Result<void> import_primitive_indices(PrimitiveBuildState& state)
+{
     Result<std::vector<std::uint32_t>> indices =
         import_indices(state.source, state.vertex_count, state.context);
     if (!indices) {
@@ -142,23 +146,27 @@ enum class TangentImportOutcome : std::uint8_t {
     return {};
 }
 
-[[nodiscard]] Result<void> import_texcoords(PrimitiveBuildState& state) {
+[[nodiscard]] Result<void> import_texcoords(PrimitiveBuildState& state)
+{
     for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets); ++set) {
         const cgltf_accessor* accessor =
             cgltf_find_accessor(&state.source, cgltf_attribute_type_texcoord, set);
         if (accessor == nullptr) {
             continue;
         }
+
         const std::string semantic = "TEXCOORD_" + std::to_string(set);
         if (accessor->count != state.position_accessor->count) {
             return Error{ErrorCode::mismatched_texcoord_count,
                          state.context + " " + semantic + " count does not match POSITION"};
         }
+
         Result<std::vector<float>> texcoords =
             unpack_float2(*accessor, state.context + " " + semantic);
         if (!texcoords) {
             return texcoords.error();
         }
+
         std::vector<Float2>& target = set == 0 ? state.data.texcoord0 : state.data.texcoord1;
         target.resize(state.vertex_count);
         for (std::size_t index = 0; index < state.vertex_count; ++index) {
@@ -173,7 +181,8 @@ enum class TangentImportOutcome : std::uint8_t {
     return {};
 }
 
-void diagnose_additional_texcoords(PrimitiveBuildState& state) {
+void diagnose_additional_texcoords(PrimitiveBuildState& state)
+{
     for (cgltf_size index = 0; index < state.source.attributes_count; ++index) {
         const cgltf_attribute& attribute = state.source.attributes[index];
         if (attribute.type == cgltf_attribute_type_texcoord &&
@@ -188,12 +197,14 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     }
 }
 
-[[nodiscard]] bool color_is_finite(const Color4& color) noexcept {
+[[nodiscard]] bool color_is_finite(const Color4& color) noexcept
+{
     return std::isfinite(color.red) && std::isfinite(color.green) && std::isfinite(color.blue) &&
            std::isfinite(color.alpha);
 }
 
-[[nodiscard]] Result<void> import_colors(PrimitiveBuildState& state) {
+[[nodiscard]] Result<void> import_colors(PrimitiveBuildState& state)
+{
     const cgltf_accessor* accessor =
         cgltf_find_accessor(&state.source, cgltf_attribute_type_color, 0);
     if (accessor == nullptr) {
@@ -203,10 +214,12 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
         return Error{ErrorCode::invalid_accessor,
                      state.context + " COLOR_0 count does not match POSITION"};
     }
+
     Result<std::vector<float>> colors = unpack_color(*accessor, state.context + " COLOR_0");
     if (!colors) {
         return colors.error();
     }
+
     const std::size_t components = accessor->type == cgltf_type_vec3 ? 3U : 4U;
     state.data.colors.resize(state.vertex_count);
     for (std::size_t index = 0; index < state.vertex_count; ++index) {
@@ -223,7 +236,8 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     return {};
 }
 
-[[nodiscard]] Result<NormalImportOutcome> import_authored_normals(PrimitiveBuildState& state) {
+[[nodiscard]] Result<NormalImportOutcome> import_authored_normals(PrimitiveBuildState& state)
+{
     const cgltf_accessor* accessor =
         cgltf_find_accessor(&state.source, cgltf_attribute_type_normal, 0);
     if (accessor == nullptr) {
@@ -233,11 +247,13 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
         return Error{ErrorCode::mismatched_normal_count,
                      state.context + " NORMAL count does not match POSITION"};
     }
+
     Result<std::vector<float>> normals =
         unpack_float3(*accessor, ErrorCode::invalid_accessor, state.context + " NORMAL");
     if (!normals) {
         return normals.error();
     }
+
     state.data.normals.resize(state.vertex_count);
     for (std::size_t index = 0; index < state.vertex_count; ++index) {
         const Float3 normal{normals.value()[index * 3], normals.value()[index * 3 + 1],
@@ -252,6 +268,7 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
             }
             return NormalImportOutcome::unusable;
         }
+
         const float inverse_length = 1.0F / std::sqrt(length_squared);
         state.data.normals[index] =
             Float3{normal.x * inverse_length, normal.y * inverse_length, normal.z * inverse_length};
@@ -260,7 +277,8 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
 }
 
 [[nodiscard]] Result<void> generate_normal_fallback(PrimitiveBuildState& state,
-                                                    NormalImportOutcome outcome) {
+                                                    NormalImportOutcome outcome)
+{
     if (outcome == NormalImportOutcome::authored) {
         return {};
     }
@@ -268,6 +286,7 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
         return Error{ErrorCode::missing_normals,
                      state.context + " has no NORMAL accessor and generation is disabled"};
     }
+
     std::uint64_t degenerate_count = 0;
     std::uint64_t fallback_count = 0;
     generate_normals(state.data.positions, state.data.normals, state.indices, degenerate_count,
@@ -289,7 +308,8 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     return {};
 }
 
-[[nodiscard]] Result<void> import_normals(PrimitiveBuildState& state) {
+[[nodiscard]] Result<void> import_normals(PrimitiveBuildState& state)
+{
     Result<NormalImportOutcome> outcome = import_authored_normals(state);
     if (!outcome) {
         return outcome.error();
@@ -297,12 +317,14 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     return generate_normal_fallback(state, outcome.value());
 }
 
-[[nodiscard]] Result<void> generate_missing_tangents(PrimitiveBuildState& state) {
+[[nodiscard]] Result<void> generate_missing_tangents(PrimitiveBuildState& state)
+{
     if (!state.data.tangents.empty() || state.source.material == nullptr ||
         state.source.material->unlit != 0 ||
         state.source.material->normal_texture.texture == nullptr) {
         return {};
     }
+
     Result<TextureMapping> mapping =
         texture_mapping(state.source.material->normal_texture, state.context + " normal texture");
     if (!mapping) {
@@ -316,6 +338,7 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
                        state.context);
         return {};
     }
+
     Result<bool> generated = generate_mikktspace_tangents(state.data, mapping.value().texcoord_set);
     if (!generated) {
         return generated.error();
@@ -330,7 +353,8 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     return {};
 }
 
-[[nodiscard]] Result<void> import_tangents(PrimitiveBuildState& state) {
+[[nodiscard]] Result<void> import_tangents(PrimitiveBuildState& state)
+{
     const Result<TangentImportOutcome> authored = import_authored_tangents(state);
     if (!authored) {
         return authored.error();
@@ -347,7 +371,8 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     return generate_missing_tangents(state);
 }
 
-[[nodiscard]] Result<void> account_converted_vertices(PrimitiveBuildState& state) {
+[[nodiscard]] Result<void> account_converted_vertices(PrimitiveBuildState& state)
+{
     if (!checked_add(state.import_state.converted_vertices,
                      static_cast<std::uint64_t>(state.data.positions.size()),
                      maximum_imported_vertices)) {
@@ -357,7 +382,8 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     return {};
 }
 
-[[nodiscard]] Result<void> store_primitive(PrimitiveBuildState& state, ImportedMesh& result) {
+[[nodiscard]] Result<void> store_primitive(PrimitiveBuildState& state, ImportedMesh& result)
+{
     if (!result.mesh.has_value()) {
         const Result<MeshId> created = state.import_state.builder.create_mesh(
             state.mesh.name != nullptr ? std::string_view{state.mesh.name} : std::string_view{});
@@ -366,11 +392,13 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
         }
         result.mesh = created.value();
     }
+
     const Result<MaterialId> material =
         material_for(state.import_state, state.source.material, state.available_texcoords);
     if (!material) {
         return material.error();
     }
+
     const Result<PrimitiveId> primitive = state.import_state.builder.create_primitive(
         *result.mesh, material.value(), std::move(state.data));
     if (!primitive) {
@@ -383,7 +411,8 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
 
 [[nodiscard]] Result<void> import_primitive(ImportState& import_state, const cgltf_mesh& mesh,
                                             cgltf_size mesh_index, cgltf_size primitive_index,
-                                            ImportedMesh& result) {
+                                            ImportedMesh& result)
+{
     const cgltf_primitive& source = mesh.primitives[primitive_index];
     const std::string context = mesh_context(mesh, mesh_index, primitive_index);
     if (!supported_primitive_type(source.type)) {
@@ -403,6 +432,7 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
     if (const Result<void> texcoords = import_texcoords(state); !texcoords) {
         return texcoords.error();
     }
+
     diagnose_additional_texcoords(state);
     if (const Result<void> colors = import_colors(state); !colors) {
         return colors.error();
@@ -420,24 +450,19 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state) {
 }
 
 [[nodiscard]] Result<ImportedMesh> import_mesh(ImportState& state, const cgltf_mesh& mesh,
-                                               cgltf_size mesh_index) {
-    try {
-        ImportedMesh result;
-        result.primitives.resize(mesh.primitives_count);
-        for (cgltf_size primitive_index = 0; primitive_index < mesh.primitives_count;
-             ++primitive_index) {
-            const Result<void> imported =
-                import_primitive(state, mesh, mesh_index, primitive_index, result);
-            if (!imported) {
-                return imported.error();
-            }
+                                               cgltf_size mesh_index)
+{
+    ImportedMesh result;
+    result.primitives.resize(mesh.primitives_count);
+    for (cgltf_size primitive_index = 0; primitive_index < mesh.primitives_count;
+         ++primitive_index) {
+        const Result<void> imported =
+            import_primitive(state, mesh, mesh_index, primitive_index, result);
+        if (!imported) {
+            return imported.error();
         }
-        return result;
-    } catch (const std::bad_alloc&) {
-        fatal_gltf_allocation_failure();
-    } catch (...) {
-        fatal_unexpected_gltf_boundary_exception();
     }
+    return result;
 }
 
 } // namespace elf3d::gltf::importer_detail

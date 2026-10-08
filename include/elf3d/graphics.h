@@ -40,7 +40,8 @@ class TextureHandle final {
   public:
     constexpr TextureHandle() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return value_ != 0;
     }
 
@@ -49,7 +50,9 @@ class TextureHandle final {
   private:
     friend class detail::TextureHandleAccess;
 
-    explicit constexpr TextureHandle(std::uint64_t value) noexcept : value_(value) {}
+    explicit constexpr TextureHandle(std::uint64_t value) noexcept : value_(value)
+    {
+    }
 
     std::uint64_t value_ = 0;
 };

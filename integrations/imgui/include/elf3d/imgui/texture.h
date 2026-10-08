@@ -37,7 +37,9 @@ class UiTexture final {
     [[nodiscard]] bool is_valid() const noexcept;
     [[nodiscard]] ImTextureRef texture_ref() const noexcept;
 
-    explicit UiTexture(ConstructionKey) noexcept {}
+    explicit UiTexture(ConstructionKey) noexcept
+    {
+    }
 
   private:
     std::uint32_t texture_ = 0;

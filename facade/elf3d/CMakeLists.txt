@@ -8,7 +8,7 @@ add_library(
         src/viewport_impl.h
         src/viewport_navigation.cpp
 )
-add_library(elf3d::elf3d ALIAS elf3d)
+elf3d_target_interface(elf3d)
 
 target_sources(
     elf3d
@@ -79,14 +79,15 @@ else()
             ${ELF3D_STUDIO_ENVIRONMENT_PORTABLE_SOURCE}
             src/studio_environment_resource.h
     )
+    set_source_files_properties(
+        ${ELF3D_STUDIO_ENVIRONMENT_PORTABLE_SOURCE}
+        PROPERTIES SKIP_PRECOMPILE_HEADERS ON
+    )
 endif()
 
-target_compile_features(elf3d PUBLIC cxx_std_20)
 target_compile_definitions(elf3d PRIVATE ELF3D_BUILDING_LIBRARY)
 target_include_directories(
     elf3d
-    PUBLIC
-        ${PROJECT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -114,3 +115,8 @@ set_target_properties(
 
 elf3d_enable_warnings(elf3d)
 elf3d_group_sources(elf3d)
+if(ELF3D_BUILD_COMPONENT STREQUAL "engine")
+    elf3d_check_prerequisites(elf3d ${model_dependencies} elf3d_third_party_glad)
+endif()
+
+elf3d_enable_pch(elf3d engine)

@@ -1,4 +1,7 @@
 function(elf3d_configure_module_group target_name)
+    foreach(component IN LISTS ARGN)
+        target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${component}/include)
+    endforeach()
     target_compile_features(${target_name} PUBLIC cxx_std_20)
     target_compile_definitions(${target_name} PRIVATE ELF3D_BUILDING_LIBRARY)
     target_include_directories(
@@ -19,24 +22,24 @@ add_library(
     elf3d_foundation_modules
     OBJECT
         core/src/diagnostics.cpp
+        core/include/elf3d/core/detail/exception_boundary.h
         math/include/elf3d/math/detail/glm_helpers.h
         math/include/elf3d/math/glm_config.h
         math/src/conventions.cpp
 )
 add_library(elf3d::foundation_modules ALIAS elf3d_foundation_modules)
-elf3d_configure_module_group(elf3d_foundation_modules)
+elf3d_configure_module_group(elf3d_foundation_modules core math)
 target_include_directories(
     elf3d_foundation_modules
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/math/include
 )
 target_sources(
     elf3d_foundation_modules
-    PUBLIC
-        FILE_SET elf3d_foundation_cxx_modules TYPE CXX_MODULES
-        FILES
-            core/src/elf.core.cppm
-            math/src/elf.math.cppm
+    PRIVATE
+        math/include/elf3d/internal/math.h
 )
 target_link_libraries(elf3d_foundation_modules PRIVATE glm::glm)
 
@@ -54,18 +57,11 @@ add_library(
         model/include/elf3d/model/detail/imported_metadata.h
 )
 add_library(elf3d::model_modules ALIAS elf3d_model_modules)
-elf3d_configure_module_group(elf3d_model_modules)
+elf3d_configure_module_group(elf3d_model_modules model)
 target_include_directories(
     elf3d_model_modules
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/model/include
-)
-target_sources(
-    elf3d_model_modules
-    PUBLIC
-        FILE_SET elf3d_model_cxx_modules TYPE CXX_MODULES
-        FILES
-            model/src/elf.model.cppm
 )
 target_link_libraries(elf3d_model_modules PUBLIC elf3d_foundation_modules)
 
@@ -83,30 +79,14 @@ if(ELF3D_BUILD_ENGINE)
             scene/src/visibility.cpp
     )
     add_library(elf3d::domain_modules ALIAS elf3d_domain_modules)
-    elf3d_configure_module_group(elf3d_domain_modules)
-    # MSVC derives module-dependency JSON names from the source basename. Keep
-    # the duplicate storage.cpp outputs separated like their object files.
-    set_source_files_properties(
-        assets/src/storage.cpp
-        PROPERTIES
-            VS_SETTINGS
-                "ModuleDependenciesFile=$(IntDir)assets/src/;SourceDependenciesFile=$(IntDir)assets/src/"
-    )
-    set_source_files_properties(
-        scene/src/storage.cpp
-        PROPERTIES
-            VS_SETTINGS
-                "ModuleDependenciesFile=$(IntDir)scene/src/;SourceDependenciesFile=$(IntDir)scene/src/"
-    )
+    elf3d_configure_module_group(elf3d_domain_modules interaction assets clipping scene)
     target_sources(
         elf3d_domain_modules
-        PUBLIC
-            FILE_SET elf3d_domain_cxx_modules TYPE CXX_MODULES
-            FILES
-                interaction/src/elf.interaction.cppm
-                assets/src/elf.assets.cppm
-                clipping/src/elf.clipping.cppm
-                scene/src/elf.scene.cppm
+        PRIVATE
+            interaction/include/elf3d/internal/interaction.h
+            assets/include/elf3d/internal/assets.h
+            clipping/include/elf3d/internal/clipping.h
+            scene/include/elf3d/internal/scene.h
     )
     target_link_libraries(
         elf3d_domain_modules
@@ -122,13 +102,11 @@ add_library(
         image/src/image_decoder.cpp
 )
 add_library(elf3d::image_modules ALIAS elf3d_image_modules)
-elf3d_configure_module_group(elf3d_image_modules)
+elf3d_configure_module_group(elf3d_image_modules image)
 target_sources(
     elf3d_image_modules
-    PUBLIC
-        FILE_SET elf3d_image_cxx_modules TYPE CXX_MODULES
-        FILES
-            image/src/elf.image.cppm
+    PRIVATE
+        image/include/elf3d/internal/image.h
 )
 target_link_libraries(
     elf3d_image_modules
@@ -146,9 +124,12 @@ add_library(
         gltf/src/exporter_internal.hpp
         gltf/src/exporter_json_internal.hpp
         gltf/src/importer_internal.hpp
+        gltf/src/file_path.cpp
+        gltf/src/file_path.hpp
         gltf/src/exporter.cpp
         gltf/src/exporter_image.cpp
         gltf/src/exporter_json.cpp
+        gltf/src/exporter_json_material.cpp
         gltf/src/exporter_json_format.cpp
         gltf/src/exporter_json_writer.cpp
         gltf/src/exporter_output.cpp
@@ -166,13 +147,11 @@ add_library(
         gltf/src/importer.cpp
 )
 add_library(elf3d::gltf_modules ALIAS elf3d_gltf_modules)
-elf3d_configure_module_group(elf3d_gltf_modules)
+elf3d_configure_module_group(elf3d_gltf_modules gltf)
 target_sources(
     elf3d_gltf_modules
-    PUBLIC
-        FILE_SET elf3d_gltf_cxx_modules TYPE CXX_MODULES
-        FILES
-            gltf/src/elf.gltf.cppm
+    PRIVATE
+        gltf/include/elf3d/internal/gltf.h
 )
 target_include_directories(
     elf3d_gltf_modules
@@ -193,28 +172,13 @@ target_link_libraries(
 )
 
 add_library(elf3d_model STATIC)
-add_library(elf3d::model ALIAS elf3d_model)
-target_compile_features(elf3d_model PUBLIC cxx_std_20)
-target_compile_definitions(elf3d_model PUBLIC ELF3D_STATIC)
-target_include_directories(
-    elf3d_model
-    PUBLIC
-        ${PROJECT_SOURCE_DIR}/include
-)
+elf3d_target_interface(elf3d_model)
 elf3d_link_object_libraries(
     elf3d_model
         elf3d_foundation_modules
         elf3d_image_modules
         elf3d_model_modules
         elf3d_gltf_modules
-)
-target_link_libraries(
-    elf3d_model
-    PRIVATE
-        elf3d_third_party_png
-        elf3d_third_party_jpeg
-        elf3d_third_party_cgltf
-        elf3d_third_party_mikktspace
 )
 set_target_properties(
     elf3d_model
@@ -249,13 +213,11 @@ add_library(
         graphics/src/device.cpp
 )
 add_library(elf3d::graphics_modules ALIAS elf3d_graphics_modules)
-elf3d_configure_module_group(elf3d_graphics_modules)
+elf3d_configure_module_group(elf3d_graphics_modules graphics)
 target_sources(
     elf3d_graphics_modules
-    PUBLIC
-        FILE_SET elf3d_graphics_cxx_modules TYPE CXX_MODULES
-        FILES
-            graphics/src/elf.graphics.cppm
+    PRIVATE
+        graphics/include/elf3d/internal/graphics.h
 )
 target_link_libraries(
     elf3d_graphics_modules
@@ -268,22 +230,23 @@ add_library(
     elf3d_opengl_modules
     OBJECT
         backend_opengl/src/device_internal.hpp
+        backend_opengl/src/device_display_shaders.hpp
         backend_opengl/src/device.cpp
         backend_opengl/src/device_indexed_draw.cpp
         backend_opengl/src/device_overlay.cpp
         backend_opengl/src/device_picking.cpp
         backend_opengl/src/device_resources.cpp
+        backend_opengl/src/device_pipeline.cpp
         backend_opengl/src/device_state.cpp
         backend_opengl/src/device_targets.cpp
+        backend_opengl/src/device_readback.cpp
 )
 add_library(elf3d::opengl_modules ALIAS elf3d_opengl_modules)
-elf3d_configure_module_group(elf3d_opengl_modules)
+elf3d_configure_module_group(elf3d_opengl_modules backend_opengl)
 target_sources(
     elf3d_opengl_modules
-    PUBLIC
-        FILE_SET elf3d_opengl_cxx_modules TYPE CXX_MODULES
-        FILES
-            backend_opengl/src/elf.backend.opengl.cppm
+    PRIVATE
+        backend_opengl/include/elf3d/internal/backend_opengl.h
 )
 target_link_libraries(
     elf3d_opengl_modules
@@ -302,24 +265,24 @@ add_library(
         navigation/src/orbit_navigation.cpp
         navigation/src/orbit_navigation_update.cpp
         picking/src/geometry_detail.h
+        picking/src/acceleration_detail.h
         picking/src/service_geometry.cpp
         picking/src/service.cpp
+        picking/src/acceleration.cpp
         selection/src/selection_controller.cpp
         visibility/src/visibility_controller.cpp
         clipping_runtime/src/clipping_controller.cpp
 )
 add_library(elf3d::interaction_modules ALIAS elf3d_interaction_modules)
-elf3d_configure_module_group(elf3d_interaction_modules)
+elf3d_configure_module_group(elf3d_interaction_modules navigation picking selection visibility clipping_runtime)
 target_sources(
     elf3d_interaction_modules
-    PUBLIC
-        FILE_SET elf3d_interaction_cxx_modules TYPE CXX_MODULES
-        FILES
-            navigation/src/elf.navigation.cppm
-            picking/src/elf.picking.cppm
-            selection/src/elf.selection.cppm
-            visibility/src/elf.visibility.cppm
-            clipping_runtime/src/elf.clipping.runtime.cppm
+    PRIVATE
+        navigation/include/elf3d/internal/navigation.h
+        picking/include/elf3d/internal/picking.h
+        selection/include/elf3d/internal/selection.h
+        visibility/include/elf3d/internal/visibility.h
+        clipping_runtime/include/elf3d/internal/clipping_runtime.h
 )
 target_link_libraries(
     elf3d_interaction_modules
@@ -336,6 +299,7 @@ add_library(
         renderer/src/model_rendering.cpp
         renderer/src/render_list.cpp
         renderer/src/renderer.cpp
+        renderer/src/renderer_detail.h
         renderer/src/studio_environment.cpp
         viewport/src/offscreen_viewport.cpp
         viewport/src/offscreen_viewport_navigation.cpp
@@ -344,14 +308,12 @@ add_library(
         viewport/src/offscreen_viewport_render_settings.cpp
 )
 add_library(elf3d::view_modules ALIAS elf3d_view_modules)
-elf3d_configure_module_group(elf3d_view_modules)
+elf3d_configure_module_group(elf3d_view_modules renderer viewport)
 target_sources(
     elf3d_view_modules
-    PUBLIC
-        FILE_SET elf3d_view_cxx_modules TYPE CXX_MODULES
-        FILES
-            renderer/src/elf.renderer.cppm
-            viewport/src/elf.viewport.cppm
+    PRIVATE
+        renderer/include/elf3d/internal/renderer.h
+        viewport/include/elf3d/internal/viewport.h
 )
 target_link_libraries(
     elf3d_view_modules
@@ -367,8 +329,25 @@ endif()
 get_property(elf3d_module_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(module_target IN LISTS elf3d_module_targets)
     elf3d_group_sources(${module_target})
+    if(ELF3D_BUILD_COMPONENT STREQUAL "engine")
+        if(module_target STREQUAL "elf3d_opengl_modules")
+            elf3d_check_prerequisites(${module_target} elf3d_third_party_glad)
+        else()
+            elf3d_check_prerequisites(${module_target} ${model_dependencies})
+        endif()
+    endif()
 endforeach()
 
 if(ELF3D_BUILD_TESTING)
     add_subdirectory(tests)
+endif()
+
+elf3d_enable_pch(elf3d_foundation_modules engine)
+elf3d_enable_pch(elf3d_model_modules engine)
+elf3d_enable_pch(elf3d_gltf_modules engine)
+if(ELF3D_BUILD_ENGINE)
+    elf3d_enable_pch(elf3d_domain_modules engine)
+    elf3d_enable_pch(elf3d_opengl_modules engine)
+    elf3d_enable_pch(elf3d_interaction_modules engine)
+    elf3d_enable_pch(elf3d_view_modules engine)
 endif()

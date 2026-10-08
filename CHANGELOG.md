@@ -1,6 +1,56 @@
 # Changelog
 
-## Unreleased
+## 0.11.3
+
+- Replaced all first-party C++ Modules with self-contained conventional headers
+  and explicit includes while preserving C++20, public APIs, runtime behavior,
+  the 18 architectural components, and the nine internal OBJECT-library groups.
+- Added private CMake-generated PCH for Windows production targets, with separate
+  profiles for the engine/framework, viewer, ImGui, and ImGui integration. Public
+  consumers inherit no PCH requirement or internal include directory. Other
+  platforms keep PCH disabled; the standard CMake switch disables it everywhere.
+- Enforce component dependencies through actual includes, including layers,
+  cycles, private-header access, and CMake ownership. Lexical checks reject
+  prohibited module source forms and enabled module build mechanisms.
+- Added independent and repeated header inclusion plus combined compile/link
+  contracts. Updated build guides and automatic regeneration of all four manual
+  Windows solutions after version or shared build-configuration changes.
+
+## 0.11.2
+
+- Replaced duplicated Windows Debug/Release configure trees with four independent
+  manual VS 2026 production solutions under `win` and two multi-configuration
+  automated trees. Downstream solutions import prebuilt upstream libraries;
+  Viewer deploys the matching DLL, assets and Debug symbols through file rules.
+- Configure presets are now `windows-full`, `windows-model`, and four `win-*`
+  presets. Existing build/test preset names remain. Removed the Study-filter
+  generator; current manual solutions exclude tests, examples and developer tools.
+
+- Breaking: removed `elf3d_embed`, `elf3d::embed`, `EmbeddedRuntime`, native
+  presentation types, and `ELF3D_BUILD_EMBED`. Graphical applications, capture,
+  benchmarks, and integration tests now use `elf3d_app` / `run_application()`.
+- Added synchronous top-down RGBA8 `Viewport::read_color_pixels()` and completed
+  Application frame statistics. Benchmark CSV schema 2 uses framework-frame
+  wall timing; historical complete-frame timings are a separate baseline.
+
+## 0.11.1
+
+- Report embedded nulls and failed UTF-8/native file-path conversion as
+  `invalid_argument` during glTF import/export and viewer file workflows.
+  Invalid browser input preserves the current directory, and invalid optional
+  preference paths are ignored.
+- Contain escaping allocation failures at Scene and Model SDK boundaries with
+  the existing fatal diagnostic. Document construction, mutation, and validation
+  now explicitly declare `noexcept`; ordinary errors remain Result values or
+  validation diagnostics.
+- Remove repeated exception handlers from glTF helpers and non-allocating
+  navigation operations, and allow allocating internal Scene operations to
+  propagate exceptions to their owning boundary.
+- Add isolated allocation-failure regressions for the Model SDK and Debug Scene
+  DLL, plus invalid-path regressions. Standard-library operations that terminate
+  internally remain an explicit limitation.
+- Simplify oversized implementation files and standardize project-owned C++
+  formatting while preserving module dependencies and resource ownership.
 
 ## 0.11.0
 

@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
@@ -13,9 +13,6 @@ module;
 #include <system_error>
 #include <utility>
 #include <vector>
-
-module elf.gltf;
-
 namespace elf3d::gltf::exporter_output {
 
 using OutputFile = std::pair<std::filesystem::path, std::vector<std::byte>>;
@@ -33,7 +30,8 @@ struct OutputArtifact {
 };
 
 [[nodiscard]] Result<void> write_file(const std::filesystem::path& path,
-                                      std::span<const std::byte> bytes) {
+                                      std::span<const std::byte> bytes)
+{
     std::ofstream stream{path, std::ios::binary | std::ios::trunc};
     if (!stream) {
         return Error{ErrorCode::source_file_write_failed, "Could not open output file for writing"};
@@ -48,7 +46,8 @@ struct OutputArtifact {
 }
 
 [[nodiscard]] Result<std::filesystem::path>
-available_sibling_path(const std::filesystem::path& final_path, std::string_view purpose) {
+available_sibling_path(const std::filesystem::path& final_path, std::string_view purpose)
+{
     for (std::uint32_t index = 0; index != 1024U; ++index) {
         const std::filesystem::path candidate =
             final_path.parent_path() / (final_path.filename().string() + ".elf3d-" +
@@ -67,26 +66,31 @@ available_sibling_path(const std::filesystem::path& final_path, std::string_view
                  "Could not reserve a staged glTF output path"};
 }
 
-void remove_file_if_present(const std::filesystem::path& path) {
+void remove_file_if_present(const std::filesystem::path& path)
+{
     if (!path.empty()) {
         std::error_code error;
         std::filesystem::remove(path, error);
     }
 }
 
-[[nodiscard]] bool remove_published_output(OutputArtifact& artifact) {
+[[nodiscard]] bool remove_published_output(OutputArtifact& artifact)
+{
     if (!artifact.published) {
         return true;
     }
+
     std::error_code error;
     std::filesystem::remove(artifact.final_path, error);
     return !error;
 }
 
-[[nodiscard]] bool restore_output_backup(OutputArtifact& artifact) {
+[[nodiscard]] bool restore_output_backup(OutputArtifact& artifact)
+{
     if (!artifact.backed_up) {
         return true;
     }
+
     std::error_code error;
     std::filesystem::rename(artifact.backup_path, artifact.final_path, error);
     if (error) {
@@ -97,16 +101,19 @@ void remove_file_if_present(const std::filesystem::path& path) {
     return true;
 }
 
-[[nodiscard]] bool remove_staged_output(OutputArtifact& artifact) {
+[[nodiscard]] bool remove_staged_output(OutputArtifact& artifact)
+{
     if (artifact.staged_path.empty()) {
         return true;
     }
+
     std::error_code error;
     std::filesystem::remove(artifact.staged_path, error);
     return !error;
 }
 
-[[nodiscard]] Result<void> rollback_output(std::vector<OutputArtifact>& artifacts) {
+[[nodiscard]] Result<void> rollback_output(std::vector<OutputArtifact>& artifacts)
+{
     bool complete = true;
     for (OutputArtifact& artifact : artifacts) {
         const bool removed = remove_published_output(artifact);
@@ -125,12 +132,14 @@ void remove_file_if_present(const std::filesystem::path& path) {
     return {};
 }
 
-[[nodiscard]] Error rollback_failure(std::vector<OutputArtifact>& artifacts, Error failure) {
+[[nodiscard]] Error rollback_failure(std::vector<OutputArtifact>& artifacts, Error failure)
+{
     const Result<void> rolled_back = rollback_output(artifacts);
     return rolled_back ? std::move(failure) : rolled_back.error();
 }
 
-[[nodiscard]] Result<void> inspect_output_paths(std::vector<OutputArtifact>& artifacts) {
+[[nodiscard]] Result<void> inspect_output_paths(std::vector<OutputArtifact>& artifacts)
+{
     for (OutputArtifact& artifact : artifacts) {
         std::error_code error;
         const bool exists = std::filesystem::exists(artifact.final_path, error);
@@ -143,7 +152,8 @@ void remove_file_if_present(const std::filesystem::path& path) {
     return {};
 }
 
-[[nodiscard]] Result<void> stage_output_files(std::vector<OutputArtifact>& artifacts) {
+[[nodiscard]] Result<void> stage_output_files(std::vector<OutputArtifact>& artifacts)
+{
     for (OutputArtifact& artifact : artifacts) {
         const Result<std::filesystem::path> staged =
             available_sibling_path(artifact.final_path, "stage");
@@ -159,11 +169,13 @@ void remove_file_if_present(const std::filesystem::path& path) {
     return {};
 }
 
-[[nodiscard]] Result<void> backup_existing_outputs(std::vector<OutputArtifact>& artifacts) {
+[[nodiscard]] Result<void> backup_existing_outputs(std::vector<OutputArtifact>& artifacts)
+{
     for (OutputArtifact& artifact : artifacts) {
         if (!artifact.has_existing_file) {
             continue;
         }
+
         const Result<std::filesystem::path> backup =
             available_sibling_path(artifact.final_path, "backup");
         if (!backup) {
@@ -181,7 +193,8 @@ void remove_file_if_present(const std::filesystem::path& path) {
     return {};
 }
 
-[[nodiscard]] Result<void> publish_staged_outputs(std::vector<OutputArtifact>& artifacts) {
+[[nodiscard]] Result<void> publish_staged_outputs(std::vector<OutputArtifact>& artifacts)
+{
     for (OutputArtifact& artifact : artifacts) {
         std::error_code error;
         std::filesystem::rename(artifact.staged_path, artifact.final_path, error);
@@ -194,7 +207,8 @@ void remove_file_if_present(const std::filesystem::path& path) {
     return {};
 }
 
-void discard_output_backups(std::vector<OutputArtifact>& artifacts) {
+void discard_output_backups(std::vector<OutputArtifact>& artifacts)
+{
     for (OutputArtifact& artifact : artifacts) {
         if (artifact.backed_up) {
             remove_file_if_present(artifact.backup_path);
@@ -204,7 +218,8 @@ void discard_output_backups(std::vector<OutputArtifact>& artifacts) {
     }
 }
 
-[[nodiscard]] Result<void> publish_artifacts(std::vector<OutputArtifact>& artifacts) {
+[[nodiscard]] Result<void> publish_artifacts(std::vector<OutputArtifact>& artifacts)
+{
     if (const Result<void> inspected = inspect_output_paths(artifacts); !inspected) {
         return inspected.error();
     }
@@ -217,13 +232,15 @@ void discard_output_backups(std::vector<OutputArtifact>& artifacts) {
     if (const Result<void> published = publish_staged_outputs(artifacts); !published) {
         return rollback_failure(artifacts, published.error());
     }
+
     discard_output_backups(artifacts);
     return {};
 }
 
 } // namespace
 
-Result<void> publish(std::vector<OutputFile>& files) {
+Result<void> publish(std::vector<OutputFile>& files)
+{
     std::vector<OutputArtifact> artifacts;
     artifacts.reserve(files.size());
     for (OutputFile& file : files) {

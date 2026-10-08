@@ -116,13 +116,15 @@ enum class ErrorCode {
     invalid_image_id,
     invalid_texture_id,
     invalid_sampler_id,
+    gpu_texture_readback_failed,
 };
 
 class Error final {
   public:
     static constexpr std::size_t message_capacity = 239;
 
-    constexpr Error(ErrorCode code, std::string_view message) noexcept : code_(code) {
+    constexpr Error(ErrorCode code, std::string_view message) noexcept : code_(code)
+    {
         const std::size_t count = std::min(message.size(), message_capacity);
         for (std::size_t index = 0; index < count; ++index) {
             message_[index] = message[index];
@@ -130,11 +132,13 @@ class Error final {
         message_[count] = '\0';
     }
 
-    [[nodiscard]] constexpr ErrorCode code() const noexcept {
+    [[nodiscard]] constexpr ErrorCode code() const noexcept
+    {
         return code_;
     }
 
-    [[nodiscard]] constexpr const char* message() const noexcept {
+    [[nodiscard]] constexpr const char* message() const noexcept
+    {
         return message_.data();
     }
 

@@ -5,11 +5,16 @@ add_library(
         include/elf3d/app/input.h
         include/elf3d/app/interaction.h
         src/application.cpp
+        src/application_context.cpp
+        src/application_frame.h
         src/input_collector.cpp
         src/input_collector.h
         src/interaction.cpp
 )
 add_library(elf3d::app ALIAS elf3d_app)
+if(ELF3D_BUILD_COMPONENT STREQUAL "viewer")
+    elf3d_check_prerequisites(elf3d_app elf3d elf3d_imgui elf3d_third_party_imgui glfw elf3d_third_party_glad)
+endif()
 
 target_compile_features(elf3d_app PUBLIC cxx_std_20)
 target_include_directories(
@@ -28,6 +33,7 @@ target_link_libraries(
         elf3d::imgui
         glfw
         OpenGL::GL
+        elf3d::third_party_glad
 )
 set_target_properties(
     elf3d_app
@@ -72,3 +78,5 @@ if(ELF3D_BUILD_TESTING)
     elf3d_enable_warnings(elf3d_input_collector_tests)
     add_test(NAME elf3d.input_collector COMMAND elf3d_input_collector_tests)
 endif()
+
+elf3d_enable_pch(elf3d_app engine)

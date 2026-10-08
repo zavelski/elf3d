@@ -22,13 +22,15 @@ namespace elf3d::viewer {
 
 #if defined(_WIN32)
 
-[[nodiscard]] bool regular_file(const std::filesystem::path& path) {
+[[nodiscard]] bool regular_file(const std::filesystem::path& path)
+{
     std::error_code error;
     return std::filesystem::is_regular_file(path, error) && !error;
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-search_executable_path(const wchar_t* executable_name) {
+search_executable_path(const wchar_t* executable_name)
+{
     constexpr DWORD maximum_path_characters = 32768;
     std::vector<wchar_t> buffer(maximum_path_characters, L'\0');
     const DWORD length = SearchPathW(nullptr, executable_name, nullptr, maximum_path_characters,
@@ -36,12 +38,14 @@ search_executable_path(const wchar_t* executable_name) {
     if (length == 0 || length >= maximum_path_characters) {
         return std::nullopt;
     }
+
     const std::filesystem::path path{buffer.data()};
     return regular_file(path) ? std::optional<std::filesystem::path>{path} : std::nullopt;
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-registry_executable_path(HKEY root, const wchar_t* executable_name, DWORD registry_view) {
+registry_executable_path(HKEY root, const wchar_t* executable_name, DWORD registry_view)
+{
     const std::wstring subkey =
         std::wstring{L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\"} +
         executable_name;
@@ -65,12 +69,14 @@ registry_executable_path(HKEY root, const wchar_t* executable_name, DWORD regist
     if (path_text.size() >= 2U && path_text.front() == L'"' && path_text.back() == L'"') {
         path_text = path_text.substr(1U, path_text.size() - 2U);
     }
+
     const std::filesystem::path path{std::move(path_text)};
     return regular_file(path) ? std::optional<std::filesystem::path>{path} : std::nullopt;
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-registered_executable_path(const wchar_t* executable_name) {
+registered_executable_path(const wchar_t* executable_name)
+{
 #if defined(_WIN64)
     constexpr std::array<DWORD, 2> registry_views{RRF_SUBKEY_WOW6464KEY, RRF_SUBKEY_WOW6432KEY};
 #else
@@ -90,18 +96,21 @@ registered_executable_path(const wchar_t* executable_name) {
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-known_installation_path(const char* environment_name, const std::filesystem::path& relative_path) {
+known_installation_path(const char* environment_name, const std::filesystem::path& relative_path)
+{
     const std::optional<std::filesystem::path> directory = environment_directory(environment_name);
     if (!directory.has_value()) {
         return std::nullopt;
     }
+
     const std::filesystem::path candidate = *directory / relative_path;
     return regular_file(candidate) ? std::optional<std::filesystem::path>{candidate} : std::nullopt;
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
 find_editor(const wchar_t* executable_name, const std::filesystem::path& program_files_relative,
-            const std::filesystem::path& local_app_data_relative = {}) {
+            const std::filesystem::path& local_app_data_relative = {})
+{
     if (std::optional<std::filesystem::path> path = search_executable_path(executable_name);
         path.has_value()) {
         return path;
@@ -127,7 +136,8 @@ find_editor(const wchar_t* executable_name, const std::filesystem::path& program
 
 #endif
 
-ExternalEditorPaths find_external_editors() {
+ExternalEditorPaths find_external_editors()
+{
 #if defined(_WIN32)
     ExternalEditorPaths editors;
     editors.emeditor =
@@ -141,8 +151,8 @@ ExternalEditorPaths find_external_editors() {
 #endif
 }
 
-bool launch_external_editor(const std::filesystem::path& editor,
-                            const std::filesystem::path& file) {
+bool launch_external_editor(const std::filesystem::path& editor, const std::filesystem::path& file)
+{
 #if defined(_WIN32)
     const std::wstring parameters = L"\"" + file.native() + L"\"";
     SHELLEXECUTEINFOW request{};

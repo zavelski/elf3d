@@ -28,13 +28,16 @@
 
 namespace elf3d::viewer {
 
-[[nodiscard]] std::filesystem::path executable_directory(int argument_count, char** arguments) {
+[[nodiscard]] std::filesystem::path executable_directory(int argument_count, char** arguments)
+{
     if (argument_count > 0 && arguments != nullptr && arguments[0] != nullptr) {
-        std::error_code error;
-        const std::filesystem::path executable =
-            std::filesystem::absolute(path_from_utf8(arguments[0]), error);
-        if (!error && executable.has_parent_path()) {
-            return executable.parent_path();
+        Result<std::filesystem::path> path = path_from_utf8(arguments[0]);
+        if (path) {
+            std::error_code error;
+            const std::filesystem::path executable = std::filesystem::absolute(path.value(), error);
+            if (!error && executable.has_parent_path()) {
+                return executable.parent_path();
+            }
         }
     }
 
@@ -43,7 +46,8 @@ namespace elf3d::viewer {
     return error ? std::filesystem::path{"."} : current;
 }
 
-[[nodiscard]] std::filesystem::path viewer_asset_root(int argument_count, char** arguments) {
+[[nodiscard]] std::filesystem::path viewer_asset_root(int argument_count, char** arguments)
+{
     const std::filesystem::path executable_assets =
         executable_directory(argument_count, arguments) / "assets";
     std::error_code error;
@@ -63,27 +67,32 @@ namespace elf3d::viewer {
 template <typename T> class ComPtr final {
   public:
     ComPtr() noexcept = default;
-    ~ComPtr() {
+    ~ComPtr()
+    {
         reset();
     }
 
     ComPtr(const ComPtr&) = delete;
     ComPtr& operator=(const ComPtr&) = delete;
 
-    [[nodiscard]] T* get() const noexcept {
+    [[nodiscard]] T* get() const noexcept
+    {
         return pointer_;
     }
 
-    [[nodiscard]] T** put() noexcept {
+    [[nodiscard]] T** put() noexcept
+    {
         reset();
         return &pointer_;
     }
 
-    [[nodiscard]] T* operator->() const noexcept {
+    [[nodiscard]] T* operator->() const noexcept
+    {
         return pointer_;
     }
 
-    void reset() noexcept {
+    void reset() noexcept
+    {
         if (pointer_ != nullptr) {
             pointer_->Release();
             pointer_ = nullptr;
@@ -96,15 +105,19 @@ template <typename T> class ComPtr final {
 
 class ComInitialization final {
   public:
-    ComInitialization() noexcept : result_{CoInitializeEx(nullptr, COINIT_MULTITHREADED)} {}
+    ComInitialization() noexcept : result_{CoInitializeEx(nullptr, COINIT_MULTITHREADED)}
+    {
+    }
 
-    ~ComInitialization() {
+    ~ComInitialization()
+    {
         if (SUCCEEDED(result_)) {
             CoUninitialize();
         }
     }
 
-    [[nodiscard]] bool can_use_com() const noexcept {
+    [[nodiscard]] bool can_use_com() const noexcept
+    {
         return SUCCEEDED(result_) || result_ == RPC_E_CHANGED_MODE;
     }
 
@@ -121,13 +134,15 @@ struct WicDecodeState {
     UINT height = 0;
 };
 
-[[nodiscard]] bool initialize_wic_factory(WicDecodeState& state) noexcept {
+[[nodiscard]] bool initialize_wic_factory(WicDecodeState& state) noexcept
+{
     return SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                       IID_PPV_ARGS(state.factory.put())));
 }
 
 [[nodiscard]] bool decode_wic_frame(WicDecodeState& state,
-                                    const std::filesystem::path& path) noexcept {
+                                    const std::filesystem::path& path) noexcept
+{
     if (FAILED(state.factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
                                                         WICDecodeMetadataCacheOnLoad,
                                                         state.decoder.put()))) {
@@ -140,7 +155,8 @@ struct WicDecodeState {
            state.height != 0;
 }
 
-[[nodiscard]] bool initialize_wic_converter(WicDecodeState& state) noexcept {
+[[nodiscard]] bool initialize_wic_converter(WicDecodeState& state) noexcept
+{
     if (FAILED(state.factory->CreateFormatConverter(state.converter.put()))) {
         return false;
     }
@@ -149,7 +165,8 @@ struct WicDecodeState {
                                                  WICBitmapPaletteTypeCustom));
 }
 
-[[nodiscard]] std::optional<DecodedImage> copy_wic_pixels(WicDecodeState& state) noexcept {
+[[nodiscard]] std::optional<DecodedImage> copy_wic_pixels(WicDecodeState& state) noexcept
+{
     const std::size_t byte_count =
         static_cast<std::size_t>(state.width) * static_cast<std::size_t>(state.height) * 4U;
     if (byte_count > static_cast<std::size_t>(std::numeric_limits<UINT>::max())) {
@@ -169,7 +186,8 @@ struct WicDecodeState {
 #endif
 
 [[nodiscard]] std::optional<DecodedImage>
-decode_png_rgba(const std::filesystem::path& path) noexcept {
+decode_png_rgba(const std::filesystem::path& path) noexcept
+{
 #if defined(_WIN32)
     const ComInitialization com;
     if (!com.can_use_com()) {
@@ -192,25 +210,30 @@ decode_png_rgba(const std::filesystem::path& path) noexcept {
 #endif
 }
 
-ToolbarTexture::~ToolbarTexture() {
+ToolbarTexture::~ToolbarTexture()
+{
     reset();
 }
 
-ToolbarTexture::ToolbarTexture(ToolbarTexture&& other) noexcept {
+ToolbarTexture::ToolbarTexture(ToolbarTexture&& other) noexcept
+{
     *this = std::move(other);
 }
 
-ToolbarTexture& ToolbarTexture::operator=(ToolbarTexture&& other) noexcept {
+ToolbarTexture& ToolbarTexture::operator=(ToolbarTexture&& other) noexcept
+{
     if (this != &other) {
         texture_ = std::move(other.texture_);
     }
     return *this;
 }
 
-bool ToolbarTexture::upload(const DecodedImage& image) noexcept {
+bool ToolbarTexture::upload(const DecodedImage& image) noexcept
+{
     if (image.rgba.empty() || image.width == 0 || image.height == 0) {
         return false;
     }
+
     const std::span<const unsigned char> pixels{image.rgba};
     elf3d::Result<std::unique_ptr<elf3d::imgui::UiTexture>> created =
         elf3d::imgui::UiTexture::create(elf3d::imgui::UiTextureDescription{
@@ -222,15 +245,18 @@ bool ToolbarTexture::upload(const DecodedImage& image) noexcept {
     return texture_->is_valid();
 }
 
-void ToolbarTexture::reset() noexcept {
+void ToolbarTexture::reset() noexcept
+{
     texture_.reset();
 }
 
-bool ToolbarTexture::is_valid() const noexcept {
+bool ToolbarTexture::is_valid() const noexcept
+{
     return texture_ != nullptr && texture_->is_valid();
 }
 
-ImTextureRef ToolbarTexture::texture_ref() const noexcept {
+ImTextureRef ToolbarTexture::texture_ref() const noexcept
+{
     return texture_ != nullptr ? texture_->texture_ref() : ImTextureRef{};
 }
 
@@ -258,7 +284,8 @@ constexpr std::array<ToolbarIconSpec, static_cast<std::size_t>(ToolbarIcon::coun
         {ToolbarIcon::reset_layout, "reset_layout.png"},
     }};
 
-[[nodiscard]] ToolbarIcons load_toolbar_icons(const std::filesystem::path& asset_root) {
+[[nodiscard]] ToolbarIcons load_toolbar_icons(const std::filesystem::path& asset_root)
+{
     ToolbarIcons icons;
     const std::filesystem::path icon_root = asset_root / "icon";
     for (const ToolbarIconSpec& spec : toolbar_icon_specs) {
@@ -272,7 +299,8 @@ constexpr std::array<ToolbarIconSpec, static_cast<std::size_t>(ToolbarIcon::coun
     return icons;
 }
 
-[[nodiscard]] elf3d::Result<elf3d::EntityId> create_viewer_camera(elf3d::Scene& scene) {
+[[nodiscard]] elf3d::Result<elf3d::EntityId> create_viewer_camera(elf3d::Scene& scene)
+{
     const elf3d::Result<elf3d::EntityId> camera_result =
         scene.create_perspective_camera_entity(elf3d::PerspectiveCameraDescription{});
     if (!camera_result) {
@@ -288,11 +316,13 @@ constexpr std::array<ToolbarIconSpec, static_cast<std::size_t>(ToolbarIcon::coun
     return camera_result.value();
 }
 
-[[nodiscard]] elf3d::Result<SceneSession> create_empty_scene(elf3d::Engine& engine) {
+[[nodiscard]] elf3d::Result<SceneSession> create_empty_scene(elf3d::Engine& engine)
+{
     elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.create_scene();
     if (!scene_result) {
         return scene_result.error();
     }
+
     std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
 
     const elf3d::Result<elf3d::EntityId> camera_result = create_viewer_camera(*scene);
@@ -303,7 +333,8 @@ constexpr std::array<ToolbarIconSpec, static_cast<std::size_t>(ToolbarIcon::coun
 }
 
 [[nodiscard]] elf3d::Result<SceneSession> load_model_scene(elf3d::Engine& engine,
-                                                           const std::filesystem::path& path) {
+                                                           const std::filesystem::path& path)
+{
     elf3d::Result<elf3d::LoadedScene> loaded_result = engine.load_scene(path_to_utf8(path));
     if (!loaded_result) {
         return loaded_result.error();

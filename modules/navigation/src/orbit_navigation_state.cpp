@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/navigation.h>
 
 #include "orbit_navigation_detail.h"
 #include <elf3d/core/assert.h>
@@ -7,13 +7,10 @@ module;
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <elf3d/internal/interaction.h>
+#include <elf3d/internal/math.h>
+#include <elf3d/internal/scene.h>
 #include <optional>
-
-module elf.navigation;
-
-import elf.interaction;
-import elf.math;
-import elf.scene;
 
 namespace elf3d::navigation {
 namespace navigation_detail {
@@ -60,7 +57,8 @@ using namespace navigation_detail;
 namespace {
 
 void set_matrix_column(Float4x4& matrix, std::size_t column, Float3 value,
-                       float homogeneous) noexcept {
+                       float homogeneous) noexcept
+{
     const std::size_t offset = column * 4;
     matrix.elements[offset] = value.x;
     matrix.elements[offset + 1] = value.y;
@@ -69,7 +67,8 @@ void set_matrix_column(Float4x4& matrix, std::size_t column, Float3 value,
 }
 
 [[nodiscard]] Float3 screen_anchor_ray(const CameraBasis& basis, const Float3& camera_position,
-                                       const Float3& anchor) noexcept {
+                                       const Float3& anchor) noexcept
+{
     const Float3 ray = math::subtract(anchor, camera_position);
     const float distance = math::vector_length(ray);
     if (!finite_vector(ray) || !std::isfinite(distance) || distance <= minimum_axis_length ||
@@ -81,7 +80,8 @@ void set_matrix_column(Float4x4& matrix, std::size_t column, Float3 value,
 
 [[nodiscard]] std::optional<Quaternion>
 screen_anchor_rotation(const CameraBasis& basis, Float2 delta,
-                       const OrbitNavigationSettings& settings) noexcept {
+                       const OrbitNavigationSettings& settings) noexcept
+{
     float current_yaw = 0.0F;
     float current_pitch = 0.0F;
     angles_from_direction(basis.forward, current_yaw, current_pitch);
@@ -95,6 +95,7 @@ screen_anchor_rotation(const CameraBasis& basis, Float2 delta,
     if (yaw_delta == 0.0F && pitch_delta == 0.0F) {
         return std::nullopt;
     }
+
     const Quaternion yaw_rotation =
         math::rotation_from_axis_angle(yaw_delta, Float3{0.0F, 1.0F, 0.0F});
     Float3 right_after_yaw = math::rotate_vector(yaw_rotation, basis.right);
@@ -102,6 +103,7 @@ screen_anchor_rotation(const CameraBasis& basis, Float2 delta,
         math::vector_length(right_after_yaw) <= minimum_axis_length) {
         right_after_yaw = basis.right;
     }
+
     const Quaternion pitch_rotation =
         math::rotation_from_axis_angle(pitch_delta, math::normalized(right_after_yaw));
     return math::compose_rotations(pitch_rotation, yaw_rotation);
@@ -110,7 +112,8 @@ screen_anchor_rotation(const CameraBasis& basis, Float2 delta,
 [[nodiscard]] Result<Float4x4> rotated_screen_anchor_camera(const Float4x4& current_world,
                                                             const CameraBasis& basis,
                                                             const Float3& anchor,
-                                                            const Quaternion& rotation) noexcept {
+                                                            const Quaternion& rotation) noexcept
+{
     const Float3 new_position =
         math::add(anchor, math::rotate_vector(rotation, math::subtract(basis.position, anchor)));
     const Float3 new_right = math::normalized(math::rotate_vector(rotation, basis.right));
@@ -137,7 +140,8 @@ struct SynchronizedView final {
 };
 
 [[nodiscard]] float fallback_synchronized_distance(const BoundsInfo& bounds,
-                                                   float minimum_distance) noexcept {
+                                                   float minimum_distance) noexcept
+{
     return bounds.has_bounds ? std::max(bounds.radius * 2.0F, minimum_distance)
                              : std::max(1.0F, minimum_distance);
 }
@@ -145,7 +149,8 @@ struct SynchronizedView final {
 [[nodiscard]] SynchronizedView synchronized_view(const CameraBasis& basis, const BoundsInfo& bounds,
                                                  const OrbitNavigationSettings& settings,
                                                  Float3 existing_pivot,
-                                                 bool preserve_existing_pivot) noexcept {
+                                                 bool preserve_existing_pivot) noexcept
+{
     Float3 pivot = preserve_existing_pivot && math::is_finite(existing_pivot)
                        ? existing_pivot
                        : math::add(basis.position, basis.forward);
@@ -157,6 +162,7 @@ struct SynchronizedView final {
         distance = fallback_synchronized_distance(bounds, settings.minimum_distance);
         pivot = math::add(basis.position, math::scale(basis.forward, distance));
     }
+
     const DistanceLimits limits = effective_distance_limits(settings, bounds);
     distance = std::clamp(distance, limits.minimum, limits.maximum);
     Float3 direction = math::subtract(pivot, basis.position);
@@ -172,7 +178,8 @@ struct FitProjection final {
 };
 
 [[nodiscard]] Result<FitProjection> fit_projection(const PerspectiveCameraDescription& description,
-                                                   float aspect) noexcept {
+                                                   float aspect) noexcept
+{
     const float vertical_half_angle = description.vertical_field_of_view_radians * 0.5F;
     const float vertical_tangent = std::tan(vertical_half_angle);
     const float horizontal_half_angle = std::atan(vertical_tangent * aspect);
@@ -191,7 +198,8 @@ struct FitProjection final {
 } // namespace
 
 Result<void> OrbitNavigationController::set_screen_anchor(scene::Storage& scene, EntityId camera,
-                                                          Float3 world_position) {
+                                                          Float3 world_position)
+{
     if (!math::is_finite(world_position)) {
         return Error{ErrorCode::invalid_argument,
                      "Navigation screen anchor requires a finite world-space position"};
@@ -201,6 +209,7 @@ Result<void> OrbitNavigationController::set_screen_anchor(scene::Storage& scene,
     if (!sync) {
         return sync.error();
     }
+
     const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
     if (!camera_world_result) {
         return camera_world_result.error();
@@ -214,7 +223,8 @@ Result<void> OrbitNavigationController::set_screen_anchor(scene::Storage& scene,
 }
 
 Result<void> OrbitNavigationController::fit_to_scene(scene::Storage& scene, EntityId camera,
-                                                     Extent2D extent) {
+                                                     Extent2D extent)
+{
     const Result<scene::VisibilityFilter> visibility =
         scene::make_visibility_filter(scene, std::nullopt);
     if (!visibility) {
@@ -225,7 +235,8 @@ Result<void> OrbitNavigationController::fit_to_scene(scene::Storage& scene, Enti
 
 Result<void> OrbitNavigationController::fit_to_scene(scene::Storage& scene, EntityId camera,
                                                      Extent2D extent,
-                                                     const scene::VisibilityFilter& visibility) {
+                                                     const scene::VisibilityFilter& visibility)
+{
     cancel_interaction();
     const Result<CameraBasis> basis = camera_basis(scene, camera);
     const Float3 direction = basis ? basis.value().forward : canonical_direction();
@@ -234,7 +245,8 @@ Result<void> OrbitNavigationController::fit_to_scene(scene::Storage& scene, Enti
 }
 
 Result<void> OrbitNavigationController::reset_view(scene::Storage& scene, EntityId camera,
-                                                   Extent2D extent) {
+                                                   Extent2D extent)
+{
     const Result<scene::VisibilityFilter> visibility =
         scene::make_visibility_filter(scene, std::nullopt);
     if (!visibility) {
@@ -245,14 +257,16 @@ Result<void> OrbitNavigationController::reset_view(scene::Storage& scene, Entity
 
 Result<void> OrbitNavigationController::reset_view(scene::Storage& scene, EntityId camera,
                                                    Extent2D extent,
-                                                   const scene::VisibilityFilter& visibility) {
+                                                   const scene::VisibilityFilter& visibility)
+{
     cancel_interaction();
     return fit_with_direction(scene, camera, extent, canonical_direction(),
                               scene.visible_world_bounds(visibility));
 }
 
 Result<void> OrbitNavigationController::fit_to_bounds(scene::Storage& scene, EntityId camera,
-                                                      Extent2D extent, Bounds3 bounds) {
+                                                      Extent2D extent, Bounds3 bounds)
+{
     cancel_interaction();
     const Result<CameraBasis> basis = camera_basis(scene, camera);
     const Float3 direction = basis ? basis.value().forward : canonical_direction();
@@ -260,39 +274,46 @@ Result<void> OrbitNavigationController::fit_to_bounds(scene::Storage& scene, Ent
 }
 
 Result<void> OrbitNavigationController::reset_to_bounds(scene::Storage& scene, EntityId camera,
-                                                        Extent2D extent, Bounds3 bounds) {
+                                                        Extent2D extent, Bounds3 bounds)
+{
     cancel_interaction();
     return fit_with_direction(scene, camera, extent, canonical_direction(), bounds);
 }
 
-Result<void> OrbitNavigationController::synchronize(const scene::Storage& scene, EntityId camera) {
+Result<void> OrbitNavigationController::synchronize(const scene::Storage& scene, EntityId camera)
+{
     return synchronize_from_camera(scene, camera, true);
 }
 
-void OrbitNavigationController::cancel_interaction() noexcept {
+void OrbitNavigationController::cancel_interaction() noexcept
+{
     interaction_.cancel();
     screen_anchor_.reset();
     keyboard_navigation_used_ = false;
     eye_orbit_active_ = false;
 }
 
-void OrbitNavigationController::set_enabled(bool enabled) noexcept {
+void OrbitNavigationController::set_enabled(bool enabled) noexcept
+{
     enabled_ = enabled;
     if (!enabled_) {
         cancel_interaction();
     }
 }
 
-bool OrbitNavigationController::enabled() const noexcept {
+bool OrbitNavigationController::enabled() const noexcept
+{
     return enabled_;
 }
 
-bool OrbitNavigationController::has_screen_anchor() const noexcept {
+bool OrbitNavigationController::has_screen_anchor() const noexcept
+{
     return screen_anchor_.has_value();
 }
 
 Result<void>
-OrbitNavigationController::set_settings(const OrbitNavigationSettings& settings) noexcept {
+OrbitNavigationController::set_settings(const OrbitNavigationSettings& settings) noexcept
+{
     if (!valid_settings(settings)) {
         return Error{ErrorCode::invalid_navigation_settings,
                      "Orbit navigation settings require finite, ordered distances, motion scale, "
@@ -307,15 +328,18 @@ OrbitNavigationController::set_settings(const OrbitNavigationSettings& settings)
     return {};
 }
 
-OrbitNavigationSettings OrbitNavigationController::settings() const noexcept {
+OrbitNavigationSettings OrbitNavigationController::settings() const noexcept
+{
     return settings_;
 }
 
-bool OrbitNavigationController::has_state() const noexcept {
+bool OrbitNavigationController::has_state() const noexcept
+{
     return has_valid_state_;
 }
 
-NavigationSnapshot OrbitNavigationController::snapshot() const noexcept {
+NavigationSnapshot OrbitNavigationController::snapshot() const noexcept
+{
     ELF3D_ASSERT(has_valid_state_);
     const interaction::InteractionMode mode = interaction_.mode();
     const NavigationInteractionMode public_mode = to_navigation_mode(mode);
@@ -330,12 +354,14 @@ NavigationSnapshot OrbitNavigationController::snapshot() const noexcept {
 }
 
 Result<void> OrbitNavigationController::ensure_synchronized(const scene::Storage& scene,
-                                                            EntityId camera) {
+                                                            EntityId camera)
+{
     if (!has_valid_state_ || scene.id() != scene_ || camera != camera_) {
         const bool preserve_existing_pivot =
             has_valid_state_ && scene.id() == scene_ && camera == camera_;
         return synchronize_from_camera(scene, camera, preserve_existing_pivot);
     }
+
     const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
     if (!camera_world_result) {
         return camera_world_result.error();
@@ -347,11 +373,13 @@ Result<void> OrbitNavigationController::ensure_synchronized(const scene::Storage
 }
 
 Result<void> OrbitNavigationController::apply_screen_anchor_dolly(
-    scene::Storage& scene, EntityId camera, float multiplier, std::optional<Bounds3> bounds_value) {
+    scene::Storage& scene, EntityId camera, float multiplier, std::optional<Bounds3> bounds_value)
+{
     if (!screen_anchor_.has_value()) {
         return Error{ErrorCode::invalid_viewport_input,
                      "Screen-stable dolly requires a navigation screen anchor"};
     }
+
     const Result<Float4x4> current_world_result = scene.world_matrix(camera);
     if (!current_world_result) {
         return current_world_result.error();
@@ -362,6 +390,7 @@ Result<void> OrbitNavigationController::apply_screen_anchor_dolly(
     if (!current_basis) {
         return current_basis.error();
     }
+
     const Float3 camera_position = math::matrix_column(camera_world, 3);
     const Float3 anchor = screen_anchor_.value();
     const Float3 ray = screen_anchor_ray(current_basis.value(), camera_position, anchor);
@@ -385,15 +414,18 @@ Result<void> OrbitNavigationController::apply_screen_anchor_dolly(
 
 Result<void>
 OrbitNavigationController::finish_screen_anchor_dolly(scene::Storage& scene, EntityId camera,
-                                                      std::optional<Bounds3> bounds_value) {
+                                                      std::optional<Bounds3> bounds_value)
+{
     const Result<CameraBasis> basis = camera_basis(scene, camera);
     if (!basis) {
         return basis.error();
     }
+
     const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
     if (!camera_world_result) {
         return camera_world_result.error();
     }
+
     const BoundsInfo bounds = bounds_info(bounds_value);
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     angles_from_direction(basis.value().forward, yaw_radians_, pitch_radians_);
@@ -423,15 +455,18 @@ OrbitNavigationController::finish_screen_anchor_dolly(scene::Storage& scene, Ent
 
 Result<OrbitNavigationController::ScreenAnchorOrbit>
 OrbitNavigationController::screen_anchor_orbit(const scene::Storage& scene, EntityId camera,
-                                               Float2 delta) {
+                                               Float2 delta)
+{
     if (!screen_anchor_.has_value()) {
         return Error{ErrorCode::invalid_viewport_input,
                      "Off-axis orbit requires a navigation screen anchor"};
     }
+
     const Result<CameraBasis> basis = camera_basis(scene, camera);
     if (!basis) {
         return basis.error();
     }
+
     const Result<Float4x4> current_world_result = scene.world_matrix(camera);
     if (!current_world_result) {
         return current_world_result.error();
@@ -445,11 +480,13 @@ OrbitNavigationController::screen_anchor_orbit(const scene::Storage& scene, Enti
         screen_anchor_.reset();
         return ScreenAnchorOrbit{current_world_result.value(), 0.0F, false};
     }
+
     const std::optional<Quaternion> rotation =
         screen_anchor_rotation(basis.value(), delta, settings_);
     if (!rotation.has_value()) {
         return ScreenAnchorOrbit{current_world_result.value(), anchor_distance, false};
     }
+
     const Result<Float4x4> rotated = rotated_screen_anchor_camera(current_world_result.value(),
                                                                   basis.value(), anchor, *rotation);
     if (!rotated) {
@@ -461,10 +498,12 @@ OrbitNavigationController::screen_anchor_orbit(const scene::Storage& scene, Enti
 Result<void>
 OrbitNavigationController::commit_screen_anchor_orbit(scene::Storage& scene, EntityId camera,
                                                       const ScreenAnchorOrbit& orbit,
-                                                      std::optional<Bounds3> bounds_value) {
+                                                      std::optional<Bounds3> bounds_value)
+{
     if (!orbit.changed) {
         return {};
     }
+
     const Result<void> transform_result =
         set_camera_world_matrix(scene, camera, orbit.camera_world);
     if (!transform_result) {
@@ -475,10 +514,12 @@ OrbitNavigationController::commit_screen_anchor_orbit(scene::Storage& scene, Ent
     if (!new_basis) {
         return new_basis.error();
     }
+
     const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
     if (!camera_world_result) {
         return camera_world_result.error();
     }
+
     angles_from_direction(new_basis.value().forward, yaw_radians_, pitch_radians_);
     pitch_radians_ = std::clamp(pitch_radians_, settings_.minimum_pitch_radians,
                                 settings_.maximum_pitch_radians);
@@ -497,7 +538,8 @@ OrbitNavigationController::commit_screen_anchor_orbit(scene::Storage& scene, Ent
 }
 
 Result<void> OrbitNavigationController::apply_screen_anchor_orbit(
-    scene::Storage& scene, EntityId camera, Float2 delta, std::optional<Bounds3> bounds_value) {
+    scene::Storage& scene, EntityId camera, Float2 delta, std::optional<Bounds3> bounds_value)
+{
     const Result<ScreenAnchorOrbit> orbit = screen_anchor_orbit(scene, camera, delta);
     if (!orbit) {
         return orbit.error();
@@ -507,7 +549,8 @@ Result<void> OrbitNavigationController::apply_screen_anchor_orbit(
 
 Result<void> OrbitNavigationController::apply_eye_orbit(scene::Storage& scene, EntityId camera,
                                                         Float2 delta,
-                                                        std::optional<Bounds3> bounds_value) {
+                                                        std::optional<Bounds3> bounds_value)
+{
     const Result<CameraBasis> basis = camera_basis(scene, camera);
     if (!basis) {
         return basis.error();
@@ -529,6 +572,7 @@ Result<void> OrbitNavigationController::apply_eye_orbit(scene::Storage& scene, E
     if (!new_basis) {
         return new_basis.error();
     }
+
     const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
     if (!camera_world_result) {
         return camera_world_result.error();
@@ -559,15 +603,18 @@ Result<void> OrbitNavigationController::apply_eye_orbit(scene::Storage& scene, E
 
 Result<void> OrbitNavigationController::synchronize_from_camera(const scene::Storage& scene,
                                                                 EntityId camera,
-                                                                bool preserve_existing_pivot) {
+                                                                bool preserve_existing_pivot)
+{
     const Result<void> valid = validate_camera(scene, camera);
     if (!valid) {
         return valid.error();
     }
+
     const Result<CameraBasis> basis = camera_basis(scene, camera);
     if (!basis) {
         return basis.error();
     }
+
     const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
     if (!camera_world_result) {
         return camera_world_result.error();
@@ -589,7 +636,8 @@ Result<void> OrbitNavigationController::synchronize_from_camera(const scene::Sto
     return {};
 }
 
-Result<void> OrbitNavigationController::apply_camera(scene::Storage& scene, EntityId camera) {
+Result<void> OrbitNavigationController::apply_camera(scene::Storage& scene, EntityId camera)
+{
     const BoundsInfo bounds = bounds_info(scene.world_bounds());
     const DistanceLimits limits = effective_distance_limits(settings_, bounds);
     distance_ = clamp_signed_distance(distance_, limits);
@@ -600,6 +648,7 @@ Result<void> OrbitNavigationController::apply_camera(scene::Storage& scene, Enti
     if (!transform_result) {
         return transform_result.error();
     }
+
     const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
     if (!camera_world_result) {
         return camera_world_result.error();
@@ -620,15 +669,18 @@ Result<void> OrbitNavigationController::apply_camera(scene::Storage& scene, Enti
 Result<OrbitNavigationController::FitPreparation>
 OrbitNavigationController::prepare_fit(const scene::Storage& scene, EntityId camera,
                                        Extent2D extent, Float3 direction,
-                                       std::optional<Bounds3> bounds_value) const {
+                                       std::optional<Bounds3> bounds_value) const
+{
     const Result<void> valid = validate_camera(scene, camera);
     if (!valid) {
         return valid.error();
     }
+
     const Result<float> aspect = aspect_ratio(extent);
     if (!aspect) {
         return aspect.error();
     }
+
     const BoundsInfo bounds = bounds_info(bounds_value);
     if (!bounds.has_bounds) {
         return Error{ErrorCode::scene_has_no_bounds,
@@ -637,10 +689,12 @@ OrbitNavigationController::prepare_fit(const scene::Storage& scene, EntityId cam
     if (!math::is_finite(direction) || math::vector_length(direction) <= minimum_axis_length) {
         direction = canonical_direction();
     }
+
     const Result<Float4x4> old_matrix = scene.local_matrix(camera);
     if (!old_matrix) {
         return old_matrix.error();
     }
+
     const Result<PerspectiveCameraDescription> old_description = scene.perspective_camera(camera);
     if (!old_description) {
         return old_description.error();
@@ -651,12 +705,14 @@ OrbitNavigationController::prepare_fit(const scene::Storage& scene, EntityId cam
 
 Result<void> OrbitNavigationController::fit_with_direction(scene::Storage& scene, EntityId camera,
                                                            Extent2D extent, Float3 direction,
-                                                           std::optional<Bounds3> bounds_value) {
+                                                           std::optional<Bounds3> bounds_value)
+{
     const Result<FitPreparation> preparation =
         prepare_fit(scene, camera, extent, direction, bounds_value);
     if (!preparation) {
         return preparation.error();
     }
+
     const Result<FitProjection> projection =
         fit_projection(preparation.value().old_description, preparation.value().aspect);
     if (!projection) {
@@ -682,6 +738,7 @@ Result<void> OrbitNavigationController::fit_with_direction(scene::Storage& scene
     if (!transform_result) {
         return transform_result.error();
     }
+
     const Result<Float4x4> camera_world_result = scene.world_matrix(camera);
     if (!camera_world_result) {
         return camera_world_result.error();

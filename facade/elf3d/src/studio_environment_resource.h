@@ -3,7 +3,9 @@
 
 #include <memory>
 
-// Include after importing elf.renderer; its types belong to that named module.
+namespace elf3d::renderer {
+class StudioEnvironmentSource;
+}
 
 namespace elf3d::detail {
 

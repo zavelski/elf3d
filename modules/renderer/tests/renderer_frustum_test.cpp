@@ -6,13 +6,12 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/graphics.h>
+#include <elf3d/internal/renderer.h>
+#include <elf3d/internal/scene.h>
 #include <memory>
 #include <vector>
-
-import elf.assets;
-import elf.graphics;
-import elf.renderer;
-import elf.scene;
 
 #include "renderer_test_support.h"
 
@@ -35,8 +34,9 @@ constexpr std::array<elf3d::VertexPositionNormal, 3> triangle_vertices{{
 }};
 
 struct FrustumScene {
-    FrustumScene()
-        : id(elf3d::detail::SceneHandleAccess::create_scene(engine_token, 5)), scene(id) {}
+    FrustumScene() : id(elf3d::detail::SceneHandleAccess::create_scene(engine_token, 5)), scene(id)
+    {
+    }
 
     elf3d::SceneId id;
     elf3d::scene::Storage scene;
@@ -45,7 +45,8 @@ struct FrustumScene {
 
 [[nodiscard]] bool add_model(FrustumScene& context, elf3d::MeshHandle mesh,
                              elf3d::MaterialHandle material, elf3d::Float3 position,
-                             elf3d::Float3 scale = {1.0F, 1.0F, 1.0F}) {
+                             elf3d::Float3 scale = {1.0F, 1.0F, 1.0F})
+{
     const auto model = context.scene.create_model(mesh, material);
     if (!model) {
         return false;
@@ -57,7 +58,8 @@ struct FrustumScene {
 }
 
 [[nodiscard]] bool add_boundary_models(FrustumScene& context, elf3d::MeshHandle mesh,
-                                       elf3d::MaterialHandle material) {
+                                       elf3d::MaterialHandle material)
+{
     constexpr float depth = 5.0F;
     constexpr float aspect = 640.0F / 360.0F;
     const float half_height =
@@ -81,7 +83,8 @@ struct FrustumScene {
 }
 
 [[nodiscard]] bool add_outside_models(FrustumScene& context, elf3d::MeshHandle mesh,
-                                      elf3d::MaterialHandle material) {
+                                      elf3d::MaterialHandle material)
+{
     constexpr float depth = 5.0F;
     constexpr float aspect = 640.0F / 360.0F;
     const float half_height =
@@ -104,7 +107,8 @@ struct FrustumScene {
     return true;
 }
 
-[[nodiscard]] int prepare_frustum_scene(FrustumScene& context) {
+[[nodiscard]] int prepare_frustum_scene(FrustumScene& context)
+{
     const auto point_mesh = context.scene.create_mesh({point_vertices, indices});
     const auto triangle_mesh = context.scene.create_mesh({triangle_vertices, indices});
     const auto material = context.scene.create_material({});
@@ -124,17 +128,20 @@ struct FrustumScene {
     return 0;
 }
 
-[[nodiscard]] bool has_expected_culling(const elf3d::renderer::RenderList& list) {
+[[nodiscard]] bool has_expected_culling(const elf3d::renderer::RenderList& list)
+{
     return list.candidate_primitives == 13 && list.frustum_culled_primitives == 6 &&
            list.items.size() == 7;
 }
 
-[[nodiscard]] int run_frustum_test() {
+[[nodiscard]] int run_frustum_test()
+{
     FrustumScene context;
     const int prepared = prepare_frustum_scene(context);
     if (prepared != 0) {
         return prepared;
     }
+
     const auto list = elf3d::renderer::build_render_list(context.scene, context.camera, {640, 360});
     if (!list || !has_expected_culling(list.value())) {
         return 3;
@@ -158,6 +165,7 @@ struct FrustumScene {
 
 } // namespace
 
-int elf3d_renderer_frustum_test() {
+int elf3d_renderer_frustum_test()
+{
     return run_frustum_test();
 }

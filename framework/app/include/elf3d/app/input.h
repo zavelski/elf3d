@@ -87,11 +87,13 @@ struct InputSnapshot {
     bool capture_lost = false;
     float dpi_scale = 1.0F;
 
-    [[nodiscard]] const InputTransition& button(InputButton value) const noexcept {
+    [[nodiscard]] const InputTransition& button(InputButton value) const noexcept
+    {
         return buttons[static_cast<std::size_t>(value)];
     }
 
-    [[nodiscard]] const InputTransition& key(InputKey value) const noexcept {
+    [[nodiscard]] const InputTransition& key(InputKey value) const noexcept
+    {
         return keys[static_cast<std::size_t>(value)];
     }
 

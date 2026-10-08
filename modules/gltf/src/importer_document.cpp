@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
@@ -12,6 +12,8 @@ module;
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/core/diagnostics.h>
+#include <elf3d/internal/math.h>
 #include <filesystem>
 #include <memory>
 #include <new>
@@ -22,18 +24,13 @@ module;
 #include <utility>
 #include <vector>
 
-module elf.gltf;
-
-import elf.core;
-import elf.math;
-import elf.model;
-
 namespace elf3d::gltf::importer_detail {
 
 [[nodiscard]] Result<void> attach_document_metadata(const cgltf_data& data,
                                                     const ImportedDocumentIds& ids,
                                                     Document& document,
-                                                    std::vector<ModelLoadDiagnostic>& diagnostics) {
+                                                    std::vector<ModelLoadDiagnostic>& diagnostics)
+{
     const importer_metadata::ImportedMetadataIds metadata_ids{
         std::span{ids.scenes},     std::span{ids.nodes},     std::span{ids.meshes},
         std::span{ids.primitives}, std::span{ids.materials}, std::span{ids.images.ids},
@@ -51,7 +48,8 @@ struct DocumentLoadState {
     CgltfData data{nullptr};
 };
 
-[[nodiscard]] Result<bool> source_is_glb(const std::filesystem::path& path) {
+[[nodiscard]] Result<bool> source_is_glb(const std::filesystem::path& path)
+{
     const std::string extension = lower_extension(path);
     if (extension != ".gltf" && extension != ".glb") {
         return Error{ErrorCode::unsupported_scene_format,
@@ -60,7 +58,8 @@ struct DocumentLoadState {
     return extension == ".glb";
 }
 
-void configure_parser_options(DocumentLoadState& state) noexcept {
+void configure_parser_options(DocumentLoadState& state) noexcept
+{
     state.parser_options.memory.alloc_func = bounded_allocate;
     state.parser_options.memory.free_func = bounded_deallocate;
     state.parser_options.memory.user_data = &state.allocation_context;
@@ -69,8 +68,8 @@ void configure_parser_options(DocumentLoadState& state) noexcept {
     state.parser_options.file.user_data = &state.buffer_context;
 }
 
-[[nodiscard]] Result<void> parse_source(const std::filesystem::path& path,
-                                        DocumentLoadState& state) {
+[[nodiscard]] Result<void> parse_source(const std::filesystem::path& path, DocumentLoadState& state)
+{
     Result<std::vector<std::byte>> source = read_source(path);
     if (!source) {
         return source.error();
@@ -94,7 +93,8 @@ void configure_parser_options(DocumentLoadState& state) noexcept {
     return {};
 }
 
-[[nodiscard]] Error initial_validation_error(cgltf_result result) {
+[[nodiscard]] Error initial_validation_error(cgltf_result result)
+{
     return Error{result == cgltf_result_data_too_short ? ErrorCode::invalid_buffer_range
                                                        : ErrorCode::gltf_validation_failed,
                  result == cgltf_result_data_too_short
@@ -102,7 +102,8 @@ void configure_parser_options(DocumentLoadState& state) noexcept {
                      : "cgltf structural validation rejected the source"};
 }
 
-[[nodiscard]] Result<void> validate_parsed_document(cgltf_data& data) {
+[[nodiscard]] Result<void> validate_parsed_document(cgltf_data& data)
+{
     if (const Result<void> textures = validate_texture_inputs(data); !textures) {
         return textures.error();
     }
@@ -122,7 +123,8 @@ void configure_parser_options(DocumentLoadState& state) noexcept {
 }
 
 [[nodiscard]] Result<void> load_external_buffers(const std::filesystem::path& path,
-                                                 DocumentLoadState& state) {
+                                                 DocumentLoadState& state)
+{
     const std::string source_path = path_to_utf8(path);
     const cgltf_result result =
         cgltf_load_buffers(&state.parser_options, state.data.get(), source_path.c_str());
@@ -144,12 +146,14 @@ struct ReachableFeatureUse {
 };
 
 [[nodiscard]] ReachableFeatureUse
-inspect_reachable_features(const cgltf_data& data, const std::vector<bool>& reachable) noexcept {
+inspect_reachable_features(const cgltf_data& data, const std::vector<bool>& reachable) noexcept
+{
     ReachableFeatureUse result;
     for (cgltf_size node_index = 0; node_index < data.nodes_count; ++node_index) {
         if (!reachable[node_index]) {
             continue;
         }
+
         const cgltf_node& node = data.nodes[node_index];
         result.skin = result.skin || node.skin != nullptr;
         result.instancing = result.instancing || node.has_mesh_gpu_instancing != 0;
@@ -163,7 +167,8 @@ inspect_reachable_features(const cgltf_data& data, const std::vector<bool>& reac
     return result;
 }
 
-void add_extension_diagnostics(const cgltf_data& data, ModelLoadReport& report) {
+void add_extension_diagnostics(const cgltf_data& data, ModelLoadReport& report)
+{
     for (cgltf_size index = 0; index < data.extensions_used_count; ++index) {
         const char* extension = data.extensions_used[index];
         if (extension != nullptr && !extension_has_full_support(extension)) {
@@ -178,7 +183,8 @@ void add_extension_diagnostics(const cgltf_data& data, ModelLoadReport& report) 
     }
 }
 
-void add_feature_diagnostics(ReachableFeatureUse features, ModelLoadReport& report) {
+void add_feature_diagnostics(ReachableFeatureUse features, ModelLoadReport& report)
+{
     if (features.skin) {
         add_diagnostic(report.diagnostics, ModelLoadDiagnosticCategory::animation,
                        ModelLoadDiagnosticCode::ignored_skin,
@@ -199,7 +205,8 @@ void add_feature_diagnostics(ReachableFeatureUse features, ModelLoadReport& repo
 
 [[nodiscard]] ModelLoadReport build_load_report(const cgltf_data& data,
                                                 const std::vector<bool>& reachable,
-                                                std::size_t repaired_signed_buffer_fields) {
+                                                std::size_t repaired_signed_buffer_fields)
+{
     ModelLoadReport report;
     if (repaired_signed_buffer_fields != 0U) {
         add_diagnostic(report.diagnostics, ModelLoadDiagnosticCategory::scene,
@@ -208,6 +215,7 @@ void add_feature_diagnostics(ReachableFeatureUse features, ModelLoadReport& repo
                        "sequential BIN layout",
                        std::to_string(repaired_signed_buffer_fields) + " repaired fields");
     }
+
     add_extension_diagnostics(data, report);
     add_feature_diagnostics(inspect_reachable_features(data, reachable), report);
     return report;
@@ -224,7 +232,8 @@ struct DocumentConstructionState {
 };
 
 [[nodiscard]] Result<DocumentSceneId>
-create_implicit_document_scene(DocumentConstructionState& state) {
+create_implicit_document_scene(DocumentConstructionState& state)
+{
     Result<DocumentSceneId> scene = state.builder.create_scene();
     if (!scene) {
         return scene.error();
@@ -237,7 +246,8 @@ create_implicit_document_scene(DocumentConstructionState& state) {
     return scene.value();
 }
 
-[[nodiscard]] Result<void> create_authored_document_scenes(DocumentConstructionState& state) {
+[[nodiscard]] Result<void> create_authored_document_scenes(DocumentConstructionState& state)
+{
     for (cgltf_size index = 0; index < state.data.scenes_count; ++index) {
         const cgltf_scene& source = state.data.scenes[index];
         Result<DocumentSceneId> scene = state.builder.create_scene(
@@ -251,7 +261,8 @@ create_implicit_document_scene(DocumentConstructionState& state) {
 }
 
 [[nodiscard]] Result<DocumentSceneId>
-select_default_document_scene(DocumentConstructionState& state) {
+select_default_document_scene(DocumentConstructionState& state)
+{
     if (state.data.scene == nullptr) {
         const Result<void> cleared = state.builder.clear_default_scene();
         if (!cleared) {
@@ -264,6 +275,7 @@ select_default_document_scene(DocumentConstructionState& state) {
         return Error{ErrorCode::invalid_node_hierarchy,
                      "The glTF default scene is outside the scene table"};
     }
+
     const std::size_t index = static_cast<std::size_t>(state.data.scene - state.data.scenes);
     const Result<void> selected = state.builder.set_default_scene(state.imported_ids.scenes[index]);
     if (!selected) {
@@ -272,11 +284,13 @@ select_default_document_scene(DocumentConstructionState& state) {
     return state.imported_ids.scenes[index];
 }
 
-[[nodiscard]] Result<DocumentSceneId> create_document_scenes(DocumentConstructionState& state) {
+[[nodiscard]] Result<DocumentSceneId> create_document_scenes(DocumentConstructionState& state)
+{
     state.imported_ids.scenes.reserve(state.data.scenes_count != 0 ? state.data.scenes_count : 1U);
     if (state.data.scenes_count == 0) {
         return create_implicit_document_scene(state);
     }
+
     const Result<void> created = create_authored_document_scenes(state);
     if (!created) {
         return created.error();
@@ -286,7 +300,8 @@ select_default_document_scene(DocumentConstructionState& state) {
 
 [[nodiscard]] Result<void> capture_node_transforms(DocumentConstructionState& state,
                                                    std::vector<bool>& skipped_nodes,
-                                                   std::vector<Float4x4>& local_matrices) {
+                                                   std::vector<Float4x4>& local_matrices)
+{
     for (cgltf_size index = 0; index < state.data.nodes_count; ++index) {
         if (!state.reachable[index]) {
             continue;
@@ -310,12 +325,14 @@ select_default_document_scene(DocumentConstructionState& state) {
     return {};
 }
 
-[[nodiscard]] bool valid_child_pointer(const cgltf_data& data, const cgltf_node* child) noexcept {
+[[nodiscard]] bool valid_child_pointer(const cgltf_data& data, const cgltf_node* child) noexcept
+{
     return child != nullptr && child >= data.nodes && child < data.nodes + data.nodes_count;
 }
 
 [[nodiscard]] Result<void> propagate_skipped_nodes(DocumentConstructionState& state,
-                                                   std::vector<bool>& skipped_nodes) {
+                                                   std::vector<bool>& skipped_nodes)
+{
     std::vector<cgltf_size> stack;
     stack.reserve(state.data.nodes_count);
     for (cgltf_size index = 0; index < state.data.nodes_count; ++index) {
@@ -332,6 +349,7 @@ select_default_document_scene(DocumentConstructionState& state) {
                 return Error{ErrorCode::scene_import_failed,
                              "A glTF node references a child outside the node table"};
             }
+
             const cgltf_size index = static_cast<cgltf_size>(child - state.data.nodes);
             if (!state.reachable[index] || skipped_nodes[index]) {
                 continue;
@@ -348,15 +366,16 @@ select_default_document_scene(DocumentConstructionState& state) {
     return {};
 }
 
-[[nodiscard]] Result<std::vector<bool>>
-used_document_meshes(const DocumentConstructionState& state,
-                     const std::vector<bool>& skipped_nodes) {
+[[nodiscard]] Result<std::vector<bool>> used_document_meshes(const DocumentConstructionState& state,
+                                                             const std::vector<bool>& skipped_nodes)
+{
     std::vector<bool> used(state.data.meshes_count, false);
     for (cgltf_size index = 0; index < state.data.nodes_count; ++index) {
         const cgltf_node& node = state.data.nodes[index];
         if (!state.reachable[index] || skipped_nodes[index] || node.mesh == nullptr) {
             continue;
         }
+
         const std::size_t mesh_index = static_cast<std::size_t>(node.mesh - state.data.meshes);
         if (mesh_index >= used.size()) {
             return Error{ErrorCode::scene_import_failed,
@@ -367,7 +386,8 @@ used_document_meshes(const DocumentConstructionState& state,
     return used;
 }
 
-void prepare_imported_ids(DocumentConstructionState& state) {
+void prepare_imported_ids(DocumentConstructionState& state)
+{
     state.imported_ids.material_cache.resize(state.data.materials_count);
     state.imported_ids.materials.resize(state.data.materials_count);
     state.imported_ids.images.ids.resize(state.data.images_count);
@@ -378,7 +398,8 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 }
 
 [[nodiscard]] Result<void> import_document_meshes(DocumentConstructionState& state,
-                                                  const std::vector<bool>& used_meshes) {
+                                                  const std::vector<bool>& used_meshes)
+{
     prepare_imported_ids(state);
     ImportState import_state{
         state.data, state.gltf_path,  state.options, state.builder, state.imported_ids, {},
@@ -403,14 +424,16 @@ void prepare_imported_ids(DocumentConstructionState& state) {
     return {};
 }
 
-[[nodiscard]] std::string imported_node_context(const cgltf_node& node, cgltf_size index) {
+[[nodiscard]] std::string imported_node_context(const cgltf_node& node, cgltf_size index)
+{
     const std::string label = node.name != nullptr ? std::string{node.name} : std::to_string(index);
     return "node " + label;
 }
 
 [[nodiscard]] Result<void> attach_perspective_camera(DocumentConstructionState& state,
                                                      const cgltf_node& node, NodeId node_id,
-                                                     const std::string& context) {
+                                                     const std::string& context)
+{
     PerspectiveCameraDescription camera;
     camera.vertical_field_of_view_radians = node.camera->data.perspective.yfov;
     camera.near_plane = node.camera->data.perspective.znear;
@@ -437,10 +460,12 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 
 [[nodiscard]] Result<void> attach_imported_camera(DocumentConstructionState& state,
                                                   const cgltf_node& node, NodeId node_id,
-                                                  cgltf_size node_index) {
+                                                  cgltf_size node_index)
+{
     if (node.camera == nullptr) {
         return {};
     }
+
     const std::string context = imported_node_context(node, node_index);
     if (node.camera->type == cgltf_camera_type_perspective) {
         return attach_perspective_camera(state, node, node_id, context);
@@ -457,7 +482,8 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 
 [[nodiscard]] Result<void> create_document_nodes(DocumentConstructionState& state,
                                                  const std::vector<bool>& skipped_nodes,
-                                                 const std::vector<Float4x4>& local_matrices) {
+                                                 const std::vector<Float4x4>& local_matrices)
+{
     state.imported_ids.nodes.resize(state.data.nodes_count);
     for (cgltf_size index = 0; index < state.data.nodes_count; ++index) {
         if (!state.reachable[index] || skipped_nodes[index]) {
@@ -477,6 +503,7 @@ void prepare_imported_ids(DocumentConstructionState& state) {
             return Error{matrix.error().code(),
                          imported_node_context(node, index) + ": " + matrix.error().message()};
         }
+
         const Result<void> camera = attach_imported_camera(state, node, created.value(), index);
         if (!camera) {
             return camera.error();
@@ -486,10 +513,12 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 }
 
 [[nodiscard]] Result<void> attach_imported_parent(DocumentConstructionState& state,
-                                                  const cgltf_node& node, cgltf_size node_index) {
+                                                  const cgltf_node& node, cgltf_size node_index)
+{
     if (node.parent == nullptr) {
         return {};
     }
+
     const std::size_t parent_index = static_cast<std::size_t>(node.parent - state.data.nodes);
     if (parent_index >= state.reachable.size() || !state.reachable[parent_index] ||
         !state.imported_ids.nodes[parent_index].has_value()) {
@@ -501,10 +530,12 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 }
 
 [[nodiscard]] Result<void> attach_imported_mesh(DocumentConstructionState& state,
-                                                const cgltf_node& node, cgltf_size node_index) {
+                                                const cgltf_node& node, cgltf_size node_index)
+{
     if (node.mesh == nullptr) {
         return {};
     }
+
     const std::size_t mesh_index = static_cast<std::size_t>(node.mesh - state.data.meshes);
     if (mesh_index >= state.imported_ids.meshes.size()) {
         return Error{ErrorCode::scene_import_failed,
@@ -518,7 +549,8 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 }
 
 [[nodiscard]] Result<void> connect_document_nodes(DocumentConstructionState& state,
-                                                  const std::vector<bool>& skipped_nodes) {
+                                                  const std::vector<bool>& skipped_nodes)
+{
     for (cgltf_size index = 0; index < state.data.nodes_count; ++index) {
         if (!state.reachable[index] || skipped_nodes[index]) {
             continue;
@@ -528,6 +560,7 @@ void prepare_imported_ids(DocumentConstructionState& state) {
         if (!parent) {
             return parent.error();
         }
+
         const Result<void> mesh = attach_imported_mesh(state, node, index);
         if (!mesh) {
             return mesh.error();
@@ -538,12 +571,14 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 
 [[nodiscard]] Result<void> add_imported_root(DocumentConstructionState& state,
                                              const std::vector<bool>& skipped_nodes,
-                                             DocumentSceneId scene_id, const cgltf_node* root) {
+                                             DocumentSceneId scene_id, const cgltf_node* root)
+{
     if (root == nullptr || root < state.data.nodes ||
         root >= state.data.nodes + state.data.nodes_count) {
         return Error{ErrorCode::invalid_node_hierarchy,
                      "A glTF scene contains an invalid root node"};
     }
+
     const std::size_t index = static_cast<std::size_t>(root - state.data.nodes);
     if (!state.reachable[index] || skipped_nodes[index] ||
         !state.imported_ids.nodes[index].has_value()) {
@@ -553,7 +588,8 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 }
 
 [[nodiscard]] Result<void> add_authored_scene_roots(DocumentConstructionState& state,
-                                                    const std::vector<bool>& skipped_nodes) {
+                                                    const std::vector<bool>& skipped_nodes)
+{
     for (cgltf_size scene_index = 0; scene_index < state.data.scenes_count; ++scene_index) {
         const cgltf_scene& scene = state.data.scenes[scene_index];
         for (cgltf_size root_index = 0; root_index < scene.nodes_count; ++root_index) {
@@ -569,14 +605,15 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 }
 
 [[nodiscard]] bool is_implicit_scene_root(const DocumentConstructionState& state,
-                                          const std::vector<bool>& skipped_nodes,
-                                          cgltf_size index) {
+                                          const std::vector<bool>& skipped_nodes, cgltf_size index)
+{
     return state.reachable[index] && !skipped_nodes[index] &&
            state.data.nodes[index].parent == nullptr && state.imported_ids.nodes[index].has_value();
 }
 
 [[nodiscard]] Result<void> add_implicit_scene_roots(DocumentConstructionState& state,
-                                                    const std::vector<bool>& skipped_nodes) {
+                                                    const std::vector<bool>& skipped_nodes)
+{
     for (cgltf_size index = 0; index < state.data.nodes_count; ++index) {
         if (!is_implicit_scene_root(state, skipped_nodes, index)) {
             continue;
@@ -591,14 +628,16 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 }
 
 [[nodiscard]] Result<void> add_document_roots(DocumentConstructionState& state,
-                                              const std::vector<bool>& skipped_nodes) {
+                                              const std::vector<bool>& skipped_nodes)
+{
     if (state.data.scenes_count != 0) {
         return add_authored_scene_roots(state, skipped_nodes);
     }
     return add_implicit_scene_roots(state, skipped_nodes);
 }
 
-[[nodiscard]] Result<Document> finish_imported_document(DocumentConstructionState& state) {
+[[nodiscard]] Result<Document> finish_imported_document(DocumentConstructionState& state)
+{
     Result<Document> document = state.builder.finish();
     if (!document) {
         return document.error();
@@ -612,33 +651,40 @@ void prepare_imported_ids(DocumentConstructionState& state) {
     return value;
 }
 
-[[nodiscard]] Result<Document> construct_document_content(DocumentConstructionState& state) {
+[[nodiscard]] Result<Document> construct_document_content(DocumentConstructionState& state)
+{
     std::vector<bool> skipped_nodes(state.data.nodes_count, false);
     std::vector<Float4x4> local_matrices(state.data.nodes_count);
     const Result<void> transforms = capture_node_transforms(state, skipped_nodes, local_matrices);
     if (!transforms) {
         return transforms.error();
     }
+
     const Result<void> propagated = propagate_skipped_nodes(state, skipped_nodes);
     if (!propagated) {
         return propagated.error();
     }
+
     Result<std::vector<bool>> used_meshes = used_document_meshes(state, skipped_nodes);
     if (!used_meshes) {
         return used_meshes.error();
     }
+
     const Result<void> meshes = import_document_meshes(state, used_meshes.value());
     if (!meshes) {
         return meshes.error();
     }
+
     const Result<void> nodes = create_document_nodes(state, skipped_nodes, local_matrices);
     if (!nodes) {
         return nodes.error();
     }
+
     const Result<void> connected = connect_document_nodes(state, skipped_nodes);
     if (!connected) {
         return connected.error();
     }
+
     const Result<void> roots = add_document_roots(state, skipped_nodes);
     if (!roots) {
         return roots.error();
@@ -649,23 +695,19 @@ void prepare_imported_ids(DocumentConstructionState& state) {
 [[nodiscard]] Result<ConstructedDocument>
 construct_document(const cgltf_data& data, const std::vector<bool>& reachable,
                    const std::filesystem::path& gltf_path, const ModelLoadOptions& options,
-                   std::vector<ModelLoadDiagnostic>& diagnostics) {
-    try {
-        DocumentConstructionState state{data, reachable, gltf_path, options, diagnostics};
-        Result<DocumentSceneId> default_scene = create_document_scenes(state);
-        if (!default_scene) {
-            return default_scene.error();
-        }
-        Result<Document> document = construct_document_content(state);
-        if (!document) {
-            return document.error();
-        }
-        return ConstructedDocument{std::move(document).value(), default_scene.value()};
-    } catch (const std::bad_alloc&) {
-        fatal_gltf_allocation_failure();
-    } catch (...) {
-        fatal_unexpected_gltf_boundary_exception();
+                   std::vector<ModelLoadDiagnostic>& diagnostics)
+{
+    DocumentConstructionState state{data, reachable, gltf_path, options, diagnostics};
+    Result<DocumentSceneId> default_scene = create_document_scenes(state);
+    if (!default_scene) {
+        return default_scene.error();
     }
+
+    Result<Document> document = construct_document_content(state);
+    if (!document) {
+        return document.error();
+    }
+    return ConstructedDocument{std::move(document).value(), default_scene.value()};
 }
 
 } // namespace elf3d::gltf::importer_detail
@@ -675,7 +717,8 @@ namespace elf3d::gltf {
 using namespace importer_detail;
 
 Result<LoadedDocument> load_document(const std::filesystem::path& path,
-                                     const ModelLoadOptions& options) noexcept {
+                                     const ModelLoadOptions& options) noexcept
+{
     try {
         Result<bool> is_glb = source_is_glb(path);
         if (!is_glb) {
@@ -692,6 +735,7 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path,
         if (const Result<void> buffers = load_external_buffers(path, state); !buffers) {
             return buffers.error();
         }
+
         Result<std::vector<bool>> reachable = reachable_nodes(*state.data);
         if (!reachable) {
             return reachable.error();

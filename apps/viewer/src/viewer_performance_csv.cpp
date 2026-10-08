@@ -7,11 +7,13 @@
 namespace elf3d::viewer {
 namespace {
 
-[[nodiscard]] constexpr int csv_flag(bool value) noexcept {
+[[nodiscard]] constexpr int csv_flag(bool value) noexcept
+{
     return value ? 1 : 0;
 }
 
-void write_csv_header(std::ofstream& stream) {
+void write_csv_header(std::ofstream& stream)
+{
     stream << "frame,frame_ms,event_input_ms,navigation_scene_ms,render_ms,ui_composition_ms,"
               "swap_wait_ms,input_to_present_proxy_ms,rendered_3d,render_list_ms,resources_ms,"
               "gl_submission_ms,gpu_main_available,gpu_main_ms,gpu_resolve_available,"
@@ -29,7 +31,8 @@ void write_csv_header(std::ofstream& stream) {
 }
 
 void write_csv_row(std::ofstream& stream, std::size_t index, const ViewerFrameSample& sample,
-                   const ViewerFrameContext& state) {
+                   const ViewerFrameContext& state)
+{
     stream << index << ',' << sample.frame_milliseconds << ',' << sample.event_input_milliseconds
            << ',' << sample.navigation_scene_milliseconds << ',' << sample.render_milliseconds
            << ',' << sample.ui_composition_milliseconds << ',' << sample.swap_wait_milliseconds
@@ -77,18 +80,21 @@ void write_csv_row(std::ofstream& stream, std::size_t index, const ViewerFrameSa
 
 } // namespace
 
-bool write_performance_csv(ViewerFrameContext& state) {
+bool write_performance_csv(ViewerFrameContext& state)
+{
     std::error_code error;
     std::filesystem::create_directories(state.performance.csv_path.parent_path(), error);
     if (error) {
         state.performance.capture_error = error.message();
         return false;
     }
+
     std::ofstream stream{state.performance.csv_path, std::ios::trunc};
     if (!stream) {
         state.performance.capture_error = "Could not open the performance CSV";
         return false;
     }
+
     write_csv_header(stream);
     stream << std::fixed << std::setprecision(6);
     for (std::size_t index = 0; index < state.performance.frame_samples.size(); ++index) {
@@ -98,6 +104,7 @@ bool write_performance_csv(ViewerFrameContext& state) {
         state.performance.capture_error = "Could not finish writing the performance CSV";
         return false;
     }
+
     state.performance.capture_error.clear();
     return true;
 }

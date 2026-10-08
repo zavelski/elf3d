@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/backend_opengl.h>
 
 #include <elf3d/graphics.h>
 
@@ -11,16 +11,13 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/graphics.h>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
-
-module elf.backend.opengl;
-
-import elf.graphics;
 
 // Use the imported graphics types; global-fragment forward declarations create different types.
 namespace elf3d::backend::opengl::device_detail {
@@ -67,7 +64,8 @@ struct OverlayProjectedPoint {
 
 [[nodiscard]] std::array<float, 4>
 multiply_matrix_vector(const std::array<float, 16>& matrix,
-                       const std::array<float, 4>& vector) noexcept {
+                       const std::array<float, 4>& vector) noexcept
+{
     std::array<float, 4> result{};
     for (int row = 0; row < 4; ++row) {
         result[static_cast<std::size_t>(row)] =
@@ -79,27 +77,32 @@ multiply_matrix_vector(const std::array<float, 16>& matrix,
     return result;
 }
 
-[[nodiscard]] bool valid_clip_position(const std::array<float, 4>& clip) noexcept {
+[[nodiscard]] bool valid_clip_position(const std::array<float, 4>& clip) noexcept
+{
     return std::isfinite(clip[0]) && std::isfinite(clip[1]) && std::isfinite(clip[2]) &&
            std::isfinite(clip[3]) && clip[3] > 0.000001F;
 }
 
-[[nodiscard]] bool valid_ndc_position(float x, float y, float z) noexcept {
+[[nodiscard]] bool valid_ndc_position(float x, float y, float z) noexcept
+{
     return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
 }
 
 [[nodiscard]] std::optional<OverlayProjectedPoint>
 project_overlay_point(const graphics::DrawOverlayDescription& description, Extent2D extent,
-                      Float3 world_position) noexcept {
+                      Float3 world_position) noexcept
+{
     if (extent.width == 0 || extent.height == 0) {
         return std::nullopt;
     }
+
     const std::array<float, 4> world{world_position.x, world_position.y, world_position.z, 1.0F};
     const std::array<float, 4> view = multiply_matrix_vector(description.view_matrix, world);
     const std::array<float, 4> clip = multiply_matrix_vector(description.projection_matrix, view);
     if (!valid_clip_position(clip)) {
         return std::nullopt;
     }
+
     const float inverse_w = 1.0F / clip[3];
     const float ndc_x = clip[0] * inverse_w;
     const float ndc_y = clip[1] * inverse_w;
@@ -107,34 +110,40 @@ project_overlay_point(const graphics::DrawOverlayDescription& description, Exten
     if (!valid_ndc_position(ndc_x, ndc_y, ndc_z)) {
         return std::nullopt;
     }
+
     const float width = static_cast<float>(extent.width);
     const float height = static_cast<float>(extent.height);
     return OverlayProjectedPoint{ndc_x, ndc_y, ndc_z, (ndc_x * 0.5F + 0.5F) * width,
                                  (1.0F - (ndc_y * 0.5F + 0.5F)) * height};
 }
 
-[[nodiscard]] OverlayVertex vertex(float x, float y, float z) noexcept {
+[[nodiscard]] OverlayVertex vertex(float x, float y, float z) noexcept
+{
     return OverlayVertex{x, y, z};
 }
 
 [[nodiscard]] std::array<OverlayVertex, 6> quad(OverlayVertex a, OverlayVertex b, OverlayVertex c,
-                                                OverlayVertex d) noexcept {
+                                                OverlayVertex d) noexcept
+{
     return std::array<OverlayVertex, 6>{a, b, c, a, c, d};
 }
 
 [[nodiscard]] std::optional<std::array<OverlayVertex, 6>>
 line_vertices(const OverlayProjectedPoint& start, const OverlayProjectedPoint& end, Extent2D extent,
-              float thickness_pixels) noexcept {
+              float thickness_pixels) noexcept
+{
     if (!std::isfinite(thickness_pixels) || thickness_pixels <= 0.0F || extent.width == 0 ||
         extent.height == 0) {
         return std::nullopt;
     }
+
     const float dx = end.screen_x - start.screen_x;
     const float dy = end.screen_y - start.screen_y;
     const float length = std::sqrt(dx * dx + dy * dy);
     if (!std::isfinite(length) || length <= 0.001F) {
         return std::nullopt;
     }
+
     const float half_thickness = thickness_pixels * 0.5F;
     const float normal_x = -dy / length * half_thickness;
     const float normal_y = dx / length * half_thickness;
@@ -147,12 +156,13 @@ line_vertices(const OverlayProjectedPoint& start, const OverlayProjectedPoint& e
 }
 
 [[nodiscard]] std::optional<std::array<OverlayVertex, 6>>
-marker_vertices(const OverlayProjectedPoint& center, Extent2D extent,
-                float radius_pixels) noexcept {
+marker_vertices(const OverlayProjectedPoint& center, Extent2D extent, float radius_pixels) noexcept
+{
     if (!std::isfinite(radius_pixels) || radius_pixels <= 0.0F || extent.width == 0 ||
         extent.height == 0) {
         return std::nullopt;
     }
+
     const float ndc_radius_x = radius_pixels * 2.0F / static_cast<float>(extent.width);
     const float ndc_radius_y = radius_pixels * 2.0F / static_cast<float>(extent.height);
     return quad(vertex(center.ndc_x - ndc_radius_x, center.ndc_y + ndc_radius_y, center.ndc_z),
@@ -161,7 +171,8 @@ marker_vertices(const OverlayProjectedPoint& center, Extent2D extent,
                 vertex(center.ndc_x + ndc_radius_x, center.ndc_y + ndc_radius_y, center.ndc_z));
 }
 
-[[nodiscard]] Color4 sanitized_overlay_color(Color4 color) noexcept {
+[[nodiscard]] Color4 sanitized_overlay_color(Color4 color) noexcept
+{
     const auto channel = [](float value, float fallback) noexcept {
         return std::isfinite(value) ? std::clamp(value, 0.0F, 1.0F) : fallback;
     };
@@ -170,14 +181,15 @@ marker_vertices(const OverlayProjectedPoint& center, Extent2D extent,
 }
 
 [[nodiscard]] bool
-overlay_has_geometry(Extent2D extent,
-                     const graphics::DrawOverlayDescription& description) noexcept {
+overlay_has_geometry(Extent2D extent, const graphics::DrawOverlayDescription& description) noexcept
+{
     return extent.width != 0 && extent.height != 0 &&
            (!description.lines.empty() || !description.markers.empty());
 }
 
 void configure_overlay_draw_state(const RenderTargetView& target,
-                                  const OverlayResources& resources) noexcept {
+                                  const OverlayResources& resources) noexcept
+{
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target.framebuffer);
     glViewport(0, 0, static_cast<GLsizei>(target.extent.width),
                static_cast<GLsizei>(target.extent.height));
@@ -201,7 +213,8 @@ void configure_overlay_draw_state(const RenderTargetView& target,
     glBindBuffer(GL_ARRAY_BUFFER, resources.vertex_buffer);
 }
 
-[[nodiscard]] Result<void> ensure_overlay_resources(OverlayResources& resources) {
+[[nodiscard]] Result<void> ensure_overlay_resources(OverlayResources& resources)
+{
     if (resources.program != 0 && resources.vertex_array != 0 && resources.vertex_buffer != 0) {
         return {};
     }
@@ -253,12 +266,14 @@ void configure_overlay_draw_state(const RenderTargetView& target,
 
 void submit_overlay_vertices(const OverlayResources& resources,
                              const std::array<OverlayVertex, 6>& vertices, Color4 color,
-                             OverlayDepthMode depth_mode) noexcept {
+                             OverlayDepthMode depth_mode) noexcept
+{
     if (depth_mode == OverlayDepthMode::depth_tested) {
         glEnable(GL_DEPTH_TEST);
     } else {
         glDisable(GL_DEPTH_TEST);
     }
+
     const Color4 sanitized = sanitized_overlay_color(color);
     glUniform4f(resources.color_uniform, sanitized.red, sanitized.green, sanitized.blue,
                 sanitized.alpha);
@@ -269,7 +284,8 @@ void submit_overlay_vertices(const OverlayResources& resources,
 
 [[nodiscard]] Result<void> submit_overlay_lines(const OverlayResources& resources,
                                                 const graphics::DrawOverlayDescription& description,
-                                                Extent2D extent) {
+                                                Extent2D extent)
+{
     for (const OverlayLineSegment& line : description.lines) {
         const std::optional<OverlayProjectedPoint> start =
             project_overlay_point(description, extent, line.start_world);
@@ -278,6 +294,7 @@ void submit_overlay_vertices(const OverlayResources& resources,
         if (!start.has_value() || !end.has_value()) {
             continue;
         }
+
         const std::optional<std::array<OverlayVertex, 6>> vertices =
             line_vertices(*start, *end, extent, line.thickness_pixels);
         if (vertices.has_value()) {
@@ -289,13 +306,15 @@ void submit_overlay_vertices(const OverlayResources& resources,
 
 [[nodiscard]] Result<void>
 submit_overlay_markers(const OverlayResources& resources,
-                       const graphics::DrawOverlayDescription& description, Extent2D extent) {
+                       const graphics::DrawOverlayDescription& description, Extent2D extent)
+{
     for (const OverlayPointMarker& marker : description.markers) {
         const std::optional<OverlayProjectedPoint> center =
             project_overlay_point(description, extent, marker.position_world);
         if (!center.has_value()) {
             continue;
         }
+
         const std::optional<std::array<OverlayVertex, 6>> vertices =
             marker_vertices(*center, extent, marker.radius_pixels);
         if (vertices.has_value()) {
@@ -308,15 +327,18 @@ submit_overlay_markers(const OverlayResources& resources,
 } // namespace
 
 Result<void> draw_overlay(OverlayResources& resources, graphics::RenderTarget& target,
-                          const graphics::DrawOverlayDescription& description) noexcept {
+                          const graphics::DrawOverlayDescription& description) noexcept
+{
     Result<RenderTargetView> target_result = render_target_view(target);
     if (!target_result) {
         return target_result.error();
     }
+
     const RenderTargetView& target_view = target_result.value();
     if (!target_view.valid || !overlay_has_geometry(target_view.extent, description)) {
         return {};
     }
+
     const Result<void> resource_result = ensure_overlay_resources(resources);
     if (!resource_result) {
         return resource_result.error();
@@ -328,6 +350,7 @@ Result<void> draw_overlay(OverlayResources& resources, graphics::RenderTarget& t
     if (!lines) {
         return lines.error();
     }
+
     const Result<void> markers = submit_overlay_markers(resources, description, target_view.extent);
     if (!markers) {
         return markers.error();
@@ -336,11 +359,13 @@ Result<void> draw_overlay(OverlayResources& resources, graphics::RenderTarget& t
         return Error{ErrorCode::draw_submission_failed,
                      "OpenGL reported an error while submitting overlay geometry"};
     }
+
     mark_render_target_stale(target);
     return {};
 }
 
-void release_overlay_resources(OverlayResources& resources) noexcept {
+void release_overlay_resources(OverlayResources& resources) noexcept
+{
     if (resources.vertex_buffer != 0) {
         glDeleteBuffers(1, &resources.vertex_buffer);
     }

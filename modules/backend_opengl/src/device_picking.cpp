@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/backend_opengl.h>
 
 #include <elf3d/clipping.h>
 #include <elf3d/graphics.h>
@@ -12,6 +12,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/graphics.h>
 #include <limits>
 #include <new>
 #include <optional>
@@ -20,10 +21,6 @@ module;
 #include <string_view>
 #include <thread>
 #include <vector>
-
-module elf.backend.opengl;
-
-import elf.graphics;
 
 // Use the imported graphics types; global-fragment forward declarations create different types.
 namespace elf3d::backend::opengl::device_detail {
@@ -125,11 +122,13 @@ struct PickingBatchStateCache {
 };
 
 [[nodiscard]] Result<PickingDrawViews> picking_draw_views(graphics::PickingTarget& target,
-                                                          graphics::StaticMesh& mesh) noexcept {
+                                                          graphics::StaticMesh& mesh) noexcept
+{
     Result<PickingTargetView> target_result = picking_target_view(target);
     if (!target_result) {
         return target_result.error();
     }
+
     Result<MeshView> mesh_result = mesh_view(mesh);
     if (!mesh_result) {
         return mesh_result.error();
@@ -137,7 +136,8 @@ struct PickingBatchStateCache {
     return PickingDrawViews{target_result.value(), mesh_result.value()};
 }
 
-void configure_picking_pass_state(const PickingTargetView& target, GLuint program) noexcept {
+void configure_picking_pass_state(const PickingTargetView& target, GLuint program) noexcept
+{
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target.framebuffer);
     glViewport(0, 0, static_cast<GLsizei>(target.extent.width),
                static_cast<GLsizei>(target.extent.height));
@@ -160,7 +160,8 @@ void configure_picking_pass_state(const PickingTargetView& target, GLuint progra
 }
 
 void upload_picking_frame_uniforms(const PickingResources& uniforms,
-                                   const graphics::PickingDrawDescription& description) noexcept {
+                                   const graphics::PickingDrawDescription& description) noexcept
+{
     glUniformMatrix4fv(uniforms.view, 1, GL_FALSE, description.view_matrix.data());
     glUniformMatrix4fv(uniforms.projection, 1, GL_FALSE, description.projection_matrix.data());
     glUniform1i(uniforms.clipping_section_plane_enabled,
@@ -193,13 +194,15 @@ void upload_picking_frame_uniforms(const PickingResources& uniforms,
 }
 
 void upload_picking_item_uniforms(const PickingResources& uniforms,
-                                  const graphics::PickingDrawDescription& description) noexcept {
+                                  const graphics::PickingDrawDescription& description) noexcept
+{
     glUniformMatrix4fv(uniforms.model, 1, GL_FALSE, description.model_matrix.data());
     glUniform1ui(uniforms.object_id, description.object_id);
     glUniform1ui(uniforms.primitive_index, description.primitive_index);
 }
 
-void set_picking_capability(GLenum capability, bool enabled) noexcept {
+void set_picking_capability(GLenum capability, bool enabled) noexcept
+{
     if (enabled) {
         glEnable(capability);
     } else {
@@ -207,7 +210,8 @@ void set_picking_capability(GLenum capability, bool enabled) noexcept {
     }
 }
 
-void configure_picking_culling(bool culling, PickingBatchStateCache& cache) noexcept {
+void configure_picking_culling(bool culling, PickingBatchStateCache& cache) noexcept
+{
     if (!cache.culling_valid || cache.culling != culling) {
         set_picking_capability(GL_CULL_FACE, culling);
         cache.culling_valid = true;
@@ -215,7 +219,8 @@ void configure_picking_culling(bool culling, PickingBatchStateCache& cache) noex
     }
 }
 
-void configure_picking_front_face(bool clockwise, PickingBatchStateCache& cache) noexcept {
+void configure_picking_front_face(bool clockwise, PickingBatchStateCache& cache) noexcept
+{
     if (!cache.front_face_valid || cache.front_face_clockwise != clockwise) {
         glFrontFace(clockwise ? GL_CW : GL_CCW);
         cache.front_face_valid = true;
@@ -223,7 +228,8 @@ void configure_picking_front_face(bool clockwise, PickingBatchStateCache& cache)
     }
 }
 
-void configure_picking_vertex_array(GLuint vertex_array, PickingBatchStateCache& cache) noexcept {
+void configure_picking_vertex_array(GLuint vertex_array, PickingBatchStateCache& cache) noexcept
+{
     if (!cache.vertex_array_valid || cache.vertex_array != vertex_array) {
         glBindVertexArray(vertex_array);
         cache.vertex_array_valid = true;
@@ -233,19 +239,22 @@ void configure_picking_vertex_array(GLuint vertex_array, PickingBatchStateCache&
 
 void configure_picking_item_state(const PickingDrawViews& views,
                                   const graphics::PickingDrawDescription& description,
-                                  PickingBatchStateCache& cache) noexcept {
+                                  PickingBatchStateCache& cache) noexcept
+{
     configure_picking_culling(!description.double_sided, cache);
     configure_picking_front_face(description.front_face_clockwise, cache);
     configure_picking_vertex_array(views.mesh.vertex_array, cache);
 }
 
-[[nodiscard]] bool picking_position_in_bounds(Float2 position, Extent2D extent) noexcept {
+[[nodiscard]] bool picking_position_in_bounds(Float2 position, Extent2D extent) noexcept
+{
     return std::isfinite(position.x) && std::isfinite(position.y) && position.x >= 0.0F &&
            position.y >= 0.0F && position.x < static_cast<float>(extent.width) &&
            position.y < static_cast<float>(extent.height);
 }
 
-[[nodiscard]] Result<void> ensure_picking_resources(PickingResources& resources) {
+[[nodiscard]] Result<void> ensure_picking_resources(PickingResources& resources)
+{
     if (resources.program != 0) {
         return {};
     }
@@ -255,6 +264,7 @@ void configure_picking_item_state(const PickingDrawViews& views,
     if (!vertex_result) {
         return vertex_result.error();
     }
+
     const GLuint vertex_shader = vertex_result.value();
     Result<GLuint> fragment_result =
         compile_shader(GL_FRAGMENT_SHADER, picking_fragment_shader_source);
@@ -262,6 +272,7 @@ void configure_picking_item_state(const PickingDrawViews& views,
         glDeleteShader(vertex_shader);
         return fragment_result.error();
     }
+
     const GLuint fragment_shader = fragment_result.value();
     Result<GLuint> program_result = link_program(vertex_shader, fragment_shader);
     glDeleteShader(vertex_shader);
@@ -294,12 +305,14 @@ void configure_picking_item_state(const PickingDrawViews& views,
     return {};
 }
 
-[[nodiscard]] bool picking_draw_locations_valid(const PickingResources& resources) noexcept {
+[[nodiscard]] bool picking_draw_locations_valid(const PickingResources& resources) noexcept
+{
     return resources.model >= 0 && resources.view >= 0 && resources.projection >= 0 &&
            resources.object_id >= 0 && resources.primitive_index >= 0;
 }
 
-[[nodiscard]] bool picking_clipping_locations_valid(const PickingResources& resources) noexcept {
+[[nodiscard]] bool picking_clipping_locations_valid(const PickingResources& resources) noexcept
+{
     return resources.clipping_section_plane_enabled >= 0 &&
            resources.clipping_section_plane_normal >= 0 &&
            resources.clipping_section_plane_offset >= 0 &&
@@ -310,7 +323,8 @@ void configure_picking_item_state(const PickingDrawViews& views,
 
 void submit_picking_draw(const PickingResources& resources, const PickingDrawViews& views,
                          const graphics::PickingDrawDescription& description,
-                         PickingBatchStateCache& cache) noexcept {
+                         PickingBatchStateCache& cache) noexcept
+{
     configure_picking_item_state(views, description, cache);
     upload_picking_item_uniforms(resources, description);
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(views.mesh.index_count), GL_UNSIGNED_INT,
@@ -321,16 +335,19 @@ void submit_picking_draw(const PickingResources& resources, const PickingDrawVie
 submit_picking_batch_items(const PickingResources& resources, const PickingTargetView& target,
                            std::span<graphics::StaticMesh* const> meshes,
                            std::span<const graphics::PickingDrawDescription> descriptions,
-                           PickingBatchStateCache& cache) noexcept {
+                           PickingBatchStateCache& cache) noexcept
+{
     for (std::size_t index = 0; index < meshes.size(); ++index) {
         if (meshes[index] == nullptr) {
             return Error{ErrorCode::invalid_argument,
                          "Picking draw batches require a mesh for every item"};
         }
+
         Result<MeshView> mesh_result = mesh_view(*meshes[index]);
         if (!mesh_result) {
             return mesh_result.error();
         }
+
         const PickingDrawViews views{target, mesh_result.value()};
         if (views.mesh.index_count != 0 && descriptions[index].object_id != 0) {
             submit_picking_draw(resources, views, descriptions[index], cache);
@@ -341,22 +358,26 @@ submit_picking_batch_items(const PickingResources& resources, const PickingTarge
 
 } // namespace
 
-bool PickingResources::valid() const noexcept {
+bool PickingResources::valid() const noexcept
+{
     return program != 0 && picking_draw_locations_valid(*this) &&
            picking_clipping_locations_valid(*this);
 }
 
 Result<void> draw_picking_indexed(PickingResources& resources, graphics::PickingTarget& target,
                                   graphics::StaticMesh& mesh,
-                                  const graphics::PickingDrawDescription& description) noexcept {
+                                  const graphics::PickingDrawDescription& description) noexcept
+{
     Result<PickingDrawViews> views_result = picking_draw_views(target, mesh);
     if (!views_result) {
         return views_result.error();
     }
+
     const PickingDrawViews& views = views_result.value();
     if (!views.target.valid || views.mesh.index_count == 0 || description.object_id == 0) {
         return {};
     }
+
     const Result<void> resource_result = ensure_picking_resources(resources);
     if (!resource_result) {
         return resource_result.error();
@@ -377,7 +398,8 @@ Result<void> draw_picking_indexed(PickingResources& resources, graphics::Picking
 Result<void>
 draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
                    std::span<graphics::StaticMesh* const> meshes,
-                   std::span<const graphics::PickingDrawDescription> descriptions) noexcept {
+                   std::span<const graphics::PickingDrawDescription> descriptions) noexcept
+{
     Result<PickingTargetView> target_result = picking_target_view(target);
     if (!target_result) {
         return target_result.error();
@@ -389,6 +411,7 @@ draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
     if (!target_result.value().valid || meshes.empty()) {
         return {};
     }
+
     const Result<void> resource_result = ensure_picking_resources(resources);
     if (!resource_result) {
         return resource_result.error();
@@ -411,11 +434,13 @@ draw_picking_batch(PickingResources& resources, graphics::PickingTarget& target,
 }
 
 Result<std::optional<PickingReadback>> read_picking_pixel(graphics::PickingTarget& target,
-                                                          Float2 position_pixels) noexcept {
+                                                          Float2 position_pixels) noexcept
+{
     Result<PickingTargetView> target_result = picking_target_view(target);
     if (!target_result) {
         return target_result.error();
     }
+
     const PickingTargetView& view = target_result.value();
     if (!view.valid || !picking_position_in_bounds(position_pixels, view.extent)) {
         return std::optional<PickingReadback>{};
@@ -442,11 +467,13 @@ Result<std::optional<PickingReadback>> read_picking_pixel(graphics::PickingTarge
     return std::optional<PickingReadback>{PickingReadback{ids[0], ids[1], ids[2], depth}};
 }
 
-Result<std::vector<float>> read_picking_depths(graphics::PickingTarget& target) noexcept {
+Result<std::vector<float>> read_picking_depths(graphics::PickingTarget& target) noexcept
+{
     Result<PickingTargetView> target_result = picking_target_view(target);
     if (!target_result) {
         return target_result.error();
     }
+
     const PickingTargetView& view = target_result.value();
     if (!view.valid) {
         return std::vector<float>{};
@@ -481,7 +508,8 @@ Result<std::vector<float>> read_picking_depths(graphics::PickingTarget& target) 
     }
 }
 
-void release_picking_resources(PickingResources& resources) noexcept {
+void release_picking_resources(PickingResources& resources) noexcept
+{
     if (resources.program != 0) {
         glDeleteProgram(resources.program);
     }

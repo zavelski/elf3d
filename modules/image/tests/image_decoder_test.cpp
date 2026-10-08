@@ -3,11 +3,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/image.h>
 #include <span>
 #include <string_view>
 #include <vector>
-
-import elf.image;
 
 namespace {
 
@@ -32,11 +31,13 @@ constexpr std::array<std::uint8_t, 71> gray_png{
      0x70, 0x60, 0x68, 0xf8, 0x0f, 0x00, 0x03, 0x05, 0x01, 0xc0, 0x4e, 0x33, 0x5b, 0xe9, 0x00,
      0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82}};
 
-std::span<const std::byte> bytes(std::span<const std::uint8_t> values) {
+std::span<const std::byte> bytes(std::span<const std::uint8_t> values)
+{
     return std::as_bytes(values);
 }
 
-int base64_value(char value) {
+int base64_value(char value)
+{
     if (value >= 'A' && value <= 'Z')
         return value - 'A';
     if (value >= 'a' && value <= 'z')
@@ -46,7 +47,8 @@ int base64_value(char value) {
     return value == '+' ? 62 : value == '/' ? 63 : 0;
 }
 
-std::vector<std::byte> base64(std::string_view source) {
+std::vector<std::byte> base64(std::string_view source)
+{
     std::vector<std::byte> result;
     for (std::size_t index = 0; index < source.size(); index += 4) {
         const std::uint32_t value =
@@ -66,11 +68,13 @@ std::vector<std::byte> base64(std::string_view source) {
     return result;
 }
 
-std::uint8_t pixel(const elf3d::image::DecodedImage& image, std::size_t index) {
+std::uint8_t pixel(const elf3d::image::DecodedImage& image, std::size_t index)
+{
     return std::to_integer<std::uint8_t>(image.pixels[index]);
 }
 
-std::uint32_t crc32(std::span<const std::uint8_t> values) {
+std::uint32_t crc32(std::span<const std::uint8_t> values)
+{
     std::uint32_t crc = 0xffffffffU;
     for (const std::uint8_t value : values) {
         crc ^= value;
@@ -81,12 +85,14 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
     return crc ^ 0xffffffffU;
 }
 
-[[nodiscard]] bool has_rgb_pixels(const elf3d::image::DecodedImage& image) {
+[[nodiscard]] bool has_rgb_pixels(const elf3d::image::DecodedImage& image)
+{
     return pixel(image, 0) == 255 && pixel(image, 1) == 0 && pixel(image, 4) == 0 &&
            pixel(image, 5) == 255 && pixel(image, 8) == 0 && pixel(image, 10) == 255;
 }
 
-[[nodiscard]] int verify_rgb_png() {
+[[nodiscard]] int verify_rgb_png()
+{
     const auto rgb = elf3d::image::decode_png_or_jpeg(bytes(rgb_png));
     if (!rgb || rgb.value().width != 2 || rgb.value().height != 2 ||
         rgb.value().pixels.size() != 16 || !has_rgb_pixels(rgb.value())) {
@@ -95,7 +101,8 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
     return 0;
 }
 
-[[nodiscard]] int verify_rgba_png() {
+[[nodiscard]] int verify_rgba_png()
+{
     const auto rgba = elf3d::image::decode_png_or_jpeg(bytes(rgba_png));
     if (!rgba || pixel(rgba.value(), 0) != 1 || pixel(rgba.value(), 3) != 4 ||
         pixel(rgba.value(), 15) != 16) {
@@ -104,7 +111,8 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
     return 0;
 }
 
-[[nodiscard]] int verify_gray_png() {
+[[nodiscard]] int verify_gray_png()
+{
     const auto gray = elf3d::image::decode_png_or_jpeg(bytes(gray_png));
     if (!gray || pixel(gray.value(), 0) != 0 || pixel(gray.value(), 3) != 255 ||
         pixel(gray.value(), 4) != 64 || pixel(gray.value(), 5) != 64 ||
@@ -114,7 +122,8 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
     return 0;
 }
 
-[[nodiscard]] int verify_truncated_jpeg(std::span<const std::byte> jpeg) {
+[[nodiscard]] int verify_truncated_jpeg(std::span<const std::byte> jpeg)
+{
     const auto truncated_jpeg_result = elf3d::image::decode_png_or_jpeg(jpeg.first(32));
     if (truncated_jpeg_result ||
         truncated_jpeg_result.error().code() != elf3d::ErrorCode::image_decode_failed) {
@@ -123,7 +132,8 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
     return 0;
 }
 
-[[nodiscard]] int verify_jpeg() {
+[[nodiscard]] int verify_jpeg()
+{
     constexpr std::string_view jpeg_base64 =
         "/9j/4AAQSkZJRgABAQAAAQABAAD/"
         "2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCg"
@@ -150,12 +160,14 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
     return verify_truncated_jpeg(jpeg);
 }
 
-[[nodiscard]] int verify_invalid_images() {
+[[nodiscard]] int verify_invalid_images()
+{
     const std::array<std::byte, 3> malformed{};
     if (elf3d::image::decode_png_or_jpeg(malformed).error().code() !=
         elf3d::ErrorCode::image_decode_failed) {
         return 6;
     }
+
     std::array<std::uint8_t, rgb_png.size()> oversized = rgb_png;
     oversized[16] = 0x00;
     oversized[17] = 0x00;
@@ -175,22 +187,27 @@ std::uint32_t crc32(std::span<const std::uint8_t> values) {
 
 } // namespace
 
-int elf3d_image_decode_test() {
+int elf3d_image_decode_test()
+{
     const int rgb = verify_rgb_png();
     if (rgb != 0) {
         return rgb;
     }
+
     const int rgba = verify_rgba_png();
     if (rgba != 0) {
         return rgba;
     }
+
     const int gray = verify_gray_png();
     if (gray != 0) {
         return gray;
     }
+
     const int jpeg = verify_jpeg();
     if (jpeg != 0) {
         return jpeg;
     }
+
     return verify_invalid_images();
 }

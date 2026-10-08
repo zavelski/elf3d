@@ -1,8 +1,9 @@
 # Shared discovery for Windows automation. Explicit overrides never silently fall back.
 function Get-Elf3DVisualStudio {
+    param([string]$VersionRange = '[18.0,)')
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Visual Studio Installer/vswhere is required.' }
-    $installation = & $vswhere -latest -products '*' -version '[18.0,)' `
+    $installation = & $vswhere -latest -products '*' -version $VersionRange `
         -requires Microsoft.Component.MSBuild Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
         -property installationPath
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($installation)) {

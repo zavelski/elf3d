@@ -7,13 +7,12 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/math.h>
+#include <elf3d/internal/navigation.h>
+#include <elf3d/internal/scene.h>
 #include <optional>
 #include <utility>
-
-import elf.assets;
-import elf.math;
-import elf.navigation;
-import elf.scene;
 
 #include "orbit_navigation_test_support.h"
 
@@ -27,7 +26,8 @@ int elf3d_navigation_keyboard_test();
 namespace {
 
 [[nodiscard]] bool has_reset_view(const NavigationTestContext& context,
-                                  const elf3d::NavigationSnapshot& snapshot) {
+                                  const elf3d::NavigationSnapshot& snapshot)
+{
     const elf3d::Float3 expected_center{1.5F, 1.5F, 1.5F};
     return nearly_equal(snapshot.pivot, expected_center) &&
            camera_looks_at(context.fixture.scene, context.fixture.camera, snapshot.pivot) &&
@@ -38,7 +38,8 @@ namespace {
                                       const elf3d::NavigationSnapshot& anchored,
                                       const elf3d::NavigationSnapshot& reset,
                                       elf3d::Float3 camera_position_before,
-                                      elf3d::Float3 camera_forward_before) {
+                                      elf3d::Float3 camera_forward_before)
+{
     return nearly_equal(anchored.pivot, reset.pivot) &&
            nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
                         camera_position_before) &&
@@ -50,20 +51,24 @@ namespace {
 [[nodiscard]] bool
 has_unchanged_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
                      const NavigationTestContext& context, elf3d::Float3 position,
-                     elf3d::Float3 forward) {
+                     elf3d::Float3 forward)
+{
     return update &&
            nearly_equal(camera_position(context.fixture.scene, context.fixture.camera), position) &&
            nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera), forward);
 }
 
-[[nodiscard]] int verify_reset_and_anchor(NavigationTestContext& context) {
+[[nodiscard]] int verify_reset_and_anchor(NavigationTestContext& context)
+{
     if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
         return 1;
     }
+
     const elf3d::NavigationSnapshot reset = context.navigation.snapshot();
     if (!has_reset_view(context, reset)) {
         return 2;
     }
+
     const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
     const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
     if (!context.navigation.set_screen_anchor(context.fixture.scene, context.fixture.camera,
@@ -91,12 +96,14 @@ has_unchanged_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
     return 0;
 }
 
-[[nodiscard]] int verify_fit_to_scene(NavigationTestContext& context) {
+[[nodiscard]] int verify_fit_to_scene(NavigationTestContext& context)
+{
     if (!context.navigation.fit_to_scene(context.fixture.scene, context.fixture.camera,
                                          {360, 800}) ||
         !bounds_visible(context.fixture.scene, context.fixture.camera, {360, 800})) {
         return 3;
     }
+
     const float extent =
         maximum_projected_bounds_extent(context.fixture.scene, context.fixture.camera, {360, 800});
     if (extent < 0.85F || extent > 1.001F) {
@@ -106,12 +113,14 @@ has_unchanged_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
 }
 
 [[nodiscard]] bool has_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
-                                   bool expected_anchor) {
+                                   bool expected_anchor)
+{
     return update && update.value().orbit_start_position_pixels.has_value() == expected_anchor;
 }
 
 [[nodiscard]] bool has_initial_drag(const elf3d::NavigationSnapshot& drag,
-                                    const elf3d::NavigationSnapshot& before) {
+                                    const elf3d::NavigationSnapshot& before)
+{
     return drag.is_orbiting && drag.is_pointer_captured &&
            nearly_equal(drag.yaw_radians, before.yaw_radians) &&
            nearly_equal(drag.pitch_radians, before.pitch_radians);
@@ -119,7 +128,8 @@ has_unchanged_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
 
 [[nodiscard]] bool has_yawed(const NavigationTestContext& context,
                              const elf3d::NavigationSnapshot& yawed,
-                             const elf3d::NavigationSnapshot& before) {
+                             const elf3d::NavigationSnapshot& before)
+{
     return !nearly_equal(yawed.yaw_radians, before.yaw_radians) &&
            yawed.yaw_radians < before.yaw_radians &&
            nearly_equal(yawed.distance, before.distance) &&
@@ -128,13 +138,15 @@ has_unchanged_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
 
 [[nodiscard]] bool has_valid_pitch(const NavigationTestContext& context,
                                    const elf3d::NavigationSnapshot& pitched,
-                                   const elf3d::NavigationSnapshot& before) {
+                                   const elf3d::NavigationSnapshot& before)
+{
     return pitched.pitch_radians > before.pitch_radians &&
            pitched.pitch_radians >= context.navigation.settings().minimum_pitch_radians &&
            pitched.pitch_radians <= context.navigation.settings().maximum_pitch_radians;
 }
 
-[[nodiscard]] int verify_orbit(NavigationTestContext& context) {
+[[nodiscard]] int verify_orbit(NavigationTestContext& context)
+{
     const elf3d::NavigationSnapshot before = context.navigation.snapshot();
     elf3d::NavigationInput input = hovered_input();
     input.orbit_down = true;
@@ -147,6 +159,7 @@ has_unchanged_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
     if (!has_orbit_start(update_navigation(context, input), true)) {
         return 4;
     }
+
     const elf3d::NavigationSnapshot first_drag = context.navigation.snapshot();
     if (!has_initial_drag(first_drag, before)) {
         return 5;
@@ -156,6 +169,7 @@ has_unchanged_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
     if (!update_navigation(context, input)) {
         return 6;
     }
+
     const elf3d::NavigationSnapshot yawed = context.navigation.snapshot();
     if (!has_yawed(context, yawed, first_drag)) {
         return 7;
@@ -179,7 +193,8 @@ has_unchanged_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
 
 [[nodiscard]] bool
 has_eye_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
-                    const NavigationTestContext& context) {
+                    const NavigationTestContext& context)
+{
     const elf3d::NavigationSnapshot snapshot = context.navigation.snapshot();
     return update && !update.value().orbit_start_position_pixels.has_value() &&
            snapshot.is_orbiting && snapshot.is_pointer_captured &&
@@ -189,7 +204,8 @@ has_eye_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& up
 [[nodiscard]] bool has_eye_orbit_result(const NavigationTestContext& context,
                                         const elf3d::NavigationSnapshot& after,
                                         const elf3d::NavigationSnapshot& before,
-                                        elf3d::Float3 position, elf3d::Float3 forward) {
+                                        elf3d::Float3 position, elf3d::Float3 forward)
+{
     return nearly_equal(camera_position(context.fixture.scene, context.fixture.camera), position) &&
            !nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera), forward) &&
            !nearly_equal(after.yaw_radians, before.yaw_radians) &&
@@ -197,10 +213,12 @@ has_eye_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& up
            !context.navigation.has_screen_anchor();
 }
 
-[[nodiscard]] int verify_eye_orbit(NavigationTestContext& context) {
+[[nodiscard]] int verify_eye_orbit(NavigationTestContext& context)
+{
     if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
         return 142;
     }
+
     const elf3d::NavigationSnapshot before = context.navigation.snapshot();
     const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
     const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
@@ -233,7 +251,8 @@ has_eye_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& up
     return 0;
 }
 
-[[nodiscard]] int verify_normal_orbit_after_eye(NavigationTestContext& context) {
+[[nodiscard]] int verify_normal_orbit_after_eye(NavigationTestContext& context)
+{
     elf3d::NavigationInput input = hovered_input();
     input.orbit_down = true;
     input.pointer_position_pixels = {10.0F, 10.0F};
@@ -251,19 +270,22 @@ has_eye_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& up
 
 [[nodiscard]] bool updated_in_mode(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
                                    const NavigationTestContext& context,
-                                   elf3d::NavigationInteractionMode mode) {
+                                   elf3d::NavigationInteractionMode mode)
+{
     return update && context.navigation.snapshot().interaction_mode == mode;
 }
 
 [[nodiscard]] bool captured_in_mode(const NavigationTestContext& context,
-                                    elf3d::NavigationInteractionMode mode) {
+                                    elf3d::NavigationInteractionMode mode)
+{
     const elf3d::NavigationSnapshot snapshot = context.navigation.snapshot();
     return snapshot.is_pointer_captured && snapshot.interaction_mode == mode;
 }
 
 [[nodiscard]] bool has_pan_update(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
                                   const NavigationTestContext& context, elf3d::Float3 position,
-                                  elf3d::Float3 forward) {
+                                  elf3d::Float3 forward)
+{
     return update &&
            !nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
                          position) &&
@@ -273,11 +295,13 @@ has_eye_orbit_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& up
 
 [[nodiscard]] bool
 released_pointer(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
-                 const NavigationTestContext& context) {
+                 const NavigationTestContext& context)
+{
     return update && !context.navigation.snapshot().is_pointer_captured;
 }
 
-[[nodiscard]] int verify_orbit_to_pan_handoff(NavigationTestContext& context) {
+[[nodiscard]] int verify_orbit_to_pan_handoff(NavigationTestContext& context)
+{
     if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
         return 104;
     }
@@ -302,6 +326,7 @@ released_pointer(const elf3d::Result<elf3d::navigation::NavigationUpdate>& updat
         !captured_in_mode(context, elf3d::NavigationInteractionMode::pan)) {
         return 107;
     }
+
     const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
     const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
     input.pointer_delta_pixels = {80.0F, 40.0F};
@@ -318,7 +343,8 @@ released_pointer(const elf3d::Result<elf3d::navigation::NavigationUpdate>& updat
 
 [[nodiscard]] bool
 has_orbit_handoff(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
-                  const NavigationTestContext& context) {
+                  const NavigationTestContext& context)
+{
     return update &&
            context.navigation.snapshot().interaction_mode ==
                elf3d::NavigationInteractionMode::orbit &&
@@ -328,13 +354,15 @@ has_orbit_handoff(const elf3d::Result<elf3d::navigation::NavigationUpdate>& upda
 
 [[nodiscard]] bool
 changed_yaw_in_orbit(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
-                     const NavigationTestContext& context, float previous_yaw) {
+                     const NavigationTestContext& context, float previous_yaw)
+{
     return update && !nearly_equal(context.navigation.snapshot().yaw_radians, previous_yaw) &&
            context.navigation.snapshot().interaction_mode ==
                elf3d::NavigationInteractionMode::orbit;
 }
 
-[[nodiscard]] int verify_pan_to_orbit_handoff(NavigationTestContext& context) {
+[[nodiscard]] int verify_pan_to_orbit_handoff(NavigationTestContext& context)
+{
     if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
         return 110;
     }
@@ -353,6 +381,7 @@ changed_yaw_in_orbit(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
     if (!has_orbit_handoff(update_navigation(context, input), context)) {
         return 113;
     }
+
     const float yaw = context.navigation.snapshot().yaw_radians;
     input.pointer_delta_pixels = {80.0F, 0.0F};
     if (!changed_yaw_in_orbit(update_navigation(context, input), context, yaw)) {
@@ -368,7 +397,8 @@ changed_yaw_in_orbit(const elf3d::Result<elf3d::navigation::NavigationUpdate>& u
 
 using NavigationStep = int (*)(NavigationTestContext&);
 
-[[nodiscard]] int run_navigation_steps(NavigationTestContext& context) {
+[[nodiscard]] int run_navigation_steps(NavigationTestContext& context)
+{
     constexpr std::array<NavigationStep, 7> steps{{
         verify_reset_and_anchor,
         verify_fit_to_scene,
@@ -389,16 +419,19 @@ using NavigationStep = int (*)(NavigationTestContext&);
 
 } // namespace
 
-int elf3d_navigation_test() {
+int elf3d_navigation_test()
+{
     NavigationTestContext context{1};
     const int interaction = run_navigation_steps(context);
     if (interaction != 0) {
         return interaction;
     }
+
     const int keyboard = elf3d_navigation_keyboard_test();
     if (keyboard != 0) {
         return keyboard;
     }
+
     const int continuous = elf3d_navigation_continuous_motion_test();
     if (continuous != 0) {
         return continuous;

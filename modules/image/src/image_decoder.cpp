@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/image.h>
 
 #include <elf3d/core/assert.h>
 #include <elf3d/core/error.h>
@@ -16,21 +16,21 @@ module;
 #include <string_view>
 #include <utility>
 #include <vector>
-
-module elf.image;
-
 namespace elf3d::image {
 namespace {
 
-[[noreturn]] void fatal_image_allocation_failure() noexcept {
+[[noreturn]] void fatal_image_allocation_failure() noexcept
+{
     fatal_error("Elf3D image decoder memory allocation failed");
 }
 
-[[noreturn]] void fatal_unexpected_image_boundary_exception() noexcept {
+[[noreturn]] void fatal_unexpected_image_boundary_exception() noexcept
+{
     fatal_error("Elf3D image decoder encountered an unexpected exception");
 }
 
-[[nodiscard]] Result<std::size_t> rgba8_size(std::uint32_t width, std::uint32_t height) {
+[[nodiscard]] Result<std::size_t> rgba8_size(std::uint32_t width, std::uint32_t height)
+{
     if (width == 0 || height == 0) {
         return Error{ErrorCode::zero_image_dimensions,
                      "Decoded images require positive width and height"};
@@ -42,6 +42,7 @@ namespace {
 
     const std::size_t width_value = static_cast<std::size_t>(width);
     const std::size_t height_value = static_cast<std::size_t>(height);
+
     if (width_value > maximum_decoded_bytes / 4 ||
         height_value > maximum_decoded_bytes / (width_value * 4)) {
         return Error{ErrorCode::decoded_image_size_overflow,
@@ -50,7 +51,8 @@ namespace {
     return width_value * height_value * 4;
 }
 
-[[nodiscard]] bool has_png_signature(std::span<const std::byte> encoded) noexcept {
+[[nodiscard]] bool has_png_signature(std::span<const std::byte> encoded) noexcept
+{
     constexpr std::uint8_t signature[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
     if (encoded.size() < std::size(signature)) {
         return false;
@@ -63,7 +65,8 @@ namespace {
     return true;
 }
 
-[[nodiscard]] bool has_jpeg_signature(std::span<const std::byte> encoded) noexcept {
+[[nodiscard]] bool has_jpeg_signature(std::span<const std::byte> encoded) noexcept
+{
     return encoded.size() >= 3 && std::to_integer<std::uint8_t>(encoded[0]) == 0xffU &&
            std::to_integer<std::uint8_t>(encoded[1]) == 0xd8U &&
            std::to_integer<std::uint8_t>(encoded[2]) == 0xffU;
@@ -71,11 +74,13 @@ namespace {
 
 class PngImage final {
   public:
-    PngImage() noexcept {
+    PngImage() noexcept
+    {
         value_.version = PNG_IMAGE_VERSION;
     }
 
-    ~PngImage() {
+    ~PngImage()
+    {
         png_image_free(&value_);
     }
 
@@ -84,7 +89,8 @@ class PngImage final {
     PngImage(PngImage&&) = delete;
     PngImage& operator=(PngImage&&) = delete;
 
-    [[nodiscard]] png_image& value() noexcept {
+    [[nodiscard]] png_image& value() noexcept
+    {
         return value_;
     }
 
@@ -92,13 +98,15 @@ class PngImage final {
     png_image value_{};
 };
 
-[[nodiscard]] Error png_decode_error(std::string_view prefix, const char* raw_message) {
+[[nodiscard]] Error png_decode_error(std::string_view prefix, const char* raw_message)
+{
     const std::string_view message =
         raw_message != nullptr && raw_message[0] != '\0' ? raw_message : "unknown error";
     return Error{ErrorCode::image_decode_failed, std::string{prefix} + ": " + std::string{message}};
 }
 
-[[nodiscard]] Result<DecodedImage> decode_png(std::span<const std::byte> encoded) {
+[[nodiscard]] Result<DecodedImage> decode_png(std::span<const std::byte> encoded)
+{
     PngImage owner;
     png_image& image = owner.value();
     if (png_image_begin_read_from_memory(&image, encoded.data(), encoded.size()) == 0) {
@@ -106,12 +114,14 @@ class PngImage final {
     }
 
     const Result<std::size_t> decoded_size = rgba8_size(image.width, image.height);
+
     if (!decoded_size) {
         return decoded_size.error();
     }
 
     DecodedImage result;
     result.width = image.width;
+
     result.height = image.height;
     result.pixels.resize(decoded_size.value());
     image.format = PNG_FORMAT_RGBA;
@@ -131,13 +141,16 @@ struct JpegErrorManager final {
     JpegJumpState* jump_state = nullptr;
 };
 
-extern "C" void jpeg_fail(j_common_ptr decoder) {
+extern "C" void jpeg_fail(j_common_ptr decoder)
+{
     auto* error = reinterpret_cast<JpegErrorManager*>(decoder->err);
     decoder->err->format_message(decoder, error->jump_state->message);
     longjmp(error->jump_state->jump, 1);
 }
 
-extern "C" void jpeg_discard_message(j_common_ptr) {}
+extern "C" void jpeg_discard_message(j_common_ptr)
+{
+}
 
 struct JpegContext final {
     JpegJumpState jump_state{};
@@ -147,7 +160,8 @@ struct JpegContext final {
     std::vector<JSAMPLE> scanline;
     bool decoder_created = false;
 
-    ~JpegContext() {
+    ~JpegContext()
+    {
         if (decoder_created) {
             jpeg_destroy_decompress(&decoder);
         }
@@ -161,9 +175,11 @@ struct JpegContext final {
 #pragma warning(push)
 #pragma warning(disable : 4611)
 #endif
-void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
+void copy_jpeg_scanline(JpegContext& context, std::size_t row_index)
+{
     const std::size_t destination_row =
         row_index * static_cast<std::size_t>(context.image.width) * 4;
+
     for (std::size_t column = 0; column < context.image.width; ++column) {
         const std::size_t source = column * 3;
         const std::size_t destination = destination_row + column * 4;
@@ -176,7 +192,8 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
     }
 }
 
-[[nodiscard]] Result<void> decode_jpeg_scanlines(JpegContext& context) {
+[[nodiscard]] Result<void> decode_jpeg_scanlines(JpegContext& context)
+{
     while (context.decoder.output_scanline < context.decoder.output_height) {
         JSAMPROW row = context.scanline.data();
         if (jpeg_read_scanlines(&context.decoder, &row, 1) != 1) {
@@ -188,7 +205,8 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
 }
 
 [[nodiscard]] Result<void> read_jpeg_header(JpegContext& context,
-                                            std::span<const std::byte> encoded) {
+                                            std::span<const std::byte> encoded)
+{
     context.decoder_created = true;
     jpeg_create_decompress(&context.decoder);
     context.decoder.mem->max_memory_to_use = static_cast<long>(maximum_decoded_bytes);
@@ -200,7 +218,8 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
     return {};
 }
 
-[[nodiscard]] Result<void> allocate_jpeg_output(JpegContext& context) {
+[[nodiscard]] Result<void> allocate_jpeg_output(JpegContext& context)
+{
     const Result<std::size_t> decoded_size =
         rgba8_size(context.decoder.image_width, context.decoder.image_height);
     if (!decoded_size) {
@@ -215,7 +234,8 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
     return {};
 }
 
-[[nodiscard]] Result<void> start_jpeg_rgb_output(JpegContext& context) {
+[[nodiscard]] Result<void> start_jpeg_rgb_output(JpegContext& context)
+{
     if (jpeg_start_decompress(&context.decoder) == FALSE ||
         context.decoder.output_width != context.image.width ||
         context.decoder.output_height != context.image.height ||
@@ -226,7 +246,8 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
     return {};
 }
 
-[[nodiscard]] Result<DecodedImage> decode_jpeg(std::span<const std::byte> encoded) {
+[[nodiscard]] Result<DecodedImage> decode_jpeg(std::span<const std::byte> encoded)
+{
     auto context = std::make_unique<JpegContext>();
     context->decoder.err = jpeg_std_error(&context->error.base);
     context->error.base.error_exit = jpeg_fail;
@@ -244,16 +265,19 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
     if (!header) {
         return header.error();
     }
+
     const Result<void> output = allocate_jpeg_output(*context);
     if (!output) {
         return output.error();
     }
+
     const Result<void> start = start_jpeg_rgb_output(*context);
     if (!start) {
         return start.error();
     }
 
     const Result<void> scanlines = decode_jpeg_scanlines(*context);
+
     if (!scanlines) {
         return scanlines.error();
     }
@@ -261,6 +285,7 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
     if (jpeg_finish_decompress(&context->decoder) == FALSE) {
         return Error{ErrorCode::image_decode_failed, "JPEG pixel decoding did not complete"};
     }
+
     jpeg_destroy_decompress(&context->decoder);
     context->decoder_created = false;
     return std::move(context->image);
@@ -271,7 +296,8 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index) {
 
 } // namespace
 
-Result<DecodedImage> decode_png_or_jpeg(std::span<const std::byte> encoded) noexcept {
+Result<DecodedImage> decode_png_or_jpeg(std::span<const std::byte> encoded) noexcept
+{
     if (encoded.empty()) {
         return Error{ErrorCode::image_decode_failed, "Image decoding requires encoded bytes"};
     }

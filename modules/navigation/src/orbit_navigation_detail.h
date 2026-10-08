@@ -6,7 +6,8 @@
 
 namespace elf3d::navigation::navigation_detail {
 
-[[nodiscard]] inline bool finite_vector(const Float3& value) noexcept {
+[[nodiscard]] inline bool finite_vector(const Float3& value) noexcept
+{
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 

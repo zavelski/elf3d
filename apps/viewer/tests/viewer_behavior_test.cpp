@@ -14,11 +14,13 @@
 
 namespace {
 
-[[nodiscard]] bool nearly_equal(float left, float right) noexcept {
+[[nodiscard]] bool nearly_equal(float left, float right) noexcept
+{
     return std::abs(left - right) <= 1.0e-6F;
 }
 
-[[nodiscard]] int verify_dpi_and_pointer_precision() {
+[[nodiscard]] int verify_dpi_and_pointer_precision()
+{
     using elf3d::Extent2D;
     using elf3d::Float2;
     using elf3d::viewer::content_extent_in_pixels;
@@ -29,11 +31,13 @@ namespace {
         content_extent_in_pixels({800.0F, 600.0F}, {2.0F, 2.0F}) != Extent2D{1600, 1200}) {
         return 1;
     }
+
     const Float2 scaled =
         pointer_delta_in_target_pixels({0.25F, -0.125F}, {800.0F, 600.0F}, {1600, 1200});
     if (!nearly_equal(scaled.x, 0.5F) || !nearly_equal(scaled.y, -0.25F)) {
         return 2;
     }
+
     const Float2 fractional =
         pointer_delta_in_target_pixels({0.1F, 0.2F}, {1000.0F, 500.0F}, {1500, 750});
     if (!nearly_equal(fractional.x, 0.15F) || !nearly_equal(fractional.y, 0.3F)) {
@@ -42,7 +46,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_wheel_accumulation() {
+[[nodiscard]] int verify_wheel_accumulation()
+{
     float accumulated = 0.0F;
     for (double delta : {0.125, 0.25, -0.0625}) {
         const std::optional<float> next =
@@ -61,7 +66,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_retained_frame_lifecycle_invalidation() {
+[[nodiscard]] int verify_retained_frame_lifecycle_invalidation()
+{
     using elf3d::viewer::RetainedViewportFrameKey;
     using elf3d::viewer::viewport_frame_render_required;
     RetainedViewportFrameKey key;
@@ -91,7 +97,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_retained_frame_mechanism_invalidation() {
+[[nodiscard]] int verify_retained_frame_mechanism_invalidation()
+{
     using elf3d::viewer::RetainedViewportFrameKey;
     using elf3d::viewer::viewport_frame_render_required;
     RetainedViewportFrameKey key;
@@ -110,7 +117,8 @@ namespace {
     return viewport_frame_render_required(key, changed, true, false) ? 0 : 37;
 }
 
-[[nodiscard]] int verify_command_fifo() {
+[[nodiscard]] int verify_command_fifo()
+{
     using namespace elf3d::viewer;
     ViewerCapabilitySnapshot capabilities;
     capabilities.view_available = true;
@@ -137,7 +145,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_command_scene_barrier() {
+[[nodiscard]] int verify_command_scene_barrier()
+{
     using namespace elf3d::viewer;
     ViewerCapabilitySnapshot capabilities;
     capabilities.scene_imported = true;
@@ -170,7 +179,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_command_disablement() {
+[[nodiscard]] int verify_command_disablement()
+{
     using namespace elf3d::viewer;
     ViewerCapabilitySnapshot disabled;
     ViewerCommandDispatcher commands;
@@ -189,7 +199,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_single_owner_command_failure() {
+[[nodiscard]] int verify_single_owner_command_failure()
+{
     using namespace elf3d::viewer;
     ViewerCapabilitySnapshot enabled;
     enabled.scene_imported = true;
@@ -217,7 +228,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_command_queue_limit() {
+[[nodiscard]] int verify_command_queue_limit()
+{
     using namespace elf3d::viewer;
     ViewerCommandDispatcher commands;
     commands.begin_frame({});
@@ -228,21 +240,23 @@ namespace {
 }
 
 [[nodiscard]] bool
-open_request_matches(const std::optional<elf3d::viewer::SceneReplacementRequest>& request) {
+open_request_matches(const std::optional<elf3d::viewer::SceneReplacementRequest>& request)
+{
     using elf3d::viewer::SceneReplacementKind;
     return request.has_value() && request->kind == SceneReplacementKind::open_model &&
            request->source_path == "a.glb";
 }
 
-[[nodiscard]] bool
-failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow) {
+[[nodiscard]] bool failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
+{
     using namespace elf3d::viewer;
     const WorkflowSnapshot snapshot = workflow.snapshot();
     return snapshot.phase == WorkflowPhase::failed && snapshot.error.has_value() &&
            workflow.attempted_this_frame();
 }
 
-[[nodiscard]] int verify_failed_scene_replacement_workflow() {
+[[nodiscard]] int verify_failed_scene_replacement_workflow()
+{
     using namespace elf3d::viewer;
     SceneReplacementWorkflow workflow;
     workflow.begin_frame();
@@ -252,10 +266,12 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
             WorkflowActivation::busy) {
         return 21;
     }
+
     std::optional<SceneReplacementRequest> request = workflow.begin_execution();
     if (!open_request_matches(request) || workflow.begin_execution().has_value()) {
         return 22;
     }
+
     workflow.fail(elf3d::Error{elf3d::ErrorCode::invalid_argument, "Expected workflow failure"});
     if (!failed_workflow_matches(workflow) ||
         workflow.activate(SceneReplacementRequest{SceneReplacementKind::close_to_empty, {}}) !=
@@ -265,7 +281,8 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
     return 0;
 }
 
-[[nodiscard]] int verify_successful_scene_replacement_workflow() {
+[[nodiscard]] int verify_successful_scene_replacement_workflow()
+{
     using namespace elf3d::viewer;
     SceneReplacementWorkflow workflow;
     workflow.begin_frame();
@@ -273,15 +290,18 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
         WorkflowActivation::accepted) {
         return 24;
     }
+
     const std::optional<SceneReplacementRequest> request = workflow.begin_execution();
     if (!request.has_value() || request->kind != SceneReplacementKind::close_to_empty) {
         return 25;
     }
+
     workflow.succeed();
     return workflow.snapshot().phase == WorkflowPhase::succeeded ? 0 : 26;
 }
 
-[[nodiscard]] int verify_save_and_editor_workflows() {
+[[nodiscard]] int verify_save_and_editor_workflows()
+{
     using namespace elf3d::viewer;
     ModelSaveWorkflow save;
     save.begin_frame();
@@ -289,10 +309,12 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
         save.activate(ModelSaveRequest{"other.glb"}) != WorkflowActivation::busy) {
         return 27;
     }
+
     const std::optional<ModelSaveRequest> save_request = save.begin_execution();
     if (!save_request.has_value() || save_request->target_path != "model.glb") {
         return 28;
     }
+
     save.succeed();
     if (save.snapshot().phase != WorkflowPhase::succeeded) {
         return 29;
@@ -303,15 +325,18 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
         WorkflowActivation::accepted) {
         return 30;
     }
+
     const std::optional<ExternalEditorLaunchRequest> editor_request = editor.begin_execution();
     if (!editor_request.has_value() || editor_request->editor_label != "Editor") {
         return 31;
     }
+
     editor.cancel();
     return editor.snapshot().phase == WorkflowPhase::cancelled ? 0 : 32;
 }
 
-[[nodiscard]] int verify_component_state_ownership() {
+[[nodiscard]] int verify_component_state_ownership()
+{
     using namespace elf3d::viewer;
     ViewerShellState shell;
     ViewerRenderingState rendering;
@@ -348,14 +373,16 @@ failed_workflow_matches(const elf3d::viewer::SceneReplacementWorkflow& workflow)
 class TemporaryViewerState final {
   public:
     TemporaryViewerState()
-        : path_(std::filesystem::path{ELF3D_VIEWER_TEST_BINARY_DIR} / "viewer_behavior") {
+        : path_(std::filesystem::path{ELF3D_VIEWER_TEST_BINARY_DIR} / "viewer_behavior")
+    {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
         std::filesystem::create_directories(path_ / "first" / "nested", error);
         std::filesystem::create_directories(path_ / "second", error);
     }
 
-    ~TemporaryViewerState() {
+    ~TemporaryViewerState()
+    {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
     }
@@ -363,7 +390,8 @@ class TemporaryViewerState final {
     TemporaryViewerState(const TemporaryViewerState&) = delete;
     TemporaryViewerState& operator=(const TemporaryViewerState&) = delete;
 
-    [[nodiscard]] const std::filesystem::path& path() const noexcept {
+    [[nodiscard]] const std::filesystem::path& path() const noexcept
+    {
         return path_;
     }
 
@@ -371,13 +399,15 @@ class TemporaryViewerState final {
     std::filesystem::path path_;
 };
 
-[[nodiscard]] bool write_file(const std::filesystem::path& path, std::string_view content) {
+[[nodiscard]] bool write_file(const std::filesystem::path& path, std::string_view content)
+{
     std::ofstream output{path, std::ios::binary | std::ios::trunc};
     output << content;
     return output.good();
 }
 
-[[nodiscard]] bool browser_entries_are_filtered(const elf3d::viewer::FileBrowserState& browser) {
+[[nodiscard]] bool browser_entries_are_filtered(const elf3d::viewer::FileBrowserState& browser)
+{
     return browser.entries.size() == 3 && browser.entries[0].directory &&
            browser.entries[0].label == "nested" && !browser.entries[1].directory &&
            browser.entries[1].label == "model.gltf" && !browser.entries[2].directory &&
@@ -385,7 +415,8 @@ class TemporaryViewerState final {
 }
 
 [[nodiscard]] int verify_preferences_persistence(const TemporaryViewerState& temporary,
-                                                 const std::filesystem::path& first) {
+                                                 const std::filesystem::path& first)
+{
     using namespace elf3d::viewer;
     ViewerPreferencesState preferences;
     preferences.storage_path = temporary.path() / "settings" / "viewer-state.ini";
@@ -402,7 +433,8 @@ class TemporaryViewerState final {
 
 [[nodiscard]] int verify_browser_history(const std::filesystem::path& first,
                                          const std::filesystem::path& second,
-                                         elf3d::viewer::FileBrowserState& browser) {
+                                         elf3d::viewer::FileBrowserState& browser)
+{
     using namespace elf3d::viewer;
     set_file_browser_directory(browser, first);
     set_file_browser_directory(browser, second);
@@ -416,19 +448,22 @@ class TemporaryViewerState final {
 }
 
 [[nodiscard]] int verify_browser_selection(const std::filesystem::path& model,
-                                           elf3d::viewer::FileBrowserState& browser) {
+                                           elf3d::viewer::FileBrowserState& browser)
+{
     using namespace elf3d::viewer;
     select_file_browser_file(browser, model);
     if (browser.selected_path.empty() ||
         std::string_view{browser.file_path.data()} != path_to_utf8(model)) {
         return 41;
     }
+
     clear_file_browser_selection(browser);
     return 0;
 }
 
 [[nodiscard]] int verify_invalid_browser_directory(const TemporaryViewerState& temporary,
-                                                   elf3d::viewer::FileBrowserState& browser) {
+                                                   elf3d::viewer::FileBrowserState& browser)
+{
     using namespace elf3d::viewer;
     const std::filesystem::path previous_directory = browser.directory;
     set_file_browser_directory(browser, temporary.path() / "missing");
@@ -441,12 +476,14 @@ class TemporaryViewerState final {
 
 [[nodiscard]] int verify_browser_navigation(const TemporaryViewerState& temporary,
                                             const std::filesystem::path& first,
-                                            const std::filesystem::path& second) {
+                                            const std::filesystem::path& second)
+{
     elf3d::viewer::FileBrowserState browser;
     const int history = verify_browser_history(first, second, browser);
     if (history != 0) {
         return history;
     }
+
     const int selection = verify_browser_selection(first / "model.gltf", browser);
     if (selection != 0) {
         return selection;
@@ -454,7 +491,8 @@ class TemporaryViewerState final {
     return verify_invalid_browser_directory(temporary, browser);
 }
 
-[[nodiscard]] int verify_preferences_and_browser() {
+[[nodiscard]] int verify_preferences_and_browser()
+{
     TemporaryViewerState temporary;
     const std::filesystem::path first = temporary.path() / "first";
     const std::filesystem::path second = temporary.path() / "second";
@@ -462,6 +500,7 @@ class TemporaryViewerState final {
         !write_file(first / "ignored.txt", "ignored")) {
         return 38;
     }
+
     const int preferences = verify_preferences_persistence(temporary, first);
     if (preferences != 0) {
         return preferences;
@@ -469,15 +508,18 @@ class TemporaryViewerState final {
     return verify_browser_navigation(temporary, first, second);
 }
 
-[[nodiscard]] int verify_input_and_frame_behavior() {
+[[nodiscard]] int verify_input_and_frame_behavior()
+{
     const int dpi = verify_dpi_and_pointer_precision();
     if (dpi != 0) {
         return dpi;
     }
+
     const int wheel = verify_wheel_accumulation();
     if (wheel != 0) {
         return wheel;
     }
+
     const int retained = verify_retained_frame_lifecycle_invalidation();
     if (retained != 0) {
         return retained;
@@ -485,23 +527,28 @@ class TemporaryViewerState final {
     return verify_retained_frame_mechanism_invalidation();
 }
 
-[[nodiscard]] int verify_command_behavior() {
+[[nodiscard]] int verify_command_behavior()
+{
     const int fifo = verify_command_fifo();
     if (fifo != 0) {
         return fifo;
     }
+
     const int barrier = verify_command_scene_barrier();
     if (barrier != 0) {
         return barrier;
     }
+
     const int disablement = verify_command_disablement();
     if (disablement != 0) {
         return disablement;
     }
+
     const int failure = verify_single_owner_command_failure();
     if (failure != 0) {
         return failure;
     }
+
     const int queue_limit = verify_command_queue_limit();
     if (queue_limit != 0) {
         return queue_limit;
@@ -509,19 +556,23 @@ class TemporaryViewerState final {
     return 0;
 }
 
-[[nodiscard]] int verify_workflow_and_state_behavior() {
+[[nodiscard]] int verify_workflow_and_state_behavior()
+{
     const int failed_workflow = verify_failed_scene_replacement_workflow();
     if (failed_workflow != 0) {
         return failed_workflow;
     }
+
     const int successful_workflow = verify_successful_scene_replacement_workflow();
     if (successful_workflow != 0) {
         return successful_workflow;
     }
+
     const int workflows = verify_save_and_editor_workflows();
     if (workflows != 0) {
         return workflows;
     }
+
     const int state = verify_component_state_ownership();
     if (state != 0) {
         return state;
@@ -531,11 +582,28 @@ class TemporaryViewerState final {
 
 } // namespace
 
-int main() {
+int main()
+{
+    const std::string_view unicode_path{"models/\xd1\x82\xd0\xb5\xd1\x81\xd1\x82.glb"};
+    const auto converted = elf3d::viewer::path_from_utf8(unicode_path);
+    if (!converted || elf3d::viewer::path_to_utf8(converted.value()) != unicode_path) {
+        return 101;
+    }
+    const auto null_path = elf3d::viewer::path_from_utf8(std::string_view{"bad\0name", 8});
+    if (null_path || null_path.error().code() != elf3d::ErrorCode::invalid_argument) {
+        return 102;
+    }
+#if defined(_WIN32)
+    const auto invalid = elf3d::viewer::path_from_utf8("\xc3\x28");
+    if (invalid || invalid.error().code() != elf3d::ErrorCode::invalid_argument) {
+        return 103;
+    }
+#endif
     const int input = verify_input_and_frame_behavior();
     if (input != 0) {
         return input;
     }
+
     const int commands = verify_command_behavior();
     if (commands != 0) {
         return commands;

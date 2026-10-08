@@ -1,3 +1,6 @@
+#include <elf3d/model.h>
+
+#include <elf3d/core/detail/exception_boundary.h>
 #include <elf3d/model/detail/document_storage.h>
 
 #include <cstdint>
@@ -10,7 +13,8 @@ namespace model::detail {
 
 class DocumentValidation final {
   public:
-    [[nodiscard]] static DocumentValidationReport validate(DocumentView document) {
+    [[nodiscard]] static DocumentValidationReport validate(DocumentView document)
+    {
         DocumentValidationReport report;
         const Document* owner = document.document_;
         if (owner == nullptr || owner->storage_ == nullptr) {
@@ -25,6 +29,7 @@ class DocumentValidation final {
                 DocumentDiagnosticCode::stale_preserved_metadata,
                 "Preserved glTF extras and unknown extensions are stale after document mutation"});
         }
+
         validate_default_scene(storage, report);
         validate_scene_roots(storage, report);
         validate_nodes(storage, report);
@@ -39,13 +44,15 @@ class DocumentValidation final {
 
   private:
     static void add_error(DocumentValidationReport& report, DocumentDiagnosticCode code,
-                          std::string_view message) {
+                          std::string_view message)
+    {
         report.diagnostics.push_back(
             DocumentDiagnostic{DocumentDiagnosticSeverity::error, code, std::string{message}});
     }
 
     static void validate_default_scene(const Document::Storage& storage,
-                                       DocumentValidationReport& report) {
+                                       DocumentValidationReport& report)
+    {
         if (storage.default_scene.has_value() && !storage.scene(*storage.default_scene)) {
             add_error(report, DocumentDiagnosticCode::invalid_reference,
                       "Document default scene is invalid");
@@ -53,7 +60,8 @@ class DocumentValidation final {
     }
 
     static void validate_scene_roots(const Document::Storage& storage,
-                                     DocumentValidationReport& report) {
+                                     DocumentValidationReport& report)
+    {
         for (const Document::Storage::SceneRecord& scene_record : storage.scenes) {
             for (const NodeId root : scene_record.roots) {
                 const Result<const Document::Storage::NodeRecord*> root_record = storage.node(root);
@@ -71,10 +79,12 @@ class DocumentValidation final {
     }
 
     static void validate_node_hierarchy(const Document::Storage& storage,
-                                        DocumentValidationReport& report) {
+                                        DocumentValidationReport& report)
+    {
         std::vector<std::uint8_t> states(storage.nodes.size(), 0U);
         std::vector<std::size_t> path;
         path.reserve(storage.nodes.size());
+
         for (std::size_t start = 0; start < storage.nodes.size(); ++start) {
             if (states[start] == 2U) {
                 continue;
@@ -88,6 +98,7 @@ class DocumentValidation final {
                 if (!parent.has_value()) {
                     break;
                 }
+
                 const Result<const Document::Storage::NodeRecord*> parent_record =
                     storage.node(*parent);
                 if (!parent_record) {
@@ -110,7 +121,8 @@ class DocumentValidation final {
         }
     }
 
-    static void validate_nodes(const Document::Storage& storage, DocumentValidationReport& report) {
+    static void validate_nodes(const Document::Storage& storage, DocumentValidationReport& report)
+    {
         for (const Document::Storage::NodeRecord& node_record : storage.nodes) {
             if (!finite(node_record.local_matrix)) {
                 add_error(report, DocumentDiagnosticCode::invalid_transform,
@@ -130,11 +142,13 @@ class DocumentValidation final {
                           "Node contains an invalid perspective camera");
             }
         }
+
         validate_node_hierarchy(storage, report);
     }
 
     static void validate_mesh_primitives(const Document::Storage& storage,
-                                         DocumentValidationReport& report) {
+                                         DocumentValidationReport& report)
+    {
         for (const Document::Storage::MeshRecord& mesh_record : storage.meshes) {
             for (const PrimitiveId primitive_id : mesh_record.primitives) {
                 const Result<const Document::Storage::PrimitiveRecord*> primitive_record =
@@ -153,7 +167,8 @@ class DocumentValidation final {
     }
 
     static void validate_primitives(const Document::Storage& storage,
-                                    DocumentValidationReport& report) {
+                                    DocumentValidationReport& report)
+    {
         for (const Document::Storage::PrimitiveRecord& primitive_record : storage.primitives) {
             if (!storage.mesh(primitive_record.mesh)) {
                 add_error(report, DocumentDiagnosticCode::invalid_reference,
@@ -163,6 +178,7 @@ class DocumentValidation final {
                 add_error(report, DocumentDiagnosticCode::invalid_reference,
                           "Primitive references an invalid material");
             }
+
             const Result<void> data_result = validate_primitive_data(primitive_record.data.view());
             if (!data_result) {
                 add_error(report, DocumentDiagnosticCode::invalid_geometry,
@@ -172,7 +188,8 @@ class DocumentValidation final {
     }
 
     static void validate_materials(const Document::Storage& storage,
-                                   DocumentValidationReport& report) {
+                                   DocumentValidationReport& report)
+    {
         for (const Document::Storage::MaterialRecord& material_record : storage.materials) {
             const ModelMaterialDescription& description = material_record.description;
             if (!storage.valid_material_textures(description)) {
@@ -190,8 +207,8 @@ class DocumentValidation final {
         }
     }
 
-    static void validate_images(const Document::Storage& storage,
-                                DocumentValidationReport& report) {
+    static void validate_images(const Document::Storage& storage, DocumentValidationReport& report)
+    {
         for (const Document::Storage::ImageRecord& image_record : storage.images) {
             const ModelImageDescription description{
                 image_record.width,
@@ -209,7 +226,8 @@ class DocumentValidation final {
     }
 
     static void validate_textures(const Document::Storage& storage,
-                                  DocumentValidationReport& report) {
+                                  DocumentValidationReport& report)
+    {
         for (const Document::Storage::TextureRecord& texture_record : storage.textures) {
             if (!storage.image(texture_record.description.image) ||
                 !storage.sampler(texture_record.description.sampler)) {
@@ -220,7 +238,8 @@ class DocumentValidation final {
     }
 
     static void validate_samplers(const Document::Storage& storage,
-                                  DocumentValidationReport& report) {
+                                  DocumentValidationReport& report)
+    {
         for (const Document::Storage::SamplerRecord& sampler_record : storage.samplers) {
             const SamplerDescription& description = sampler_record.description;
             if (!valid_wrap(description.wrap_u) || !valid_wrap(description.wrap_v) ||
@@ -235,8 +254,10 @@ class DocumentValidation final {
 
 } // namespace model::detail
 
-DocumentValidationReport validate_document(DocumentView document) {
-    return model::detail::DocumentValidation::validate(document);
+DocumentValidationReport validate_document(DocumentView document) noexcept
+{
+    return detail::fatal_exception_boundary(
+        [&] { return model::detail::DocumentValidation::validate(document); });
 }
 
 } // namespace elf3d

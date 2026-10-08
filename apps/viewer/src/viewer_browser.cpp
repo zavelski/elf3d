@@ -21,7 +21,8 @@
 
 namespace elf3d::viewer {
 
-[[nodiscard]] bool is_file_io_error(elf3d::ErrorCode code) noexcept {
+[[nodiscard]] bool is_file_io_error(elf3d::ErrorCode code) noexcept
+{
     switch (code) {
     case elf3d::ErrorCode::source_file_not_found:
     case elf3d::ErrorCode::source_file_read_failed:
@@ -34,7 +35,8 @@ namespace elf3d::viewer {
     }
 }
 
-[[nodiscard]] bool is_unsupported_gltf_error(elf3d::ErrorCode code) noexcept {
+[[nodiscard]] bool is_unsupported_gltf_error(elf3d::ErrorCode code) noexcept
+{
     switch (code) {
     case elf3d::ErrorCode::unsupported_scene_format:
     case elf3d::ErrorCode::unsupported_required_extension:
@@ -49,7 +51,8 @@ namespace elf3d::viewer {
     }
 }
 
-[[nodiscard]] bool is_invalid_gltf_structure_error(elf3d::ErrorCode code) noexcept {
+[[nodiscard]] bool is_invalid_gltf_structure_error(elf3d::ErrorCode code) noexcept
+{
     switch (code) {
     case elf3d::ErrorCode::malformed_gltf:
     case elf3d::ErrorCode::malformed_glb:
@@ -66,7 +69,8 @@ namespace elf3d::viewer {
     }
 }
 
-[[nodiscard]] bool is_invalid_gltf_payload_error(elf3d::ErrorCode code) noexcept {
+[[nodiscard]] bool is_invalid_gltf_payload_error(elf3d::ErrorCode code) noexcept
+{
     switch (code) {
     case elf3d::ErrorCode::malformed_data_uri:
     case elf3d::ErrorCode::invalid_base64_payload:
@@ -79,7 +83,8 @@ namespace elf3d::viewer {
     }
 }
 
-[[nodiscard]] bool is_resource_limit_error(elf3d::ErrorCode code) noexcept {
+[[nodiscard]] bool is_resource_limit_error(elf3d::ErrorCode code) noexcept
+{
     switch (code) {
     case elf3d::ErrorCode::resource_limit_exceeded:
     case elf3d::ErrorCode::size_overflow:
@@ -93,7 +98,8 @@ namespace elf3d::viewer {
     }
 }
 
-[[nodiscard]] const char* error_category(elf3d::ErrorCode code) noexcept {
+[[nodiscard]] const char* error_category(elf3d::ErrorCode code) noexcept
+{
     if (is_file_io_error(code)) {
         return "File I/O";
     }
@@ -109,7 +115,8 @@ namespace elf3d::viewer {
 constexpr int professional_dialog_style_var_count = 7;
 constexpr int professional_dialog_style_color_count = 27;
 
-void push_professional_dialog_style() {
+void push_professional_dialog_style()
+{
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{16.0F, 14.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{9.0F, 6.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{8.0F, 8.0F});
@@ -146,26 +153,31 @@ void push_professional_dialog_style() {
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, ImVec4{0.400F, 0.560F, 0.650F, 1.00F});
 }
 
-void pop_professional_dialog_style() {
+void pop_professional_dialog_style()
+{
     ImGui::PopStyleColor(professional_dialog_style_color_count);
     ImGui::PopStyleVar(professional_dialog_style_var_count);
 }
 
-void push_primary_action_style() {
+void push_primary_action_style()
+{
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.105F, 0.385F, 0.610F, 1.00F});
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.135F, 0.480F, 0.740F, 1.00F});
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.090F, 0.325F, 0.520F, 1.00F});
 }
 
-void pop_primary_action_style() {
+void pop_primary_action_style()
+{
     ImGui::PopStyleColor(3);
 }
 
 [[nodiscard]] bool open_browser_toolbar_button(const char* label, const char* tooltip_text,
-                                               bool enabled = true) {
+                                               bool enabled = true)
+{
     if (!enabled) {
         ImGui::BeginDisabled();
     }
+
     const float size = ImGui::GetFrameHeight();
     const float width =
         std::max(size, ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0F);
@@ -178,13 +190,18 @@ void pop_primary_action_style() {
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-open_browser_file_candidate(const FileBrowserState& browser) {
+open_browser_file_candidate(const FileBrowserState& browser)
+{
     const std::string text{browser.file_path.data()};
     if (text.empty()) {
         return std::nullopt;
     }
 
-    std::filesystem::path candidate = path_from_utf8(text);
+    Result<std::filesystem::path> converted = path_from_utf8(text);
+    if (!converted) {
+        return std::nullopt;
+    }
+    std::filesystem::path candidate = std::move(converted).value();
     if (candidate.is_relative()) {
         candidate = browser.directory / candidate;
     }
@@ -199,12 +216,18 @@ open_browser_file_candidate(const FileBrowserState& browser) {
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-save_browser_file_candidate(const FileBrowserState& browser) {
+save_browser_file_candidate(const FileBrowserState& browser)
+{
     const std::string text{browser.file_path.data()};
     if (text.empty()) {
         return std::nullopt;
     }
-    std::filesystem::path candidate = path_from_utf8(text);
+
+    Result<std::filesystem::path> converted = path_from_utf8(text);
+    if (!converted) {
+        return std::nullopt;
+    }
+    std::filesystem::path candidate = std::move(converted).value();
     if (candidate.extension().empty()) {
         candidate += ".glb";
     }
@@ -221,7 +244,8 @@ save_browser_file_candidate(const FileBrowserState& browser) {
 }
 
 [[nodiscard]] bool open_browser_entry_matches_search(const OpenBrowserEntry& entry,
-                                                     std::string_view search_text) {
+                                                     std::string_view search_text)
+{
     if (search_text.empty()) {
         return true;
     }
@@ -229,8 +253,8 @@ save_browser_file_candidate(const FileBrowserState& browser) {
 }
 
 void build_open_browser_sidebar_item(FileBrowserState& browser, const char* section_id,
-                                     std::string_view label,
-                                     const std::filesystem::path& directory) {
+                                     std::string_view label, const std::filesystem::path& directory)
+{
     std::error_code error;
     if (!std::filesystem::is_directory(directory, error) || error) {
         return;
@@ -250,20 +274,23 @@ void build_open_browser_sidebar_item(FileBrowserState& browser, const char* sect
     ImGui::PopID();
 }
 
-void build_open_browser_sidebar_section(const char* title) {
+void build_open_browser_sidebar_section(const char* title)
+{
     ImGui::Spacing();
     ImGui::TextColored(ImVec4{0.470F, 0.680F, 0.810F, 1.00F}, "%s", title);
     ImGui::Spacing();
 }
 
-void build_bookmarks(FileBrowserState& browser) {
+void build_bookmarks(FileBrowserState& browser)
+{
     build_open_browser_sidebar_section("FAVORITES");
     for (const std::filesystem::path& bookmark : browser.bookmarks) {
         build_open_browser_sidebar_item(browser, "favorites", file_name_label(bookmark), bookmark);
     }
 }
 
-void build_open_browser_system_locations(FileBrowserState& browser) {
+void build_open_browser_system_locations(FileBrowserState& browser)
+{
     build_open_browser_sidebar_section("LOCATIONS");
     const std::optional<std::filesystem::path> user_profile = environment_directory("USERPROFILE");
     if (user_profile.has_value()) {
@@ -279,13 +306,15 @@ void build_open_browser_system_locations(FileBrowserState& browser) {
                                         profile_path / "Pictures");
         build_open_browser_sidebar_item(browser, "locations", "Videos", profile_path / "Videos");
     }
+
     const std::optional<std::filesystem::path> one_drive = environment_directory("OneDrive");
     if (one_drive.has_value()) {
         build_open_browser_sidebar_item(browser, "locations", "OneDrive", *one_drive);
     }
 }
 
-void build_open_browser_volumes(FileBrowserState& browser) {
+void build_open_browser_volumes(FileBrowserState& browser)
+{
     build_open_browser_sidebar_section("STORAGE");
 #if defined(_WIN32)
     bool has_drive = false;
@@ -295,7 +324,11 @@ void build_open_browser_volumes(FileBrowserState& browser) {
         root += ":\\";
 
         std::error_code error;
-        const std::filesystem::path root_path = path_from_utf8(root);
+        Result<std::filesystem::path> converted = path_from_utf8(root);
+        if (!converted) {
+            continue;
+        }
+        const std::filesystem::path& root_path = converted.value();
         if (!std::filesystem::is_directory(root_path, error) || error) {
             continue;
         }
@@ -311,7 +344,8 @@ void build_open_browser_volumes(FileBrowserState& browser) {
 #endif
 }
 
-void build_recents(FileBrowserState& browser) {
+void build_recents(FileBrowserState& browser)
+{
     build_open_browser_sidebar_section("RECENT");
     if (browser.recents.empty()) {
         ImGui::TextDisabled("none");
@@ -322,14 +356,16 @@ void build_recents(FileBrowserState& browser) {
     }
 }
 
-void build_open_browser_sidebar(FileBrowserState& browser) {
+void build_open_browser_sidebar(FileBrowserState& browser)
+{
     build_bookmarks(browser);
     build_open_browser_system_locations(browser);
     build_open_browser_volumes(browser);
     build_recents(browser);
 }
 
-void build_open_browser_top_bar(FileBrowserState& browser) {
+void build_open_browser_top_bar(FileBrowserState& browser)
+{
     if (open_browser_toolbar_button("<", "Back", browser.history_index > 0U)) {
         navigate_file_browser_history(browser, -1);
     }
@@ -361,8 +397,7 @@ void build_open_browser_top_bar(FileBrowserState& browser) {
     if (ImGui::InputTextWithHint("##OpenFolderPath", "Folder path", browser.folder_path.data(),
                                  browser.folder_path.size(),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
-        set_file_browser_directory(browser,
-                                   path_from_utf8(std::string{browser.folder_path.data()}));
+        set_file_browser_directory_utf8(browser, browser.folder_path.data());
     }
     tooltip("Current folder");
     ImGui::SameLine();
@@ -387,7 +422,8 @@ struct BrowserEntryDrawContext {
 void handle_open_browser_selection(const OpenBrowserEntry& entry, FileBrowserState& browser,
                                    BrowserFileRequests& requests,
                                    std::optional<std::filesystem::path>& navigation_request,
-                                   const FileBrowserFrameInput& input) {
+                                   const FileBrowserFrameInput& input)
+{
     if (entry.directory) {
         clear_file_browser_selection(browser);
         if (input.primary_double_clicked) {
@@ -402,7 +438,8 @@ void handle_open_browser_selection(const OpenBrowserEntry& entry, FileBrowserSta
 }
 
 void draw_open_browser_entry(const OpenBrowserEntry& entry, FileBrowserState& browser,
-                             const BrowserEntryDrawContext& context) {
+                             const BrowserEntryDrawContext& context)
+{
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     const std::string display_label = entry.directory ? entry.label + "/" : entry.label;
@@ -431,7 +468,8 @@ void draw_open_browser_entry(const OpenBrowserEntry& entry, FileBrowserState& br
 
 void build_open_browser_file_table(FileBrowserState& browser, BrowserFileRequests& requests,
                                    const FileBrowserFrameInput& input,
-                                   ExternalEditorWorkflow& external_editor) {
+                                   ExternalEditorWorkflow& external_editor)
+{
     const std::string search_text = lowercase_ascii(std::string{browser.search.data()});
     constexpr ImGuiTableFlags table_flags =
         ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable |
@@ -470,7 +508,8 @@ void build_open_browser_file_table(FileBrowserState& browser, BrowserFileRequest
     }
 }
 
-void build_error(const FileBrowserState& browser) {
+void build_error(const FileBrowserState& browser)
+{
     if (browser.error.empty()) {
         return;
     }
@@ -484,7 +523,8 @@ void build_error(const FileBrowserState& browser) {
 }
 
 [[nodiscard]] std::optional<std::string>
-build_open_browser_footer(FileBrowserState& browser, const FileBrowserFrameInput& input) {
+build_open_browser_footer(FileBrowserState& browser, const FileBrowserFrameInput& input)
+{
     std::optional<std::string> requested_path;
     const std::optional<std::filesystem::path> candidate = open_browser_file_candidate(browser);
     const bool can_open = candidate.has_value();
@@ -526,12 +566,14 @@ build_open_browser_footer(FileBrowserState& browser, const FileBrowserFrameInput
 [[nodiscard]] std::optional<FileDialogResult>
 build_open_modal(FileBrowserState& browser, const ViewerPreferencesState& preferences,
                  const SceneSession& scene, const FileBrowserFrameInput& input,
-                 ExternalEditorWorkflow& external_editor) {
+                 ExternalEditorWorkflow& external_editor)
+{
     if (browser.request_open_modal) {
         initialize_open_browser(browser, preferences, scene);
         ImGui::OpenPopup("Open Model");
         browser.request_open_modal = false;
     }
+
     std::optional<FileDialogResult> result;
 
     push_professional_dialog_style();
@@ -576,16 +618,19 @@ build_open_modal(FileBrowserState& browser, const ViewerPreferencesState& prefer
             if (footer_request.has_value()) {
                 result = FileDialogResult{FileDialogAction::open, std::move(*footer_request)};
             }
+
             build_file_properties_popup(browser, input);
         }
         ImGui::EndPopup();
     }
+
     pop_professional_dialog_style();
     return result;
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-begin_save_browser_request(FileBrowserState& browser, const std::filesystem::path& candidate) {
+begin_save_browser_request(FileBrowserState& browser, const std::filesystem::path& candidate)
+{
     std::error_code error;
     if (std::filesystem::exists(candidate, error) && !error) {
         browser.pending_save_path = candidate;
@@ -596,7 +641,8 @@ begin_save_browser_request(FileBrowserState& browser, const std::filesystem::pat
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-build_save_browser_footer(FileBrowserState& browser) {
+build_save_browser_footer(FileBrowserState& browser)
+{
     std::optional<std::filesystem::path> requested_path;
     const std::optional<std::filesystem::path> candidate = save_browser_file_candidate(browser);
     const bool can_save = candidate.has_value();
@@ -634,7 +680,8 @@ build_save_browser_footer(FileBrowserState& browser) {
 }
 
 [[nodiscard]] std::optional<std::filesystem::path>
-build_replace_confirmation(FileBrowserState& browser) {
+build_replace_confirmation(FileBrowserState& browser)
+{
     std::optional<std::filesystem::path> confirmed;
     ImGui::SetNextWindowSize(ImVec2{520.0F, 0.0F}, ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Confirm Replace", nullptr,
@@ -665,7 +712,8 @@ build_replace_confirmation(FileBrowserState& browser) {
 
 void build_save_browser_file_area(FileBrowserState& browser, BrowserFileRequests& requests,
                                   const FileBrowserFrameInput& input,
-                                  ExternalEditorWorkflow& external_editor) {
+                                  ExternalEditorWorkflow& external_editor)
+{
     const float footer_height = ImGui::GetFrameHeightWithSpacing() * 2.0F + 18.0F;
     if (ImGui::BeginChild("##SaveBrowserSidebar", ImVec2{250.0F, -footer_height}, true)) {
         build_open_browser_sidebar(browser);
@@ -680,7 +728,8 @@ void build_save_browser_file_area(FileBrowserState& browser, BrowserFileRequests
 
 [[nodiscard]] std::optional<FileDialogResult>
 build_save_browser_actions(FileBrowserState& browser, const BrowserFileRequests& requests,
-                           const FileBrowserFrameInput& input) {
+                           const FileBrowserFrameInput& input)
+{
     std::optional<FileDialogResult> result;
     std::optional<std::filesystem::path> activated_save;
     if (requests.open_file.has_value()) {
@@ -696,6 +745,7 @@ build_save_browser_actions(FileBrowserState& browser, const BrowserFileRequests&
         footer_request = build_save_browser_footer(browser);
         build_file_properties_popup(browser, input);
     }
+
     const std::optional<std::filesystem::path> replacement = build_replace_confirmation(browser);
     std::optional<std::filesystem::path> selected = replacement;
     if (!selected.has_value()) {
@@ -718,12 +768,14 @@ build_save_browser_actions(FileBrowserState& browser, const BrowserFileRequests&
 [[nodiscard]] std::optional<FileDialogResult>
 build_save_modal(FileBrowserState& browser, const ViewerPreferencesState& preferences,
                  const SceneSession& scene, const FileBrowserFrameInput& input,
-                 ExternalEditorWorkflow& external_editor) {
+                 ExternalEditorWorkflow& external_editor)
+{
     if (browser.request_save_modal) {
         initialize_save_browser(browser, preferences, scene);
         ImGui::OpenPopup("Save Model As");
         browser.request_save_modal = false;
     }
+
     std::optional<FileDialogResult> result;
     push_professional_dialog_style();
     ImGui::SetNextWindowSize(ImVec2{1120.0F, 720.0F}, ImGuiCond_Appearing);

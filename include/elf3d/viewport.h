@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 
 namespace elf3d {
 
@@ -138,6 +139,11 @@ class ELF3D_API Viewport final {
     [[nodiscard]] Result<void> render(const Scene& scene, EntityId camera_entity,
                                       const ViewportRenderOptions& options) noexcept;
     [[nodiscard]] RenderStatistics render_statistics() const noexcept;
+    // Synchronous graphics-thread read of the last rendered image after the current
+    // display transform. Storage must be exactly width * height * 4 bytes, RGBA8,
+    // tightly packed, top row first. No scene rendering is performed. Before a
+    // successful render or after target recreation, returns texture_unavailable.
+    [[nodiscard]] Result<void> read_color_pixels(std::span<std::uint8_t> pixels) noexcept;
     // The returned non-owning handle is invalidated by resize or destruction.
     [[nodiscard]] TextureHandle color_texture() const noexcept;
     [[nodiscard]] bool framebuffer_valid() const noexcept;

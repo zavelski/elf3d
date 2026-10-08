@@ -1,31 +1,36 @@
-import elf.interaction;
+#include <elf3d/internal/interaction.h>
 
 namespace {
 
 constexpr float threshold = 4.0F;
 
 [[nodiscard]] bool is_started_drag(const elf3d::interaction::ViewportInteractionFrame& frame,
-                                   elf3d::interaction::InteractionMode mode) noexcept {
+                                   elf3d::interaction::InteractionMode mode) noexcept
+{
     return frame.drag_started && frame.drag_active && frame.mode == mode && frame.pointer_captured;
 }
 
 [[nodiscard]] bool is_active_drag(const elf3d::interaction::ViewportInteractionFrame& frame,
-                                  elf3d::interaction::InteractionMode mode) noexcept {
+                                  elf3d::interaction::InteractionMode mode) noexcept
+{
     return frame.drag_active && frame.mode == mode && frame.pointer_captured;
 }
 
 [[nodiscard]] bool is_mode_handoff(const elf3d::interaction::ViewportInteractionFrame& frame,
-                                   elf3d::interaction::InteractionMode mode) noexcept {
+                                   elf3d::interaction::InteractionMode mode) noexcept
+{
     return !frame.drag_ended && frame.drag_started && frame.drag_active && frame.mode == mode &&
            frame.pointer_captured && frame.pointer_delta_pixels == elf3d::Float2{};
 }
 
 [[nodiscard]] bool is_released(const elf3d::interaction::ViewportInteractionFrame& frame,
-                               const elf3d::interaction::ViewportInteractionState& state) noexcept {
+                               const elf3d::interaction::ViewportInteractionState& state) noexcept
+{
     return frame.drag_ended && !frame.pointer_captured && !state.pointer_captured();
 }
 
-[[nodiscard]] int verify_inactive_state() {
+[[nodiscard]] int verify_inactive_state()
+{
     elf3d::interaction::ViewportInteractionState state;
     const elf3d::interaction::PointerInputSnapshot inactive;
     const elf3d::interaction::ViewportInteractionFrame inactive_frame =
@@ -43,7 +48,8 @@ constexpr float threshold = 4.0F;
     return 0;
 }
 
-[[nodiscard]] int verify_click() {
+[[nodiscard]] int verify_click()
+{
     elf3d::interaction::ViewportInteractionState state;
     elf3d::interaction::PointerInputSnapshot input;
     input.focused = true;
@@ -72,7 +78,8 @@ constexpr float threshold = 4.0F;
     return 0;
 }
 
-[[nodiscard]] int verify_orbit_start() {
+[[nodiscard]] int verify_orbit_start()
+{
     elf3d::interaction::ViewportInteractionState state;
     elf3d::interaction::PointerInputSnapshot input;
     input.focused = true;
@@ -94,7 +101,8 @@ constexpr float threshold = 4.0F;
     return 0;
 }
 
-[[nodiscard]] int verify_orbit_progress() {
+[[nodiscard]] int verify_orbit_progress()
+{
     elf3d::interaction::ViewportInteractionState state;
     elf3d::interaction::PointerInputSnapshot input;
     input.focused = true;
@@ -127,7 +135,8 @@ constexpr float threshold = 4.0F;
     return 0;
 }
 
-[[nodiscard]] int verify_modifier_pan() {
+[[nodiscard]] int verify_modifier_pan()
+{
     elf3d::interaction::ViewportInteractionState state;
     elf3d::interaction::PointerInputSnapshot input;
     input.focused = true;
@@ -138,6 +147,7 @@ constexpr float threshold = 4.0F;
     if (!frame.drag_started || frame.mode != elf3d::interaction::InteractionMode::pan) {
         return 11;
     }
+
     state.cancel();
     if (state.pointer_captured()) {
         return 12;
@@ -145,7 +155,8 @@ constexpr float threshold = 4.0F;
     return 0;
 }
 
-[[nodiscard]] int verify_other_pan_and_zoom_modes() {
+[[nodiscard]] int verify_other_pan_and_zoom_modes()
+{
     elf3d::interaction::ViewportInteractionState state;
     elf3d::interaction::PointerInputSnapshot input;
     input.focused = true;
@@ -186,11 +197,13 @@ constexpr float threshold = 4.0F;
     if (!frame.drag_started || frame.mode != elf3d::interaction::InteractionMode::zoom) {
         return 16;
     }
+
     state.cancel();
     return 0;
 }
 
-[[nodiscard]] int verify_left_to_right_handoff() {
+[[nodiscard]] int verify_left_to_right_handoff()
+{
     elf3d::interaction::ViewportInteractionState state;
     elf3d::interaction::PointerInputSnapshot input;
     input = {};
@@ -225,7 +238,8 @@ constexpr float threshold = 4.0F;
     return 0;
 }
 
-[[nodiscard]] int verify_right_to_left_handoff() {
+[[nodiscard]] int verify_right_to_left_handoff()
+{
     elf3d::interaction::ViewportInteractionState state;
     elf3d::interaction::PointerInputSnapshot input;
     input = {};
@@ -258,7 +272,8 @@ constexpr float threshold = 4.0F;
 
 } // namespace
 
-int elf3d_interaction_test() {
+int elf3d_interaction_test()
+{
     const int results[]{
         verify_inactive_state(),        verify_click(),
         verify_orbit_start(),           verify_orbit_progress(),

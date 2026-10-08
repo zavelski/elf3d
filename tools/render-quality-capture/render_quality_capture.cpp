@@ -1,9 +1,4 @@
-#include <elf3d/embed/runtime.h>
-
-#include <glad/gl.h>
-
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
+#include "capture_internal.h"
 
 #define NOMINMAX
 #include <windows.h>
@@ -33,285 +28,19 @@
 #include <utility>
 #include <vector>
 
-namespace {
+namespace elf3d::capture_tool {
 
 constexpr elf3d::Color4 default_viewer_clear_color{213.0F / 255.0F, 227.0F / 255.0F,
                                                    240.0F / 255.0F, 1.0F};
 
-constexpr std::string_view procedural_model = "procedural-material";
-
-enum class CameraMode { authored_first, authored_opposite, fit_front, fit_back, matrix };
-
-struct Options final {
-    std::filesystem::path model;
-    elf3d::Extent2D extent;
-    CameraMode camera_mode = CameraMode::authored_first;
-    std::string camera_name;
-    std::optional<elf3d::Float4x4> camera_matrix;
-    std::filesystem::path output;
-    std::filesystem::path metadata;
-    elf3d::RenderShadingMode shading = elf3d::RenderShadingMode::standard;
-    elf3d::BasicLighting lighting;
-    elf3d::EnvironmentLighting environment;
-    elf3d::DisplayTransform display;
-    bool validate_material = false;
-};
-
-struct Presence final {
-    bool model = false;
-    bool extent = false;
-    bool camera = false;
-    bool output = false;
-    bool metadata = false;
-};
-
-class GlfwRuntime final {
-  public:
-    ~GlfwRuntime() {
-        if (initialized_) {
-            glfwTerminate();
-        }
-    }
-    [[nodiscard]] bool initialize() noexcept {
-        initialized_ = glfwInit() == GLFW_TRUE;
-        return initialized_;
-    }
-
-  private:
-    bool initialized_ = false;
-};
-
-class Window final {
-  public:
-    explicit Window(GLFWwindow* value) noexcept : value_(value) {}
-    ~Window() {
-        if (value_ != nullptr) {
-            glfwDestroyWindow(value_);
-        }
-    }
-    Window(const Window&) = delete;
-    Window& operator=(const Window&) = delete;
-    [[nodiscard]] GLFWwindow* get() const noexcept {
-        return value_;
-    }
-
-  private:
-    GLFWwindow* value_ = nullptr;
-};
-
-struct CaptureScene final {
-    std::unique_ptr<elf3d::EmbeddedRuntime> runtime;
-    std::unique_ptr<elf3d::Scene> scene;
-    std::unique_ptr<elf3d::Viewport> viewport;
-    elf3d::EntityId camera;
-    elf3d::PerspectiveCameraDescription projection;
-    elf3d::Float4x4 camera_matrix;
-    std::string model_alias;
-    std::string model_hash;
-};
-
-[[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path) {
+[[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path)
+{
     const std::u8string utf8 = path.u8string();
     return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};
 }
 
-[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value) {
-    const auto* begin = reinterpret_cast<const char8_t*>(value.data());
-    return std::filesystem::path{std::u8string{begin, begin + value.size()}};
-}
-
-[[nodiscard]] std::optional<float> float_value(std::string_view value) noexcept {
-    float parsed = 0.0F;
-    const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
-    return result.ec == std::errc{} && result.ptr == value.data() + value.size() &&
-                   std::isfinite(parsed)
-               ? std::optional<float>{parsed}
-               : std::nullopt;
-}
-
-[[nodiscard]] std::optional<std::uint32_t> unsigned_value(std::string_view value) noexcept {
-    std::uint32_t parsed = 0;
-    const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
-    return result.ec == std::errc{} && result.ptr == value.data() + value.size()
-               ? std::optional<std::uint32_t>{parsed}
-               : std::nullopt;
-}
-
-[[nodiscard]] std::optional<elf3d::Extent2D> extent_value(std::string_view value) noexcept {
-    const std::size_t separator = value.find('x');
-    if (separator == std::string_view::npos) {
-        return std::nullopt;
-    }
-    const auto width = unsigned_value(value.substr(0, separator));
-    const auto height = unsigned_value(value.substr(separator + 1));
-    return width && height && *width != 0 && *height != 0
-               ? std::optional<elf3d::Extent2D>{{*width, *height}}
-               : std::nullopt;
-}
-
-[[nodiscard]] std::optional<elf3d::Float4x4> matrix_value(std::string_view value) noexcept {
-    elf3d::Float4x4 matrix;
-    std::size_t begin = 0;
-    for (std::size_t index = 0; index < matrix.elements.size(); ++index) {
-        const std::size_t end = value.find(',', begin);
-        const std::string_view token = value.substr(begin, end - begin);
-        const auto parsed = float_value(token);
-        if (!parsed || (index + 1 != matrix.elements.size() && end == std::string_view::npos) ||
-            (index + 1 == matrix.elements.size() && end != std::string_view::npos)) {
-            return std::nullopt;
-        }
-        matrix.elements[index] = *parsed;
-        begin = end == std::string_view::npos ? value.size() : end + 1;
-    }
-    return matrix;
-}
-
-template <typename Value>
-[[nodiscard]] bool set_once(Value& destination, bool& present, Value value) {
-    if (present) {
-        return false;
-    }
-    destination = std::move(value);
-    present = true;
-    return true;
-}
-
-[[nodiscard]] bool parse_required(std::string_view name, std::string_view value, Options& options,
-                                  Presence& presence) {
-    if (name == "--model") {
-        return set_once(options.model, presence.model, path_from_utf8(value));
-    }
-    if (name == "--extent") {
-        const auto extent = extent_value(value);
-        return extent && set_once(options.extent, presence.extent, *extent);
-    }
-    if (name == "--output") {
-        return set_once(options.output, presence.output, path_from_utf8(value));
-    }
-    if (name == "--metadata") {
-        return set_once(options.metadata, presence.metadata, path_from_utf8(value));
-    }
-    if (name == "--camera" && !presence.camera) {
-        if (value == "authored-first") {
-            options.camera_mode = CameraMode::authored_first;
-        } else if (value == "authored-opposite") {
-            options.camera_mode = CameraMode::authored_opposite;
-        } else if (value == "fit-front") {
-            options.camera_mode = CameraMode::fit_front;
-        } else if (value == "fit-back") {
-            options.camera_mode = CameraMode::fit_back;
-        } else if (value == "matrix") {
-            options.camera_mode = CameraMode::matrix;
-        } else {
-            return false;
-        }
-        options.camera_name = value;
-        presence.camera = true;
-        return true;
-    }
-    return false;
-}
-
-[[nodiscard]] bool parse_render_setting(std::string_view name, std::string_view value,
-                                        Options& options) {
-    const auto number = float_value(value);
-    if (name == "--matrix") {
-        options.camera_matrix = matrix_value(value);
-        return options.camera_matrix.has_value();
-    }
-    if (name == "--shading") {
-        if (value == "standard") {
-            options.shading = elf3d::RenderShadingMode::standard;
-            return true;
-        }
-        if (value == "unlit") {
-            options.shading = elf3d::RenderShadingMode::unlit;
-            return true;
-        }
-        return false;
-    }
-    if (name == "--tone") {
-        if (value == "standard") {
-            options.display.tone_mapping = elf3d::ToneMappingMode::standard;
-            return true;
-        }
-        if (value == "pbr-neutral") {
-            options.display.tone_mapping = elf3d::ToneMappingMode::pbr_neutral;
-            return true;
-        }
-        if (value == "none") {
-            options.display.tone_mapping = elf3d::ToneMappingMode::none;
-            return true;
-        }
-        return false;
-    }
-    if (name == "--validate-material") {
-        if (value == "true") {
-            options.validate_material = true;
-            return true;
-        }
-        if (value == "false") {
-            options.validate_material = false;
-            return true;
-        }
-        return false;
-    }
-    if (!number) {
-        return false;
-    }
-    if (name == "--ambient") {
-        options.lighting.ambient_intensity = *number;
-    } else if (name == "--directional") {
-        options.lighting.diffuse_intensity = *number;
-    } else if (name == "--environment") {
-        options.environment.intensity = *number;
-    } else if (name == "--rotation") {
-        options.environment.rotation_radians = *number;
-    } else if (name == "--exposure") {
-        options.display.exposure_ev = *number;
-    } else {
-        return false;
-    }
-    return true;
-}
-
-[[nodiscard]] std::optional<Options> parse_options(int count, char** values) {
-    Options options;
-    Presence presence;
-    for (int index = 1; index < count; index += 2) {
-        if (index + 1 >= count || values[index] == nullptr || values[index + 1] == nullptr) {
-            return std::nullopt;
-        }
-        const std::string_view name{values[index]};
-        const std::string_view value{values[index + 1]};
-        if (!parse_required(name, value, options, presence) &&
-            !parse_render_setting(name, value, options)) {
-            return std::nullopt;
-        }
-    }
-    if (!presence.model || !presence.extent || !presence.camera || !presence.output ||
-        !presence.metadata ||
-        (options.camera_mode == CameraMode::matrix) != options.camera_matrix.has_value()) {
-        return std::nullopt;
-    }
-    return options;
-}
-
-void print_usage() {
-    std::cerr << "Usage: elf3d_render_quality_capture --model <path|procedural-material> "
-                 "--extent <width>x<height> "
-                 "--camera authored-first|authored-opposite|fit-front|fit-back|matrix "
-                 "[--matrix <16-column-major-values>] --output <png> --metadata <json> "
-                 "[--shading standard|unlit] [--ambient <value>] [--directional <value>] "
-                 "[--environment <value>] [--rotation <radians>] [--exposure <ev>] "
-                 "[--tone pbr-neutral|none] [--validate-material true|false]\n";
-}
-
-elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcept {
-    return glfwGetProcAddress(name);
-}
-
-[[nodiscard]] std::string bytes_to_hex(std::span<const unsigned char> bytes) {
+[[nodiscard]] std::string bytes_to_hex(std::span<const unsigned char> bytes)
+{
     std::ostringstream stream;
     stream << std::hex << std::setfill('0');
     for (const unsigned char byte : bytes) {
@@ -320,7 +49,8 @@ elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcep
     return stream.str();
 }
 
-[[nodiscard]] std::optional<std::string> sha256_file(const std::filesystem::path& path) {
+[[nodiscard]] std::optional<std::string> sha256_file(const std::filesystem::path& path)
+{
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
     DWORD object_bytes = 0;
@@ -336,12 +66,14 @@ elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcep
         }
         return std::nullopt;
     }
+
     std::vector<unsigned char> object(object_bytes);
     std::vector<unsigned char> digest(hash_bytes);
     if (BCryptCreateHash(algorithm, &hash, object.data(), object_bytes, nullptr, 0, 0) < 0) {
         BCryptCloseAlgorithmProvider(algorithm, 0);
         return std::nullopt;
     }
+
     std::ifstream stream{path, std::ios::binary};
     std::vector<unsigned char> buffer(1024U * 1024U);
     while (stream) {
@@ -352,6 +84,7 @@ elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcep
             stream.setstate(std::ios::badbit);
         }
     }
+
     const bool success = stream.eof() && BCryptFinishHash(hash, digest.data(), hash_bytes, 0) >= 0;
     BCryptDestroyHash(hash);
     BCryptCloseAlgorithmProvider(algorithm, 0);
@@ -363,7 +96,8 @@ struct SphereMesh final {
     std::vector<std::uint32_t> indices;
 };
 
-[[nodiscard]] SphereMesh make_sphere() {
+[[nodiscard]] SphereMesh make_sphere()
+{
     constexpr std::uint32_t longitude_count = 48;
     constexpr std::uint32_t latitude_count = 24;
     constexpr float pi = 3.14159265359F;
@@ -393,11 +127,13 @@ struct SphereMesh final {
 }
 
 [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::Scene>>
-create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
+create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera)
+{
     auto scene_result = engine.create_scene();
     if (!scene_result) {
         return scene_result.error();
     }
+
     std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
     const SphereMesh sphere = make_sphere();
     const auto mesh = scene->create_mesh({sphere.vertices, sphere.indices});
@@ -422,6 +158,7 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
         if (!material) {
             return material.error();
         }
+
         const auto model = scene->create_model_entity(mesh.value(), material.value());
         if (!model) {
             return model.error();
@@ -433,6 +170,7 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
             return positioned.error();
         }
     }
+
     const auto camera_result = scene->create_perspective_camera_entity({});
     if (!camera_result) {
         return camera_result.error();
@@ -441,7 +179,8 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
     return scene;
 }
 
-[[nodiscard]] std::optional<elf3d::EntityId> first_authored_camera(elf3d::Scene& scene) {
+[[nodiscard]] std::optional<elf3d::EntityId> first_authored_camera(elf3d::Scene& scene)
+{
     auto snapshot = scene.hierarchy_snapshot();
     if (!snapshot) {
         return std::nullopt;
@@ -457,7 +196,8 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
 
 [[nodiscard]] elf3d::Float4x4
 fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
-                     const elf3d::PerspectiveCameraDescription& camera, bool back) noexcept {
+                     const elf3d::PerspectiveCameraDescription& camera, bool back) noexcept
+{
     const elf3d::Float3 center{(bounds.minimum.x + bounds.maximum.x) * 0.5F,
                                (bounds.minimum.y + bounds.maximum.y) * 0.5F,
                                (bounds.minimum.z + bounds.maximum.z) * 0.5F};
@@ -480,14 +220,10 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
     return matrix;
 }
 
-[[nodiscard]] elf3d::Result<CaptureScene> create_capture_scene(const Options& options) {
-    auto runtime_result = elf3d::EmbeddedRuntime::create({load_opengl_procedure});
-    if (!runtime_result) {
-        return runtime_result.error();
-    }
+[[nodiscard]] elf3d::Result<CaptureScene> create_capture_scene(const Options& options,
+                                                               elf3d::Engine& engine)
+{
     CaptureScene capture;
-    capture.runtime = std::move(runtime_result).value();
-    elf3d::Engine& engine = capture.runtime->engine();
     const bool procedural = path_to_utf8(options.model) == procedural_model;
     if (procedural) {
         auto scene_result = create_material_scene(engine, capture.camera);
@@ -572,6 +308,7 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
         if (!moved) {
             return moved.error();
         }
+
         const auto matrix = capture.scene->local_matrix(capture.camera);
         if (!matrix) {
             return matrix.error();
@@ -609,7 +346,8 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
 }
 
 [[nodiscard]] bool write_png(const std::filesystem::path& path, elf3d::Extent2D extent,
-                             const std::vector<unsigned char>& pixels) {
+                             const std::vector<unsigned char>& pixels)
+{
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
     if (error) {
@@ -629,7 +367,8 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
     return written != 0 && closed == 0;
 }
 
-[[nodiscard]] std::string json_escape(std::string_view value) {
+[[nodiscard]] std::string json_escape(std::string_view value)
+{
     std::string result;
     for (const char character : value) {
         if (character == '\\' || character == '"') {
@@ -640,19 +379,20 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
     return result;
 }
 
-[[nodiscard]] bool write_metadata(const Options& options, const CaptureScene& capture) {
+[[nodiscard]] bool write_metadata(const Options& options, const CaptureScene& capture,
+                                  const elf3d::GraphicsContextSnapshot& graphics)
+{
     std::error_code error;
     std::filesystem::create_directories(options.metadata.parent_path(), error);
     if (error) {
         return false;
     }
+
     std::ofstream stream{options.metadata, std::ios::trunc};
     if (!stream) {
         return false;
     }
-    const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
-    const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
-    const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+
     stream << std::fixed << std::setprecision(6) << "{\n  \"schema\": 1,\n  \"model_alias\": \""
            << json_escape(capture.model_alias) << "\",\n  \"sha256\": \"" << capture.model_hash
            << "\",\n  \"camera_mode\": \"" << options.camera_name
@@ -682,302 +422,155 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
                                                                                      : "standard")
            << "\"},\n  \"shading\": \""
            << (options.shading == elf3d::RenderShadingMode::unlit ? "unlit" : "standard")
-           << "\",\n  \"renderer\": {\"vendor\": \""
-           << json_escape(vendor == nullptr ? "unavailable" : vendor) << "\", \"device\": \""
-           << json_escape(renderer == nullptr ? "unavailable" : renderer) << "\", \"opengl\": \""
-           << json_escape(version == nullptr ? "unavailable" : version)
-           << "\"},\n  \"build_revision\": \"" << ELF3D_CAPTURE_BUILD_REVISION << "\"\n}\n";
+           << "\",\n  \"renderer\": {\"vendor\": \"" << json_escape(graphics.vendor_name)
+           << "\", \"device\": \"" << json_escape(graphics.device_name) << "\", \"opengl\": \""
+           << json_escape(graphics.api_version) << "\"},\n  \"build_revision\": \""
+           << ELF3D_CAPTURE_BUILD_REVISION << "\"\n}\n";
     return static_cast<bool>(stream);
 }
 
-[[nodiscard]] int initialize_graphics(const Options& options, GlfwRuntime& glfw,
-                                      std::unique_ptr<Window>& window) {
-    if (!glfw.initialize()) {
-        return 4;
+class CaptureApplication final : public elf3d::Application {
+  public:
+    explicit CaptureApplication(Options options) : options_(std::move(options))
+    {
     }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    window = std::make_unique<Window>(glfwCreateWindow(
-        static_cast<int>(options.extent.width), static_cast<int>(options.extent.height),
-        "Elf3D render quality capture", nullptr, nullptr));
-    if (window->get() == nullptr) {
-        return 5;
-    }
-    glfwMakeContextCurrent(window->get());
-    glfwSwapInterval(0);
-    return gladLoadGL(load_opengl_procedure) != 0 && GLAD_GL_VERSION_4_1 != 0 ? 0 : 6;
-}
 
-[[nodiscard]] elf3d::Result<std::vector<unsigned char>> read_resolved_pixels(const Options& options,
-                                                                             CaptureScene& scene) {
-    const auto native = scene.runtime->native_texture_view(scene.viewport->color_texture());
-    if (!native || native.value().api != elf3d::NativeGraphicsApi::opengl) {
-        return native ? elf3d::Error{elf3d::ErrorCode::backend_mismatch,
-                                     "Resolved texture is not OpenGL"}
-                      : native.error();
-    }
-    glFinish();
-    const std::size_t row_bytes = static_cast<std::size_t>(options.extent.width) * 4U;
-    std::vector<unsigned char> bottom_up(row_bytes * options.extent.height);
-    std::vector<unsigned char> top_down(bottom_up.size());
-    GLint previous_texture = 0;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
-    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(native.value().value));
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, bottom_up.data());
-    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previous_texture));
-    if (glGetError() != GL_NO_ERROR) {
-        return elf3d::Error{elf3d::ErrorCode::gpu_texture_upload_failed,
-                            "Resolved texture readback failed"};
-    }
-    for (std::uint32_t row = 0; row < options.extent.height; ++row) {
-        const std::size_t source =
-            static_cast<std::size_t>(options.extent.height - 1U - row) * row_bytes;
-        const std::size_t destination = static_cast<std::size_t>(row) * row_bytes;
-        std::copy_n(bottom_up.begin() + static_cast<std::ptrdiff_t>(source), row_bytes,
-                    top_down.begin() + static_cast<std::ptrdiff_t>(destination));
-    }
-    return top_down;
-}
-
-[[nodiscard]] double luminance(const unsigned char* pixel) noexcept {
-    return (0.2126 * static_cast<double>(pixel[0]) + 0.7152 * static_cast<double>(pixel[1]) +
-            0.0722 * static_cast<double>(pixel[2])) /
-           255.0;
-}
-
-[[nodiscard]] std::vector<double> region_luminance(const std::vector<unsigned char>& pixels,
-                                                   elf3d::Extent2D extent, int center_x,
-                                                   int center_y, int radius) {
-    std::vector<double> values;
-    for (int y = center_y - radius; y <= center_y + radius; ++y) {
-        for (int x = center_x - radius; x <= center_x + radius; ++x) {
-            const int dx = x - center_x;
-            const int dy = y - center_y;
-            if (x < 0 || y < 0 || x >= static_cast<int>(extent.width) ||
-                y >= static_cast<int>(extent.height) || dx * dx + dy * dy > radius * radius) {
-                continue;
+    elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
+        try {
+            auto created = create_capture_scene(options_, context.engine());
+            if (!created) {
+                return created.error();
             }
-            const std::size_t offset =
-                (static_cast<std::size_t>(y) * extent.width + static_cast<std::size_t>(x)) * 4U;
-            values.push_back(luminance(pixels.data() + offset));
+            scene_ = std::move(created).value();
+            // Snapshot strings are borrowed only for this run_application call.
+            graphics_ = context.graphics_context();
+            scene_.viewport->set_clear_color(default_viewer_clear_color);
+            scene_.viewport->set_basic_lighting(options_.lighting);
+            scene_.viewport->set_environment_lighting(options_.environment);
+            scene_.viewport->set_display_transform(options_.display);
+            scene_.viewport->set_render_shading_mode(options_.shading);
+            return {};
+        } catch (...) {
+            elf3d::fatal_error("Capture application startup failed unexpectedly");
         }
     }
-    std::sort(values.begin(), values.end());
-    return values;
-}
 
-[[nodiscard]] double percentile(const std::vector<double>& sorted, double fraction) noexcept {
-    if (sorted.empty()) {
-        return 0.0;
-    }
-    const std::size_t index =
-        static_cast<std::size_t>(std::round(fraction * static_cast<double>(sorted.size() - 1U)));
-    return sorted[std::min(index, sorted.size() - 1U)];
-}
-
-[[nodiscard]] double fraction_above(const std::vector<double>& values, double threshold) noexcept {
-    return values.empty() ? 0.0
-                          : static_cast<double>(std::count_if(
-                                values.begin(), values.end(),
-                                [threshold](double value) { return value > threshold; })) /
-                                static_cast<double>(values.size());
-}
-
-[[nodiscard]] double region_mean_absolute_rgb_difference(const std::vector<unsigned char>& first,
-                                                         const std::vector<unsigned char>& second,
-                                                         elf3d::Extent2D extent, int center_x,
-                                                         int center_y, int radius) noexcept {
-    std::uint64_t accumulated = 0;
-    std::uint64_t channel_count = 0;
-    for (int y = center_y - radius; y <= center_y + radius; ++y) {
-        for (int x = center_x - radius; x <= center_x + radius; ++x) {
-            const int dx = x - center_x;
-            const int dy = y - center_y;
-            if (x < 0 || y < 0 || x >= static_cast<int>(extent.width) ||
-                y >= static_cast<int>(extent.height) || dx * dx + dy * dy > radius * radius) {
-                continue;
+    elf3d::Result<void> update(elf3d::ApplicationUpdateContext& context) noexcept override
+    {
+        try {
+            if (!context.previous_frame_statistics()) {
+                return {};
             }
-            const std::size_t offset =
-                (static_cast<std::size_t>(y) * extent.width + static_cast<std::size_t>(x)) * 4U;
-            for (std::size_t channel = 0; channel < 3; ++channel) {
-                const int difference = static_cast<int>(first[offset + channel]) -
-                                       static_cast<int>(second[offset + channel]);
-                accumulated += static_cast<std::uint64_t>(std::abs(difference));
-                ++channel_count;
+            auto& pixels = images_.frames[stage_];
+            pixels.resize(static_cast<std::size_t>(options_.extent.width) * options_.extent.height *
+                          4U);
+            const auto readback = scene_.viewport->read_color_pixels(pixels);
+            if (!readback) {
+                return readback.error();
             }
+            if (!options_.validate_material || stage_ == 3) {
+                if (options_.validate_material) {
+                    const auto validated = validate_material_capture(options_, images_);
+                    if (!validated) {
+                        return validated.error();
+                    }
+                }
+                if (!write_png(options_.output, options_.extent, images_.frames[0]) ||
+                    !write_metadata(options_, scene_, graphics_)) {
+                    return elf3d::Error{elf3d::ErrorCode::source_file_write_failed,
+                                        "Could not write capture output"};
+                }
+                std::cout << "Wrote " << path_to_utf8(options_.output) << " and "
+                          << path_to_utf8(options_.metadata) << '\n';
+                context.request_exit();
+                return {};
+            }
+            ++stage_;
+            return configure_stage();
+        } catch (...) {
+            elf3d::fatal_error("Capture application update failed unexpectedly");
         }
     }
-    return channel_count == 0U
-               ? 0.0
-               : static_cast<double>(accumulated) / (static_cast<double>(channel_count) * 255.0);
-}
 
-[[nodiscard]] elf3d::Result<void>
-validate_material_capture(const Options& options, CaptureScene& scene,
-                          const std::vector<unsigned char>& front_pixels) {
-    if (path_to_utf8(options.model) != procedural_model ||
-        options.camera_mode != CameraMode::fit_front || options.extent.width != 1280U ||
-        options.extent.height != 720U || options.shading != elf3d::RenderShadingMode::standard) {
-        return elf3d::Error{
-            elf3d::ErrorCode::invalid_argument,
-            "Material validation requires procedural-material fit-front at 1280x720"};
+    elf3d::Result<void> build_ui(elf3d::ApplicationUiContext& context) noexcept override
+    {
+        elf3d::ViewportRenderOptions options;
+        options.shading_mode = options_.shading;
+        return context.queue_viewport_render(*scene_.viewport, *scene_.scene, scene_.camera,
+                                             options);
     }
-    const auto bounds = scene.scene->visible_bounds();
-    if (!bounds) {
-        return elf3d::Error{elf3d::ErrorCode::empty_scene_geometry,
-                            "Material validation scene has no visible bounds"};
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
+        scene_.viewport.reset();
+        scene_.scene.reset();
+        graphics_ = {};
     }
 
-    elf3d::BasicLighting environment_only = options.lighting;
-    environment_only.ambient_intensity = 0.0F;
-    environment_only.diffuse_intensity = 0.0F;
-    elf3d::EnvironmentLighting unrotated_environment = options.environment;
-    unrotated_environment.rotation_radians = 0.0F;
-    scene.viewport->set_basic_lighting(environment_only);
-    scene.viewport->set_environment_lighting(unrotated_environment);
-    const auto unrotated_rendered = scene.viewport->render(*scene.scene, scene.camera);
-    if (!unrotated_rendered) {
-        return unrotated_rendered.error();
+  private:
+    elf3d::Result<void> configure_stage() noexcept
+    {
+        if (stage_ < 3) {
+            auto lighting = options_.lighting;
+            lighting.ambient_intensity = 0.0F;
+            lighting.diffuse_intensity = 0.0F;
+            auto environment = options_.environment;
+            environment.rotation_radians = stage_ == 1 ? 0.0F : 0.174532925F;
+            scene_.viewport->set_basic_lighting(lighting);
+            scene_.viewport->set_environment_lighting(environment);
+            return {};
+        }
+        scene_.viewport->set_basic_lighting(options_.lighting);
+        scene_.viewport->set_environment_lighting(options_.environment);
+        const auto bounds = scene_.scene->visible_bounds();
+        if (!bounds) {
+            return elf3d::Error{elf3d::ErrorCode::empty_scene_geometry,
+                                "Capture scene has no bounds"};
+        }
+        return scene_.scene->set_local_matrix(
+            scene_.camera, fitted_camera_matrix(*bounds, options_.extent, scene_.projection, true));
     }
-    auto unrotated_pixels_result = read_resolved_pixels(options, scene);
-    if (!unrotated_pixels_result) {
-        return unrotated_pixels_result.error();
-    }
-    elf3d::EnvironmentLighting rotated_environment = unrotated_environment;
-    rotated_environment.rotation_radians = 0.174532925F;
-    scene.viewport->set_environment_lighting(rotated_environment);
-    const auto rotated_rendered = scene.viewport->render(*scene.scene, scene.camera);
-    if (!rotated_rendered) {
-        return rotated_rendered.error();
-    }
-    auto rotated_pixels_result = read_resolved_pixels(options, scene);
-    if (!rotated_pixels_result) {
-        return rotated_pixels_result.error();
-    }
-    const double white_motion = region_mean_absolute_rgb_difference(unrotated_pixels_result.value(),
-                                                                    rotated_pixels_result.value(),
-                                                                    options.extent, 333, 360, 92);
-    const double polished_motion = region_mean_absolute_rgb_difference(
-        unrotated_pixels_result.value(), rotated_pixels_result.value(), options.extent, 741, 360,
-        92);
-    const double rough_motion = region_mean_absolute_rgb_difference(unrotated_pixels_result.value(),
-                                                                    rotated_pixels_result.value(),
-                                                                    options.extent, 946, 360, 92);
 
-    scene.viewport->set_basic_lighting(options.lighting);
-    scene.viewport->set_environment_lighting(options.environment);
-    const elf3d::Float4x4 back_matrix =
-        fitted_camera_matrix(*bounds, options.extent, scene.projection, true);
-    const auto positioned = scene.scene->set_local_matrix(scene.camera, back_matrix);
-    if (!positioned) {
-        return positioned.error();
-    }
-    const auto rendered = scene.viewport->render(*scene.scene, scene.camera);
-    if (!rendered) {
-        return rendered.error();
-    }
-    auto back_pixels_result = read_resolved_pixels(options, scene);
-    if (!back_pixels_result) {
-        return back_pixels_result.error();
-    }
-    const auto white_front = region_luminance(front_pixels, options.extent, 333, 360, 92);
-    const auto white_back =
-        region_luminance(back_pixels_result.value(), options.extent, 946, 360, 92);
-    const auto polished = region_luminance(front_pixels, options.extent, 741, 360, 92);
-    const auto rough = region_luminance(front_pixels, options.extent, 946, 360, 92);
-    const double white_front_median = percentile(white_front, 0.5);
-    const double white_back_median = percentile(white_back, 0.5);
-    const double white_p99 = percentile(white_front, 0.99);
-    const double polished_median = percentile(polished, 0.5);
-    const double polished_p99 = percentile(polished, 0.99);
-    const double rough_median = percentile(rough, 0.5);
-    const double rough_p99 = percentile(rough, 0.99);
-    const bool passes =
-        white_front_median >= 0.72 && white_front_median <= 0.85 && white_back_median >= 0.77 &&
-        white_back_median <= 0.90 && white_front_median / white_back_median >= 0.85 &&
-        white_front_median / white_back_median <= 1.0 && white_p99 >= 0.85 && white_p99 < 0.95 &&
-        polished_median >= 0.53 && polished_median <= 0.70 &&
-        polished_p99 - polished_median >= 0.38 && polished_p99 - polished_median <= 0.50 &&
-        fraction_above(polished, 0.75) >= 0.04 &&
-        rough_p99 - rough_median < polished_p99 - polished_median &&
-        rough_p99 - rough_median >= 0.10 && rough_p99 - rough_median <= 0.25 &&
-        fraction_above(rough, 0.55) > fraction_above(polished, 0.55) && polished_motion >= 0.018 &&
-        polished_motion >= 1.5 * white_motion && rough_motion >= 0.013 &&
-        rough_motion < polished_motion;
-    std::cout << std::fixed << std::setprecision(6)
-              << "material_metrics white_front_median=" << white_front_median
-              << " white_back_median=" << white_back_median
-              << " front_back_ratio=" << white_front_median / white_back_median
-              << " white_p99=" << white_p99 << " polished_median=" << polished_median
-              << " polished_contrast=" << polished_p99 - polished_median
-              << " polished_fraction_above_075=" << fraction_above(polished, 0.75)
-              << " rough_contrast=" << rough_p99 - rough_median
-              << " white_rotation_motion=" << white_motion
-              << " polished_rotation_motion=" << polished_motion
-              << " rough_rotation_motion=" << rough_motion << '\n';
-    return passes ? elf3d::Result<void>{}
-                  : elf3d::Result<void>{elf3d::Error{
-                        elf3d::ErrorCode::draw_submission_failed,
-                        "Procedural material capture did not satisfy the high-contrast studio "
-                        "gates"}};
-}
+    Options options_;
+    CaptureScene scene_;
+    MaterialCaptureImages images_;
+    elf3d::GraphicsContextSnapshot graphics_;
+    std::size_t stage_ = 0;
+};
 
-[[nodiscard]] int capture(const Options& options) {
-    const bool procedural = path_to_utf8(options.model) == procedural_model;
-    if (!procedural && !std::filesystem::is_regular_file(options.model)) {
+[[nodiscard]] int capture(const Options& options)
+{
+    if (path_to_utf8(options.model) != procedural_model &&
+        !std::filesystem::is_regular_file(options.model)) {
         std::cerr << "Model does not exist\n";
         return 3;
     }
-    GlfwRuntime glfw;
-    std::unique_ptr<Window> window;
-    const int graphics = initialize_graphics(options, glfw, window);
-    if (graphics != 0) {
-        std::cerr << "Hidden OpenGL 4.1 context initialization failed\n";
-        return graphics;
-    }
-    auto capture_result = create_capture_scene(options);
-    if (!capture_result) {
-        std::cerr << capture_result.error().message() << '\n';
+    CaptureApplication application{options};
+    elf3d::ApplicationOptions application_options;
+    application_options.title = "Elf3D render quality capture";
+    application_options.initial_window_extent = options.extent;
+    application_options.initial_visibility = elf3d::ApplicationWindowVisibility::hidden;
+    application_options.presentation_mode = elf3d::PresentationMode::immediate;
+    const auto result = elf3d::run_application(application_options, application);
+    if (!result) {
+        const auto code = result.error().code();
+        if (code == elf3d::ErrorCode::graphics_initialization_failed ||
+            code == elf3d::ErrorCode::graphics_context_unavailable ||
+            code == elf3d::ErrorCode::unsupported_graphics_version) {
+            std::cerr << "Hidden OpenGL 4.1 context initialization failed\n";
+            return 77;
+        }
+        std::cerr << result.error().message() << '\n';
         return 7;
     }
-    CaptureScene scene = std::move(capture_result).value();
-    scene.viewport->set_clear_color(default_viewer_clear_color);
-    scene.viewport->set_basic_lighting(options.lighting);
-    scene.viewport->set_environment_lighting(options.environment);
-    scene.viewport->set_display_transform(options.display);
-    scene.viewport->set_render_shading_mode(options.shading);
-    const auto rendered = scene.viewport->render(*scene.scene, scene.camera);
-    if (!rendered) {
-        std::cerr << rendered.error().message() << '\n';
-        return 8;
-    }
-    auto pixels_result = read_resolved_pixels(options, scene);
-    if (!pixels_result) {
-        std::cerr << pixels_result.error().message() << '\n';
-        return 9;
-    }
-    const std::vector<unsigned char>& top_down = pixels_result.value();
-    if (options.validate_material) {
-        const auto validated = validate_material_capture(options, scene, top_down);
-        if (!validated) {
-            std::cerr << validated.error().message() << '\n';
-            return 10;
-        }
-    }
-    if (!write_png(options.output, options.extent, top_down) || !write_metadata(options, scene)) {
-        std::cerr << "Could not write capture output\n";
-        return 10;
-    }
-    std::cout << "Wrote " << path_to_utf8(options.output) << " and "
-              << path_to_utf8(options.metadata) << '\n';
-    return 0;
+    return result.value();
 }
 
-} // namespace
+} // namespace elf3d::capture_tool
 
-int main(int count, char** values) {
+int main(int count, char** values)
+{
+    using namespace elf3d::capture_tool;
     const auto options = parse_options(count, values);
     if (!options) {
         print_usage();

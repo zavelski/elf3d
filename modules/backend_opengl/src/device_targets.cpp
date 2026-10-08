@@ -1,14 +1,16 @@
-module;
+#include <elf3d/internal/backend_opengl.h>
 
 #include <elf3d/graphics.h>
 
 #include <glad/gl.h>
 
+#include "device_display_shaders.hpp"
 #include "device_internal.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/graphics.h>
 #include <memory>
 #include <new>
 #include <optional>
@@ -18,98 +20,10 @@ module;
 #include <utility>
 #include <vector>
 
-module elf.backend.opengl;
-
-import elf.graphics;
-
 namespace elf3d::backend::opengl::device_detail {
+[[nodiscard]] Result<void> read_display_pixels(GLuint texture, Extent2D extent,
+                                               std::span<std::uint8_t> pixels) noexcept;
 namespace {
-
-constexpr char display_resolve_vertex_shader_source[] = R"glsl(#version 410 core
-out vec2 v_texcoord;
-
-void main()
-{
-    const vec2 positions[3] = vec2[3](
-        vec2(-1.0, -1.0),
-        vec2(3.0, -1.0),
-        vec2(-1.0, 3.0)
-    );
-    const vec2 texcoords[3] = vec2[3](
-        vec2(0.0, 0.0),
-        vec2(2.0, 0.0),
-        vec2(0.0, 2.0)
-    );
-    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
-    v_texcoord = texcoords[gl_VertexID];
-}
-)glsl";
-
-constexpr char display_resolve_fragment_shader_source[] = R"glsl(#version 410 core
-in vec2 v_texcoord;
-
-uniform sampler2D u_linear_color_texture;
-uniform float u_exposure_ev;
-uniform int u_tone_mapping;
-
-layout(location = 0) out vec4 fragment_color;
-
-vec3 linear_to_srgb(vec3 linear_color)
-{
-    linear_color = max(linear_color, vec3(0.0));
-    return mix(12.92 * linear_color,
-               1.055 * pow(linear_color, vec3(1.0 / 2.4)) - 0.055,
-               step(vec3(0.0031308), linear_color));
-}
-
-float sanitize_component(float value)
-{
-    return isnan(value) || isinf(value) || value < 0.0 ? 0.0 : value;
-}
-
-vec3 pbr_neutral_tone_mapping(vec3 color)
-{
-    const float start_compression = 0.76;
-    const float desaturation = 0.15;
-    float darkest = min(color.r, min(color.g, color.b));
-    float offset = darkest < 0.08 ? darkest - 6.25 * darkest * darkest : 0.04;
-    color -= vec3(offset);
-    float peak = max(color.r, max(color.g, color.b));
-    if (peak < start_compression) {
-        return color;
-    }
-    float distance_to_white = 1.0 - start_compression;
-    float compressed_peak =
-        1.0 - distance_to_white * distance_to_white /
-                  (peak + distance_to_white - start_compression);
-    color *= compressed_peak / peak;
-    float desaturation_weight =
-        1.0 - 1.0 / (desaturation * (peak - compressed_peak) + 1.0);
-    return mix(color, vec3(compressed_peak), desaturation_weight);
-}
-
-vec3 standard_tone_mapping(vec3 color)
-{
-    const float calibration = 1.590579;
-    return vec3(1.0) - exp2(-calibration * color);
-}
-
-void main()
-{
-    vec4 linear_color = texture(u_linear_color_texture, v_texcoord);
-    vec3 sanitized = vec3(sanitize_component(linear_color.r),
-                          sanitize_component(linear_color.g),
-                          sanitize_component(linear_color.b));
-    vec3 exposed = sanitized * exp2(u_exposure_ev);
-    vec3 display_linear = max(exposed, vec3(0.0));
-    if (u_tone_mapping == 1) {
-        display_linear = pbr_neutral_tone_mapping(exposed);
-    } else if (u_tone_mapping == 2) {
-        display_linear = standard_tone_mapping(exposed);
-    }
-    fragment_color = vec4(linear_to_srgb(display_linear), clamp(linear_color.a, 0.0, 1.0));
-}
-)glsl";
 
 struct DisplayResolveResources final {
     GLuint program = 0;
@@ -118,18 +32,21 @@ struct DisplayResolveResources final {
     GLint exposure_uniform = -1;
     GLint tone_mapping_uniform = -1;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] bool valid() const noexcept
+    {
         return program != 0 && vertex_array != 0 && texture_uniform >= 0 && exposure_uniform >= 0 &&
                tone_mapping_uniform >= 0;
     }
 };
 
-[[nodiscard]] Result<GLuint> create_display_resolve_program() {
+[[nodiscard]] Result<GLuint> create_display_resolve_program()
+{
     Result<GLuint> vertex_result =
         compile_shader(GL_VERTEX_SHADER, display_resolve_vertex_shader_source);
     if (!vertex_result) {
         return vertex_result.error();
     }
+
     const GLuint vertex_shader = vertex_result.value();
     Result<GLuint> fragment_result =
         compile_shader(GL_FRAGMENT_SHADER, display_resolve_fragment_shader_source);
@@ -137,13 +54,15 @@ struct DisplayResolveResources final {
         glDeleteShader(vertex_shader);
         return fragment_result.error();
     }
+
     Result<GLuint> program_result = link_program(vertex_shader, fragment_result.value());
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_result.value());
     return program_result;
 }
 
-[[nodiscard]] Result<DisplayResolveResources> create_display_resolve_resources() {
+[[nodiscard]] Result<DisplayResolveResources> create_display_resolve_resources()
+{
     AllocationStateGuard allocation_guard;
     Result<GLuint> program_result = create_display_resolve_program();
     if (!program_result) {
@@ -169,7 +88,8 @@ struct DisplayResolveResources final {
     return resources;
 }
 
-void configure_framebuffer_clear_state(GLuint framebuffer, Extent2D extent) noexcept {
+void configure_framebuffer_clear_state(GLuint framebuffer, Extent2D extent) noexcept
+{
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer);
     glViewport(0, 0, static_cast<GLsizei>(extent.width), static_cast<GLsizei>(extent.height));
     glDisable(GL_SCISSOR_TEST);
@@ -180,7 +100,8 @@ void configure_framebuffer_clear_state(GLuint framebuffer, Extent2D extent) noex
 
 void delete_render_target_objects(GLuint framebuffer, GLuint linear_color_texture,
                                   GLuint display_framebuffer, GLuint display_texture,
-                                  GLuint depth_renderbuffer) noexcept {
+                                  GLuint depth_renderbuffer) noexcept
+{
     if (depth_renderbuffer != 0) {
         glDeleteRenderbuffers(1, &depth_renderbuffer);
     }
@@ -205,20 +126,22 @@ struct RenderTargetObjects {
     GLuint display_texture = 0;
     GLuint depth_renderbuffer = 0;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] bool valid() const noexcept
+    {
         return framebuffer != 0 && linear_color_texture != 0 && display_framebuffer != 0 &&
                display_texture != 0 && depth_renderbuffer != 0;
     }
 };
 
-void delete_render_target_objects(const RenderTargetObjects& objects) noexcept {
+void delete_render_target_objects(const RenderTargetObjects& objects) noexcept
+{
     delete_render_target_objects(objects.framebuffer, objects.linear_color_texture,
                                  objects.display_framebuffer, objects.display_texture,
                                  objects.depth_renderbuffer);
 }
 
-void configure_render_target_textures(const RenderTargetObjects& objects,
-                                      Extent2D extent) noexcept {
+void configure_render_target_textures(const RenderTargetObjects& objects, Extent2D extent) noexcept
+{
     glBindTexture(GL_TEXTURE_2D, objects.linear_color_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -241,7 +164,8 @@ void configure_render_target_textures(const RenderTargetObjects& objects,
                           static_cast<GLsizei>(extent.height));
 }
 
-[[nodiscard]] bool configure_render_framebuffer(const RenderTargetObjects& objects) noexcept {
+[[nodiscard]] bool configure_render_framebuffer(const RenderTargetObjects& objects) noexcept
+{
     glBindFramebuffer(GL_FRAMEBUFFER, objects.framebuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                            objects.linear_color_texture, 0);
@@ -252,7 +176,8 @@ void configure_render_target_textures(const RenderTargetObjects& objects,
     return glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
 }
 
-[[nodiscard]] bool configure_display_framebuffer(const RenderTargetObjects& objects) noexcept {
+[[nodiscard]] bool configure_display_framebuffer(const RenderTargetObjects& objects) noexcept
+{
     glBindFramebuffer(GL_FRAMEBUFFER, objects.display_framebuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                            objects.display_texture, 0);
@@ -261,7 +186,8 @@ void configure_render_target_textures(const RenderTargetObjects& objects,
     return glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
 }
 
-[[nodiscard]] Result<RenderTargetObjects> create_render_target_objects(Extent2D extent) noexcept {
+[[nodiscard]] Result<RenderTargetObjects> create_render_target_objects(Extent2D extent) noexcept
+{
     AllocationStateGuard state_guard;
     RenderTargetObjects objects;
     glGenFramebuffers(1, &objects.framebuffer);
@@ -292,7 +218,8 @@ void configure_render_target_textures(const RenderTargetObjects& objects,
 }
 
 void delete_picking_objects(GLuint framebuffer, GLuint id_texture,
-                            GLuint depth_renderbuffer) noexcept {
+                            GLuint depth_renderbuffer) noexcept
+{
     if (depth_renderbuffer != 0) {
         glDeleteRenderbuffers(1, &depth_renderbuffer);
     }
@@ -307,18 +234,23 @@ void delete_picking_objects(GLuint framebuffer, GLuint id_texture,
 class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorTextureResolver {
   public:
     explicit OpenGLRenderTarget(std::shared_ptr<OpenGLDeviceState> state) noexcept
-        : state_(std::move(state)) {}
+        : state_(std::move(state))
+    {
+    }
 
-    ~OpenGLRenderTarget() override {
+    ~OpenGLRenderTarget() override
+    {
         release();
         release_resolve_resources();
     }
 
-    [[nodiscard]] Extent2D extent() const noexcept override {
+    [[nodiscard]] Extent2D extent() const noexcept override
+    {
         return extent_;
     }
 
-    [[nodiscard]] Result<void> resize(Extent2D extent) noexcept override {
+    [[nodiscard]] Result<void> resize(Extent2D extent) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -341,6 +273,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         if (!objects_result) {
             return objects_result.error();
         }
+
         const RenderTargetObjects objects = objects_result.value();
 
         Result<TextureHandle> handle_result =
@@ -362,7 +295,8 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         return {};
     }
 
-    [[nodiscard]] Result<void> clear(Color4 color) noexcept override {
+    [[nodiscard]] Result<void> clear(Color4 color) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -380,36 +314,60 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         return {};
     }
 
-    void set_display_transform(const DisplayTransform& transform) noexcept override {
+    void set_display_transform(const DisplayTransform& transform) noexcept override
+    {
         if (display_transform_ != transform) {
             display_transform_ = transform;
             display_stale_ = true;
         }
     }
 
-    [[nodiscard]] TextureHandle color_texture() const noexcept override {
+    [[nodiscard]] TextureHandle color_texture() const noexcept override
+    {
         return color_texture_handle_;
     }
 
-    [[nodiscard]] bool is_valid() const noexcept override {
+    [[nodiscard]] bool is_valid() const noexcept override
+    {
         return framebuffer_ != 0 && linear_color_texture_ != 0 && display_framebuffer_ != 0 &&
                display_texture_ != 0 && depth_renderbuffer_ != 0 &&
                color_texture_handle_.is_valid() && extent_.width != 0 && extent_.height != 0;
     }
 
-    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
         return opengl_resource_token();
     }
 
-    [[nodiscard]] GLuint framebuffer() const noexcept {
+    [[nodiscard]] GLuint framebuffer() const noexcept
+    {
         return framebuffer_;
     }
 
-    void mark_display_stale() noexcept {
+    [[nodiscard]] Result<void> read_color_pixels(std::span<std::uint8_t> pixels) override
+    {
+        const Result<void> validation = state_->validate_operation();
+        if (!validation) {
+            return validation.error();
+        }
+        if (!is_valid()) {
+            return Error{ErrorCode::texture_unavailable, "Viewport image is unavailable"};
+        }
+        const Result<void> resolved = resolve_color_texture();
+        if (!resolved) {
+            return resolved.error();
+        }
+
+        return read_display_pixels(display_texture_, extent_, pixels);
+    }
+
+    void mark_display_stale() noexcept
+    {
         display_stale_ = true;
     }
 
-    [[nodiscard]] Result<void> resolve_color_texture() override {
+    [[nodiscard]] Result<void> resolve_color_texture() override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -450,6 +408,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         } else if (display_transform_.tone_mapping == ToneMappingMode::standard) {
             tone_mapping = 2;
         }
+
         glUniform1i(resolve_tone_mapping_uniform_, tone_mapping);
         {
             const GpuTimingScope timing{*state_, GpuTimingKind::resolve};
@@ -465,7 +424,8 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
     }
 
   private:
-    [[nodiscard]] Result<void> ensure_display_resolve_resources() {
+    [[nodiscard]] Result<void> ensure_display_resolve_resources()
+    {
         if (resolve_program_ != 0 && resolve_vertex_array_ != 0 && resolve_texture_uniform_ >= 0 &&
             resolve_exposure_uniform_ >= 0 && resolve_tone_mapping_uniform_ >= 0) {
             return {};
@@ -483,7 +443,8 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         return {};
     }
 
-    void release_resolve_resources() noexcept {
+    void release_resolve_resources() noexcept
+    {
         if (!state_->can_destroy_objects()) {
             return;
         }
@@ -500,7 +461,8 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         resolve_tone_mapping_uniform_ = -1;
     }
 
-    void release() noexcept {
+    void release() noexcept
+    {
         if (color_texture_handle_.is_valid()) {
             state_->unregister_texture(color_texture_handle_);
         }
@@ -538,17 +500,22 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
 class OpenGLPickingTarget final : public graphics::PickingTarget {
   public:
     explicit OpenGLPickingTarget(std::shared_ptr<OpenGLDeviceState> state) noexcept
-        : state_(std::move(state)) {}
+        : state_(std::move(state))
+    {
+    }
 
-    ~OpenGLPickingTarget() override {
+    ~OpenGLPickingTarget() override
+    {
         release();
     }
 
-    [[nodiscard]] Extent2D extent() const noexcept override {
+    [[nodiscard]] Extent2D extent() const noexcept override
+    {
         return extent_;
     }
 
-    [[nodiscard]] Result<void> resize(Extent2D extent) noexcept override {
+    [[nodiscard]] Result<void> resize(Extent2D extent) noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -620,7 +587,8 @@ class OpenGLPickingTarget final : public graphics::PickingTarget {
         return {};
     }
 
-    [[nodiscard]] Result<void> clear() noexcept override {
+    [[nodiscard]] Result<void> clear() noexcept override
+    {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
             return validation.error();
@@ -638,21 +606,25 @@ class OpenGLPickingTarget final : public graphics::PickingTarget {
         return {};
     }
 
-    [[nodiscard]] bool is_valid() const noexcept override {
+    [[nodiscard]] bool is_valid() const noexcept override
+    {
         return framebuffer_ != 0 && id_texture_ != 0 && depth_renderbuffer_ != 0 &&
                extent_.width != 0 && extent_.height != 0;
     }
 
-    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
         return opengl_resource_token();
     }
 
-    [[nodiscard]] GLuint framebuffer() const noexcept {
+    [[nodiscard]] GLuint framebuffer() const noexcept
+    {
         return framebuffer_;
     }
 
   private:
-    void release() noexcept {
+    void release() noexcept
+    {
         if (state_->can_destroy_objects()) {
             delete_picking_objects(framebuffer_, id_texture_, depth_renderbuffer_);
         }
@@ -671,7 +643,8 @@ class OpenGLPickingTarget final : public graphics::PickingTarget {
 } // namespace
 
 Result<std::unique_ptr<graphics::RenderTarget>>
-create_render_target(std::shared_ptr<OpenGLDeviceState> state, Extent2D initial_extent) noexcept {
+create_render_target(std::shared_ptr<OpenGLDeviceState> state, Extent2D initial_extent) noexcept
+{
     const Result<void> validation = state->validate_operation();
     if (!validation) {
         return validation.error();
@@ -692,7 +665,8 @@ create_render_target(std::shared_ptr<OpenGLDeviceState> state, Extent2D initial_
 }
 
 Result<std::unique_ptr<graphics::PickingTarget>>
-create_picking_target(std::shared_ptr<OpenGLDeviceState> state, Extent2D initial_extent) noexcept {
+create_picking_target(std::shared_ptr<OpenGLDeviceState> state, Extent2D initial_extent) noexcept
+{
     const Result<void> validation = state->validate_operation();
     if (!validation) {
         return validation.error();
@@ -712,7 +686,8 @@ create_picking_target(std::shared_ptr<OpenGLDeviceState> state, Extent2D initial
     }
 }
 
-Result<RenderTargetView> render_target_view(graphics::RenderTarget& target) noexcept {
+Result<RenderTargetView> render_target_view(graphics::RenderTarget& target) noexcept
+{
     if (target.backend_resource_token() != opengl_resource_token()) {
         return Error{ErrorCode::backend_mismatch, "The render target does not belong to OpenGL"};
     }
@@ -721,7 +696,8 @@ Result<RenderTargetView> render_target_view(graphics::RenderTarget& target) noex
                             opengl_target.is_valid()};
 }
 
-Result<PickingTargetView> picking_target_view(graphics::PickingTarget& target) noexcept {
+Result<PickingTargetView> picking_target_view(graphics::PickingTarget& target) noexcept
+{
     if (target.backend_resource_token() != opengl_resource_token()) {
         return Error{ErrorCode::backend_mismatch, "The picking target does not belong to OpenGL"};
     }
@@ -730,7 +706,8 @@ Result<PickingTargetView> picking_target_view(graphics::PickingTarget& target) n
                              opengl_target.is_valid()};
 }
 
-void mark_render_target_stale(graphics::RenderTarget& target) noexcept {
+void mark_render_target_stale(graphics::RenderTarget& target) noexcept
+{
     static_cast<OpenGLRenderTarget&>(target).mark_display_stale();
 }
 

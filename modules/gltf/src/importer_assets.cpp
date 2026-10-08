@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
@@ -11,6 +11,8 @@ module;
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/core/diagnostics.h>
+#include <elf3d/internal/image.h>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -19,31 +21,29 @@ module;
 #include <utility>
 #include <vector>
 
-module elf.gltf;
-
-import elf.core;
-import elf.image;
-import elf.model;
-
 namespace elf3d::gltf::importer_detail {
 
-[[nodiscard]] Result<EncodedImage> encoded_data_uri(std::string_view uri) {
+[[nodiscard]] Result<EncodedImage> encoded_data_uri(std::string_view uri)
+{
     const std::size_t comma = uri.find(',');
     if (comma == std::string_view::npos || comma <= 5) {
         return Error{ErrorCode::malformed_data_uri,
                      "glTF image data URI is missing metadata or payload"};
     }
+
     const std::string_view metadata = uri.substr(5, comma - 5);
     constexpr std::string_view base64_suffix = ";base64";
     if (!metadata.ends_with(base64_suffix)) {
         return Error{ErrorCode::malformed_data_uri,
                      "glTF image data URIs must use base64 encoding"};
     }
+
     Result<ModelImageMimeType> mime =
         mime_from_text(metadata.substr(0, metadata.size() - base64_suffix.size()));
     if (!mime) {
         return mime.error();
     }
+
     Result<std::vector<std::byte>> bytes = importer_encoding::decode_base64(uri.substr(comma + 1));
     if (!bytes) {
         return bytes.error();
@@ -57,22 +57,29 @@ namespace elf3d::gltf::importer_detail {
 
 [[nodiscard]] Result<EncodedImage> encoded_external_image(const cgltf_image& source,
                                                           std::string_view uri,
-                                                          const std::filesystem::path& gltf_path) {
+                                                          const std::filesystem::path& gltf_path)
+{
     if (uri.find("://") != std::string_view::npos) {
         return Error{ErrorCode::unsupported_remote_uri,
                      "Remote HTTP/HTTPS glTF image URIs are unsupported"};
     }
+
     Result<std::string> decoded_uri = importer_encoding::percent_decode(uri);
     if (!decoded_uri) {
         return decoded_uri.error();
     }
-    const std::filesystem::path image_path =
-        gltf_path.parent_path() / path_from_utf8(decoded_uri.value());
+
+    Result<std::filesystem::path> relative_path = file_path::from_utf8(decoded_uri.value());
+    if (!relative_path) {
+        return relative_path.error();
+    }
+    const std::filesystem::path image_path = gltf_path.parent_path() / relative_path.value();
     Result<ModelImageMimeType> mime = source.mime_type != nullptr ? mime_from_text(source.mime_type)
                                                                   : mime_from_extension(image_path);
     if (!mime) {
         return mime.error();
     }
+
     Result<std::vector<std::byte>> bytes = read_image_file(image_path);
     if (!bytes) {
         return Error{bytes.error().code(),
@@ -85,36 +92,34 @@ namespace elf3d::gltf::importer_detail {
     return EncodedImage{mime.value(), std::move(bytes).value()};
 }
 
-[[nodiscard]] bool valid_image_buffer_view(const cgltf_buffer_view& view) noexcept {
+[[nodiscard]] bool valid_image_buffer_view(const cgltf_buffer_view& view) noexcept
+{
     return view.buffer != nullptr && view.buffer->data != nullptr && view.size != 0 &&
            view.offset <= view.buffer->size && view.size <= view.buffer->size - view.offset &&
            view.size <= image::maximum_encoded_bytes;
 }
 
-[[nodiscard]] Error invalid_image_buffer_view_error(const cgltf_buffer_view& view) {
+[[nodiscard]] Error invalid_image_buffer_view_error(const cgltf_buffer_view& view)
+{
     return Error{view.size > image::maximum_encoded_bytes ? ErrorCode::image_resource_limit_exceeded
                                                           : ErrorCode::image_range_out_of_bounds,
                  "A GLB image buffer view is empty or outside its source buffer"};
 }
 
 [[nodiscard]] Result<EncodedImage> copy_image_buffer_view(ModelImageMimeType mime,
-                                                          const cgltf_buffer_view& view) {
-    try {
-        const auto* begin = static_cast<const std::byte*>(view.buffer->data) + view.offset;
-        std::vector<std::byte> bytes(begin, begin + view.size);
-        if (!encoded_matches(mime, bytes)) {
-            return Error{ErrorCode::image_decode_failed,
-                         "GLB image bytes do not match the declared MIME type"};
-        }
-        return EncodedImage{mime, std::move(bytes)};
-    } catch (const std::bad_alloc&) {
-        fatal_gltf_allocation_failure();
-    } catch (...) {
-        fatal_unexpected_gltf_boundary_exception();
+                                                          const cgltf_buffer_view& view)
+{
+    const auto* begin = static_cast<const std::byte*>(view.buffer->data) + view.offset;
+    std::vector<std::byte> bytes(begin, begin + view.size);
+    if (!encoded_matches(mime, bytes)) {
+        return Error{ErrorCode::image_decode_failed,
+                     "GLB image bytes do not match the declared MIME type"};
     }
+    return EncodedImage{mime, std::move(bytes)};
 }
 
-[[nodiscard]] Result<EncodedImage> encoded_buffer_view(const cgltf_image& source) {
+[[nodiscard]] Result<EncodedImage> encoded_buffer_view(const cgltf_image& source)
+{
     if (source.buffer_view == nullptr) {
         return Error{ErrorCode::invalid_image_buffer_view,
                      "A glTF image has neither a URI nor a buffer view"};
@@ -123,10 +128,12 @@ namespace elf3d::gltf::importer_detail {
         return Error{ErrorCode::unsupported_image_mime_type,
                      "A buffer-view glTF image requires image/png or image/jpeg MIME type"};
     }
+
     Result<ModelImageMimeType> mime = mime_from_text(source.mime_type);
     if (!mime) {
         return mime.error();
     }
+
     const cgltf_buffer_view& view = *source.buffer_view;
     if (!valid_image_buffer_view(view)) {
         return invalid_image_buffer_view_error(view);
@@ -135,7 +142,8 @@ namespace elf3d::gltf::importer_detail {
 }
 
 [[nodiscard]] Result<EncodedImage> encoded_image(const cgltf_image& source,
-                                                 const std::filesystem::path& gltf_path) {
+                                                 const std::filesystem::path& gltf_path)
+{
     if (source.uri != nullptr) {
         const std::string_view uri{source.uri};
         return uri.starts_with("data:") ? encoded_data_uri(uri)
@@ -146,7 +154,8 @@ namespace elf3d::gltf::importer_detail {
 
 [[nodiscard]] Result<ImageId> image_for(const cgltf_data& data, const cgltf_image* source,
                                         const std::filesystem::path& gltf_path,
-                                        DocumentBuilder& builder, ImageImportState& images) {
+                                        DocumentBuilder& builder, ImageImportState& images)
+{
     if (source == nullptr || source < data.images || source >= data.images + data.images_count) {
         return Error{ErrorCode::invalid_image_handle,
                      "A glTF texture references an image outside the image table"};
@@ -155,26 +164,31 @@ namespace elf3d::gltf::importer_detail {
     if (images.ids[index].has_value()) {
         return images.ids[index].value();
     }
+
     Result<EncodedImage> encoded = encoded_image(*source, gltf_path);
     if (!encoded) {
         return encoded.error();
     }
+
     std::uint64_t encoded_total = images.budget.encoded_bytes;
     if (!checked_add(encoded_total, static_cast<std::uint64_t>(encoded.value().bytes.size()),
                      maximum_total_encoded_image_bytes)) {
         return Error{ErrorCode::image_resource_limit_exceeded,
                      "Imported scene images exceed the 512 MiB encoded-image limit"};
     }
+
     Result<image::DecodedImage> decoded = image::decode_png_or_jpeg(encoded.value().bytes);
     if (!decoded) {
         return decoded.error();
     }
+
     std::uint64_t decoded_total = images.budget.decoded_bytes;
     if (!checked_add(decoded_total, static_cast<std::uint64_t>(decoded.value().pixels.size()),
                      maximum_total_decoded_image_bytes)) {
         return Error{ErrorCode::image_resource_limit_exceeded,
                      maximum_total_decoded_image_error_message};
     }
+
     const Result<ImageId> created = builder.create_image(ModelImageDescription{
         decoded.value().width, decoded.value().height, PixelFormat::rgba8_unorm,
         decoded.value().pixels, encoded.value().mime, encoded.value().bytes});
@@ -187,7 +201,8 @@ namespace elf3d::gltf::importer_detail {
     return created.value();
 }
 
-[[nodiscard]] Result<TextureWrap> texture_wrap(cgltf_wrap_mode wrap) {
+[[nodiscard]] Result<TextureWrap> texture_wrap(cgltf_wrap_mode wrap)
+{
     switch (wrap) {
     case cgltf_wrap_mode_repeat:
         return TextureWrap::repeat;
@@ -201,7 +216,8 @@ namespace elf3d::gltf::importer_detail {
     }
 }
 
-[[nodiscard]] Result<TextureFilter> min_filter(cgltf_filter_type filter) {
+[[nodiscard]] Result<TextureFilter> min_filter(cgltf_filter_type filter)
+{
     switch (filter) {
     case cgltf_filter_type_undefined:
         return TextureFilter::linear_mipmap_linear;
@@ -223,12 +239,14 @@ namespace elf3d::gltf::importer_detail {
     }
 }
 
-[[nodiscard]] constexpr SamplerDescription automatic_sampler_description() noexcept {
+[[nodiscard]] constexpr SamplerDescription automatic_sampler_description() noexcept
+{
     return SamplerDescription{TextureWrap::repeat, TextureWrap::repeat,
                               TextureFilter::linear_mipmap_linear, TextureFilter::linear};
 }
 
-[[nodiscard]] Result<TextureFilter> mag_filter(cgltf_filter_type filter) {
+[[nodiscard]] Result<TextureFilter> mag_filter(cgltf_filter_type filter)
+{
     switch (filter) {
     case cgltf_filter_type_undefined:
     case cgltf_filter_type_linear:
@@ -241,10 +259,12 @@ namespace elf3d::gltf::importer_detail {
     }
 }
 
-[[nodiscard]] Result<SamplerDescription> sampler_description(const cgltf_sampler* sampler) {
+[[nodiscard]] Result<SamplerDescription> sampler_description(const cgltf_sampler* sampler)
+{
     if (sampler == nullptr) {
         return automatic_sampler_description();
     }
+
     Result<TextureWrap> wrap_u = texture_wrap(sampler->wrap_s);
     Result<TextureWrap> wrap_v = texture_wrap(sampler->wrap_t);
     Result<TextureFilter> minimum = min_filter(sampler->min_filter);
@@ -268,7 +288,8 @@ namespace elf3d::gltf::importer_detail {
 [[nodiscard]] Result<SamplerId> sampler_for(const cgltf_data& data, const cgltf_sampler* source,
                                             DocumentBuilder& builder,
                                             std::vector<std::optional<SamplerId>>& samplers,
-                                            std::optional<SamplerId>& default_sampler) {
+                                            std::optional<SamplerId>& default_sampler)
+{
     if (source == nullptr) {
         if (!default_sampler.has_value()) {
             const Result<SamplerId> created =
@@ -288,10 +309,12 @@ namespace elf3d::gltf::importer_detail {
     if (samplers[index].has_value()) {
         return samplers[index].value();
     }
+
     Result<SamplerDescription> description = sampler_description(source);
     if (!description) {
         return description.error();
     }
+
     const Result<SamplerId> created = builder.create_sampler(description.value());
     if (!created) {
         return created.error();
@@ -303,7 +326,8 @@ namespace elf3d::gltf::importer_detail {
 [[nodiscard]] std::string mesh_context(const cgltf_mesh& mesh, cgltf_size mesh_index,
                                        cgltf_size primitive_index);
 
-[[nodiscard]] Result<void> validate_sampler_inputs(const cgltf_data& data) {
+[[nodiscard]] Result<void> validate_sampler_inputs(const cgltf_data& data)
+{
     for (cgltf_size sampler_index = 0; sampler_index < data.samplers_count; ++sampler_index) {
         const Result<SamplerDescription> sampler =
             sampler_description(&data.samplers[sampler_index]);
@@ -317,7 +341,8 @@ namespace elf3d::gltf::importer_detail {
 [[nodiscard]] Result<void> validate_primitive_texcoords(const cgltf_mesh& mesh,
                                                         cgltf_size mesh_index,
                                                         const cgltf_primitive& primitive,
-                                                        cgltf_size primitive_index) {
+                                                        cgltf_size primitive_index)
+{
     const cgltf_accessor* positions =
         cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0);
     for (cgltf_int set = 0; set < static_cast<cgltf_int>(maximum_texture_coordinate_sets); ++set) {
@@ -341,7 +366,8 @@ namespace elf3d::gltf::importer_detail {
     return {};
 }
 
-[[nodiscard]] Result<void> validate_mesh_texcoords(const cgltf_data& data) {
+[[nodiscard]] Result<void> validate_mesh_texcoords(const cgltf_data& data)
+{
     for (cgltf_size mesh_index = 0; mesh_index < data.meshes_count; ++mesh_index) {
         const cgltf_mesh& mesh = data.meshes[mesh_index];
         for (cgltf_size primitive_index = 0; primitive_index < mesh.primitives_count;
@@ -360,14 +386,16 @@ namespace elf3d::gltf::importer_detail {
     return {};
 }
 
-[[nodiscard]] Result<void> validate_texture_inputs(const cgltf_data& data) {
+[[nodiscard]] Result<void> validate_texture_inputs(const cgltf_data& data)
+{
     if (const Result<void> samplers = validate_sampler_inputs(data); !samplers) {
         return samplers.error();
     }
     return validate_mesh_texcoords(data);
 }
 
-[[nodiscard]] Result<TextureId> texture_for(ImportState& state, const cgltf_texture* source) {
+[[nodiscard]] Result<TextureId> texture_for(ImportState& state, const cgltf_texture* source)
+{
     if (source == nullptr || source < state.data.textures ||
         source >= state.data.textures + state.data.textures_count) {
         return Error{ErrorCode::invalid_texture_asset_handle,
@@ -381,16 +409,19 @@ namespace elf3d::gltf::importer_detail {
         return Error{ErrorCode::unsupported_image_mime_type,
                      "The glTF texture has no ordinary PNG/JPEG fallback image"};
     }
+
     Result<ImageId> image =
         image_for(state.data, source->image, state.gltf_path, state.builder, state.ids.images);
     if (!image) {
         return image.error();
     }
+
     Result<SamplerId> sampler = sampler_for(state.data, source->sampler, state.builder,
                                             state.ids.samplers, state.default_sampler);
     if (!sampler) {
         return sampler.error();
     }
+
     const Result<TextureId> created =
         state.builder.create_texture(ModelTextureDescription{image.value(), sampler.value()});
     if (!created) {
@@ -401,7 +432,8 @@ namespace elf3d::gltf::importer_detail {
 }
 
 [[nodiscard]] std::string mesh_context(const cgltf_mesh& mesh, cgltf_size mesh_index,
-                                       cgltf_size primitive_index) {
+                                       cgltf_size primitive_index)
+{
     std::string result = "mesh ";
     result +=
         mesh.name != nullptr ? std::string{"'"} + mesh.name + "'" : std::to_string(mesh_index);
@@ -409,7 +441,8 @@ namespace elf3d::gltf::importer_detail {
     return result;
 }
 
-[[nodiscard]] std::string node_context(const cgltf_node& node, cgltf_size node_index) {
+[[nodiscard]] std::string node_context(const cgltf_node& node, cgltf_size node_index)
+{
     std::string result = "node ";
     result += node.name != nullptr ? node.name : std::to_string(node_index);
     return result;
@@ -422,7 +455,8 @@ struct ReachableNodeTraversal {
 
 [[nodiscard]] Result<void> append_reachable_root(const cgltf_data& data,
                                                  ReachableNodeTraversal& traversal,
-                                                 const cgltf_node* node) {
+                                                 const cgltf_node* node)
+{
     if (node == nullptr || node < data.nodes || node >= data.nodes + data.nodes_count) {
         return Error{ErrorCode::invalid_node_hierarchy,
                      "A glTF scene contains an invalid root node"};
@@ -436,7 +470,8 @@ struct ReachableNodeTraversal {
 }
 
 [[nodiscard]] Result<void> append_scene_roots(const cgltf_data& data,
-                                              ReachableNodeTraversal& traversal) {
+                                              ReachableNodeTraversal& traversal)
+{
     for (cgltf_size scene_index = 0; scene_index < data.scenes_count; ++scene_index) {
         const cgltf_scene& scene = data.scenes[scene_index];
         for (cgltf_size root_index = 0; root_index < scene.nodes_count; ++root_index) {
@@ -451,7 +486,8 @@ struct ReachableNodeTraversal {
 }
 
 [[nodiscard]] Result<void> append_parentless_roots(const cgltf_data& data,
-                                                   ReachableNodeTraversal& traversal) {
+                                                   ReachableNodeTraversal& traversal)
+{
     for (cgltf_size index = 0; index < data.nodes_count; ++index) {
         if (data.nodes[index].parent == nullptr) {
             const Result<void> result = append_reachable_root(data, traversal, &data.nodes[index]);
@@ -465,8 +501,8 @@ struct ReachableNodeTraversal {
 
 [[nodiscard]] Result<void> append_reachable_child(const cgltf_data& data,
                                                   ReachableNodeTraversal& traversal,
-                                                  const cgltf_node& parent,
-                                                  const cgltf_node* child) {
+                                                  const cgltf_node& parent, const cgltf_node* child)
+{
     if (child == nullptr || child < data.nodes || child >= data.nodes + data.nodes_count ||
         child->parent != &parent) {
         return Error{ErrorCode::invalid_node_hierarchy,
@@ -481,7 +517,8 @@ struct ReachableNodeTraversal {
 }
 
 [[nodiscard]] Result<void> append_reachable_descendants(const cgltf_data& data,
-                                                        ReachableNodeTraversal& traversal) {
+                                                        ReachableNodeTraversal& traversal)
+{
     for (std::size_t queue_index = 0; queue_index < traversal.queue.size(); ++queue_index) {
         const cgltf_node& parent = *traversal.queue[queue_index];
         for (cgltf_size child_index = 0; child_index < parent.children_count; ++child_index) {
@@ -495,25 +532,19 @@ struct ReachableNodeTraversal {
     return {};
 }
 
-[[nodiscard]] Result<std::vector<bool>> reachable_nodes(const cgltf_data& data) {
-    try {
-        ReachableNodeTraversal traversal{std::vector<bool>(data.nodes_count, false), {}};
-        const Result<void> roots = data.scenes_count != 0
-                                       ? append_scene_roots(data, traversal)
-                                       : append_parentless_roots(data, traversal);
-        if (!roots) {
-            return roots.error();
-        }
-        if (const Result<void> descendants = append_reachable_descendants(data, traversal);
-            !descendants) {
-            return descendants.error();
-        }
-        return std::move(traversal.reachable);
-    } catch (const std::bad_alloc&) {
-        fatal_gltf_allocation_failure();
-    } catch (...) {
-        fatal_unexpected_gltf_boundary_exception();
+[[nodiscard]] Result<std::vector<bool>> reachable_nodes(const cgltf_data& data)
+{
+    ReachableNodeTraversal traversal{std::vector<bool>(data.nodes_count, false), {}};
+    const Result<void> roots = data.scenes_count != 0 ? append_scene_roots(data, traversal)
+                                                      : append_parentless_roots(data, traversal);
+    if (!roots) {
+        return roots.error();
     }
+    if (const Result<void> descendants = append_reachable_descendants(data, traversal);
+        !descendants) {
+        return descendants.error();
+    }
+    return std::move(traversal.reachable);
 }
 
 } // namespace elf3d::gltf::importer_detail

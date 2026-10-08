@@ -4,7 +4,8 @@ namespace elf3d::viewer {
 
 RetainedViewportFrameKey viewport_frame_key(const ViewerFrameContext& state,
                                             const SceneSession& scene, const Viewport& viewport,
-                                            const ToolCoordinator& tools) {
+                                            const ToolCoordinator& tools)
+{
     const DistanceMeasurementSnapshot measurement = tools.measurement().snapshot(
         *scene.scene, viewport, tools.active_tool() == ViewerTool::distance_measurement);
     RetainedViewportFrameKey key;
@@ -30,7 +31,8 @@ RetainedViewportFrameKey viewport_frame_key(const ViewerFrameContext& state,
 
 bool viewport_frame_render_required(const ViewerFrameContext& state,
                                     const RetainedViewportFrameKey& key,
-                                    const Viewport& viewport) noexcept {
+                                    const Viewport& viewport) noexcept
+{
     const std::optional<NavigationSnapshot> navigation = viewport.navigation_snapshot();
     const bool navigating = navigation.has_value() && navigation->is_pointer_captured;
     return viewport_frame_render_required(state.rendering.retained_viewport_frame, key,
@@ -39,7 +41,8 @@ bool viewport_frame_render_required(const ViewerFrameContext& state,
 
 bool viewport_frame_render_required(const std::optional<RetainedViewportFrameKey>& previous_frame,
                                     const RetainedViewportFrameKey& key, bool framebuffer_valid,
-                                    bool pointer_navigation_captured) noexcept {
+                                    bool pointer_navigation_captured) noexcept
+{
     return !framebuffer_valid || !previous_frame.has_value() || *previous_frame != key ||
            pointer_navigation_captured;
 }

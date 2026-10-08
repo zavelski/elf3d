@@ -3,6 +3,7 @@
 #include <elf3d/core/result.h>
 #include <elf3d/graphics.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -20,27 +21,39 @@ constexpr std::uintptr_t fake_resource_token = 1;
 
 class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
   public:
-    [[nodiscard]] elf3d::Extent2D extent() const noexcept override {
+    [[nodiscard]] elf3d::Extent2D extent() const noexcept override
+    {
         return extent_value;
     }
-    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) noexcept override {
+    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) noexcept override
+    {
         extent_value = extent;
         return {};
     }
-    [[nodiscard]] elf3d::Result<void> clear(elf3d::Color4) noexcept override {
+    [[nodiscard]] elf3d::Result<void> clear(elf3d::Color4) noexcept override
+    {
         ++clear_count;
         return {};
     }
-    void set_display_transform(const elf3d::DisplayTransform& transform) noexcept override {
-        display_transform = transform;
-    }
-    [[nodiscard]] elf3d::TextureHandle color_texture() const noexcept override {
+    [[nodiscard]] elf3d::Result<void> read_color_pixels(std::span<std::uint8_t> pixels) override
+    {
+        std::fill(pixels.begin(), pixels.end(), std::uint8_t{0});
         return {};
     }
-    [[nodiscard]] bool is_valid() const noexcept override {
+    void set_display_transform(const elf3d::DisplayTransform& transform) noexcept override
+    {
+        display_transform = transform;
+    }
+    [[nodiscard]] elf3d::TextureHandle color_texture() const noexcept override
+    {
+        return {};
+    }
+    [[nodiscard]] bool is_valid() const noexcept override
+    {
         return extent_value.width != 0 && extent_value.height != 0;
     }
-    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
         return fake_resource_token;
     }
 
@@ -51,21 +64,26 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
 
 class FakePickingTarget final : public elf3d::graphics::PickingTarget {
   public:
-    [[nodiscard]] elf3d::Extent2D extent() const noexcept override {
+    [[nodiscard]] elf3d::Extent2D extent() const noexcept override
+    {
         return extent_value;
     }
-    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) noexcept override {
+    [[nodiscard]] elf3d::Result<void> resize(elf3d::Extent2D extent) noexcept override
+    {
         extent_value = extent;
         return {};
     }
-    [[nodiscard]] elf3d::Result<void> clear() noexcept override {
+    [[nodiscard]] elf3d::Result<void> clear() noexcept override
+    {
         ++clear_count;
         return {};
     }
-    [[nodiscard]] bool is_valid() const noexcept override {
+    [[nodiscard]] bool is_valid() const noexcept override
+    {
         return extent_value.width != 0 && extent_value.height != 0;
     }
-    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
         return fake_resource_token;
     }
 
@@ -77,17 +95,23 @@ class FakeMesh final : public elf3d::graphics::StaticMesh {
   public:
     FakeMesh(std::uint32_t vertices, std::uint32_t indices,
              elf3d::graphics::VertexLayout layout) noexcept
-        : vertices_(vertices), indices_(indices), layout_(layout) {}
-    [[nodiscard]] std::uint32_t vertex_count() const noexcept override {
+        : vertices_(vertices), indices_(indices), layout_(layout)
+    {
+    }
+    [[nodiscard]] std::uint32_t vertex_count() const noexcept override
+    {
         return vertices_;
     }
-    [[nodiscard]] std::uint32_t index_count() const noexcept override {
+    [[nodiscard]] std::uint32_t index_count() const noexcept override
+    {
         return indices_;
     }
-    [[nodiscard]] elf3d::graphics::VertexLayout vertex_layout() const noexcept override {
+    [[nodiscard]] elf3d::graphics::VertexLayout vertex_layout() const noexcept override
+    {
         return layout_;
     }
-    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
         return fake_resource_token;
     }
 
@@ -99,22 +123,27 @@ class FakeMesh final : public elf3d::graphics::StaticMesh {
 
 class FakePipeline final : public elf3d::graphics::GraphicsPipeline {
   public:
-    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
         return fake_resource_token;
     }
 };
 class FakeTexture final : public elf3d::graphics::Texture2D {
   public:
-    explicit FakeTexture(int& live_count) noexcept : live_count_(&live_count, 1U) {
+    explicit FakeTexture(int& live_count) noexcept : live_count_(&live_count, 1U)
+    {
         ++live_count_.front();
     }
-    ~FakeTexture() override {
+    ~FakeTexture() override
+    {
         --live_count_.front();
     }
-    [[nodiscard]] elf3d::Extent2D extent() const noexcept override {
+    [[nodiscard]] elf3d::Extent2D extent() const noexcept override
+    {
         return {1, 1};
     }
-    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
         return fake_resource_token;
     }
 
@@ -124,19 +153,24 @@ class FakeTexture final : public elf3d::graphics::Texture2D {
 class FakeTextureCube final : public elf3d::graphics::TextureCube {
   public:
     FakeTextureCube(std::uint32_t extent, std::uint32_t mip_count, int& live_count) noexcept
-        : extent_(extent), mip_count_(mip_count), live_count_(&live_count, 1U) {
+        : extent_(extent), mip_count_(mip_count), live_count_(&live_count, 1U)
+    {
         ++live_count_.front();
     }
-    ~FakeTextureCube() override {
+    ~FakeTextureCube() override
+    {
         --live_count_.front();
     }
-    [[nodiscard]] std::uint32_t extent() const noexcept override {
+    [[nodiscard]] std::uint32_t extent() const noexcept override
+    {
         return extent_;
     }
-    [[nodiscard]] std::uint32_t mip_count() const noexcept override {
+    [[nodiscard]] std::uint32_t mip_count() const noexcept override
+    {
         return mip_count_;
     }
-    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override {
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
         return fake_resource_token;
     }
 
@@ -181,55 +215,68 @@ struct FakeDeviceState {
 
 class FakeDevice final : public elf3d::graphics::Device {
   public:
-    [[nodiscard]] double monotonic_time_milliseconds() const noexcept override {
+    [[nodiscard]] double monotonic_time_milliseconds() const noexcept override
+    {
         const double result = clock_milliseconds_;
         clock_milliseconds_ += 0.125;
         return result;
     }
     [[nodiscard]] elf3d::graphics::GpuTimingSample
-    delayed_gpu_timing(elf3d::graphics::GpuTimingPass) noexcept override {
+    delayed_gpu_timing(elf3d::graphics::GpuTimingPass) noexcept override
+    {
         return {};
     }
 
-    [[nodiscard]] FakeDeviceState& state() noexcept {
+    [[nodiscard]] FakeDeviceState& state() noexcept
+    {
         return state_;
     }
 
-    [[nodiscard]] const FakeDeviceState& state() const noexcept {
+    [[nodiscard]] const FakeDeviceState& state() const noexcept
+    {
         return state_;
     }
-    void fail_cubemap_upload_at(int attempt) noexcept {
+    void fail_cubemap_upload_at(int attempt) noexcept
+    {
         failed_cubemap_upload_ = attempt;
     }
-    void fail_texture_upload_at(int attempt) noexcept {
+    void fail_texture_upload_at(int attempt) noexcept
+    {
         failed_texture_upload_ = attempt;
     }
-    [[nodiscard]] int live_cubemap_count() const noexcept {
+    [[nodiscard]] int live_cubemap_count() const noexcept
+    {
         return live_cubemap_count_;
     }
-    [[nodiscard]] int live_texture_count() const noexcept {
+    [[nodiscard]] int live_texture_count() const noexcept
+    {
         return live_texture_count_;
     }
 
-    [[nodiscard]] elf3d::GraphicsBackend backend() const noexcept override {
+    [[nodiscard]] elf3d::GraphicsBackend backend() const noexcept override
+    {
         return elf3d::GraphicsBackend::none;
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::RenderTarget>>
-    create_render_target(elf3d::Extent2D) noexcept override {
+    create_render_target(elf3d::Extent2D) noexcept override
+    {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument, "Not used"};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::PickingTarget>>
-    create_picking_target(elf3d::Extent2D initial_extent) noexcept override {
+    create_picking_target(elf3d::Extent2D initial_extent) noexcept override
+    {
         auto target = std::make_unique<FakePickingTarget>();
         target->extent_value = initial_extent;
         return std::unique_ptr<elf3d::graphics::PickingTarget>{std::move(target)};
     }
     [[nodiscard]] elf3d::Result<elf3d::graphics::NativeTextureView>
-    native_texture_view(elf3d::TextureHandle) const noexcept override {
+    native_texture_view(elf3d::TextureHandle) const noexcept override
+    {
         return elf3d::Error{elf3d::ErrorCode::invalid_argument, "Not used"};
     }
-    [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::StaticMesh>> create_static_mesh(
-        const elf3d::graphics::StaticMeshDescription& description) noexcept override {
+    [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::StaticMesh>>
+    create_static_mesh(const elf3d::graphics::StaticMeshDescription& description) noexcept override
+    {
         ++state_.upload_count;
         state_.mesh_layouts.push_back(description.vertex_layout);
         state_.mesh_uploaded_bytes.push_back(description.vertex_bytes.size());
@@ -238,7 +285,8 @@ class FakeDevice final : public elf3d::graphics::Device {
             description.vertex_layout)};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::Texture2D>>
-    create_texture_2d(const elf3d::graphics::Texture2DDescription& description) noexcept override {
+    create_texture_2d(const elf3d::graphics::Texture2DDescription& description) noexcept override
+    {
         ++state_.texture_upload_count;
         state_.texture_descriptions.push_back(FakeDeviceState::TextureDescriptionSnapshot{
             description.format, description.wrap_u, description.wrap_v, description.min_filter,
@@ -251,7 +299,8 @@ class FakeDevice final : public elf3d::graphics::Device {
             std::make_unique<FakeTexture>(live_texture_count_)};
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::TextureCube>> create_texture_cube(
-        const elf3d::graphics::TextureCubeDescription& description) noexcept override {
+        const elf3d::graphics::TextureCubeDescription& description) noexcept override
+    {
         ++state_.cubemap_upload_count;
         state_.cubemap_extents.push_back(
             description.mips.empty() ? 0U : description.mips.front().extent);
@@ -265,7 +314,8 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
     [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::graphics::GraphicsPipeline>>
     create_graphics_pipeline(
-        const elf3d::graphics::GraphicsPipelineDescription& description) noexcept override {
+        const elf3d::graphics::GraphicsPipelineDescription& description) noexcept override
+    {
         state_.vertex_shader_source = description.vertex_shader_source;
         state_.fragment_shader_source = description.fragment_shader_source;
         return std::unique_ptr<elf3d::graphics::GraphicsPipeline>{std::make_unique<FakePipeline>()};
@@ -273,13 +323,15 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<void>
     draw_indexed(elf3d::graphics::RenderTarget&, elf3d::graphics::GraphicsPipeline&,
                  elf3d::graphics::StaticMesh&,
-                 const elf3d::graphics::DrawIndexedDescription& description) noexcept override {
+                 const elf3d::graphics::DrawIndexedDescription& description) noexcept override
+    {
         ++state_.draw_count;
         std::array<bool, elf3d::graphics::material_texture_count> texture_presence{};
         for (std::size_t index = 0; index < texture_presence.size(); ++index) {
             texture_presence[index] =
                 description.textures.size() > index && description.textures[index] != nullptr;
         }
+
         state_.draw_texture_presence.push_back(texture_presence);
         state_.draw_environment_presence.push_back(description.environment_cubemaps.size() == 2U &&
                                                    description.environment_luts.size() == 1U &&
@@ -296,7 +348,8 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<void> draw_indexed_batch(
         elf3d::graphics::RenderTarget& target, elf3d::graphics::GraphicsPipeline& pipeline,
         std::span<elf3d::graphics::StaticMesh* const> meshes,
-        std::span<const elf3d::graphics::DrawIndexedDescription> descriptions) noexcept override {
+        std::span<const elf3d::graphics::DrawIndexedDescription> descriptions) noexcept override
+    {
         ++state_.indexed_batch_count;
         if (meshes.size() != descriptions.size()) {
             return elf3d::Error{elf3d::ErrorCode::invalid_argument,
@@ -307,6 +360,7 @@ class FakeDevice final : public elf3d::graphics::Device {
                 return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                     "Fake batch item requires a mesh"};
             }
+
             const elf3d::Result<void> result =
                 draw_indexed(target, pipeline, *meshes[index], descriptions[index]);
             if (!result) {
@@ -317,7 +371,8 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
     [[nodiscard]] elf3d::Result<void>
     draw_overlay(elf3d::graphics::RenderTarget&,
-                 const elf3d::graphics::DrawOverlayDescription& description) noexcept override {
+                 const elf3d::graphics::DrawOverlayDescription& description) noexcept override
+    {
         ++state_.overlay_draw_count;
         state_.overlay_line_count += static_cast<int>(description.lines.size());
         state_.overlay_marker_count += static_cast<int>(description.markers.size());
@@ -325,7 +380,8 @@ class FakeDevice final : public elf3d::graphics::Device {
     }
     [[nodiscard]] elf3d::Result<void> draw_picking_indexed(
         elf3d::graphics::PickingTarget&, elf3d::graphics::StaticMesh&,
-        const elf3d::graphics::PickingDrawDescription& description) noexcept override {
+        const elf3d::graphics::PickingDrawDescription& description) noexcept override
+    {
         ++state_.picking_draw_count;
         state_.picking_draws.push_back(description);
         return {};
@@ -333,7 +389,8 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<void> draw_picking_batch(
         elf3d::graphics::PickingTarget& target,
         std::span<elf3d::graphics::StaticMesh* const> meshes,
-        std::span<const elf3d::graphics::PickingDrawDescription> descriptions) noexcept override {
+        std::span<const elf3d::graphics::PickingDrawDescription> descriptions) noexcept override
+    {
         ++state_.picking_batch_count;
         if (meshes.size() != descriptions.size()) {
             return elf3d::Error{elf3d::ErrorCode::invalid_argument,
@@ -344,6 +401,7 @@ class FakeDevice final : public elf3d::graphics::Device {
                 return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                     "Fake picking batch item requires a mesh"};
             }
+
             const elf3d::Result<void> result =
                 draw_picking_indexed(target, *meshes[index], descriptions[index]);
             if (!result) {
@@ -353,14 +411,17 @@ class FakeDevice final : public elf3d::graphics::Device {
         return {};
     }
     [[nodiscard]] elf3d::Result<std::optional<elf3d::graphics::PickingPixel>>
-    read_picking_pixel(elf3d::graphics::PickingTarget&, elf3d::Float2) noexcept override {
+    read_picking_pixel(elf3d::graphics::PickingTarget&, elf3d::Float2) noexcept override
+    {
         return state_.picking_pixel;
     }
     [[nodiscard]] elf3d::Result<std::vector<float>>
-    read_picking_depths(elf3d::graphics::PickingTarget& target) noexcept override {
+    read_picking_depths(elf3d::graphics::PickingTarget& target) noexcept override
+    {
         if (!state_.picking_depths.empty()) {
             return state_.picking_depths;
         }
+
         const elf3d::Extent2D extent = target.extent();
         return std::vector<float>(
             static_cast<std::size_t>(extent.width) * static_cast<std::size_t>(extent.height),

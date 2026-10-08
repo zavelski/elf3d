@@ -67,7 +67,8 @@ $relativeFiles = @(
     $trackedAndUntracked |
         Where-Object {
             $_ -notmatch "^third_party/" -and
-            $_ -notmatch "^tools/(green-profile|module-graph)/fixtures/"
+            $_ -notmatch "^tools/(green-profile|module-graph)/fixtures/" -and
+            (Test-Path -LiteralPath (Join-Path $repositoryPath $_) -PathType Leaf)
         } |
         Sort-Object -Unique
 )

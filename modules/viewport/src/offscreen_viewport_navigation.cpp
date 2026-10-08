@@ -1,28 +1,27 @@
-module;
+#include <elf3d/internal/viewport.h>
 
 #include <elf3d/viewport.h>
 
+#include <elf3d/internal/clipping.h>
+#include <elf3d/internal/navigation.h>
+#include <elf3d/internal/renderer.h>
+#include <elf3d/internal/scene.h>
+#include <elf3d/internal/visibility.h>
 #include <optional>
 #include <utility>
-
-module elf.viewport;
-
-import elf.clipping;
-import elf.navigation;
-import elf.renderer;
-import elf.scene;
-import elf.visibility;
 
 namespace elf3d::viewport {
 
 Result<void> OffscreenViewport::update_navigation(renderer::Renderer& renderer,
                                                   scene::Storage& scene, EntityId camera,
-                                                  const NavigationInput& input) {
+                                                  const NavigationInput& input)
+{
     state_->validate_visibility(scene);
     Result<scene::VisibilityFilter> visibility = state_->visibility_filter(scene);
     if (!visibility) {
         return visibility.error();
     }
+
     Result<clipping::ClippingFilter> clipping_filter = state_->clipping.filter();
     if (!clipping_filter) {
         return clipping_filter.error();

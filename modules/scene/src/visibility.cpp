@@ -1,17 +1,15 @@
-module;
+#include <elf3d/internal/scene.h>
 
 #include <elf3d/core/assert.h>
 
 #include <algorithm>
 #include <optional>
 #include <vector>
-
-module elf.scene;
-
 namespace elf3d::scene {
 namespace {
 
-void expand_bounds(std::optional<Bounds3>& target, Bounds3 bounds) noexcept {
+void expand_bounds(std::optional<Bounds3>& target, Bounds3 bounds) noexcept
+{
     if (!target.has_value()) {
         target = bounds;
         return;
@@ -26,7 +24,8 @@ void expand_bounds(std::optional<Bounds3>& target, Bounds3 bounds) noexcept {
 
 } // namespace
 
-Result<void> Storage::set_entity_visible(EntityId entity_id, bool visible) {
+Result<void> Storage::set_entity_visible(EntityId entity_id, bool visible)
+{
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -34,6 +33,7 @@ Result<void> Storage::set_entity_visible(EntityId entity_id, bool visible) {
     if (record.value()->local_visible == visible) {
         return {};
     }
+
     record.value()->local_visible = visible;
     update_effective_visibility_from(entity_id);
     increment_revision();
@@ -41,7 +41,8 @@ Result<void> Storage::set_entity_visible(EntityId entity_id, bool visible) {
     return {};
 }
 
-Result<bool> Storage::entity_local_visibility(EntityId entity_id) const noexcept {
+Result<bool> Storage::entity_local_visibility(EntityId entity_id) const noexcept
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -49,7 +50,8 @@ Result<bool> Storage::entity_local_visibility(EntityId entity_id) const noexcept
     return record.value()->local_visible;
 }
 
-Result<bool> Storage::entity_effective_visibility(EntityId entity_id) const noexcept {
+Result<bool> Storage::entity_effective_visibility(EntityId entity_id) const noexcept
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -57,7 +59,8 @@ Result<bool> Storage::entity_effective_visibility(EntityId entity_id) const noex
     return record.value()->effective_visible;
 }
 
-Result<void> Storage::show_entity_and_ancestors(EntityId entity_id) {
+Result<void> Storage::show_entity_and_ancestors(EntityId entity_id)
+{
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -79,6 +82,7 @@ Result<void> Storage::show_entity_and_ancestors(EntityId entity_id) {
     }
 
     bool changed = false;
+
     for (const EntityId path_entity : path) {
         Result<EntityRecord*> current_record = mutable_entity(path_entity);
         if (!current_record) {
@@ -99,7 +103,8 @@ Result<void> Storage::show_entity_and_ancestors(EntityId entity_id) {
     return {};
 }
 
-Result<void> Storage::show_all_entities() {
+Result<void> Storage::show_all_entities()
+{
     bool changed = false;
     for (std::optional<EntityRecord>& record : entities_) {
         if (record.has_value() && !record->local_visible) {
@@ -110,13 +115,15 @@ Result<void> Storage::show_all_entities() {
     if (!changed) {
         return {};
     }
+
     update_all_effective_visibility();
     increment_revision();
     increment_visibility_revision();
     return {};
 }
 
-bool Storage::visible_bounds_cache_matches(const VisibilityFilter& filter) const noexcept {
+bool Storage::visible_bounds_cache_matches(const VisibilityFilter& filter) const noexcept
+{
     const bool cacheable = filter.hierarchy_revision == hierarchy_revision_ &&
                            filter.visibility_revision == visibility_revision_;
     return cacheable && cached_visible_world_bounds_valid_ &&
@@ -127,7 +134,8 @@ bool Storage::visible_bounds_cache_matches(const VisibilityFilter& filter) const
 }
 
 void Storage::cache_visible_bounds(const VisibilityFilter& filter,
-                                   std::optional<Bounds3> bounds) const noexcept {
+                                   std::optional<Bounds3> bounds) const noexcept
+{
     if (filter.hierarchy_revision != hierarchy_revision_ ||
         filter.visibility_revision != visibility_revision_) {
         return;
@@ -140,28 +148,32 @@ void Storage::cache_visible_bounds(const VisibilityFilter& filter,
     cached_visible_world_bounds_valid_ = true;
 }
 
-std::optional<Bounds3>
-Storage::visible_world_bounds(const VisibilityFilter& filter) const noexcept {
+std::optional<Bounds3> Storage::visible_world_bounds(const VisibilityFilter& filter) const
+{
     if (visible_bounds_cache_matches(filter)) {
         return cached_visible_world_bounds_;
     }
+
     std::optional<Bounds3> result;
     for (const std::optional<EntityRecord>& record : entities_) {
         if (!record.has_value() || !record->model.has_value() ||
             !entity_visible_in_filter(*this, filter, record->id)) {
             continue;
         }
+
         const std::optional<Bounds3> bounds = entity_world_bounds(*record);
         if (!bounds.has_value()) {
             continue;
         }
         expand_bounds(result, *bounds);
     }
+
     cache_visible_bounds(filter, result);
     return result;
 }
 
-void Storage::update_effective_visibility_from(EntityId entity_id) noexcept {
+void Storage::update_effective_visibility_from(EntityId entity_id)
+{
     ELF3D_ASSERT(mutable_entity(entity_id).has_value());
     std::vector<EntityId> stack{entity_id};
     while (!stack.empty()) {
@@ -176,6 +188,7 @@ void Storage::update_effective_visibility_from(EntityId entity_id) noexcept {
             ELF3D_ASSERT(parent.has_value());
             effective = effective && parent.value()->effective_visible;
         }
+
         current.value()->effective_visible = effective;
 
         for (const EntityId child : current.value()->children) {
@@ -184,7 +197,8 @@ void Storage::update_effective_visibility_from(EntityId entity_id) noexcept {
     }
 }
 
-void Storage::update_all_effective_visibility() noexcept {
+void Storage::update_all_effective_visibility() noexcept
+{
     for (std::optional<EntityRecord>& record : entities_) {
         if (!record.has_value()) {
             continue;
@@ -204,7 +218,8 @@ void Storage::update_all_effective_visibility() noexcept {
 }
 
 Result<VisibilityFilter> make_visibility_filter(const Storage& scene,
-                                                std::optional<EntityId> isolated_root) {
+                                                std::optional<EntityId> isolated_root)
+{
     VisibilityFilter filter;
     filter.scene = scene.id();
     filter.hierarchy_revision = scene.hierarchy_revision();
@@ -223,6 +238,7 @@ Result<VisibilityFilter> make_visibility_filter(const Storage& scene,
     std::vector<EntityId> stack;
     stack.push_back(isolated_root_id);
     std::size_t visited = 0;
+
     while (!stack.empty()) {
         if (++visited > scene.entities().size()) {
             return Error{ErrorCode::hierarchy_cycle,
@@ -239,6 +255,7 @@ Result<VisibilityFilter> make_visibility_filter(const Storage& scene,
             stack.push_back(child);
         }
     }
+
     std::sort(filter.isolated_entity_values.begin(), filter.isolated_entity_values.end());
     filter.isolated_entity_values.erase(
         std::unique(filter.isolated_entity_values.begin(), filter.isolated_entity_values.end()),
@@ -247,7 +264,8 @@ Result<VisibilityFilter> make_visibility_filter(const Storage& scene,
 }
 
 bool entity_visible_in_filter(const Storage& scene, const VisibilityFilter& filter,
-                              EntityId entity_id) noexcept {
+                              EntityId entity_id) noexcept
+{
     const Result<const EntityRecord*> record = scene.entity(entity_id);
     if (!record || !record.value()->effective_visible) {
         return false;

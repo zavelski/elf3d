@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
@@ -10,30 +10,30 @@ module;
 
 #include <algorithm>
 #include <cstddef>
+#include <elf3d/internal/image.h>
 #include <utility>
 #include <vector>
-
-module elf.gltf;
-
-import elf.image;
 
 namespace elf3d::gltf::exporter_detail {
 namespace {
 
 class PngImage final {
   public:
-    PngImage() noexcept {
+    PngImage() noexcept
+    {
         value_.version = PNG_IMAGE_VERSION;
     }
 
-    ~PngImage() {
+    ~PngImage()
+    {
         png_image_free(&value_);
     }
 
     PngImage(const PngImage&) = delete;
     PngImage& operator=(const PngImage&) = delete;
 
-    [[nodiscard]] png_image& value() noexcept {
+    [[nodiscard]] png_image& value() noexcept
+    {
         return value_;
     }
 
@@ -41,7 +41,8 @@ class PngImage final {
     png_image value_{};
 };
 
-[[nodiscard]] Result<std::vector<std::byte>> encode_png(const ImageView& image) {
+[[nodiscard]] Result<std::vector<std::byte>> encode_png(const ImageView& image)
+{
     if (image.format != PixelFormat::rgba8_unorm) {
         return Error{ErrorCode::unsupported_texture_format,
                      "glTF export supports only RGBA8 document images"};
@@ -56,6 +57,7 @@ class PngImage final {
         0) {
         return Error{ErrorCode::image_encode_failed, value.message};
     }
+
     std::vector<std::byte> result(static_cast<std::size_t>(size));
     if (png_image_write_to_memory(&value, result.data(), &size, 0, image.pixels.data(), 0,
                                   nullptr) == 0) {
@@ -67,7 +69,8 @@ class PngImage final {
 
 } // namespace
 
-Result<EncodedImageOutput> encoded_image(const ImageView& image) {
+Result<EncodedImageOutput> encoded_image(const ImageView& image)
+{
     if (image.source_mime_type != ModelImageMimeType::none) {
         const Result<image::DecodedImage> decoded = image::decode_png_or_jpeg(image.source_bytes);
         if (decoded && decoded.value().width == image.width &&
@@ -80,6 +83,7 @@ Result<EncodedImageOutput> encoded_image(const ImageView& image) {
                 image.source_mime_type, false};
         }
     }
+
     Result<std::vector<std::byte>> encoded = encode_png(image);
     if (!encoded) {
         return encoded.error();

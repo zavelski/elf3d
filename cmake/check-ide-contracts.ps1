@@ -17,14 +17,14 @@ function Assert-GeneratedToolchain {
     $compiler = Get-Content -LiteralPath $compilerFiles[0].FullName -Raw
     if ($compiler -notmatch 'set\(CMAKE_CXX_COMPILER_VERSION "([0-9.]+)"\)' -or
         [version]$Matches[1] -lt [version]'19.50') { throw 'Effective MSVC is older than 19.50.' }
-    if ($cache -notmatch '(?m)^CMAKE_GENERATOR_INSTANCE:INTERNAL=(.+)\r?$') { throw 'Visual Studio instance was not recorded.' }
+    if ($cache -notmatch '(?m)^CMAKE_GENERATOR_INSTANCE:[^=]+=(.+)\r?$') { throw 'Visual Studio instance was not recorded.' }
     $msbuild = Join-Path $Matches[1].Trim() 'MSBuild/Current/Bin/amd64/MSBuild.exe'
     $version = @(& $msbuild -nologo -version) -join ''
     if ($LASTEXITCODE -ne 0 -or [version]$version -lt [version]'18.0') { throw 'Effective MSBuild is older than 18.' }
-    $modelProject = Get-ChildItem -LiteralPath $BuildDirectory -Recurse -File -Filter 'elf3d_model.vcxproj' |
+    $cppProject = Get-ChildItem -LiteralPath $BuildDirectory -Recurse -File -Filter '*.vcxproj' |
         Select-Object -First 1
-    if ($null -eq $modelProject) { throw 'The generated model project is missing.' }
-    $propertyOutput = @(& $msbuild $modelProject.FullName /nologo /p:Configuration=Debug /p:Platform=x64 `
+    if ($null -eq $cppProject) { throw 'A generated C++ project is missing.' }
+    $propertyOutput = @(& $msbuild $cppProject.FullName /nologo /p:Configuration=Debug /p:Platform=x64 `
         '-getProperty:VCTargetsPath,VCToolsInstallDir,WindowsSdkDir,WindowsTargetPlatformVersion,PlatformToolset,Platform') -join "`n"
     if ($LASTEXITCODE -ne 0) { throw 'MSBuild could not evaluate imported C++ property/target files.' }
     $properties = ($propertyOutput | ConvertFrom-Json).Properties
@@ -45,6 +45,7 @@ function Assert-GeneratedToolchain {
         }
         if ($file.Extension -ne '.vcxproj') { continue }
         [xml]$project = $text
+        Assert-PchContract $project $file.FullName $cache
         $toolsets = @($project.SelectNodes("//*[local-name()='PlatformToolset']"))
         if (-not $toolsets.Count -or @($toolsets | Where-Object InnerText -NE 'v145').Count) {
             throw "Project '$($file.FullName)' does not use v145 in every configuration."
@@ -62,6 +63,38 @@ function Assert-GeneratedToolchain {
     if (($cache + $compiler) -match 'Microsoft Visual Studio[/\\]+2022') { throw 'A compiler/cache path still selects the old IDE.' }
 }
 
+function Assert-PchContract {
+    param([xml]$Project, [string]$ProjectPath, [string]$Cache)
+    $name = [IO.Path]::GetFileNameWithoutExtension($ProjectPath)
+    if ($name -in @('CompilerIdC', 'CompilerIdCXX')) { return }
+    $enabled = $name -in @('elf3d_foundation_modules', 'elf3d_domain_modules',
+        'elf3d_model_modules', 'elf3d_gltf_modules', 'elf3d_opengl_modules',
+        'elf3d_interaction_modules', 'elf3d_view_modules', 'elf3d',
+        'elf3d_imgui', 'elf3d_third_party_imgui', 'elf3d_app', 'elf3d_viewer')
+    if ($Cache -match '(?m)^CMAKE_DISABLE_PRECOMPILE_HEADERS:[^=]+=(?:ON|TRUE|1)\r?$') { $enabled = $false }
+    foreach ($configuration in @('Debug', 'Release')) {
+        $groups = @($Project.SelectNodes("//*[local-name()='ItemDefinitionGroup']") |
+            Where-Object { $_.GetAttribute('Condition') -like "*'$configuration|x64'*" })
+        foreach ($group in $groups) {
+            $compile = $group.SelectSingleNode("./*[local-name()='ClCompile']")
+            if ($null -eq $compile) { continue }
+            $scan = $compile.SelectSingleNode("./*[local-name()='ScanSourceForModuleDependencies']")
+            if ($null -eq $scan -or $scan.InnerText -ne 'false') { throw "Module scanning is enabled: $name $configuration." }
+            $pch = $compile.SelectSingleNode("./*[local-name()='PrecompiledHeader']")
+            $actual = $null -ne $pch -and $pch.InnerText -eq 'Use'
+            if ($actual -ne $enabled) { throw "Incorrect PCH setting: $name $configuration." }
+            if ($enabled) {
+                $create = @($Project.SelectNodes("//*[local-name()='ClCompile'][@Include]/*[local-name()='PrecompiledHeader']") |
+                    Where-Object { $_.InnerText -eq 'Create' -and $_.GetAttribute('Condition') -like "*'$configuration|x64'*" })
+                $output = $compile.SelectSingleNode("./*[local-name()='PrecompiledHeaderOutputFile']")
+                if ($create.Count -ne 1 -or $null -eq $output -or $output.InnerText -notlike "*$name.dir/$configuration/*") {
+                    throw "PCH is not owned by its target/configuration: $name $configuration."
+                }
+            }
+        }
+    }
+}
+
 function Assert-IdeContract {
     param([string]$BuildDirectory, [string]$RepositoryPath, [bool]$Engine)
     $solutionPath = Join-Path $BuildDirectory "Elf3D.slnx"
@@ -72,7 +105,7 @@ function Assert-IdeContract {
         [System.StringComparer]::OrdinalIgnoreCase
     )
     foreach ($entry in $projects) {
-        if ($entry.Name -notmatch '^elf3d($|_(model$|.*_modules$|app$|embed$|imgui$|viewer$))') {
+        if ($entry.Name -notmatch '^elf3d($|_(model$|.*_modules$|app$|imgui$|viewer$))') {
             continue
         }
         [xml]$filters = Get-Content -LiteralPath ($entry.Path + ".filters") -Raw
@@ -137,46 +170,6 @@ function Assert-IdeContract {
     }
     if ($viewer.SelectNodes("//*[local-name()='LocalDebuggerCommandArguments']").Count -ne 0) {
         throw "Viewer must launch without a default model argument."
-    }
-
-    $solutionHash = (Get-FileHash -LiteralPath $solutionPath).Hash
-    & (Join-Path $PSScriptRoot 'create-study-solution.ps1') -BuildDirectory $BuildDirectory
-    $filterPath = Join-Path $BuildDirectory 'Elf3D-Study.slnf'
-    $filterHash = (Get-FileHash -LiteralPath $filterPath).Hash
-    & (Join-Path $PSScriptRoot 'create-study-solution.ps1') -BuildDirectory $BuildDirectory
-    if ((Get-FileHash -LiteralPath $filterPath).Hash -ne $filterHash) { throw 'Study-filter output is not deterministic.' }
-    if ((Get-FileHash -LiteralPath $solutionPath).Hash -ne $solutionHash) {
-        throw "Creating the study filter modified the full solution."
-    }
-    $filter = Get-Content -LiteralPath (Join-Path $BuildDirectory 'Elf3D-Study.slnf') -Raw | ConvertFrom-Json
-    if ($filter.solution.path -ne 'Elf3D.slnx') {
-        throw "Study filter refers to the wrong solution."
-    }
-    $remaining = @($filter.solution.projects)
-    $expectedPaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    [void]$expectedPaths.Add($viewerProject.Path)
-    # Repeated expansion independently checks the exact closure, including utility references.
-    do {
-        $added = $false
-        foreach ($entry in $projects) {
-            if (-not $expectedPaths.Contains($entry.Path)) { continue }
-            [xml]$project = Get-Content -LiteralPath $entry.Path -Raw
-            foreach ($reference in $project.SelectNodes("//*[local-name()='ProjectReference'][@Include]")) {
-                $path = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine(
-                    (Split-Path -Parent $entry.Path), $reference.GetAttribute('Include')))
-                if ($expectedPaths.Add($path)) { $added = $true }
-            }
-        }
-    } while ($added)
-    foreach ($relative in $remaining) {
-        $matching = @($projects | Where-Object { $_.RelativePath -eq $relative })
-        if ($matching.Count -ne 1 -or -not (Test-Path -LiteralPath $matching[0].Path -PathType Leaf) -or
-            -not $expectedPaths.Remove($matching[0].Path)) {
-            throw "Study filter contains an invalid, duplicate, or unrelated project '$relative'."
-        }
-    }
-    if ($expectedPaths.Count -ne 0) {
-        throw "Study filter omits viewer dependencies: $($expectedPaths -join ', ')."
     }
 }
 

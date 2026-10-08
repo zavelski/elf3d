@@ -13,13 +13,15 @@ inline constexpr float side_dock_width_fraction = 0.27968F;
 
 class ScopedFont final {
   public:
-    explicit ScopedFont(ImFont* font) noexcept : font_(font) {
+    explicit ScopedFont(ImFont* font) noexcept : font_(font)
+    {
         if (font_ != nullptr) {
             ImGui::PushFont(font_);
         }
     }
 
-    ~ScopedFont() {
+    ~ScopedFont()
+    {
         if (font_ != nullptr) {
             ImGui::PopFont();
         }
@@ -33,7 +35,8 @@ class ScopedFont final {
 };
 
 [[nodiscard]] inline bool begin_panel_window(const char* name, bool* open, ImFont* title_font,
-                                             ImGuiWindowFlags flags = ImGuiWindowFlags_None) {
+                                             ImGuiWindowFlags flags = ImGuiWindowFlags_None)
+{
     const ScopedFont title_scope{title_font};
     return ImGui::Begin(name, open, flags);
 }

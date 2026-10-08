@@ -17,7 +17,8 @@ class InteractionOwnerId final {
   public:
     constexpr InteractionOwnerId() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return value_ != 0;
     }
 
@@ -25,7 +26,9 @@ class InteractionOwnerId final {
 
   private:
     friend class InteractionArbiter;
-    explicit constexpr InteractionOwnerId(std::uint64_t value) noexcept : value_(value) {}
+    explicit constexpr InteractionOwnerId(std::uint64_t value) noexcept : value_(value)
+    {
+    }
 
     std::uint64_t value_ = 0;
 };
@@ -34,7 +37,8 @@ class InteractionRegionId final {
   public:
     constexpr InteractionRegionId() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return value_ != 0;
     }
 
@@ -42,7 +46,9 @@ class InteractionRegionId final {
 
   private:
     friend class InteractionArbiter;
-    explicit constexpr InteractionRegionId(std::uint64_t value) noexcept : value_(value) {}
+    explicit constexpr InteractionRegionId(std::uint64_t value) noexcept : value_(value)
+    {
+    }
 
     std::uint64_t value_ = 0;
 };

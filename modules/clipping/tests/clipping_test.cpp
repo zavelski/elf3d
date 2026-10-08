@@ -3,25 +3,27 @@
 
 #include <array>
 #include <cmath>
+#include <elf3d/internal/clipping.h>
+#include <elf3d/internal/math.h>
 #include <limits>
 #include <optional>
 
-import elf.clipping;
-import elf.math;
-
 namespace {
 
-[[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.0001F) noexcept {
+[[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.0001F) noexcept
+{
     return std::abs(left - right) <= tolerance;
 }
 
 [[nodiscard]] bool nearly_equal(elf3d::Float3 left, elf3d::Float3 right,
-                                float tolerance = 0.0001F) noexcept {
+                                float tolerance = 0.0001F) noexcept
+{
     return nearly_equal(left.x, right.x, tolerance) && nearly_equal(left.y, right.y, tolerance) &&
            nearly_equal(left.z, right.z, tolerance);
 }
 
-[[nodiscard]] int verify_section_planes() {
+[[nodiscard]] int verify_section_planes()
+{
     elf3d::SectionPlane plane;
     plane.enabled = true;
     plane.normal = {2.0F, 0.0F, 0.0F};
@@ -29,11 +31,13 @@ namespace {
     if (!normalized || !nearly_equal(normalized.value().normal, {1.0F, 0.0F, 0.0F})) {
         return 1;
     }
+
     plane.normal = {};
     if (elf3d::clipping::normalized_section_plane(plane).error().code() !=
         elf3d::ErrorCode::invalid_section_plane) {
         return 2;
     }
+
     plane.normal = {1.0F, 0.0F, 0.0F};
     plane.point.x = std::numeric_limits<float>::quiet_NaN();
     if (elf3d::clipping::normalized_section_plane(plane).error().code() !=
@@ -43,18 +47,21 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_clipping_boxes() {
+[[nodiscard]] int verify_clipping_boxes()
+{
     const elf3d::ClippingBox box{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}, true};
     if (!elf3d::clipping::validated_clipping_box(box)) {
         return 4;
     }
     elf3d::ClippingBox invalid_box = box;
+
     invalid_box.minimum.x = 2.0F;
     if (elf3d::clipping::validated_clipping_box(invalid_box).error().code() !=
         elf3d::ErrorCode::invalid_clipping_box) {
         return 5;
     }
     invalid_box = box;
+
     invalid_box.maximum.z = invalid_box.minimum.z;
     if (elf3d::clipping::validated_clipping_box(invalid_box).error().code() !=
         elf3d::ErrorCode::invalid_clipping_box) {
@@ -63,7 +70,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_plane_filters() {
+[[nodiscard]] int verify_plane_filters()
+{
     const elf3d::clipping::ClippingFilter disabled = elf3d::clipping::disabled_filter();
     constexpr elf3d::Bounds3 default_bounds{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
     if (!elf3d::clipping::contains_point(disabled, {100.0F, -20.0F, 7.0F}) ||
@@ -92,7 +100,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_box_filters() {
+[[nodiscard]] int verify_box_filters()
+{
     elf3d::SectionPlane plane;
     plane.normal = {1.0F, 0.0F, 0.0F};
     const std::array<elf3d::ClippingBox, 2> disjoint_boxes{{
@@ -118,7 +127,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_bounds_classification() {
+[[nodiscard]] int verify_bounds_classification()
+{
     elf3d::SectionPlane plane;
     plane.enabled = true;
     plane.normal = {1.0F, 0.0F, 0.0F};
@@ -137,7 +147,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_clipped_bounds() {
+[[nodiscard]] int verify_clipped_bounds()
+{
     elf3d::SectionPlane plane;
     plane.enabled = true;
     plane.normal = {1.0F, 0.0F, 0.0F};
@@ -155,12 +166,14 @@ namespace {
         !nearly_equal(clipped->maximum.x, 1.0F)) {
         return 13;
     }
+
     const std::optional<elf3d::Bounds3> union_bounds =
         elf3d::clipping::clipped_bounds(boxes_filter.value(), centered);
     if (!union_bounds.has_value() || !nearly_equal(union_bounds->minimum.x, -1.0F) ||
         !nearly_equal(union_bounds->maximum.x, 1.0F)) {
         return 14;
     }
+
     const std::optional<elf3d::Bounds3> empty = elf3d::clipping::clipped_bounds(
         boxes_filter.value(), elf3d::Bounds3{{-0.25F, -0.25F, -0.25F}, {0.25F, 0.25F, 0.25F}});
     if (empty.has_value()) {
@@ -169,7 +182,8 @@ namespace {
     return 0;
 }
 
-[[nodiscard]] int verify_transformed_bounds() {
+[[nodiscard]] int verify_transformed_bounds()
+{
     const elf3d::Bounds3 centered{{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
     const elf3d::Float4x4 translated =
         elf3d::math::transform_matrix(elf3d::Transform{{4.0F, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}});
@@ -182,7 +196,8 @@ namespace {
 
 } // namespace
 
-int elf3d_clipping_test() {
+int elf3d_clipping_test()
+{
     const std::array<int, 7> results{{
         verify_section_planes(),
         verify_clipping_boxes(),

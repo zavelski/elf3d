@@ -1,0 +1,7 @@
+if(EXISTS "${SOURCE}")
+    file(COPY_FILE "${SOURCE}" "${DESTINATION}" ONLY_IF_DIFFERENT)
+elseif(CONFIGURATION STREQUAL "Debug")
+    message(FATAL_ERROR "Missing Engine Debug symbols: ${SOURCE}. Build Elf3D-Engine.slnx in Debug|x64 first.")
+elseif(EXISTS "${DESTINATION}")
+    file(REMOVE "${DESTINATION}")
+endif()

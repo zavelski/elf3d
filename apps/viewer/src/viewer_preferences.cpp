@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iterator>
+#include <new>
 #include <optional>
 #include <span>
 #include <sstream>
@@ -22,16 +23,30 @@
 
 namespace elf3d::viewer {
 
-[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value) {
-    std::u8string utf8;
-    utf8.reserve(value.size());
-    for (const char character : value) {
-        utf8.push_back(static_cast<char8_t>(static_cast<unsigned char>(character)));
+[[nodiscard]] Result<std::filesystem::path> path_from_utf8(std::string_view value) noexcept
+{
+    if (value.find('\0') != std::string_view::npos) {
+        return Error{ErrorCode::invalid_argument, "A file path cannot contain a null character"};
     }
-    return std::filesystem::path{utf8};
+    try {
+        std::u8string utf8;
+        utf8.reserve(value.size());
+        for (const char character : value) {
+            utf8.push_back(static_cast<char8_t>(static_cast<unsigned char>(character)));
+        }
+        return std::filesystem::path{utf8};
+    } catch (const std::system_error&) {
+        return Error{ErrorCode::invalid_argument,
+                     "The file path could not be converted from UTF-8"};
+    } catch (const std::bad_alloc&) {
+        fatal_error("Elf3D viewer path allocation failed");
+    } catch (...) {
+        fatal_error("Elf3D viewer path conversion encountered an unexpected exception");
+    }
 }
 
-[[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path) {
+[[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path)
+{
     const std::u8string utf8 = path.u8string();
     std::string result;
     result.reserve(utf8.size());
@@ -41,28 +56,43 @@ namespace elf3d::viewer {
     return result;
 }
 
-void copy_text_to_buffer(std::string_view value, std::span<char> buffer) {
+void set_file_browser_directory_utf8(FileBrowserState& browser, std::string_view value)
+{
+    Result<std::filesystem::path> path = path_from_utf8(value);
+    if (path) {
+        set_file_browser_directory(browser, path.value());
+    } else {
+        browser.error = path.error().message();
+    }
+}
+
+void copy_text_to_buffer(std::string_view value, std::span<char> buffer)
+{
     if (buffer.empty()) {
         return;
     }
+
     std::fill(buffer.begin(), buffer.end(), '\0');
     const std::size_t copy_count = std::min(value.size(), buffer.size() - 1U);
     std::copy_n(value.data(), copy_count, buffer.data());
 }
 
-[[nodiscard]] std::string lowercase_ascii(std::string value) {
+[[nodiscard]] std::string lowercase_ascii(std::string value)
+{
     for (char& character : value) {
         character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
     }
     return value;
 }
 
-[[nodiscard]] bool supported_model_path(const std::filesystem::path& path) {
+[[nodiscard]] bool supported_model_path(const std::filesystem::path& path)
+{
     const std::string extension = lowercase_ascii(path.extension().string());
     return extension == ".gltf" || extension == ".glb";
 }
 
-[[nodiscard]] std::string file_name_label(const std::filesystem::path& path) {
+[[nodiscard]] std::string file_name_label(const std::filesystem::path& path)
+{
     std::string label = path_to_utf8(path.filename());
     if (label.empty()) {
         label = path_to_utf8(path);
@@ -70,19 +100,22 @@ void copy_text_to_buffer(std::string_view value, std::span<char> buffer) {
     return label;
 }
 
-[[nodiscard]] std::filesystem::path fallback_open_directory() {
+[[nodiscard]] std::filesystem::path fallback_open_directory()
+{
     std::error_code error;
     const std::filesystem::path current = std::filesystem::current_path(error);
     return error ? std::filesystem::path{"."} : current;
 }
 
-[[nodiscard]] std::filesystem::path absolute_path_no_throw(const std::filesystem::path& path) {
+[[nodiscard]] std::filesystem::path absolute_path_no_throw(const std::filesystem::path& path)
+{
     std::error_code error;
     const std::filesystem::path absolute = std::filesystem::absolute(path, error);
     return error ? path.lexically_normal() : absolute.lexically_normal();
 }
 
-[[nodiscard]] std::string normalized_path_key(const std::filesystem::path& path) {
+[[nodiscard]] std::string normalized_path_key(const std::filesystem::path& path)
+{
     std::string key = path_to_utf8(absolute_path_no_throw(path));
 #if defined(_WIN32)
     key = lowercase_ascii(std::move(key));
@@ -91,12 +124,14 @@ void copy_text_to_buffer(std::string_view value, std::span<char> buffer) {
 }
 
 [[nodiscard]] bool same_path_key(const std::filesystem::path& left,
-                                 const std::filesystem::path& right) {
+                                 const std::filesystem::path& right)
+{
     return normalized_path_key(left) == normalized_path_key(right);
 }
 
 void push_unique_directory(std::vector<std::filesystem::path>& directories,
-                           const std::filesystem::path& directory, std::size_t maximum_count) {
+                           const std::filesystem::path& directory, std::size_t maximum_count)
+{
     std::error_code error;
     const std::filesystem::path resolved = absolute_path_no_throw(directory);
     if (!std::filesystem::is_directory(resolved, error) || error) {
@@ -114,7 +149,8 @@ void push_unique_directory(std::vector<std::filesystem::path>& directories,
     }
 }
 
-[[nodiscard]] std::optional<std::string> environment_value(const char* name) {
+[[nodiscard]] std::optional<std::string> environment_value(const char* name)
+{
 #if defined(_WIN32)
     char* value = nullptr;
     std::size_t value_size = 0;
@@ -133,46 +169,66 @@ void push_unique_directory(std::vector<std::filesystem::path>& directories,
 #endif
 }
 
-[[nodiscard]] std::optional<std::filesystem::path> environment_directory(const char* name) {
+[[nodiscard]] std::optional<std::filesystem::path> environment_directory(const char* name)
+{
     const std::optional<std::string> value = environment_value(name);
     if (!value.has_value()) {
         return std::nullopt;
     }
 
     std::error_code error;
-    std::filesystem::path path = absolute_path_no_throw(path_from_utf8(*value));
+    Result<std::filesystem::path> converted = path_from_utf8(*value);
+    if (!converted) {
+        return std::nullopt;
+    }
+    std::filesystem::path path = absolute_path_no_throw(converted.value());
     if (!std::filesystem::is_directory(path, error) || error) {
         return std::nullopt;
     }
     return path;
 }
 
-[[nodiscard]] std::optional<std::filesystem::path> viewer_preferences_path() {
+[[nodiscard]] std::optional<std::filesystem::path> viewer_preferences_path()
+{
 #if defined(_WIN32)
     const std::optional<std::string> base = environment_value("LOCALAPPDATA");
     if (base.has_value()) {
-        return path_from_utf8(*base) / "Elf3D" / "viewer-state.ini";
+        Result<std::filesystem::path> converted = path_from_utf8(*base);
+        if (converted) {
+            return converted.value() / "Elf3D" / "viewer-state.ini";
+        }
     }
 #elif defined(__APPLE__)
     const std::optional<std::string> home = environment_value("HOME");
     if (home.has_value()) {
-        return path_from_utf8(*home) / "Library" / "Application Support" / "Elf3D" /
-               "viewer-state.ini";
+        Result<std::filesystem::path> converted = path_from_utf8(*home);
+        if (converted) {
+            return converted.value() / "Library" / "Application Support" / "Elf3D" /
+                   "viewer-state.ini";
+        }
     }
 #else
     const std::optional<std::string> config_home = environment_value("XDG_CONFIG_HOME");
     if (config_home.has_value()) {
-        return path_from_utf8(*config_home) / "Elf3D" / "viewer-state.ini";
+        Result<std::filesystem::path> converted = path_from_utf8(*config_home);
+        if (converted) {
+            return converted.value() / "Elf3D" / "viewer-state.ini";
+        }
     }
+
     const std::optional<std::string> home = environment_value("HOME");
     if (home.has_value()) {
-        return path_from_utf8(*home) / ".config" / "Elf3D" / "viewer-state.ini";
+        Result<std::filesystem::path> converted = path_from_utf8(*home);
+        if (converted) {
+            return converted.value() / ".config" / "Elf3D" / "viewer-state.ini";
+        }
     }
 #endif
     return std::nullopt;
 }
 
-void load_viewer_preferences(ViewerPreferencesState& preferences) {
+void load_viewer_preferences(ViewerPreferencesState& preferences)
+{
     std::optional<std::filesystem::path> path = viewer_preferences_path();
     if (!preferences.storage_path.empty()) {
         path = preferences.storage_path;
@@ -187,7 +243,12 @@ void load_viewer_preferences(ViewerPreferencesState& preferences) {
     if (!std::getline(input, line) || !line.starts_with(prefix)) {
         return;
     }
-    const std::filesystem::path directory = path_from_utf8(line.substr(prefix.size()));
+
+    Result<std::filesystem::path> converted = path_from_utf8(line.substr(prefix.size()));
+    if (!converted) {
+        return;
+    }
+    const std::filesystem::path& directory = converted.value();
     std::error_code error;
     if (std::filesystem::is_directory(directory, error) && !error) {
         preferences.last_model_directory = absolute_path_no_throw(directory);
@@ -195,7 +256,8 @@ void load_viewer_preferences(ViewerPreferencesState& preferences) {
 }
 
 void remember_model_directory(ViewerPreferencesState& preferences,
-                              const std::filesystem::path& model_path) {
+                              const std::filesystem::path& model_path)
+{
     if (!model_path.has_parent_path()) {
         return;
     }
@@ -203,16 +265,19 @@ void remember_model_directory(ViewerPreferencesState& preferences,
     if (preferences.storage_path.empty()) {
         return;
     }
+
     std::error_code error;
     std::filesystem::create_directories(preferences.storage_path.parent_path(), error);
     if (error) {
         return;
     }
+
     std::ofstream output{preferences.storage_path, std::ios::binary | std::ios::trunc};
     output << "last_model_directory=" << path_to_utf8(preferences.last_model_directory) << '\n';
 }
 
-void initialize_bookmarks(FileBrowserState& browser) {
+void initialize_bookmarks(FileBrowserState& browser)
+{
     if (!browser.bookmarks.empty()) {
         return;
     }
@@ -223,6 +288,7 @@ void initialize_bookmarks(FileBrowserState& browser) {
         const std::filesystem::path& profile_path = *user_profile;
         defaults.push_back(profile_path);
     }
+
     defaults.push_back(fallback_open_directory());
 
     for (const std::filesystem::path& path : defaults) {
@@ -230,17 +296,20 @@ void initialize_bookmarks(FileBrowserState& browser) {
     }
 }
 
-void select_file_browser_file(FileBrowserState& browser, const std::filesystem::path& path) {
+void select_file_browser_file(FileBrowserState& browser, const std::filesystem::path& path)
+{
     browser.selected_path = path;
     copy_text_to_buffer(path_to_utf8(path), browser.file_path);
 }
 
-void clear_file_browser_selection(FileBrowserState& browser) {
+void clear_file_browser_selection(FileBrowserState& browser)
+{
     browser.selected_path.clear();
     copy_text_to_buffer("", browser.file_path);
 }
 
-[[nodiscard]] std::string format_file_size(std::uintmax_t bytes) {
+[[nodiscard]] std::string format_file_size(std::uintmax_t bytes)
+{
     constexpr std::array<const char*, 5> units{"B", "KB", "MB", "GB", "TB"};
     double value = static_cast<double>(bytes);
     std::size_t unit_index = 0;
@@ -259,7 +328,8 @@ void clear_file_browser_selection(FileBrowserState& browser) {
     return stream.str();
 }
 
-[[nodiscard]] std::string format_file_time(const std::filesystem::path& path) {
+[[nodiscard]] std::string format_file_time(const std::filesystem::path& path)
+{
     std::error_code error;
     const std::filesystem::file_time_type file_time = std::filesystem::last_write_time(path, error);
     if (error) {
@@ -288,7 +358,8 @@ void clear_file_browser_selection(FileBrowserState& browser) {
 }
 
 void set_file_browser_directory(FileBrowserState& browser, const std::filesystem::path& directory,
-                                bool record_history) {
+                                bool record_history)
+{
     std::filesystem::path resolved = absolute_path_no_throw(directory);
     std::error_code error;
     if (!std::filesystem::is_directory(resolved, error) || error) {
@@ -311,13 +382,15 @@ void set_file_browser_directory(FileBrowserState& browser, const std::filesystem
                                           static_cast<std::ptrdiff_t>(browser.history_index + 1U),
                                       browser.history.end());
             }
+
             browser.history.push_back(resolved);
             browser.history_index = browser.history.size() - 1U;
         }
     }
 }
 
-void navigate_file_browser_history(FileBrowserState& browser, int offset) {
+void navigate_file_browser_history(FileBrowserState& browser, int offset)
+{
     if (browser.history.empty()) {
         return;
     }
@@ -333,7 +406,8 @@ void navigate_file_browser_history(FileBrowserState& browser, int offset) {
     set_file_browser_directory(browser, browser.history[browser.history_index], false);
 }
 
-void refresh_file_browser_entries(FileBrowserState& browser) {
+void refresh_file_browser_entries(FileBrowserState& browser)
+{
     if (!browser.needs_refresh) {
         return;
     }
@@ -385,7 +459,8 @@ void refresh_file_browser_entries(FileBrowserState& browser) {
 }
 
 void initialize_open_browser(FileBrowserState& browser, const ViewerPreferencesState& preferences,
-                             const SceneSession& scene) {
+                             const SceneSession& scene)
+{
     initialize_bookmarks(browser);
     browser.external_editors = find_external_editors();
     browser.properties.reset();
@@ -409,7 +484,8 @@ void initialize_open_browser(FileBrowserState& browser, const ViewerPreferencesS
 }
 
 void initialize_save_browser(FileBrowserState& browser, const ViewerPreferencesState& preferences,
-                             const SceneSession& scene) {
+                             const SceneSession& scene)
+{
     initialize_open_browser(browser, preferences, scene);
     browser.pending_save_path.reset();
     if (scene.is_imported()) {

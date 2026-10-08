@@ -91,7 +91,8 @@ struct EncodedImageOutput {
 
 class BinaryBuilder final {
   public:
-    [[nodiscard]] Result<ByteRange> append_positions(std::span<const Float3> values) {
+    [[nodiscard]] Result<ByteRange> append_positions(std::span<const Float3> values)
+    {
         const Result<ByteRange> range = reserve(values.size(), 12U);
         if (!range) {
             return range.error();
@@ -104,7 +105,8 @@ class BinaryBuilder final {
         return range.value();
     }
 
-    [[nodiscard]] Result<ByteRange> append_texcoords(std::span<const Float2> values) {
+    [[nodiscard]] Result<ByteRange> append_texcoords(std::span<const Float2> values)
+    {
         const Result<ByteRange> range = reserve(values.size(), 8U);
         if (!range) {
             return range.error();
@@ -116,7 +118,8 @@ class BinaryBuilder final {
         return range.value();
     }
 
-    [[nodiscard]] Result<ByteRange> append_colors(std::span<const Color4> values) {
+    [[nodiscard]] Result<ByteRange> append_colors(std::span<const Color4> values)
+    {
         const Result<ByteRange> range = reserve(values.size(), 16U);
         if (!range) {
             return range.error();
@@ -130,7 +133,8 @@ class BinaryBuilder final {
         return range.value();
     }
 
-    [[nodiscard]] Result<ByteRange> append_tangents(std::span<const Float4> values) {
+    [[nodiscard]] Result<ByteRange> append_tangents(std::span<const Float4> values)
+    {
         const Result<ByteRange> range = reserve(values.size(), 16U);
         if (!range) {
             return range.error();
@@ -144,13 +148,15 @@ class BinaryBuilder final {
         return range.value();
     }
 
-    [[nodiscard]] Result<EncodedIndexRange> append_indices(std::span<const std::uint32_t> values) {
+    [[nodiscard]] Result<EncodedIndexRange> append_indices(std::span<const std::uint32_t> values)
+    {
         std::uint32_t maximum = 0U;
         for (const std::uint32_t value : values) {
             if (value > maximum) {
                 maximum = value;
             }
         }
+
         const std::uint32_t component_type =
             maximum <= std::numeric_limits<std::uint8_t>::max()
                 ? 5121U
@@ -158,6 +164,7 @@ class BinaryBuilder final {
         const std::size_t stride =
             component_type == 5121U ? 1U : (component_type == 5123U ? 2U : 4U);
         const Result<ByteRange> range = reserve(values.size(), stride);
+
         if (!range) {
             return range.error();
         }
@@ -173,7 +180,8 @@ class BinaryBuilder final {
         return EncodedIndexRange{range.value(), component_type};
     }
 
-    [[nodiscard]] Result<ByteRange> append_bytes(std::span<const std::byte> values) {
+    [[nodiscard]] Result<ByteRange> append_bytes(std::span<const std::byte> values)
+    {
         const Result<ByteRange> range = reserve(values.size(), 1U);
         if (!range) {
             return range.error();
@@ -182,18 +190,21 @@ class BinaryBuilder final {
         return range.value();
     }
 
-    [[nodiscard]] const std::vector<std::byte>& bytes() const noexcept {
+    [[nodiscard]] const std::vector<std::byte>& bytes() const noexcept
+    {
         return bytes_;
     }
 
   private:
-    [[nodiscard]] Result<ByteRange> reserve(std::size_t count, std::size_t stride) {
+    [[nodiscard]] Result<ByteRange> reserve(std::size_t count, std::size_t stride)
+    {
         if (count > std::numeric_limits<std::uint32_t>::max() / stride) {
             return Error{ErrorCode::size_overflow, "glTF output exceeds the 32-bit buffer limit"};
         }
         while (bytes_.size() % 4U != 0U) {
             bytes_.push_back(std::byte{0});
         }
+
         const std::size_t length = count * stride;
         if (bytes_.size() > std::numeric_limits<std::uint32_t>::max() - length) {
             return Error{ErrorCode::size_overflow, "glTF output exceeds the 32-bit buffer limit"};
@@ -202,19 +213,22 @@ class BinaryBuilder final {
                          static_cast<std::uint32_t>(length)};
     }
 
-    void append_uint32(std::uint32_t value) {
+    void append_uint32(std::uint32_t value)
+    {
         bytes_.push_back(static_cast<std::byte>(value & 0xffU));
         bytes_.push_back(static_cast<std::byte>((value >> 8U) & 0xffU));
         bytes_.push_back(static_cast<std::byte>((value >> 16U) & 0xffU));
         bytes_.push_back(static_cast<std::byte>((value >> 24U) & 0xffU));
     }
 
-    void append_uint16(std::uint16_t value) {
+    void append_uint16(std::uint16_t value)
+    {
         bytes_.push_back(static_cast<std::byte>(value & 0xffU));
         bytes_.push_back(static_cast<std::byte>((value >> 8U) & 0xffU));
     }
 
-    void append_float(float value) {
+    void append_float(float value)
+    {
         append_uint32(std::bit_cast<std::uint32_t>(value));
     }
 

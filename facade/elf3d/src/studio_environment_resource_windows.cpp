@@ -5,10 +5,9 @@
 #include <windows.h>
 
 #include <cstddef>
+#include <elf3d/internal/renderer.h>
 #include <memory>
 #include <span>
-
-import elf.renderer;
 
 #include "resource_ids.h"
 #include "studio_environment_resource.h"
@@ -20,7 +19,8 @@ const int studio_environment_module_anchor = 0;
 
 class WindowsStudioEnvironmentSource final : public renderer::StudioEnvironmentSource {
   public:
-    [[nodiscard]] Result<std::span<const std::byte>> bytes() noexcept override {
+    [[nodiscard]] Result<std::span<const std::byte>> bytes() noexcept override
+    {
         HMODULE module = nullptr;
         if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -30,12 +30,14 @@ class WindowsStudioEnvironmentSource final : public renderer::StudioEnvironmentS
             return Error{ErrorCode::graphics_initialization_failed,
                          "Could not locate the Elf3D module for its studio environment"};
         }
+
         const HRSRC resource = FindResourceW(
             module, MAKEINTRESOURCEW(ELF3D_STUDIO_ENVIRONMENT_RESOURCE_ID), MAKEINTRESOURCEW(10));
         if (resource == nullptr) {
             return Error{ErrorCode::graphics_initialization_failed,
                          "The built-in studio environment resource is missing"};
         }
+
         const DWORD byte_count = SizeofResource(module, resource);
         const HGLOBAL loaded = LoadResource(module, resource);
         const void* data = loaded != nullptr ? LockResource(loaded) : nullptr;
@@ -50,7 +52,8 @@ class WindowsStudioEnvironmentSource final : public renderer::StudioEnvironmentS
 
 } // namespace
 
-std::unique_ptr<renderer::StudioEnvironmentSource> create_studio_environment_source() {
+std::unique_ptr<renderer::StudioEnvironmentSource> create_studio_environment_source()
+{
     return std::make_unique<WindowsStudioEnvironmentSource>();
 }
 

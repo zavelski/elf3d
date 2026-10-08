@@ -18,12 +18,14 @@ class SceneId final {
   public:
     constexpr SceneId() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return engine_token_ != 0 && value_ != 0;
     }
 
     // Stable only for diagnostics within the owning process.
-    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
+    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
+    {
         return value_;
     }
 
@@ -33,7 +35,9 @@ class SceneId final {
     friend class detail::SceneHandleAccess;
 
     constexpr SceneId(std::uint64_t engine_token, std::uint64_t value) noexcept
-        : engine_token_(engine_token), value_(value) {}
+        : engine_token_(engine_token), value_(value)
+    {
+    }
 
     std::uint64_t engine_token_ = 0;
     std::uint64_t value_ = 0;
@@ -43,12 +47,14 @@ class EntityId final {
   public:
     constexpr EntityId() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return scene_.is_valid() && value_ != 0;
     }
 
     // Stable only for diagnostics within the owning Scene lifetime.
-    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
+    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
+    {
         return value_;
     }
 
@@ -57,8 +63,9 @@ class EntityId final {
   private:
     friend class detail::SceneHandleAccess;
 
-    constexpr EntityId(SceneId scene, std::uint64_t value) noexcept
-        : scene_(scene), value_(value) {}
+    constexpr EntityId(SceneId scene, std::uint64_t value) noexcept : scene_(scene), value_(value)
+    {
+    }
 
     SceneId scene_;
     std::uint64_t value_ = 0;
@@ -68,12 +75,14 @@ class MeshHandle final {
   public:
     constexpr MeshHandle() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return scene_.is_valid() && value_ != 0;
     }
 
     // Stable only for diagnostics within the owning Scene lifetime.
-    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
+    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
+    {
         return value_;
     }
 
@@ -82,8 +91,9 @@ class MeshHandle final {
   private:
     friend class detail::SceneHandleAccess;
 
-    constexpr MeshHandle(SceneId scene, std::uint64_t value) noexcept
-        : scene_(scene), value_(value) {}
+    constexpr MeshHandle(SceneId scene, std::uint64_t value) noexcept : scene_(scene), value_(value)
+    {
+    }
 
     SceneId scene_;
     std::uint64_t value_ = 0;
@@ -93,11 +103,13 @@ class MaterialHandle final {
   public:
     constexpr MaterialHandle() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return scene_.is_valid() && value_ != 0;
     }
 
-    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
+    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
+    {
         return value_;
     }
 
@@ -107,7 +119,9 @@ class MaterialHandle final {
     friend class detail::SceneHandleAccess;
 
     constexpr MaterialHandle(SceneId scene, std::uint64_t value) noexcept
-        : scene_(scene), value_(value) {}
+        : scene_(scene), value_(value)
+    {
+    }
 
     SceneId scene_;
     std::uint64_t value_ = 0;
@@ -117,11 +131,13 @@ class ImageHandle final {
   public:
     constexpr ImageHandle() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return scene_.is_valid() && value_ != 0;
     }
 
-    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
+    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
+    {
         return value_;
     }
 
@@ -131,7 +147,9 @@ class ImageHandle final {
     friend class detail::SceneHandleAccess;
 
     constexpr ImageHandle(SceneId scene, std::uint64_t value) noexcept
-        : scene_(scene), value_(value) {}
+        : scene_(scene), value_(value)
+    {
+    }
 
     SceneId scene_;
     std::uint64_t value_ = 0;
@@ -142,11 +160,13 @@ class TextureAssetHandle final {
   public:
     constexpr TextureAssetHandle() noexcept = default;
 
-    [[nodiscard]] constexpr bool is_valid() const noexcept {
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
         return scene_.is_valid() && value_ != 0;
     }
 
-    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept {
+    [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
+    {
         return value_;
     }
 
@@ -156,7 +176,9 @@ class TextureAssetHandle final {
     friend class detail::SceneHandleAccess;
 
     constexpr TextureAssetHandle(SceneId scene, std::uint64_t value) noexcept
-        : scene_(scene), value_(value) {}
+        : scene_(scene), value_(value)
+    {
+    }
 
     SceneId scene_;
     std::uint64_t value_ = 0;

@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/scene.h>
 
 #include <elf3d/core/result.h>
 #include <elf3d/picking.h>
@@ -7,12 +7,9 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/math.h>
 #include <optional>
 #include <span>
-
-module elf.scene;
-
-import elf.math;
 
 namespace elf3d::scene {
 namespace {
@@ -20,10 +17,12 @@ namespace {
 constexpr float barycentric_tolerance = 0.001F;
 constexpr float minimum_normal_length = 0.000001F;
 
-[[nodiscard]] bool valid_barycentric(Float3 barycentric) noexcept {
+[[nodiscard]] bool valid_barycentric(Float3 barycentric) noexcept
+{
     if (!math::is_finite(barycentric)) {
         return false;
     }
+
     const float sum = barycentric.x + barycentric.y + barycentric.z;
     return std::isfinite(sum) && std::abs(sum - 1.0F) <= barycentric_tolerance &&
            barycentric.x >= -barycentric_tolerance && barycentric.y >= -barycentric_tolerance &&
@@ -33,44 +32,53 @@ constexpr float minimum_normal_length = 0.000001F;
            barycentric.z <= 1.0F + barycentric_tolerance;
 }
 
-[[nodiscard]] bool valid_hit(const PickHit& hit) noexcept {
+[[nodiscard]] bool valid_hit(const PickHit& hit) noexcept
+{
     return hit.entity.is_valid() && hit.mesh.is_valid() && math::is_finite(hit.world_position) &&
            math::is_finite(hit.world_normal) && valid_barycentric(hit.barycentric_coordinates) &&
            std::isfinite(hit.world_distance) && hit.world_distance >= 0.0F;
 }
 
-[[nodiscard]] Float3 subtract(Float3 left, Float3 right) noexcept {
+[[nodiscard]] Float3 subtract(Float3 left, Float3 right) noexcept
+{
     return Float3{left.x - right.x, left.y - right.y, left.z - right.z};
 }
 
-[[nodiscard]] Float3 add(Float3 left, Float3 right) noexcept {
+[[nodiscard]] Float3 add(Float3 left, Float3 right) noexcept
+{
     return Float3{left.x + right.x, left.y + right.y, left.z + right.z};
 }
 
-[[nodiscard]] Float3 scale(Float3 value, float multiplier) noexcept {
+[[nodiscard]] Float3 scale(Float3 value, float multiplier) noexcept
+{
     return Float3{value.x * multiplier, value.y * multiplier, value.z * multiplier};
 }
 
-[[nodiscard]] float dot(Float3 left, Float3 right) noexcept {
+[[nodiscard]] float dot(Float3 left, Float3 right) noexcept
+{
     return left.x * right.x + left.y * right.y + left.z * right.z;
 }
 
-[[nodiscard]] float length(Float3 value) noexcept {
+[[nodiscard]] float length(Float3 value) noexcept
+{
     return std::sqrt(dot(value, value));
 }
 
-[[nodiscard]] Float3 cross(Float3 left, Float3 right) noexcept {
+[[nodiscard]] Float3 cross(Float3 left, Float3 right) noexcept
+{
     return Float3{left.y * right.z - left.z * right.y, left.z * right.x - left.x * right.z,
                   left.x * right.y - left.y * right.x};
 }
 
 [[nodiscard]] Float3 barycentric_point(Float3 first, Float3 second, Float3 third,
-                                       Float3 barycentric) noexcept {
+                                       Float3 barycentric) noexcept
+{
     return add(add(scale(first, barycentric.x), scale(second, barycentric.y)),
                scale(third, barycentric.z));
 }
 
-[[nodiscard]] Float3 multiply_normal_matrix(const math::Matrix3x3& matrix, Float3 normal) noexcept {
+[[nodiscard]] Float3 multiply_normal_matrix(const math::Matrix3x3& matrix, Float3 normal) noexcept
+{
     return Float3{
         matrix[0] * normal.x + matrix[3] * normal.y + matrix[6] * normal.z,
         matrix[1] * normal.x + matrix[4] * normal.y + matrix[7] * normal.z,
@@ -84,7 +92,8 @@ struct LocalAnchorGeometry {
 };
 
 [[nodiscard]] Result<RuntimePrimitiveView> anchor_primitive(const Storage& scene,
-                                                            const SurfaceAnchor& anchor) noexcept {
+                                                            const SurfaceAnchor& anchor) noexcept
+{
     if (anchor.scene != scene.id()) {
         return Error{ErrorCode::invalid_surface_anchor,
                      "A surface anchor belongs to a different scene"};
@@ -93,10 +102,12 @@ struct LocalAnchorGeometry {
         return Error{ErrorCode::invalid_surface_anchor,
                      "A surface anchor contains invalid barycentric coordinates"};
     }
+
     const Result<const EntityRecord*> record = scene.entity(anchor.entity);
     if (!record) {
         return record.error();
     }
+
     const std::optional<ModelComponent>& model = record.value()->model;
     if (!model.has_value()) {
         return Error{ErrorCode::invalid_surface_anchor,
@@ -106,6 +117,7 @@ struct LocalAnchorGeometry {
         return Error{ErrorCode::invalid_surface_anchor,
                      "A surface anchor primitive index is no longer valid"};
     }
+
     Result<RuntimePrimitiveView> primitive =
         scene.runtime_primitive(anchor.entity, anchor.primitive_index);
     if (!primitive) {
@@ -119,13 +131,15 @@ struct LocalAnchorGeometry {
 }
 
 [[nodiscard]] Result<LocalAnchorGeometry>
-local_anchor_geometry(const RuntimePrimitiveView& primitive, const SurfaceAnchor& anchor) noexcept {
+local_anchor_geometry(const RuntimePrimitiveView& primitive, const SurfaceAnchor& anchor) noexcept
+{
     const std::size_t base = static_cast<std::size_t>(anchor.triangle_index) * 3U;
     const std::span<const std::uint32_t> indices = primitive.indices();
     if (base + 2U >= indices.size()) {
         return Error{ErrorCode::invalid_surface_anchor,
                      "A surface anchor triangle index is no longer valid"};
     }
+
     const std::uint32_t first_index = indices[base];
     const std::uint32_t second_index = indices[base + 1U];
     const std::uint32_t third_index = indices[base + 2U];
@@ -141,6 +155,7 @@ local_anchor_geometry(const RuntimePrimitiveView& primitive, const SurfaceAnchor
     const Float3 third = primitive.position(third_index);
     const Float3 local_normal = cross(subtract(second, first), subtract(third, first));
     const float normal_length = length(local_normal);
+
     if (!std::isfinite(normal_length) || normal_length <= minimum_normal_length) {
         return Error{ErrorCode::invalid_surface_anchor,
                      "A surface anchor triangle has degenerate geometry"};
@@ -152,15 +167,18 @@ local_anchor_geometry(const RuntimePrimitiveView& primitive, const SurfaceAnchor
 
 } // namespace
 
-Result<SurfaceAnchor> Storage::create_surface_anchor(const PickHit& hit) const noexcept {
+Result<SurfaceAnchor> Storage::create_surface_anchor(const PickHit& hit) const noexcept
+{
     if (!valid_hit(hit)) {
         return Error{ErrorCode::invalid_surface_anchor_hit,
                      "A surface anchor requires a valid finite triangle PickHit"};
     }
+
     const Result<const EntityRecord*> record = entity(hit.entity);
     if (!record) {
         return record.error();
     }
+
     const std::optional<ModelComponent>& model = record.value()->model;
     if (!model.has_value()) {
         return Error{ErrorCode::invalid_surface_anchor_hit,
@@ -170,6 +188,7 @@ Result<SurfaceAnchor> Storage::create_surface_anchor(const PickHit& hit) const n
         return Error{ErrorCode::invalid_surface_anchor_hit,
                      "A surface anchor hit refers to an invalid model primitive"};
     }
+
     const Result<RuntimePrimitiveView> primitive =
         runtime_primitive(hit.entity, hit.primitive_index);
     if (!primitive) {
@@ -179,6 +198,7 @@ Result<SurfaceAnchor> Storage::create_surface_anchor(const PickHit& hit) const n
         return Error{ErrorCode::invalid_surface_anchor_hit,
                      "A surface anchor hit mesh does not match its model primitive"};
     }
+
     const std::size_t base = static_cast<std::size_t>(hit.triangle_index) * 3U;
     if (base + 2U >= primitive.value().indices().size()) {
         return Error{ErrorCode::invalid_surface_anchor_hit,
@@ -192,12 +212,13 @@ Result<SurfaceAnchor> Storage::create_surface_anchor(const PickHit& hit) const n
                          hit.barycentric_coordinates};
 }
 
-Result<ResolvedSurfaceAnchor>
-Storage::resolve_surface_anchor(const SurfaceAnchor& anchor) const noexcept {
+Result<ResolvedSurfaceAnchor> Storage::resolve_surface_anchor(const SurfaceAnchor& anchor) const
+{
     const Result<RuntimePrimitiveView> primitive = anchor_primitive(*this, anchor);
     if (!primitive) {
         return primitive.error();
     }
+
     const Result<LocalAnchorGeometry> local = local_anchor_geometry(primitive.value(), anchor);
     if (!local) {
         return local.error();
@@ -207,6 +228,7 @@ Storage::resolve_surface_anchor(const SurfaceAnchor& anchor) const noexcept {
     if (!world) {
         return world.error();
     }
+
     const Result<math::Matrix3x3> normal_transform = world_normal_matrix(anchor.entity);
     if (!normal_transform) {
         return normal_transform.error();
@@ -215,6 +237,7 @@ Storage::resolve_surface_anchor(const SurfaceAnchor& anchor) const noexcept {
     const Float3 world_position = math::transform_point(world.value(), local.value().position);
     Float3 world_normal = multiply_normal_matrix(normal_transform.value(), local.value().normal);
     const float world_normal_length = length(world_normal);
+
     if (!math::is_finite(world_position) || !std::isfinite(world_normal_length) ||
         world_normal_length <= minimum_normal_length) {
         return Error{ErrorCode::invalid_surface_anchor,

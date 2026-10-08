@@ -22,7 +22,7 @@ submitting:
 ## Build and Test
 
 ```powershell
-cmake --preset windows-debug
+cmake --preset windows-full
 cmake --build --preset windows-debug --parallel
 ctest --preset windows-debug --output-on-failure
 ```
@@ -31,7 +31,7 @@ Run the Release preset as well when changing compiler configuration,
 optimization-sensitive code, packaging, or runtime deployment:
 
 ```powershell
-cmake --preset windows-release
+cmake --preset windows-full
 cmake --build --preset windows-release --parallel
 ctest --preset windows-release --output-on-failure
 ```

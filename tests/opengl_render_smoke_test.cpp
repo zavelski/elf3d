@@ -1,4 +1,6 @@
-#include <elf3d/embed/runtime.h>
+#include "engine_access.h"
+#include <elf3d/app/application.h>
+#include <elf3d/elf3d.h>
 
 #include <glad/gl.h>
 
@@ -12,81 +14,32 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <vector>
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+int run_scene_allocation_failure(elf3d::Engine& engine, elf3d::Scene& scene, elf3d::EntityId entity,
+                                 std::string_view scenario);
+#endif
 
 namespace {
 
 constexpr int skipped = 77;
 
-class GlfwRuntime final {
-  public:
-    GlfwRuntime() = default;
-    ~GlfwRuntime() {
-        if (initialized_) {
-            glfwTerminate();
-        }
-    }
-
-    GlfwRuntime(const GlfwRuntime&) = delete;
-    GlfwRuntime& operator=(const GlfwRuntime&) = delete;
-
-    [[nodiscard]] bool initialize() noexcept {
-        initialized_ = glfwInit() == GLFW_TRUE;
-        return initialized_;
-    }
-
-  private:
-    bool initialized_ = false;
-};
-
-class Window final {
-  public:
-    explicit Window(GLFWwindow* window) noexcept : window_(window) {}
-    ~Window() {
-        if (window_ != nullptr) {
-            glfwDestroyWindow(window_);
-        }
-    }
-
-    Window(const Window&) = delete;
-    Window& operator=(const Window&) = delete;
-
-    [[nodiscard]] GLFWwindow* get() const noexcept {
-        return window_;
-    }
-
-  private:
-    GLFWwindow* window_ = nullptr;
-};
-
-elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcept {
+elf3d::detail::GraphicsProcedure load_opengl_procedure(const char* name) noexcept
+{
     return glfwGetProcAddress(name);
 }
 
-[[nodiscard]] bool in_range(std::uint8_t value, std::uint8_t minimum,
-                            std::uint8_t maximum) noexcept {
+[[nodiscard]] bool in_range(std::uint8_t value, std::uint8_t minimum, std::uint8_t maximum) noexcept
+{
     return value >= minimum && value <= maximum;
 }
 
-[[nodiscard]] int fail(int code, const char* message) {
+[[nodiscard]] int fail(int code, const char* message)
+{
     std::cerr << message << '\n';
     return code;
-}
-
-void configure_hidden_context() noexcept {
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-#if defined(__APPLE__)
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-#endif
-}
-
-[[nodiscard]] bool is_skippable_graphics_error(elf3d::ErrorCode code) noexcept {
-    return code == elf3d::ErrorCode::unsupported_graphics_version ||
-           code == elf3d::ErrorCode::graphics_context_unavailable ||
-           code == elf3d::ErrorCode::graphics_initialization_failed;
 }
 
 struct SmokeFixture {
@@ -122,7 +75,8 @@ struct ForeignGlState {
 
 class ForeignGlObjects final {
   public:
-    ~ForeignGlObjects() {
+    ~ForeignGlObjects()
+    {
         glUseProgram(0);
         glBindVertexArray(0);
         for (std::size_t index = 0; index < 8; ++index) {
@@ -151,7 +105,8 @@ class ForeignGlObjects final {
     ForeignGlObjects() = default;
 };
 
-[[nodiscard]] GLuint compile_foreign_shader(GLenum type, const char* source) noexcept {
+[[nodiscard]] GLuint compile_foreign_shader(GLenum type, const char* source) noexcept
+{
     const GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
     glCompileShader(shader);
@@ -164,7 +119,8 @@ class ForeignGlObjects final {
     return shader;
 }
 
-[[nodiscard]] GLuint create_foreign_program() noexcept {
+[[nodiscard]] GLuint create_foreign_program() noexcept
+{
     constexpr const char* vertex_source =
         "#version 410 core\nvoid main(){gl_Position=vec4(0.0,0.0,0.0,1.0);}";
     constexpr const char* fragment_source =
@@ -176,6 +132,7 @@ class ForeignGlObjects final {
         glDeleteShader(fragment);
         return 0;
     }
+
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -191,7 +148,8 @@ class ForeignGlObjects final {
     return program;
 }
 
-[[nodiscard]] ForeignGlState capture_foreign_state() noexcept {
+[[nodiscard]] ForeignGlState capture_foreign_state() noexcept
+{
     ForeignGlState state;
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &state.draw_framebuffer);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &state.read_framebuffer);
@@ -213,7 +171,8 @@ class ForeignGlObjects final {
     return state;
 }
 
-[[nodiscard]] bool configure_foreign_state(ForeignGlObjects& objects) noexcept {
+[[nodiscard]] bool configure_foreign_state(ForeignGlObjects& objects) noexcept
+{
     glGenFramebuffers(1, &objects.framebuffer);
     glGenVertexArrays(1, &objects.vertex_array);
     glGenTextures(1, &objects.texture_2d);
@@ -242,7 +201,8 @@ class ForeignGlObjects final {
     return glGetError() == GL_NO_ERROR;
 }
 
-[[nodiscard]] int create_public_objects(elf3d::Engine& engine, SmokeFixture& fixture) {
+[[nodiscard]] int create_public_objects(elf3d::Engine& engine, SmokeFixture& fixture)
+{
     elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.create_scene();
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
         engine.create_viewport({64, 64});
@@ -254,7 +214,8 @@ class ForeignGlObjects final {
     return 0;
 }
 
-[[nodiscard]] int create_scene_assets(elf3d::Scene& scene, SmokeAssets& assets) {
+[[nodiscard]] int create_scene_assets(elf3d::Scene& scene, SmokeAssets& assets)
+{
     const std::array<elf3d::VertexPositionNormal, 3> vertices{{
         {{-2.0F, -2.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
         {{2.0F, -2.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
@@ -281,7 +242,8 @@ class ForeignGlObjects final {
     return 0;
 }
 
-[[nodiscard]] int create_scene_entities(SmokeFixture& fixture, const SmokeAssets& assets) {
+[[nodiscard]] int create_scene_entities(SmokeFixture& fixture, const SmokeAssets& assets)
+{
     const auto far_model = fixture.scene->create_model_entity(assets.mesh, assets.red);
     const auto near_model = fixture.scene->create_model_entity(assets.mesh, assets.green);
     const auto camera = fixture.scene->create_perspective_camera_entity({});
@@ -301,7 +263,8 @@ class ForeignGlObjects final {
     return 0;
 }
 
-[[nodiscard]] int verify_camera_role_errors(SmokeFixture& fixture) {
+[[nodiscard]] int verify_camera_role_errors(SmokeFixture& fixture)
+{
     const elf3d::Result<void> navigation = fixture.viewport->update_navigation(
         *fixture.scene, fixture.non_camera_entity, elf3d::NavigationInput{});
     if (navigation || navigation.error().code() != elf3d::ErrorCode::entity_has_no_camera) {
@@ -328,22 +291,13 @@ class ForeignGlObjects final {
     return 0;
 }
 
-[[nodiscard]] int render_scene(SmokeFixture& fixture) {
-    fixture.viewport->set_clear_color({0.0F, 0.0F, 0.0F, 1.0F});
-    const elf3d::Result<void> render_result =
-        fixture.viewport->render(*fixture.scene, fixture.camera);
-    if (!render_result || fixture.viewport->render_statistics().draw_calls != 2) {
-        return fail(6, "OpenGL smoke test failed to render the transparent scene");
-    }
-    return 0;
-}
-
-[[nodiscard]] int verify_foreign_state_preserved(elf3d::EmbeddedRuntime& runtime,
-                                                 SmokeFixture& fixture) {
+[[nodiscard]] int verify_foreign_state_preserved(elf3d::Engine& engine, SmokeFixture& fixture)
+{
     ForeignGlObjects objects;
     if (!configure_foreign_state(objects)) {
         return fail(24, "OpenGL smoke test failed to configure foreign host state");
     }
+
     const ForeignGlState expected = capture_foreign_state();
 
     const elf3d::Result<void> render = fixture.viewport->render(*fixture.scene, fixture.camera);
@@ -357,31 +311,19 @@ class ForeignGlObjects final {
         return fail(26, "Viewport picking did not preserve foreign OpenGL state");
     }
 
-    const elf3d::Result<elf3d::NativeTextureView> texture =
-        runtime.native_texture_view(fixture.viewport->color_texture());
+    const elf3d::Result<elf3d::detail::NativeTextureView> texture =
+        elf3d::detail::EngineAccess::native_texture_view(engine, fixture.viewport->color_texture());
     if (!texture || capture_foreign_state() != expected) {
         return fail(27, "Viewport display resolve did not preserve foreign OpenGL state");
     }
     return 0;
 }
 
-[[nodiscard]] int verify_rendered_pixel(elf3d::EmbeddedRuntime& runtime,
-                                        const SmokeFixture& fixture) {
-    const elf3d::Result<elf3d::NativeTextureView> texture_result =
-        runtime.native_texture_view(fixture.viewport->color_texture());
-    if (!texture_result) {
-        std::cerr << texture_result.error().message() << '\n';
-        return 7;
-    }
-    if (texture_result.value().extent != elf3d::Extent2D{64U, 64U}) {
-        return fail(8, "OpenGL smoke test returned an unexpected texture extent");
-    }
+[[nodiscard]] int verify_rendered_pixel(elf3d::Engine&, const SmokeFixture& fixture)
+{
     std::vector<std::uint8_t> pixels(64U * 64U * 4U);
-    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_result.value().value));
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-    if (glGetError() != GL_NO_ERROR) {
-        return fail(9, "OpenGL smoke test failed to read the rendered texture");
+    if (!fixture.viewport->read_color_pixels(pixels)) {
+        return fail(9, "OpenGL smoke test could not read viewport pixels");
     }
     const std::size_t center = ((32U * 64U) + 32U) * 4U;
     const std::uint8_t red_channel = pixels[center];
@@ -400,17 +342,10 @@ class ForeignGlObjects final {
 }
 
 [[nodiscard]] std::optional<std::array<std::uint8_t, 4>>
-read_center_pixel(elf3d::EmbeddedRuntime& runtime, const SmokeFixture& fixture) {
-    const elf3d::Result<elf3d::NativeTextureView> texture =
-        runtime.native_texture_view(fixture.viewport->color_texture());
-    if (!texture || texture.value().extent != elf3d::Extent2D{64U, 64U}) {
-        return std::nullopt;
-    }
+read_center_pixel(elf3d::Engine&, const SmokeFixture& fixture)
+{
     std::vector<std::uint8_t> pixels(64U * 64U * 4U);
-    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture.value().value));
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-    if (glGetError() != GL_NO_ERROR) {
+    if (!fixture.viewport->read_color_pixels(pixels)) {
         return std::nullopt;
     }
     constexpr std::size_t center = ((32U * 64U) + 32U) * 4U;
@@ -424,12 +359,14 @@ struct NormalMapPixelSample final {
 };
 
 [[nodiscard]] std::optional<NormalMapPixelSample>
-render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem::path& path) {
-    auto loaded = runtime.engine().load_scene(path.string());
-    auto viewport = runtime.engine().create_viewport({64U, 64U});
+render_normal_map_fixture(elf3d::Engine& engine, const std::filesystem::path& path)
+{
+    auto loaded = engine.load_scene(path.string());
+    auto viewport = engine.create_viewport({64U, 64U});
     if (!loaded || !viewport) {
         return std::nullopt;
     }
+
     std::unique_ptr<elf3d::Scene> scene = std::move(loaded).value().scene;
     const auto camera = scene->create_perspective_camera_entity({});
     if (!camera) {
@@ -440,6 +377,7 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
     if (!scene->set_local_transform(camera.value(), camera_transform)) {
         return std::nullopt;
     }
+
     std::unique_ptr<elf3d::Viewport> fixture_viewport = std::move(viewport).value();
     fixture_viewport->set_clear_color({0.0F, 0.0F, 0.0F, 1.0F});
     elf3d::EnvironmentLighting environment;
@@ -449,7 +387,7 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
         return std::nullopt;
     }
     SmokeFixture fixture{std::move(scene), std::move(fixture_viewport), {}, camera.value()};
-    const auto pixel = read_center_pixel(runtime, fixture);
+    const auto pixel = read_center_pixel(engine, fixture);
     if (!pixel) {
         return std::nullopt;
     }
@@ -457,7 +395,8 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
 }
 
 [[nodiscard]] unsigned pixel_rgb_difference(const std::array<std::uint8_t, 4>& first,
-                                            const std::array<std::uint8_t, 4>& second) noexcept {
+                                            const std::array<std::uint8_t, 4>& second) noexcept
+{
     unsigned difference = 0;
     for (std::size_t index = 0; index < 3U; ++index) {
         const int delta = static_cast<int>(first[index]) - static_cast<int>(second[index]);
@@ -466,13 +405,14 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
     return difference;
 }
 
-[[nodiscard]] int verify_tangent_space_normal_mapping(elf3d::EmbeddedRuntime& runtime) {
+[[nodiscard]] int verify_tangent_space_normal_mapping(elf3d::Engine& engine)
+{
     const std::filesystem::path fixtures =
         std::filesystem::path{ELF3D_TEST_SOURCE_DIR} / "tests" / "fixtures" / "normal_mapping";
-    const auto geometric = render_normal_map_fixture(runtime, fixtures / "geometric.gltf");
-    const auto flat = render_normal_map_fixture(runtime, fixtures / "flat.gltf");
-    const auto tilted = render_normal_map_fixture(runtime, fixtures / "tilted.gltf");
-    const auto scale_zero = render_normal_map_fixture(runtime, fixtures / "scale_zero.gltf");
+    const auto geometric = render_normal_map_fixture(engine, fixtures / "geometric.gltf");
+    const auto flat = render_normal_map_fixture(engine, fixtures / "flat.gltf");
+    const auto tilted = render_normal_map_fixture(engine, fixtures / "tilted.gltf");
+    const auto scale_zero = render_normal_map_fixture(engine, fixtures / "scale_zero.gltf");
     if (!geometric || !flat || !tilted || !scale_zero) {
         return fail(38, "Normal-map pixel fixtures could not be rendered");
     }
@@ -499,14 +439,14 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
     return 0;
 }
 
-[[nodiscard]] int verify_lazy_display_invalidation(elf3d::EmbeddedRuntime& runtime,
-                                                   SmokeFixture& fixture) {
-    const auto before = read_center_pixel(runtime, fixture);
+[[nodiscard]] int verify_lazy_display_invalidation(elf3d::Engine& engine, SmokeFixture& fixture)
+{
+    const auto before = read_center_pixel(engine, fixture);
     const std::uint64_t revision = fixture.viewport->render_revision();
     elf3d::DisplayTransform display;
     display.exposure_ev = 1.0F;
     fixture.viewport->set_display_transform(display);
-    const auto after = read_center_pixel(runtime, fixture);
+    const auto after = read_center_pixel(engine, fixture);
     if (!before || !after || fixture.viewport->render_revision() != revision + 1U ||
         (*after)[0] <= (*before)[0] || (*after)[1] <= (*before)[1]) {
         return fail(37,
@@ -515,55 +455,15 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
     return 0;
 }
 
-[[nodiscard]] bool has_render_gpu_timings(const elf3d::RenderStatistics& statistics) noexcept {
+[[nodiscard]] bool has_render_gpu_timings(const elf3d::RenderStatistics& statistics) noexcept
+{
     return statistics.gpu_main_pass_timing_available && statistics.gpu_resolve_timing_available &&
            statistics.gpu_main_pass_milliseconds >= 0.0 &&
            statistics.gpu_resolve_milliseconds >= 0.0;
 }
 
-[[nodiscard]] int verify_delayed_render_gpu_timings(elf3d::EmbeddedRuntime& runtime,
-                                                    SmokeFixture& fixture) {
-    bool render_timings_available = false;
-    for (int attempt = 0; attempt < 16 && !render_timings_available; ++attempt) {
-        if (!fixture.viewport->render(*fixture.scene, fixture.camera) ||
-            !runtime.native_texture_view(fixture.viewport->color_texture())) {
-            return fail(28, "GPU timing test could not render and resolve a frame");
-        }
-        glfwSwapBuffers(glfwGetCurrentContext());
-        const elf3d::RenderStatistics statistics = fixture.viewport->render_statistics();
-        render_timings_available = has_render_gpu_timings(statistics);
-    }
-    if (!render_timings_available) {
-        return fail(29, "Nonblocking GPU render timings did not become available");
-    }
-
-    return 0;
-}
-
-[[nodiscard]] int verify_delayed_picking_gpu_timing(SmokeFixture& fixture) {
-    bool timing_available = false;
-    for (int attempt = 0; attempt < 8 && !timing_available; ++attempt) {
-        if (!fixture.viewport->pick(*fixture.scene, fixture.camera, {32.0F, 32.0F})) {
-            return fail(30, "GPU timing test could not perform a pick");
-        }
-        const elf3d::Result<elf3d::PickingStatistics> statistics =
-            fixture.viewport->picking_statistics();
-        timing_available = statistics && statistics.value().latest_gpu_timing_available &&
-                           statistics.value().latest_gpu_milliseconds >= 0.0;
-    }
-    if (!timing_available) {
-        return fail(31, "Nonblocking GPU picking timing did not become available");
-    }
-    return 0;
-}
-
-[[nodiscard]] int verify_delayed_gpu_timings(elf3d::EmbeddedRuntime& runtime,
-                                             SmokeFixture& fixture) {
-    const int render = verify_delayed_render_gpu_timings(runtime, fixture);
-    return render != 0 ? render : verify_delayed_picking_gpu_timing(fixture);
-}
-
-[[nodiscard]] int verify_foreign_timer_query_preserved(SmokeFixture& fixture) {
+[[nodiscard]] int verify_foreign_timer_query_preserved(SmokeFixture& fixture)
+{
     GLuint query = 0;
     glGenQueries(1, &query);
     glBeginQuery(GL_TIME_ELAPSED, query);
@@ -577,7 +477,8 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
                : fail(32, "Viewport rendering disturbed a foreign timer query");
 }
 
-[[nodiscard]] int prepare_smoke_fixture(elf3d::Engine& engine, SmokeFixture& fixture) {
+[[nodiscard]] int prepare_smoke_fixture(elf3d::Engine& engine, SmokeFixture& fixture)
+{
     const int objects = create_public_objects(engine, fixture);
     if (objects != 0) {
         return objects;
@@ -587,6 +488,7 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
     if (asset_status != 0) {
         return asset_status;
     }
+
     const int entities = create_scene_entities(fixture, assets);
     if (entities != 0) {
         return entities;
@@ -594,117 +496,261 @@ render_normal_map_fixture(elf3d::EmbeddedRuntime& runtime, const std::filesystem
     return verify_camera_role_errors(fixture);
 }
 
-[[nodiscard]] int verify_smoke_rendering(elf3d::EmbeddedRuntime& runtime, SmokeFixture& fixture) {
-    const int rendered = render_scene(fixture);
-    if (rendered != 0) {
-        return rendered;
+[[nodiscard]] int verify_late_dependent_destruction()
+{
+    const elf3d::detail::EngineCreateOptions options{load_opengl_procedure};
+    auto created = elf3d::detail::EngineAccess::create(options);
+    if (!created) {
+        return fail(33, "Lifetime probe could not create Engine");
     }
-    const int state_preservation = verify_foreign_state_preserved(runtime, fixture);
-    if (state_preservation != 0) {
-        return state_preservation;
-    }
-    const int timings = verify_delayed_gpu_timings(runtime, fixture);
-    if (timings != 0) {
-        return timings;
-    }
-    const int foreign_timer = verify_foreign_timer_query_preserved(fixture);
-    if (foreign_timer != 0) {
-        return foreign_timer;
-    }
-    const int pixel = verify_rendered_pixel(runtime, fixture);
-    if (pixel != 0) {
-        return pixel;
-    }
-    return verify_tangent_space_normal_mapping(runtime);
-}
-
-[[nodiscard]] int run_render_smoke(elf3d::EmbeddedRuntime& runtime) {
-    SmokeFixture fixture;
-    const int camera_roles = prepare_smoke_fixture(runtime.engine(), fixture);
-    if (camera_roles != 0) {
-        return camera_roles;
-    }
-    const int normal_mapping = verify_smoke_rendering(runtime, fixture);
-    return normal_mapping != 0 ? normal_mapping
-                               : verify_lazy_display_invalidation(runtime, fixture);
-}
-
-[[nodiscard]] int
-verify_late_dependent_destruction(std::unique_ptr<elf3d::EmbeddedRuntime>& runtime) {
-    elf3d::Engine& engine = runtime->engine();
-    elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.create_scene();
-    elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
-        engine.create_viewport({16, 16});
+    auto engine = std::move(created).value();
+    auto scene_result = engine->create_scene();
+    auto viewport_result = engine->create_viewport({16, 16});
     if (!scene_result || !viewport_result) {
-        return fail(33, "Late-destruction test could not create runtime dependents");
+        return fail(33, "Lifetime probe could not create dependents");
     }
-    std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
-    std::unique_ptr<elf3d::Viewport> viewport = std::move(viewport_result).value();
-    const elf3d::Result<elf3d::EntityId> camera = scene->create_perspective_camera_entity({});
+    auto scene = std::move(scene_result).value();
+    auto viewport = std::move(viewport_result).value();
+    const auto camera = scene->create_perspective_camera_entity({});
     if (!camera) {
-        return fail(34, "Late-destruction test could not create a camera");
+        return fail(34, "Lifetime probe could not create camera");
     }
-
-    runtime.reset();
-    const elf3d::Result<void> render = viewport->render(*scene, camera.value());
-    if (render || render.error().code() != elf3d::ErrorCode::graphics_shutdown) {
-        return fail(35, "A late Viewport operation did not report Engine shutdown");
+    engine.reset();
+    const auto rendered = viewport->render(*scene, camera.value());
+    if (rendered || rendered.error().code() != elf3d::ErrorCode::graphics_shutdown) {
+        return fail(35, "Late operation did not report Engine shutdown");
+    }
+    std::array<std::uint8_t, 16 * 16 * 4> pixels{};
+    const auto readback = viewport->read_color_pixels(pixels);
+    if (readback || readback.error().code() != elf3d::ErrorCode::graphics_shutdown) {
+        return fail(41, "Late readback did not report Engine shutdown");
     }
     viewport.reset();
     scene.reset();
     return 0;
 }
 
-[[nodiscard]] int run_render_smoke_with_runtime() {
-    const elf3d::Result<std::unique_ptr<elf3d::EmbeddedRuntime>> missing_loader =
-        elf3d::EmbeddedRuntime::create({});
-    if (missing_loader ||
-        missing_loader.error().code() != elf3d::ErrorCode::missing_graphics_procedure_loader) {
-        return fail(36, "EmbeddedRuntime did not reject a missing procedure loader");
-    }
-    const elf3d::EmbeddedRuntimeOptions options{load_opengl_procedure};
-    elf3d::Result<std::unique_ptr<elf3d::EmbeddedRuntime>> runtime_result =
-        elf3d::EmbeddedRuntime::create(options);
-    if (!runtime_result) {
-        if (is_skippable_graphics_error(runtime_result.error().code())) {
-            std::cout << "Skipping OpenGL render smoke test: " << runtime_result.error().message()
-                      << '\n';
-            return skipped;
-        }
-        std::cerr << runtime_result.error().message() << '\n';
-        return 2;
-    }
-    std::unique_ptr<elf3d::EmbeddedRuntime> runtime = std::move(runtime_result).value();
-    const int smoke = run_render_smoke(*runtime);
-    return smoke != 0 ? smoke : verify_late_dependent_destruction(runtime);
+[[nodiscard]] bool has_top_down_pattern(std::span<const std::uint8_t> pixels) noexcept
+{
+    return pixels[0] == 0 && pixels[1] == 255 && pixels[8] == 255 && pixels[9] == 0;
 }
+
+[[nodiscard]] bool verify_readback_pack_state(elf3d::Viewport& viewport, GLuint texture)
+{
+    std::array<std::uint8_t, 16> pixels{};
+    // OpenGL writes bottom row first; public readback must reverse these rows.
+    constexpr std::array<std::uint8_t, 16> pattern{255, 0,   0, 255, 255, 0,   0, 255,
+                                                   0,   255, 0, 255, 0,   255, 0, 255};
+    GLint previous_texture = 0;
+    GLint previous_pack_buffer = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &previous_pack_buffer);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, pattern.data());
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previous_texture));
+    constexpr std::array<GLenum, 6> names{GL_PACK_ALIGNMENT,    GL_PACK_ROW_LENGTH,
+                                          GL_PACK_SKIP_ROWS,    GL_PACK_SKIP_PIXELS,
+                                          GL_PACK_IMAGE_HEIGHT, GL_PACK_SKIP_IMAGES};
+    constexpr std::array<GLint, 6> unusual{8, 9, 3, 2, 10, 1};
+    std::array<GLint, 6> original{};
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        glGetIntegerv(names[index], &original[index]);
+        glPixelStorei(names[index], unusual[index]);
+    }
+    GLuint pack_buffer = 0;
+    glGenBuffers(1, &pack_buffer);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pack_buffer);
+    glBufferData(GL_PIXEL_PACK_BUFFER, 1024, nullptr, GL_STREAM_READ);
+    const auto readback = viewport.read_color_pixels(pixels);
+    bool restored = true;
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        GLint actual = 0;
+        glGetIntegerv(names[index], &actual);
+        restored = restored && actual == unusual[index];
+        glPixelStorei(names[index], original[index]);
+    }
+    GLint actual_buffer = 0;
+    GLint actual_texture = 0;
+    glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &actual_buffer);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &actual_texture);
+    restored = restored && actual_buffer == static_cast<GLint>(pack_buffer) &&
+               actual_texture == previous_texture;
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(previous_pack_buffer));
+    glDeleteBuffers(1, &pack_buffer);
+    return readback && restored && has_top_down_pattern(pixels);
+}
+
+[[nodiscard]] int verify_readback_resize(elf3d::Viewport& viewport, elf3d::Scene& scene,
+                                         elf3d::EntityId camera)
+{
+    std::array<std::uint8_t, 16> pixels{};
+    if (!viewport.resize({2, 2}) || !viewport.read_color_pixels(pixels) ||
+        !viewport.resize({3, 2})) {
+        return fail(48, "Readback fixture resize failed");
+    }
+    const auto resized = viewport.read_color_pixels(pixels);
+    if (resized || resized.error().code() != elf3d::ErrorCode::texture_unavailable) {
+        return fail(49, "Recreated target retained a readable image");
+    }
+    std::array<std::uint8_t, 24> new_pixels{};
+    if (!viewport.render(scene, camera) || !viewport.read_color_pixels(new_pixels)) {
+        return fail(50, "Resized target did not produce a new readable image");
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_readback_before_render(elf3d::Viewport& viewport)
+{
+    std::array<std::uint8_t, 16> pixels{};
+    const auto absent = viewport.read_color_pixels(pixels);
+    if (absent || absent.error().code() != elf3d::ErrorCode::texture_unavailable) {
+        return fail(43, "Unrendered viewport unexpectedly provided pixels");
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_readback_contract(elf3d::Engine& engine)
+{
+    auto created_scene = engine.create_scene();
+    auto created_viewport = engine.create_viewport({2, 2});
+    if (!created_scene || !created_viewport) {
+        return fail(42, "Readback fixture creation failed");
+    }
+    auto scene = std::move(created_scene).value();
+    auto viewport = std::move(created_viewport).value();
+    const auto camera = scene->create_perspective_camera_entity({});
+    if (!camera || verify_readback_before_render(*viewport) != 0) {
+        return 43;
+    }
+    if (!viewport->render(*scene, camera.value())) {
+        return fail(44, "Readback fixture render failed");
+    }
+    std::array<std::uint8_t, 15> wrong_size{};
+    const auto invalid = viewport->read_color_pixels(wrong_size);
+    if (invalid || invalid.error().code() != elf3d::ErrorCode::invalid_argument) {
+        return fail(45, "Readback accepted incorrect storage size");
+    }
+    const auto native =
+        elf3d::detail::EngineAccess::native_texture_view(engine, viewport->color_texture());
+    if (!native) {
+        return fail(46, "Readback test could not resolve image");
+    }
+    if (!verify_readback_pack_state(*viewport, static_cast<GLuint>(native.value().value))) {
+        return fail(47, "Readback orientation or OpenGL pack state contract failed");
+    }
+    return verify_readback_resize(*viewport, *scene, camera.value());
+}
+
+class SmokeApplication final : public elf3d::Application {
+  public:
+    explicit SmokeApplication(std::string_view failure_scenario)
+        : failure_scenario_(failure_scenario)
+    {
+    }
+    elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
+        // Native backend probes borrow the framework context and never own its lifecycle.
+        if (gladLoadGL(load_opengl_procedure) == 0) {
+            return error("GLAD test table failed");
+        }
+        if (prepare_smoke_fixture(context.engine(), fixture_) != 0) {
+            return error("Fixture preparation failed");
+        }
+#if defined(_MSC_VER) && defined(_DEBUG)
+        if (!failure_scenario_.empty()) {
+            run_scene_allocation_failure(context.engine(), *fixture_.scene, fixture_.camera,
+                                         failure_scenario_);
+            return error("Allocation failure probe returned unexpectedly");
+        }
+#endif
+        fixture_.viewport->set_clear_color({0, 0, 0, 1});
+        return {};
+    }
+    elf3d::Result<void> update(elf3d::ApplicationUpdateContext& context) noexcept override
+    {
+        if (!context.previous_frame_statistics()) {
+            return {};
+        }
+        auto& engine = context.engine();
+        if (attempt_ == 0) {
+            if (!verify_initial_frame(engine)) {
+                return error("Native graphics or pixel contract failed");
+            }
+        }
+        const auto picked = fixture_.viewport->pick(*fixture_.scene, fixture_.camera, {32, 32});
+        if (!picked) {
+            return picked.error();
+        }
+        const auto picking = fixture_.viewport->picking_statistics();
+        if (has_render_gpu_timings(fixture_.viewport->render_statistics()) && picking &&
+            picking.value().latest_gpu_timing_available &&
+            picking.value().latest_gpu_milliseconds >= 0.0) {
+            passed_ = true;
+            context.request_exit();
+        } else if (++attempt_ == 16) {
+            return error("Delayed GPU timing samples did not mature");
+        }
+        return {};
+    }
+    elf3d::Result<void> build_ui(elf3d::ApplicationUiContext& context) noexcept override
+    {
+        return context.queue_viewport_render(*fixture_.viewport, *fixture_.scene, fixture_.camera);
+    }
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
+        fixture_.viewport.reset();
+        fixture_.scene.reset();
+    }
+    bool passed() const noexcept
+    {
+        return passed_;
+    }
+
+  private:
+    bool verify_initial_frame(elf3d::Engine& engine) noexcept
+    {
+        return verify_rendered_pixel(engine, fixture_) == 0 &&
+               verify_foreign_state_preserved(engine, fixture_) == 0 &&
+               verify_foreign_timer_query_preserved(fixture_) == 0 &&
+               verify_tangent_space_normal_mapping(engine) == 0 &&
+               verify_lazy_display_invalidation(engine, fixture_) == 0 &&
+               verify_readback_contract(engine) == 0 && verify_late_dependent_destruction() == 0;
+    }
+    static elf3d::Error error(std::string_view message) noexcept
+    {
+        return {elf3d::ErrorCode::draw_submission_failed, message};
+    }
+    // argv storage remains valid throughout this synchronous application run.
+    std::string_view failure_scenario_;
+    SmokeFixture fixture_;
+    unsigned attempt_ = 0;
+    bool passed_ = false;
+};
 
 } // namespace
 
-int main() {
-    GlfwRuntime glfw;
-    if (!glfw.initialize()) {
-        std::cout << "Skipping OpenGL render smoke test: GLFW initialization failed\n";
-        return skipped;
+int main(int argument_count, char** arguments)
+{
+    const std::string_view failure_scenario =
+        argument_count == 3 && std::string_view{arguments[1]} == "--allocation-failure"
+            ? std::string_view{arguments[2]}
+            : std::string_view{};
+    SmokeApplication application{failure_scenario};
+    elf3d::ApplicationOptions options;
+    options.initial_window_extent = {64, 64};
+    options.initial_visibility = elf3d::ApplicationWindowVisibility::hidden;
+    options.presentation_mode = elf3d::PresentationMode::immediate;
+    const auto result = elf3d::run_application(options, application);
+    if (!result) {
+        const auto code = result.error().code();
+        if (code == elf3d::ErrorCode::graphics_initialization_failed ||
+            code == elf3d::ErrorCode::graphics_context_unavailable ||
+            code == elf3d::ErrorCode::unsupported_graphics_version) {
+            std::cout << "SKIP: " << result.error().message() << '\n';
+            return 77;
+        }
+        std::cerr << result.error().message() << '\n';
+        return 1;
     }
-
-    configure_hidden_context();
-
-    Window window{glfwCreateWindow(64, 64, "Elf3D OpenGL smoke", nullptr, nullptr)};
-    if (window.get() == nullptr) {
-        std::cout << "Skipping OpenGL render smoke test: hidden context creation failed\n";
-        return skipped;
-    }
-    glfwMakeContextCurrent(window.get());
-    if (glfwGetCurrentContext() != window.get()) {
-        return fail(1, "GLFW did not make the smoke-test context current");
-    }
-    glfwSwapInterval(0);
-
-    const int loaded_version = gladLoadGL(load_opengl_procedure);
-    if (loaded_version == 0 || GLAD_GL_VERSION_4_1 == 0) {
-        std::cout << "Skipping OpenGL render smoke test: OpenGL 4.1 is unavailable\n";
-        return skipped;
-    }
-    return run_render_smoke_with_runtime();
+    return application.passed() ? 0 : 1;
 }

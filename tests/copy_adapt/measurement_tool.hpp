@@ -33,11 +33,13 @@ struct MeasurementOverlay {
     std::size_t line_count = 0;
     std::size_t marker_count = 0;
 
-    [[nodiscard]] std::span<const elf3d::OverlayLineSegment> line_span() const noexcept {
+    [[nodiscard]] std::span<const elf3d::OverlayLineSegment> line_span() const noexcept
+    {
         return {lines.data(), line_count};
     }
 
-    [[nodiscard]] std::span<const elf3d::OverlayPointMarker> marker_span() const noexcept {
+    [[nodiscard]] std::span<const elf3d::OverlayPointMarker> marker_span() const noexcept
+    {
         return {markers.data(), marker_count};
     }
 };

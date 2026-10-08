@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/backend_opengl.h>
 
 #include <elf3d/clipping.h>
 #include <elf3d/graphics.h>
@@ -11,6 +11,7 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/graphics.h>
 #include <memory>
 #include <optional>
 #include <span>
@@ -18,10 +19,6 @@ module;
 #include <string_view>
 #include <thread>
 #include <vector>
-
-module elf.backend.opengl;
-
-import elf.graphics;
 
 // Use the imported graphics types; global-fragment forward declarations create different types.
 namespace elf3d::backend::opengl::device_detail {
@@ -65,19 +62,23 @@ struct IndexedBatchStateCache {
 [[nodiscard]] Result<IndexedDrawResources>
 indexed_draw_resources(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
                        graphics::StaticMesh& mesh,
-                       const graphics::DrawIndexedDescription& description) noexcept {
+                       const graphics::DrawIndexedDescription& description) noexcept
+{
     if (description.textures.size() != graphics::material_texture_count) {
         return Error{ErrorCode::invalid_argument,
                      "Indexed drawing requires five ordered material texture observers"};
     }
+
     Result<RenderTargetView> target_result = render_target_view(target);
     if (!target_result) {
         return target_result.error();
     }
+
     Result<PipelineView> pipeline_result = pipeline_view(pipeline);
     if (!pipeline_result) {
         return pipeline_result.error();
     }
+
     Result<MeshView> mesh_result = mesh_view(mesh);
     if (!mesh_result) {
         return mesh_result.error();
@@ -95,7 +96,8 @@ indexed_draw_resources(graphics::RenderTarget& target, graphics::GraphicsPipelin
     return resources;
 }
 
-void configure_indexed_pass_state(const IndexedDrawResources& resources) noexcept {
+void configure_indexed_pass_state(const IndexedDrawResources& resources) noexcept
+{
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resources.target.framebuffer);
     glViewport(0, 0, static_cast<GLsizei>(resources.target.extent.width),
                static_cast<GLsizei>(resources.target.extent.height));
@@ -118,7 +120,8 @@ void configure_indexed_pass_state(const IndexedDrawResources& resources) noexcep
 }
 
 void upload_indexed_frame_uniforms(const PipelineView& pipeline,
-                                   const graphics::DrawIndexedDescription& description) noexcept {
+                                   const graphics::DrawIndexedDescription& description) noexcept
+{
     const UniformLocations& uniforms = pipeline.uniforms;
     glUniformMatrix4fv(uniforms.view, 1, GL_FALSE, description.view_matrix.data());
     glUniformMatrix4fv(uniforms.projection, 1, GL_FALSE, description.projection_matrix.data());
@@ -144,7 +147,8 @@ void upload_indexed_frame_uniforms(const PipelineView& pipeline,
 
 void upload_indexed_item_uniforms(const UniformLocations& uniforms,
                                   const graphics::DrawIndexedDescription& description,
-                                  const IndexedDrawResources& resources) noexcept {
+                                  const IndexedDrawResources& resources) noexcept
+{
     glUniformMatrix4fv(uniforms.model, 1, GL_FALSE, description.model_matrix.data());
     glUniformMatrix3fv(uniforms.normal, 1, GL_FALSE, description.normal_matrix.data());
     glUniform1i(uniforms.vertex_layout, static_cast<GLint>(resources.mesh.vertex_layout));
@@ -176,7 +180,8 @@ void upload_indexed_item_uniforms(const UniformLocations& uniforms,
 }
 
 void upload_texture_mapping_uniforms(const UniformLocations& uniforms,
-                                     const graphics::DrawIndexedDescription& description) noexcept {
+                                     const graphics::DrawIndexedDescription& description) noexcept
+{
     std::array<GLint, graphics::material_texture_count> texcoord_sets{};
     std::array<float, graphics::material_texture_count * 2> texture_offsets{};
     std::array<float, graphics::material_texture_count * 2> texture_scales{};
@@ -200,9 +205,9 @@ void upload_texture_mapping_uniforms(const UniformLocations& uniforms,
                  texture_rotations.data());
 }
 
-void upload_indexed_clipping_uniforms(
-    const UniformLocations& uniforms,
-    const graphics::DrawIndexedDescription& description) noexcept {
+void upload_indexed_clipping_uniforms(const UniformLocations& uniforms,
+                                      const graphics::DrawIndexedDescription& description) noexcept
+{
     glUniform1i(uniforms.clipping_section_plane_enabled,
                 description.clipping_section_plane_enabled ? 1 : 0);
     glUniform3f(uniforms.clipping_section_plane_normal, description.clipping_section_plane_normal.x,
@@ -233,7 +238,8 @@ void upload_indexed_clipping_uniforms(
 }
 
 [[nodiscard]] Result<EnvironmentDrawResources>
-environment_draw_resources(const graphics::DrawIndexedDescription& description) noexcept {
+environment_draw_resources(const graphics::DrawIndexedDescription& description) noexcept
+{
     graphics::TextureCube* diffuse_resource = description.environment_cubemaps.size() > 0U
                                                   ? description.environment_cubemaps[0]
                                                   : nullptr;
@@ -257,7 +263,8 @@ environment_draw_resources(const graphics::DrawIndexedDescription& description) 
     return EnvironmentDrawResources{diffuse.value(), specular.value(), brdf_lut.value()};
 }
 
-void bind_environment_textures(const EnvironmentDrawResources& resources) noexcept {
+void bind_environment_textures(const EnvironmentDrawResources& resources) noexcept
+{
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_CUBE_MAP, resources.diffuse);
     glActiveTexture(GL_TEXTURE6);
@@ -266,7 +273,8 @@ void bind_environment_textures(const EnvironmentDrawResources& resources) noexce
     glBindTexture(GL_TEXTURE_2D, resources.brdf_lut);
 }
 
-void set_capability(GLenum capability, bool enabled) noexcept {
+void set_capability(GLenum capability, bool enabled) noexcept
+{
     if (enabled) {
         glEnable(capability);
     } else {
@@ -274,7 +282,8 @@ void set_capability(GLenum capability, bool enabled) noexcept {
     }
 }
 
-void configure_indexed_blending(bool blending, IndexedBatchStateCache& cache) noexcept {
+void configure_indexed_blending(bool blending, IndexedBatchStateCache& cache) noexcept
+{
     if (!cache.blending_valid || cache.blending != blending) {
         set_capability(GL_BLEND, blending);
         glDepthMask(blending ? GL_FALSE : GL_TRUE);
@@ -283,7 +292,8 @@ void configure_indexed_blending(bool blending, IndexedBatchStateCache& cache) no
     }
 }
 
-void configure_indexed_culling(bool culling, IndexedBatchStateCache& cache) noexcept {
+void configure_indexed_culling(bool culling, IndexedBatchStateCache& cache) noexcept
+{
     if (!cache.culling_valid || cache.culling != culling) {
         set_capability(GL_CULL_FACE, culling);
         cache.culling_valid = true;
@@ -291,7 +301,8 @@ void configure_indexed_culling(bool culling, IndexedBatchStateCache& cache) noex
     }
 }
 
-void configure_indexed_front_face(bool clockwise, IndexedBatchStateCache& cache) noexcept {
+void configure_indexed_front_face(bool clockwise, IndexedBatchStateCache& cache) noexcept
+{
     if (!cache.front_face_valid || cache.front_face_clockwise != clockwise) {
         glFrontFace(clockwise ? GL_CW : GL_CCW);
         cache.front_face_valid = true;
@@ -299,7 +310,8 @@ void configure_indexed_front_face(bool clockwise, IndexedBatchStateCache& cache)
     }
 }
 
-void configure_indexed_vertex_array(GLuint vertex_array, IndexedBatchStateCache& cache) noexcept {
+void configure_indexed_vertex_array(GLuint vertex_array, IndexedBatchStateCache& cache) noexcept
+{
     if (!cache.vertex_array_valid || cache.vertex_array != vertex_array) {
         glBindVertexArray(vertex_array);
         cache.vertex_array_valid = true;
@@ -309,7 +321,8 @@ void configure_indexed_vertex_array(GLuint vertex_array, IndexedBatchStateCache&
 
 void configure_indexed_item_state(const IndexedDrawResources& resources,
                                   const graphics::DrawIndexedDescription& description,
-                                  IndexedBatchStateCache& cache) noexcept {
+                                  IndexedBatchStateCache& cache) noexcept
+{
     configure_indexed_blending(description.alpha_mode == AlphaMode::blend, cache);
     configure_indexed_culling(!description.double_sided, cache);
     configure_indexed_front_face(description.front_face_clockwise, cache);
@@ -317,7 +330,8 @@ void configure_indexed_item_state(const IndexedDrawResources& resources,
 }
 
 void bind_material_textures(const IndexedDrawResources& resources,
-                            IndexedBatchStateCache& cache) noexcept {
+                            IndexedBatchStateCache& cache) noexcept
+{
     constexpr std::array<GLenum, graphics::material_texture_count> texture_units{
         GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2, GL_TEXTURE3, GL_TEXTURE4};
     for (std::size_t index = 0; index < resources.textures.size(); ++index) {
@@ -332,7 +346,8 @@ void bind_material_textures(const IndexedDrawResources& resources,
 
 void submit_indexed_draw(const IndexedDrawResources& resources,
                          const graphics::DrawIndexedDescription& description,
-                         IndexedBatchStateCache& cache) noexcept {
+                         IndexedBatchStateCache& cache) noexcept
+{
     configure_indexed_item_state(resources, description, cache);
     upload_indexed_item_uniforms(resources.pipeline.uniforms, description, resources);
     upload_texture_mapping_uniforms(resources.pipeline.uniforms, description);
@@ -344,11 +359,13 @@ void submit_indexed_draw(const IndexedDrawResources& resources,
 [[nodiscard]] Result<IndexedDrawResources>
 batch_item_resources(const RenderTargetView& target, const PipelineView& pipeline,
                      graphics::StaticMesh* mesh,
-                     const graphics::DrawIndexedDescription& description) noexcept {
+                     const graphics::DrawIndexedDescription& description) noexcept
+{
     if (mesh == nullptr || description.textures.size() != graphics::material_texture_count) {
         return Error{ErrorCode::invalid_argument,
                      "Indexed draw batches require a mesh and five ordered textures per item"};
     }
+
     Result<MeshView> mesh_result = mesh_view(*mesh);
     if (!mesh_result) {
         return mesh_result.error();
@@ -368,7 +385,8 @@ batch_item_resources(const RenderTargetView& target, const PipelineView& pipelin
 submit_indexed_batch_items(const RenderTargetView& target, const PipelineView& pipeline,
                            std::span<graphics::StaticMesh* const> meshes,
                            std::span<const graphics::DrawIndexedDescription> descriptions,
-                           IndexedBatchStateCache& cache) noexcept {
+                           IndexedBatchStateCache& cache) noexcept
+{
     for (std::size_t index = 0; index < meshes.size(); ++index) {
         Result<IndexedDrawResources> resources =
             batch_item_resources(target, pipeline, meshes[index], descriptions[index]);
@@ -386,12 +404,14 @@ submit_indexed_batch_items(const RenderTargetView& target, const PipelineView& p
 
 Result<void> draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
                           graphics::StaticMesh& mesh,
-                          const graphics::DrawIndexedDescription& description) noexcept {
+                          const graphics::DrawIndexedDescription& description) noexcept
+{
     Result<IndexedDrawResources> resources_result =
         indexed_draw_resources(target, pipeline, mesh, description);
     if (!resources_result) {
         return resources_result.error();
     }
+
     const IndexedDrawResources& resources = resources_result.value();
     if (!resources.target.valid || resources.mesh.index_count == 0) {
         return {};
@@ -403,6 +423,7 @@ Result<void> draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipe
     if (!environment) {
         return environment.error();
     }
+
     upload_indexed_frame_uniforms(resources.pipeline, description);
     upload_indexed_clipping_uniforms(resources.pipeline.uniforms, description);
     bind_environment_textures(environment.value());
@@ -413,6 +434,7 @@ Result<void> draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipe
         return Error{ErrorCode::draw_submission_failed,
                      "OpenGL reported an error while submitting an indexed draw"};
     }
+
     mark_render_target_stale(target);
     return {};
 }
@@ -420,11 +442,13 @@ Result<void> draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipe
 Result<void>
 draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
                    std::span<graphics::StaticMesh* const> meshes,
-                   std::span<const graphics::DrawIndexedDescription> descriptions) noexcept {
+                   std::span<const graphics::DrawIndexedDescription> descriptions) noexcept
+{
     Result<RenderTargetView> target_result = render_target_view(target);
     if (!target_result) {
         return target_result.error();
     }
+
     Result<PipelineView> pipeline_result = pipeline_view(pipeline);
     if (!pipeline_result) {
         return pipeline_result.error();
@@ -444,6 +468,7 @@ draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& p
     if (!environment) {
         return environment.error();
     }
+
     upload_indexed_frame_uniforms(pipeline_result.value(), descriptions.front());
     upload_indexed_clipping_uniforms(pipeline_result.value().uniforms, descriptions.front());
     bind_environment_textures(environment.value());
@@ -457,6 +482,7 @@ draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& p
         return Error{ErrorCode::draw_submission_failed,
                      "OpenGL reported an error while submitting an indexed draw batch"};
     }
+
     mark_render_target_stale(target);
     return {};
 }

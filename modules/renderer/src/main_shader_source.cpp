@@ -1,9 +1,8 @@
-module;
+#include "renderer_detail.h"
+
+#include <elf3d/internal/renderer.h>
 
 #include <string_view>
-
-module elf.renderer;
-
 namespace elf3d::renderer {
 namespace {
 
@@ -310,11 +309,13 @@ void main()
 
 } // namespace
 
-std::string_view main_vertex_shader_source() noexcept {
+std::string_view main_vertex_shader_source() noexcept
+{
     return vertex_shader_source;
 }
 
-std::string_view main_fragment_shader_source() noexcept {
+std::string_view main_fragment_shader_source() noexcept
+{
     return fragment_shader_source;
 }
 

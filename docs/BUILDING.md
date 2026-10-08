@@ -15,175 +15,171 @@ All required third-party source is included in the repository. A normal
 configure and build does not download dependencies.
 
 Use standalone CMake, CTest and CPack from the same installation. The CMake
-bundled with Visual Studio may be older than the required version. The current
-toolchain is VS 2026 18.9.2, MSVC 19.51.36256.0, Windows SDK 10.0.26100.0,
-CMake 4.4.3 and clang-format 23.1.0. Run `cmake/check-windows-environment.ps1`
-to inspect discovery before configuring.
+bundled with Visual Studio may be older than the required version. Run
+`cmake/check-windows-environment.ps1` to inspect discovery before configuring.
 
 CMake generates native `.slnx` solutions. When upgrading the compiler or
 generator, preserve personal debugger settings and recreate the entire build
 directory, including nested solutions and compiler module artifacts. Removing
 only `CMakeCache.txt` does not remove stale projects. Older Visual Studio
-generators, old MSVC compilers, and v143 overrides fail explicitly. Newer
-eligible generations are permitted; select their generator/toolset in a new
-build directory. C++20 and the Debug `/MDd` / Release `/MD` runtime remain required.
+generators, old MSVC compilers, and v143 overrides fail explicitly. A future
+toolchain upgrade replaces the active baseline and requires regenerating all
+build trees. C++20 and the Debug `/MDd` / Release `/MD` runtime remain required.
 
-## Debug Build
+## Manual Visual Studio Solutions
 
-Run these commands from the repository root:
+Prepare the manual workspace from the repository root, using PowerShell 7.6.5
+or newer:
 
 ```powershell
-cmake --preset windows-debug
-cmake --build --preset windows-debug --parallel
+.\cmake\configure-win.ps1
 ```
 
-The Debug viewer is written to:
+This discovers the active VS 2026 toolchain and generates all four solutions,
+including both configurations, without compiling or launching Visual Studio.
+Repeat this command after changing the project version or shared build
+configuration so all components have matching import metadata. Reload open
+solutions in Visual Studio after regeneration. Existing binaries and personal
+IDE settings are preserved.
+
+The generated workspace is ignored by Git. Open and build these solutions in
+order, selecting the **same** `Debug | x64` or `Release | x64` in each:
+
+| Order | Solution | Production projects |
+| --- | --- | ---: |
+| 1 | `win/dependencies/Elf3D-Dependencies.slnx` | 7 |
+| 2 | `win/engine/Elf3D-Engine.slnx` | 11 |
+| 3 | `win/imgui/Elf3D-ImGui.slnx` | 2 |
+| 4 | `win/viewer/Elf3D-Viewer.slnx` | 2 |
+
+There is one project set per component. Switch between Debug and Release in
+VS; a second configure tree is unnecessary. `ALL_BUILD` and `ZERO_CHECK` are
+standard CMake utilities and are counted separately. Tests, examples, developer
+tools, the environment baker, `RUN_TESTS`, and Dashboard projects are absent.
+No solution filter is needed.
+
+Dependencies contains zlib, PNG, JPEG, cgltf, MikkTSpace, GLAD, and GLFW. GLM is
+header-only. Engine contains `elf3d`, `elf3d_model`, and the existing nine
+internal module-group projects (18 C++20 modules). ImGui contains Dear ImGui
+and `elf3d_imgui`. Viewer contains `elf3d_app` and `elf3d_viewer`.
+
+Dear ImGui is independent of Engine. Our `elf3d_imgui` integration uses Elf3D
+results/errors, mathematical values, diagnostics, and the private native texture
+presentation bridge, so it depends on Engine. Engine does not depend on ImGui
+or GLFW. `elf3d_model` remains independent of graphics.
+
+Each component builds only its own sources. It imports upstream libraries from
+this manual workspace. **Rebuild Solution in Viewer does not rebuild Engine,
+ImGui, or Dependencies.** Clean affects only that component's outputs. After
+changing upstream code, rebuild affected components in dependency order. After
+changing public headers, also rebuild affected downstream consumers. A missing
+prerequisite reports its component, configuration, path, and solution to build;
+Debug never falls back to Release.
+
+Outputs are `bin/Debug`, `bin/Release`, `lib/Debug`, and `lib/Release` inside each
+component. Objects and module artifacts remain local and configuration-specific.
+The runnable viewer paths are:
 
 ```text
-out/build/windows-debug/bin/Debug/elf3d_viewer.exe
+win/viewer/bin/Debug/elf3d_viewer.exe
+win/viewer/bin/Release/elf3d_viewer.exe
 ```
 
-## Release Build
+The Viewer build deploys the matching `elf3d.dll`, assets, and Engine Debug PDB
+beside the EXE. Release symbols are copied when produced. File dependencies
+refresh a changed Engine DLL on the next Viewer build even without relinking
+the viewer. Keep the DLL and `assets` directory with a copied EXE.
+
+In the Viewer solution, `elf3d_viewer` is the initial startup project. Select
+Debug or Release and press F5 after building the upstream solutions. The
+debugger working directory follows the selected EXE directory; no model
+argument is required. A saved VS startup preference can override the generated
+default: right-click `elf3d_viewer` and select **Set as Startup Project**.
+Debug symbols allow breakpoints in both Viewer/framework and Engine code.
+See [TESTING.md](TESTING.md#visual-studio-debugging-routes) for debugging routes.
+
+Public headers and implementation files remain grouped by repository directory.
+CMake owns generated projects: edit CMake source lists and regenerate rather
+than editing `.vcxproj` or `.slnx` files. The private import metadata lives in
+each producer's `local/` directory. It uses native configuration-aware CMake
+imported targets, including separate DLL/import-library paths, shared public
+usage requirements and static-link closures. Engine OBJECT targets and internal headers
+artifacts do not cross this boundary. Metadata rejects incompatible source
+roots, component roots, architectures, or toolchain identities. It is a local
+build mechanism, not an installed binary SDK or package-registry workflow.
+
+When upgrading the active Visual Studio toolchain, preserve personal settings,
+recreate all four component directories, rerun preparation, and rebuild in
+order. Old compiler/module caches must not be reused. Nested vendored CMake
+solutions are implementation artifacts; the four paths above are the manual
+entry points.
+
+## Automated Builds
+
+Build and test validation uses separate source-integrated trees and never
+consumes, configures, cleans, or writes the manual `win` workspace. Full Debug
+and Release share one configure tree:
 
 ```powershell
-cmake --preset windows-release
-cmake --build --preset windows-release --parallel
+cmake --preset windows-full
+cmake --build --preset windows-debug --parallel 4
+ctest --preset windows-debug --output-on-failure
+cmake --build --preset windows-release --parallel 4
+ctest --preset windows-release --output-on-failure
 ```
 
-The Release viewer is written to:
+Outputs are in `out/build/windows-full/bin/<Configuration>` and
+`out/build/windows-full/lib/<Configuration>`. The full profile retains tests,
+compile-checked examples, tools, and source-built dependencies.
 
-```text
-out/build/windows-release/bin/Release/elf3d_viewer.exe
-```
-
-Both checked-in full presets build the Runtime SDK, Standard Application
-Framework, explicit embedding integration, reference viewer, and explicitly
-enable the optional `elf3d_render_benchmark` target.
-
-Keep the generated `assets` directory beside the viewer executable when
-copying it to another location.
-
-## Model-Only Build
-
-Use the model-only presets for `elf3d_model` and model/import/export tests. They
-do not configure Scene/Assets, renderer, OpenGL, the application framework,
-embedding integration, GLFW, ImGui, viewport, or viewer targets. They explicitly
-disable the optional performance benchmark and
-include a configured-target dependency check:
+Independent CPU/model validation uses a second tree:
 
 ```powershell
-cmake --preset windows-model-debug
-cmake --build --preset windows-model-debug --parallel
+cmake --preset windows-model
+cmake --build --preset windows-model-debug --parallel 4
 ctest --preset windows-model-debug --output-on-failure
+cmake --build --preset windows-model-release --parallel 4
+ctest --preset windows-model-release --output-on-failure
 ```
 
-The static library is written under:
+Its outputs are under `out/build/windows-model`. It does not configure Scene,
+renderer, OpenGL, GLFW, ImGui, framework, or Viewer. This independent tree proves
+the CPU library does not acquire a graphics dependency.
 
-```text
-out/build/windows-model-debug/lib/Debug/elf3d_model.lib
-```
+The four build/test preset names remain unchanged. Only configure preset names
+and their build-directory mappings changed. The common hidden preset owns the
+VS generator, platform, toolset, and two configurations. `ELF3D_BUILD_COMPONENT`
+is a private selector: `all` (normal source integration), `dependencies`,
+`engine`, `imgui`, or `viewer`. Component modes are top-level workflows and
+select their source targets before testing infrastructure is instantiated.
+Normal `add_subdirectory` integration remains source-built.
 
-## Main Targets
-
-| Target | Purpose |
-| --- | --- |
-| `elf3d_model` | Static CPU-side model library |
-| `elf3d` | Shared C++ engine library |
-| `elf3d_app` / `elf3d::app` | Canonical standard desktop application lifecycle |
-| `elf3d_embed` / `elf3d::embed` | Explicit host-owned context and loop integration |
-| `elf3d_imgui` / `elf3d::imgui` | Named Dear ImGui presentation integration |
-| `elf3d_viewer` | Desktop reference viewer |
-| `elf3d_public_api_examples` | Compile-checks the canonical public integration examples |
-| `elf3d_render_benchmark` | Optional hidden-context rendering benchmark |
-| `elf3d_render_quality_capture` | Optional reproducible PNG/metadata capture tool |
-
-Set `ELF3D_BUILD_VIEWER=OFF` when only the SDK/framework products are required.
-Set `ELF3D_BUILD_APP=OFF` or `ELF3D_BUILD_EMBED=OFF` to omit the corresponding
-integration. A custom model-only configuration must disable engine,
-application, embedding, viewer, and performance-benchmark targets together;
-the checked-in model-only presets provide that exact mapping. The viewer
-requires the application framework, and the performance benchmark requires the
-embedding integration. `ELF3D_BUILD_TESTING` controls Elf3D test targets and
-registration. On the first standalone configure its default follows
-`BUILD_TESTING`; when included with `add_subdirectory` it defaults to `OFF`.
-All four checked-in presets explicitly enable both options. As with other
-CMake options, an explicit value or existing cache value takes precedence over
-the initial default. The performance benchmark defaults to `OFF`; set
-`ELF3D_BUILD_PERFORMANCE_BENCHMARK=ON` to include it in a custom engine build.
-The checked-in full presets already do so and therefore build both rendering
-tools.
-
-Validate all four checked-in preset option, target, and IDE contracts, plus
-external-application configuration, without compiling them:
+Configure/IDE contracts, including all four component compositions:
 
 ```powershell
 .\cmake\check-preset-contracts.ps1
 ```
 
-The public CI runs the full and model-only Debug profiles independently and
-builds/tests the standalone external-application example in the full Debug job.
-Scheduled and manually dispatched workflows also run both Release profiles.
-Every CI job pins CMake 4.4.3; older CMake releases are not a supported
-compatibility target. CI limits builds to four parallel jobs for predictable
-resource use on hosted runners.
-
-Check project-owned C++ formatting with pinned `clang-format` 23.1.0:
+Complete component build/ownership/import/runtime checks in an isolated tree:
 
 ```powershell
-.\cmake\check-format.ps1
+.\cmake\check-win-components.ps1 -Build
 ```
 
-## Visual Studio Study and Debugging
-
-After `cmake --preset windows-debug`, open
-`out/build/windows-debug/Elf3D.slnx` in Visual Studio 2026. Select `Debug | x64`.
-In a fresh standalone solution, `elf3d_viewer` is the startup project; press F5
-to build and debug it. If Visual Studio has retained a different startup choice
-in its local user settings, right-click `elf3d_viewer` and select **Set as
-Startup Project**.
-
-The full solution retains the product projects, nine internal module groups,
-third-party libraries, tests, tools, and CMake utility projects. Public engine
-headers are visible under `elf3d/include/elf3d`; a model-only solution shows its
-public subset in `elf3d_model`. Project-owned source filters mirror repository
-directories, keeping each `.cppm` beside its `.cpp` implementations. Headers
-are explicitly assigned to targets for navigation; adding a file on disk does
-not silently add new compiled sources. CMake owns these generated projects:
-edit `CMakeLists.txt`, then configure again to change them.
-
-For a smaller study view, run from the repository root:
-
-```powershell
-.\cmake\create-study-solution.ps1 -BuildDirectory .\out\build\windows-debug
-```
-
-Open the resulting `Elf3D-Study.slnf` in the same directory. It contains viewer
-and the complete recursive `ProjectReference` closure, including third-party
-and CMake dependencies. The script reads the existing generated solution;
-it neither builds nor changes the full `.slnx`. Regenerate the filter after
-changing targets/dependencies. Tests and unrelated tools remain accessible
-through the full solution. The filter uses the same binaries and build tree.
-
-The viewer debugger working directory is the directory containing its EXE.
-F5 starts normally without a model argument. To study loading, set **Project
-Properties > Configuration Properties > Debugging > Command Arguments** for
-`Debug | x64` to the quoted absolute fixture path, for example:
-
-```text
-"C:\Projects\Elf3D\tests\fixtures\elf3d_smoke\elf3d_smoke.gltf"
-```
-
-Leave Working Directory at its generated value. The viewer build copies its
-UI assets beside the EXE. See [TESTING.md](TESTING.md#visual-studio-debugging-routes)
-for breakpoints, variable inspection, and DLL/PDB checks.
+The checker retains its logs below `out`. `configure-win.ps1 -BuildRoot
+<path-under-out>` also supports isolated preparation without touching `win`.
+Project-owned C++ formatting uses `cmake/check-format.ps1` and pinned
+clang-format 23.1.0. Full/model-only Debug run in independent CI jobs; scheduled
+or manually dispatched CI additionally tests Release. Graphics initialization
+skips are reported separately from successful rendering validation.
 
 ## External Application with Shared Elf3D Sources
 
 `examples/external_application` is a standalone CMake project, configured
 separately from the Elf3D presets. It uses only public headers, links
 `elf3d::app`, and exercises a hidden application with one frame and explicit
-Scene release in `stop`. The application itself does not import internal C++
-modules; CMake builds those modules inside Elf3D.
+Scene release in `stop`. The application uses public SDK/integration headers;
+CMake builds the conventional engine component sources inside Elf3D.
 
 Validate the example without creating an application outside this repository:
 
@@ -226,7 +222,7 @@ engine DLL using `$<TARGET_FILE:elf3d>` and the application's target directory,
 so it does not depend on a hardcoded DLL path.
 
 `MyApp` references the same `Elf3D` source checkout, without copying it.
-Its object files, module build artifacts, libraries, DLLs, and PDBs are built
+Its object files, private PCH artifacts, libraries, DLLs, and PDBs are built
 independently under `MyApp/out/build`; the existing Elf3D build is separate.
 Changing a shared source file affects both consumers on their next build.
 Do not edit that shared checkout concurrently from two tasks. Use a separate
@@ -246,9 +242,9 @@ profile or baker, regenerate and verify it from a Release build:
 ```powershell
 cmake --build --preset windows-release `
     --target elf3d_studio_environment_baker --parallel
-.\out\build\windows-release\bin\Release\elf3d_studio_environment_baker.exe `
+.\out\build\windows-full\bin\Release\elf3d_studio_environment_baker.exe `
     --output .\modules\renderer\assets\studio_environment_v3.ibl
-.\out\build\windows-release\bin\Release\elf3d_studio_environment_baker.exe `
+.\out\build\windows-full\bin\Release\elf3d_studio_environment_baker.exe `
     --verify .\modules\renderer\assets\studio_environment_v3.ibl
 ```
 
@@ -267,3 +263,16 @@ v3 in `elf3d.dll`; no sidecar IBL file is shipped.
   changing Visual Studio installations or generator settings.
 
 See `TESTING.md` for the validation commands.
+
+## Header and PCH Build Contract
+
+First-party code uses C++20 conventional headers and sources. C++ Modules
+are prohibited by `CODING_POLICY.md`. Windows production targets use private
+CMake-generated PCH; public consumers inherit no PCH requirement or internal
+include directory. Other platforms keep PCH disabled.
+
+Use `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` in a separate configure tree to
+validate without PCH. Do not edit generated Visual Studio project files. After
+shared configuration changes, regenerate all four manual solutions with
+`pwsh -NoProfile -File .\cmake\configure-win.ps1`; preserve existing manual
+binaries and IDE settings and validate builds under `out`.

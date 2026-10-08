@@ -3,34 +3,45 @@
 ## Preset Contracts
 
 After changing CMake options, presets, or product composition, validate all
-four checked-in configure and target contracts:
+automated profile mappings and the four manual component contracts:
 
 ```powershell
 .\cmake\check-preset-contracts.ps1
 ```
 
-The check configures isolated full and model-only Debug/Release trees below
+The check configures isolated full and model-only multi-configuration trees below
 `out/`, verifies required/forbidden targets, explicit testing options, header
-coverage and directory filters, viewer startup/debugger metadata, and the study
-filter's exact dependency closure. It also configures the external application,
+coverage and directory filters, viewer startup/debugger metadata, and the four
+independent manual source-project compositions. It also configures the external application,
 checks its own test/startup target, public-only includes, CRT, output paths,
 and Elf3D's default/explicit testing and viewer options. It removes temporary
 trees after completion (`-KeepBuilds` retains them). It does not compile or
 provide evidence of Visual Studio UI behavior.
 
-The same gate checks XML solution folders and `DefaultStartup`, deterministic
-study filters, missing/duplicate project references, v145/x64 and CRT settings,
+The same gate checks XML solution folders and `DefaultStartup`, missing/duplicate
+project paths, local project references, v145/x64 and CRT settings,
 effective compiler/MSBuild versions, repeated configuration, and rejection of
 unsupported toolchains. Nested solutions must use `.slnx` too. Focused parser
 and discovery checks can run without compiling or accessing a private model:
 `cmake/check-solution-contracts.ps1`.
+
+Actual component builds and ownership checks run separately:
+
+```powershell
+.\cmake\check-win-components.ps1 -Build
+```
+
+This uses an isolated root below `out`, retains its build logs, builds both
+configurations, tests graphics smoke, Clean/Rebuild ownership, incremental DLL
+deployment, missing Debug prerequisites, toolchain compatibility, and a CPU-only
+imported Model client. It does not modify the manual `win` workspace.
 
 ## Automated Tests
 
 Configure, build, and run the Debug suite:
 
 ```powershell
-cmake --preset windows-debug
+cmake --preset windows-full
 cmake --build --preset windows-debug --parallel
 ctest --preset windows-debug --output-on-failure
 ```
@@ -38,7 +49,7 @@ ctest --preset windows-debug --output-on-failure
 Run the Release suite:
 
 ```powershell
-cmake --preset windows-release
+cmake --preset windows-full
 cmake --build --preset windows-release --parallel
 ctest --preset windows-release --output-on-failure
 ```
@@ -46,7 +57,7 @@ ctest --preset windows-release --output-on-failure
 Run the model-only suite:
 
 ```powershell
-cmake --preset windows-model-debug
+cmake --preset windows-model
 cmake --build --preset windows-model-debug --parallel
 ctest --preset windows-model-debug --output-on-failure
 ```
@@ -61,6 +72,13 @@ preparation, viewport lifetime, the public API, model document and
 asset-reference behavior, and OpenGL rendering. A separate external target
 copies and adapts a Measurement Tool while seeing only public Elf3D headers and
 targets; it does not link the viewer or use private implementation includes.
+
+Graphics integration tests borrow hidden `Application` contexts. The OpenGL
+smoke covers top-down RGBA8 readback, incorrect buffer sizes, image availability
+before rendering and after resize, current display transform, and preservation
+of native pixel-pack settings and PBO binding. The application smoke verifies
+completed-frame indices/timing, failed frames, and exit without another render.
+These optional graphics tests are absent when `ELF3D_BUILD_APP=OFF`.
 
 The context-dependent `elf3d.render_quality_material_pixels` test renders a
 generated white/dielectric/polished-metal/rough-metal scene and enforces the
@@ -78,7 +96,7 @@ guards the v1-calibrated source energy, fixed resource size, and unchanged BRDF
 LUT bytes.
 
 The model-only suite stops before renderer, backend OpenGL, viewport, Standard
-Application Framework, embedding integration, ImGui, GLFW, and viewer targets.
+Application Framework, ImGui, GLFW, and viewer targets.
 It covers Document construction and processing, all-scene glTF import,
 glTF/GLB export, source-image and raw-metadata fidelity, and verifies from
 generated CMake metadata that Scene/Assets and engine/UI targets were not
@@ -119,7 +137,7 @@ ctest --preset windows-model-debug -R "elf3d\.model_" --output-on-failure
 Launch the checked-in smoke model:
 
 ```powershell
-.\out\build\windows-debug\bin\Debug\elf3d_viewer.exe `
+.\out\build\windows-full\bin\Debug\elf3d_viewer.exe `
     .\tests\fixtures\elf3d_smoke\elf3d_smoke.gltf
 ```
 
@@ -131,8 +149,10 @@ The smoke model and its license are stored in
 
 ## Visual Studio Debugging Routes
 
-Use the full solution or study filter as described in
-[BUILDING.md](BUILDING.md#visual-studio-study-and-debugging), with `Debug | x64`.
+Use the four manual solutions described in
+[BUILDING.md](BUILDING.md#manual-visual-studio-solutions), with `Debug | x64`.
+Build Dependencies, Engine, ImGui, then Viewer. Start F5 from the Viewer
+solution. Its deployed DLL and PDB are in `win/viewer/bin/Debug`.
 Set breakpoints on executable statements in these files; function names below
 are navigation landmarks. F9 toggles a breakpoint, F10 steps over, F11 steps
 into, and Shift+F11 returns to the caller. Inspect **Call Stack**, **Locals**,
@@ -140,9 +160,9 @@ and **Watch** while paused.
 
 | Route | Breakpoints and what to inspect |
 | --- | --- |
-| Startup | `apps/viewer/src/main.cpp` (`WinMain`) → `run_viewer_entry` in `viewer_runtime.cpp` → `elf3d::run_application` in `framework/app/src/application.cpp` → `detail::EngineAccess::create` in `facade/elf3d/src/engine.cpp` → `ViewerApplication::start`. Inspect application options, window/context creation results, and the owned Engine/Scene/Viewport. |
+| Startup | `apps/viewer/src/main.cpp` (`WinMain`) РІвЂ вЂ™ `run_viewer_entry` in `viewer_runtime.cpp` РІвЂ вЂ™ `elf3d::run_application` in `framework/app/src/application.cpp` РІвЂ вЂ™ `detail::EngineAccess::create` in `facade/elf3d/src/engine.cpp` РІвЂ вЂ™ `ViewerApplication::start`. Inspect application options, window/context creation results, and the owned Engine/Scene/Viewport. |
 | Frame | `ViewerApplication::update` and `build_ui` in `viewer_runtime.cpp`, then `Renderer::render` in `modules/renderer/src/renderer.cpp`. Inspect frame input, viewport extent, camera, render request, and returned statistics. Disable frequently hit frame breakpoints after studying one frame. |
-| Model loading | Start with the absolute fixture argument or open the model from the viewer. Follow `load_model_scene` in `apps/viewer/src/viewer_assets.cpp` → `Engine::load_scene` in `facade/elf3d/src/engine.cpp` → `gltf::load_document` in `modules/gltf/src/importer_document.cpp`. Inspect the source path, `Result`, load report, and replacement Scene; the previous scene is retained on a failed load. |
+| Model loading | Start with the absolute fixture argument or open the model from the viewer. Follow `load_model_scene` in `apps/viewer/src/viewer_assets.cpp` РІвЂ вЂ™ `Engine::load_scene` in `facade/elf3d/src/engine.cpp` РІвЂ вЂ™ `gltf::load_document` in `modules/gltf/src/importer_document.cpp`. Inspect the source path, `Result`, load report, and replacement Scene; the previous scene is retained on a failed load. |
 | Shutdown | Close the window and stop in `ViewerApplication::stop` in `viewer_runtime.cpp`, `Scene::~Scene` in `facade/elf3d/src/scene.cpp`, and `Engine::~Engine` in `facade/elf3d/src/engine.cpp`. Verify application-owned UI/Viewport/Scene release before the framework releases Engine, graphics context, and window. |
 
 For hidden or unresolved breakpoints, pause and open **Debug > Windows >

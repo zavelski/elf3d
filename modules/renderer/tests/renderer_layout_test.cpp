@@ -5,13 +5,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/graphics.h>
+#include <elf3d/internal/renderer.h>
+#include <elf3d/internal/scene.h>
 #include <memory>
 #include <vector>
-
-import elf.assets;
-import elf.graphics;
-import elf.renderer;
-import elf.scene;
 
 #include "renderer_test_support.h"
 
@@ -23,13 +22,15 @@ using elf3d::renderer::tests::FakeRenderTarget;
 
 constexpr std::uint64_t engine_token = 11;
 
-[[nodiscard]] bool position_test_camera(elf3d::scene::Storage& scene, elf3d::EntityId camera) {
+[[nodiscard]] bool position_test_camera(elf3d::scene::Storage& scene, elf3d::EntityId camera)
+{
     elf3d::Transform transform;
     transform.translation = {0.0F, 0.0F, 3.0F};
     return static_cast<bool>(scene.set_local_transform(camera, transform));
 }
 
-[[nodiscard]] elf3d::PrimitiveData layout_triangle(std::size_t layout_index) {
+[[nodiscard]] elf3d::PrimitiveData layout_triangle(std::size_t layout_index)
+{
     elf3d::PrimitiveData data;
     data.positions = {{0.0F, 0.0F, 0.0F}, {1.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}};
     data.normals = {{0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}};
@@ -51,7 +52,8 @@ constexpr std::uint64_t engine_token = 11;
 
 [[nodiscard]] bool add_layout_primitives(elf3d::Document& document, elf3d::MeshId mesh,
                                          elf3d::MaterialId material,
-                                         std::array<elf3d::PrimitiveId, 4>& primitives) {
+                                         std::array<elf3d::PrimitiveId, 4>& primitives)
+{
     for (std::size_t index = 0; index < primitives.size(); ++index) {
         const auto primitive = document.create_primitive(mesh, material, layout_triangle(index));
         if (!primitive) {
@@ -62,7 +64,8 @@ constexpr std::uint64_t engine_token = 11;
     return true;
 }
 
-[[nodiscard]] bool has_expected_layout_uploads(const FakeDeviceState& device) {
+[[nodiscard]] bool has_expected_layout_uploads(const FakeDeviceState& device)
+{
     constexpr std::array<elf3d::graphics::VertexLayout, 4> layouts{{
         elf3d::graphics::VertexLayout::position_normal_float3,
         elf3d::graphics::VertexLayout::position_normal_float3_texcoord_float2,
@@ -77,21 +80,24 @@ constexpr std::uint64_t engine_token = 11;
 }
 
 struct LayoutScene {
-    LayoutScene()
-        : id(elf3d::detail::SceneHandleAccess::create_scene(engine_token, 4)), scene(id) {}
+    LayoutScene() : id(elf3d::detail::SceneHandleAccess::create_scene(engine_token, 4)), scene(id)
+    {
+    }
 
     elf3d::SceneId id;
     elf3d::scene::Storage scene;
     elf3d::EntityId camera;
 };
 
-[[nodiscard]] int prepare_layout_scene(LayoutScene& context) {
+[[nodiscard]] int prepare_layout_scene(LayoutScene& context)
+{
     elf3d::Document document;
     const auto mesh = document.create_mesh("layout-mesh");
     const auto material = document.create_material({});
     if (!mesh || !material) {
         return 1;
     }
+
     std::array<elf3d::PrimitiveId, 4> primitives;
     if (!add_layout_primitives(document, mesh.value(), material.value(), primitives)) {
         return 1;
@@ -99,6 +105,7 @@ struct LayoutScene {
     if (!context.scene.set_document(std::move(document))) {
         return 1;
     }
+
     const auto model = context.scene.create_entity();
     const auto camera = context.scene.create_perspective_camera({});
     if (!model || !camera || !position_test_camera(context.scene, camera.value())) {
@@ -111,8 +118,8 @@ struct LayoutScene {
     return 0;
 }
 
-[[nodiscard]] bool renders_expected(elf3d::renderer::Renderer& renderer,
-                                    const LayoutScene& context) {
+[[nodiscard]] bool renders_expected(elf3d::renderer::Renderer& renderer, const LayoutScene& context)
+{
     FakeRenderTarget target;
     const elf3d::renderer::RenderRequest request{context.camera};
     const auto first = renderer.render(context.scene, target, request);
@@ -125,7 +132,8 @@ struct LayoutScene {
            has_expected_layout_uploads(device);
 }
 
-[[nodiscard]] int run_layout_test() {
+[[nodiscard]] int run_layout_test()
+{
     LayoutScene context;
     const int prepared = prepare_layout_scene(context);
     if (prepared != 0) {
@@ -147,6 +155,7 @@ struct LayoutScene {
 
 } // namespace
 
-int elf3d_renderer_layout_test() {
+int elf3d_renderer_layout_test()
+{
     return run_layout_test();
 }

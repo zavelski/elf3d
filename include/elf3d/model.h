@@ -109,7 +109,8 @@ struct PrimitiveData {
     std::vector<std::uint32_t> indices;
     std::vector<Float4> tangents;
 
-    [[nodiscard]] PrimitiveDataView view() const noexcept {
+    [[nodiscard]] PrimitiveDataView view() const noexcept
+    {
         return PrimitiveDataView{positions, normals, texcoord0, texcoord1,
                                  colors,    indices, tangents};
     }
@@ -322,7 +323,7 @@ class DocumentView;
 
 class Document final {
   public:
-    Document();
+    Document() noexcept;
     ~Document() noexcept;
 
     Document(const Document&) = delete;
@@ -362,38 +363,42 @@ class Document final {
     [[nodiscard]] Result<SamplerView> sampler(SamplerId sampler) const noexcept;
     [[nodiscard]] std::optional<Bounds3> bounds() const noexcept;
 
-    [[nodiscard]] Result<DocumentSceneId> create_scene(std::string_view name = {});
-    [[nodiscard]] Result<NodeId> create_node(std::string_view name = {});
-    [[nodiscard]] Result<MeshId> create_mesh(std::string_view name = {});
+    [[nodiscard]] Result<DocumentSceneId> create_scene(std::string_view name = {}) noexcept;
+    [[nodiscard]] Result<NodeId> create_node(std::string_view name = {}) noexcept;
+    [[nodiscard]] Result<MeshId> create_mesh(std::string_view name = {}) noexcept;
     [[nodiscard]] Result<MaterialId>
-    create_material(const ModelMaterialDescription& description = {});
-    [[nodiscard]] Result<ImageId> create_image(const ModelImageDescription& description);
-    [[nodiscard]] Result<SamplerId> create_sampler(const SamplerDescription& description = {});
-    [[nodiscard]] Result<TextureId> create_texture(const ModelTextureDescription& description);
+    create_material(const ModelMaterialDescription& description = {}) noexcept;
+    [[nodiscard]] Result<ImageId> create_image(const ModelImageDescription& description) noexcept;
+    [[nodiscard]] Result<SamplerId>
+    create_sampler(const SamplerDescription& description = {}) noexcept;
+    [[nodiscard]] Result<TextureId>
+    create_texture(const ModelTextureDescription& description) noexcept;
     [[nodiscard]] Result<PrimitiveId> create_primitive(MeshId mesh, MaterialId material,
-                                                       const PrimitiveDataView& data);
+                                                       const PrimitiveDataView& data) noexcept;
     [[nodiscard]] Result<PrimitiveId> create_primitive(MeshId mesh, MaterialId material,
-                                                       PrimitiveData&& data);
-    [[nodiscard]] Result<void> add_scene_root(DocumentSceneId scene, NodeId node);
-    [[nodiscard]] Result<void> set_default_scene(DocumentSceneId scene);
+                                                       PrimitiveData&& data) noexcept;
+    [[nodiscard]] Result<void> add_scene_root(DocumentSceneId scene, NodeId node) noexcept;
+    [[nodiscard]] Result<void> set_default_scene(DocumentSceneId scene) noexcept;
     [[nodiscard]] Result<void> clear_default_scene() noexcept;
-    [[nodiscard]] Result<void> set_parent(NodeId node, NodeId parent);
-    [[nodiscard]] Result<void> clear_parent(NodeId node);
-    [[nodiscard]] Result<void> set_node_mesh(NodeId node, MeshId mesh);
-    [[nodiscard]] Result<void> clear_node_mesh(NodeId node);
-    [[nodiscard]] Result<void> set_node_matrix(NodeId node, const Float4x4& matrix);
+    [[nodiscard]] Result<void> set_parent(NodeId node, NodeId parent) noexcept;
+    [[nodiscard]] Result<void> clear_parent(NodeId node) noexcept;
+    [[nodiscard]] Result<void> set_node_mesh(NodeId node, MeshId mesh) noexcept;
+    [[nodiscard]] Result<void> clear_node_mesh(NodeId node) noexcept;
+    [[nodiscard]] Result<void> set_node_matrix(NodeId node, const Float4x4& matrix) noexcept;
     [[nodiscard]] Result<void>
-    set_node_perspective_camera(NodeId node, const PerspectiveCameraDescription& description);
-    [[nodiscard]] Result<void> clear_node_perspective_camera(NodeId node);
+    set_node_perspective_camera(NodeId node,
+                                const PerspectiveCameraDescription& description) noexcept;
+    [[nodiscard]] Result<void> clear_node_perspective_camera(NodeId node) noexcept;
     [[nodiscard]] Result<void> replace_primitive(PrimitiveId primitive,
-                                                 const PrimitiveDataView& data);
-    [[nodiscard]] Result<void> replace_primitive(PrimitiveId primitive, PrimitiveData&& data);
+                                                 const PrimitiveDataView& data) noexcept;
+    [[nodiscard]] Result<void> replace_primitive(PrimitiveId primitive,
+                                                 PrimitiveData&& data) noexcept;
 
   private:
     friend class DocumentView;
     friend class model::detail::DocumentMetadataAccess;
     friend class model::detail::DocumentValidation;
-    friend DocumentValidationReport validate_document(DocumentView document);
+    friend DocumentValidationReport validate_document(DocumentView document) noexcept;
 
     class Storage;
     std::unique_ptr<Storage> storage_;
@@ -437,7 +442,7 @@ class DocumentView final {
   private:
     friend class Document;
     friend class model::detail::DocumentValidation;
-    friend DocumentValidationReport validate_document(DocumentView document);
+    friend DocumentValidationReport validate_document(DocumentView document) noexcept;
 
     explicit DocumentView(const Document* document) noexcept;
 
@@ -450,7 +455,7 @@ struct LoadedDocument {
     ModelLoadReport report;
 };
 
-[[nodiscard]] DocumentValidationReport validate_document(DocumentView document);
+[[nodiscard]] DocumentValidationReport validate_document(DocumentView document) noexcept;
 [[nodiscard]] Result<LoadedDocument> load_document(std::string_view path_utf8,
                                                    const ModelLoadOptions& options = {}) noexcept;
 [[nodiscard]] Result<ModelWriteReport>

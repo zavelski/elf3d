@@ -1,3 +1,5 @@
+#include <elf3d/model.h>
+
 #include <elf3d/model/detail/document_storage.h>
 #include <elf3d/model/detail/imported_metadata.h>
 
@@ -8,13 +10,15 @@ namespace elf3d::model::detail {
 
 bool DocumentMetadataAccess::target_metadata_valid(bool target_exists,
                                                    const ModelJsonMetadata& metadata,
-                                                   std::size_t& total_bytes) noexcept {
+                                                   std::size_t& total_bytes) noexcept
+{
     return target_exists && valid_metadata(metadata, total_bytes);
 }
 
 Result<void>
 DocumentMetadataAccess::validate_document_metadata(const ImportedDocumentMetadata& metadata,
-                                                   std::size_t& total_bytes) noexcept {
+                                                   std::size_t& total_bytes) noexcept
+{
     if (!valid_metadata(metadata.root, total_bytes)) {
         return Error{ErrorCode::invalid_argument,
                      "Imported JSON metadata is malformed or exceeds its resource budget"};
@@ -29,7 +33,8 @@ DocumentMetadataAccess::validate_document_metadata(const ImportedDocumentMetadat
 Result<void>
 DocumentMetadataAccess::validate_structural_targets(const Document::Storage& storage,
                                                     const ImportedDocumentMetadata& metadata,
-                                                    std::size_t& total_bytes) noexcept {
+                                                    std::size_t& total_bytes) noexcept
+{
     for (const auto& entry : metadata.scenes) {
         if (!target_metadata_valid(static_cast<bool>(storage.scene(entry.first)), entry.second,
                                    total_bytes)) {
@@ -64,7 +69,8 @@ DocumentMetadataAccess::validate_structural_targets(const Document::Storage& sto
 Result<void>
 DocumentMetadataAccess::validate_resource_targets(const Document::Storage& storage,
                                                   const ImportedDocumentMetadata& metadata,
-                                                  std::size_t& total_bytes) noexcept {
+                                                  std::size_t& total_bytes) noexcept
+{
     for (const auto& entry : metadata.materials) {
         if (!target_metadata_valid(static_cast<bool>(storage.material(entry.first)), entry.second,
                                    total_bytes)) {
@@ -98,7 +104,8 @@ DocumentMetadataAccess::validate_resource_targets(const Document::Storage& stora
 
 void DocumentMetadataAccess::attach_structural_metadata(Document::Storage& storage,
                                                         ImportedDocumentMetadata& metadata,
-                                                        bool& any_metadata) noexcept {
+                                                        bool& any_metadata) noexcept
+{
     for (auto& entry : metadata.scenes) {
         const std::size_t index =
             static_cast<std::size_t>(DocumentHandleAccess::value(entry.first) - 1U);
@@ -127,7 +134,8 @@ void DocumentMetadataAccess::attach_structural_metadata(Document::Storage& stora
 
 void DocumentMetadataAccess::attach_resource_metadata(Document::Storage& storage,
                                                       ImportedDocumentMetadata& metadata,
-                                                      bool& any_metadata) noexcept {
+                                                      bool& any_metadata) noexcept
+{
     for (auto& entry : metadata.materials) {
         const std::size_t index =
             static_cast<std::size_t>(DocumentHandleAccess::value(entry.first) - 1U);
@@ -155,7 +163,8 @@ void DocumentMetadataAccess::attach_resource_metadata(Document::Storage& storage
 }
 
 Result<void> DocumentMetadataAccess::attach_import_metadata(Document& document,
-                                                            ImportedDocumentMetadata&& metadata) {
+                                                            ImportedDocumentMetadata&& metadata)
+{
     if (document.storage_ == nullptr) {
         return Error{ErrorCode::invalid_argument,
                      "Imported metadata requires a live model document"};
@@ -166,11 +175,13 @@ Result<void> DocumentMetadataAccess::attach_import_metadata(Document& document,
     if (!document_validation) {
         return document_validation.error();
     }
+
     Result<void> structural_validation =
         validate_structural_targets(storage, metadata, total_bytes);
     if (!structural_validation) {
         return structural_validation.error();
     }
+
     Result<void> resource_validation = validate_resource_targets(storage, metadata, total_bytes);
     if (!resource_validation) {
         return resource_validation.error();

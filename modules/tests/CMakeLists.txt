@@ -5,6 +5,35 @@ function(elf3d_configure_group_test target_name)
     elf3d_enable_warnings(${target_name})
 endfunction()
 
+include(${PROJECT_SOURCE_DIR}/cmake/header-contracts.cmake)
+file(GLOB_RECURSE elf3d_sdk_contracts CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/include/elf3d/*.h)
+file(GLOB_RECURSE elf3d_internal_contracts CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/modules/*/include/elf3d/internal/*.h)
+if(NOT ELF3D_BUILD_ENGINE)
+    list(FILTER elf3d_internal_contracts INCLUDE REGEX "/(math|image|gltf)/include/")
+endif()
+elf3d_add_header_contracts(elf3d_header_contracts ${elf3d_sdk_contracts} ${elf3d_internal_contracts})
+target_link_libraries(elf3d_header_contracts PRIVATE elf3d_foundation_modules elf3d_model_modules elf3d_image_modules elf3d_gltf_modules)
+if(ELF3D_BUILD_ENGINE)
+    target_link_libraries(elf3d_header_contracts PRIVATE elf3d_domain_modules elf3d_graphics_modules elf3d_opengl_modules elf3d_interaction_modules elf3d_view_modules)
+endif()
+
+add_executable(
+    elf3d_allocation_failure_test
+    ${PROJECT_SOURCE_DIR}/modules/core/tests/allocation_failure_test.cpp
+)
+elf3d_configure_group_test(elf3d_allocation_failure_test)
+target_include_directories(
+    elf3d_allocation_failure_test PRIVATE ${PROJECT_SOURCE_DIR}/modules/core/include
+)
+target_link_libraries(elf3d_allocation_failure_test PRIVATE elf3d::model)
+add_test(
+    NAME elf3d.allocation_failure
+    COMMAND ${CMAKE_COMMAND}
+        "-DELF3D_FAILURE_EXECUTABLE=$<TARGET_FILE:elf3d_allocation_failure_test>"
+        "-DELF3D_FAILURE_SCENARIOS=document_create;document_node;document_validation;unexpected"
+        -P "${PROJECT_SOURCE_DIR}/cmake/check-fatal-boundaries.cmake"
+)
+
 add_executable(
     elf3d_foundation_tests
         foundation_test_driver.cpp
@@ -58,6 +87,7 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/modules/image/tests/image_decoder_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_exporter_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_importer_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_container_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_tangent_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_metadata_round_trip_test.cpp
 )
@@ -92,6 +122,7 @@ add_executable(
     elf3d_model_tests
         model_test_driver.cpp
         ${PROJECT_SOURCE_DIR}/modules/model/tests/model_document_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/model/tests/model_assets_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/model/tests/model_processing_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/model/tests/model_tangent_test.cpp
 )
@@ -154,12 +185,14 @@ add_executable(
     elf3d_view_tests
         view_test_driver.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_picking_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_environment_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_layout_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_frustum_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_document_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/display_transform_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/viewport/tests/offscreen_viewport_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/viewport/tests/viewport_navigation_test.cpp
 )
 elf3d_configure_group_test(elf3d_view_tests)
 elf3d_link_object_libraries(

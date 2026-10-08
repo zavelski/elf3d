@@ -17,7 +17,8 @@ enum class CallbackPhase {
 
 class CallbackTrace final {
   public:
-    void record(CallbackPhase phase) noexcept {
+    void record(CallbackPhase phase) noexcept
+    {
         if (size_ < phases_.size()) {
             phases_[size_] = phase;
             ++size_;
@@ -26,7 +27,8 @@ class CallbackTrace final {
         }
     }
 
-    [[nodiscard]] bool matches(std::span<const CallbackPhase> expected) const noexcept {
+    [[nodiscard]] bool matches(std::span<const CallbackPhase> expected) const noexcept
+    {
         if (overflowed_ || size_ != expected.size()) {
             return false;
         }
@@ -46,7 +48,8 @@ class CallbackTrace final {
 
 class LifecycleApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::start);
         elf3d::Result<std::unique_ptr<elf3d::Scene>> scene = context.engine().create_scene();
         if (!scene) {
@@ -69,32 +72,47 @@ class LifecycleApplication final : public elf3d::Application {
     }
 
     [[nodiscard]] elf3d::Result<void>
-    update(elf3d::ApplicationUpdateContext& context) noexcept override {
+    update(elf3d::ApplicationUpdateContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::update);
         ++update_count_;
-        if (update_count_ >= 2) {
+        const auto previous = context.previous_frame_statistics();
+        if (update_count_ == 1) {
+            statistics_valid_ = statistics_valid_ && !previous.has_value();
+        } else {
+            statistics_valid_ =
+                statistics_valid_ && previous.has_value() &&
+                previous->frame_index == static_cast<std::uint64_t>(update_count_ - 2) &&
+                previous->wall_milliseconds >= 0.0;
+        }
+        if (update_count_ >= 3) {
             context.request_exit();
         }
         return {};
     }
 
     [[nodiscard]] elf3d::Result<void>
-    build_ui(elf3d::ApplicationUiContext& context) noexcept override {
+    build_ui(elf3d::ApplicationUiContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::build_ui);
         return context.queue_viewport_render(*viewport_, *scene_, camera_);
     }
 
-    void stop(elf3d::ApplicationContext&) noexcept override {
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
         trace_.record(CallbackPhase::stop);
         viewport_.reset();
         scene_.reset();
     }
 
-    [[nodiscard]] bool passed() const noexcept {
-        constexpr std::array expected{CallbackPhase::start, CallbackPhase::update,
+    [[nodiscard]] bool passed() const noexcept
+    {
+        constexpr std::array expected{CallbackPhase::start,    CallbackPhase::update,
+                                      CallbackPhase::build_ui, CallbackPhase::update,
                                       CallbackPhase::build_ui, CallbackPhase::update,
                                       CallbackPhase::stop};
-        return trace_.matches(expected) && scene_ == nullptr && viewport_ == nullptr;
+        return trace_.matches(expected) && statistics_valid_ && scene_ == nullptr &&
+               viewport_ == nullptr;
     }
 
   private:
@@ -103,30 +121,36 @@ class LifecycleApplication final : public elf3d::Application {
     std::unique_ptr<elf3d::Viewport> viewport_;
     elf3d::EntityId camera_;
     int update_count_ = 0;
+    bool statistics_valid_ = true;
 };
 
 class NoCallbackApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext&) noexcept override
+    {
         called_ = true;
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override
+    {
         called_ = true;
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override
+    {
         called_ = true;
         return {};
     }
 
-    void stop(elf3d::ApplicationContext&) noexcept override {
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
         called_ = true;
     }
 
-    [[nodiscard]] bool passed() const noexcept {
+    [[nodiscard]] bool passed() const noexcept
+    {
         return !called_;
     }
 
@@ -136,7 +160,8 @@ class NoCallbackApplication final : public elf3d::Application {
 
 class StartupFailureApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::start);
         elf3d::Result<std::unique_ptr<elf3d::Scene>> scene = context.engine().create_scene();
         if (!scene) {
@@ -147,23 +172,27 @@ class StartupFailureApplication final : public elf3d::Application {
                             "Injected application startup failure"};
     }
 
-    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override
+    {
         trace_.record(CallbackPhase::update);
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override
+    {
         trace_.record(CallbackPhase::build_ui);
         return {};
     }
 
-    void stop(elf3d::ApplicationContext&) noexcept override {
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
         trace_.record(CallbackPhase::stop);
         released_partial_startup_ = scene_ != nullptr;
         scene_.reset();
     }
 
-    [[nodiscard]] bool passed() const noexcept {
+    [[nodiscard]] bool passed() const noexcept
+    {
         constexpr std::array expected{CallbackPhase::start, CallbackPhase::stop};
         return trace_.matches(expected) && released_partial_startup_ && scene_ == nullptr;
     }
@@ -176,27 +205,32 @@ class StartupFailureApplication final : public elf3d::Application {
 
 class UpdateFailureApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext&) noexcept override
+    {
         trace_.record(CallbackPhase::start);
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override
+    {
         trace_.record(CallbackPhase::update);
         return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                             "Injected application update failure"};
     }
 
-    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override
+    {
         trace_.record(CallbackPhase::build_ui);
         return {};
     }
 
-    void stop(elf3d::ApplicationContext&) noexcept override {
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
         trace_.record(CallbackPhase::stop);
     }
 
-    [[nodiscard]] bool passed() const noexcept {
+    [[nodiscard]] bool passed() const noexcept
+    {
         constexpr std::array expected{CallbackPhase::start, CallbackPhase::update,
                                       CallbackPhase::stop};
         return trace_.matches(expected);
@@ -208,26 +242,31 @@ class UpdateFailureApplication final : public elf3d::Application {
 
 class UiFailureApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext&) noexcept override
+    {
         trace_.record(CallbackPhase::start);
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override
+    {
         trace_.record(CallbackPhase::update);
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override
+    {
         trace_.record(CallbackPhase::build_ui);
         return elf3d::Error{elf3d::ErrorCode::invalid_argument, "Injected application UI failure"};
     }
 
-    void stop(elf3d::ApplicationContext&) noexcept override {
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
         trace_.record(CallbackPhase::stop);
     }
 
-    [[nodiscard]] bool passed() const noexcept {
+    [[nodiscard]] bool passed() const noexcept
+    {
         constexpr std::array expected{CallbackPhase::start, CallbackPhase::update,
                                       CallbackPhase::build_ui, CallbackPhase::stop};
         return trace_.matches(expected);
@@ -239,13 +278,19 @@ class UiFailureApplication final : public elf3d::Application {
 
 class QueuedRenderFailureApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::start);
         elf3d::Result<std::unique_ptr<elf3d::Scene>> scene = context.engine().create_scene();
         if (!scene) {
             return scene.error();
         }
         scene_ = std::move(scene).value();
+        const auto camera = scene_->create_perspective_camera_entity({});
+        if (!camera) {
+            return camera.error();
+        }
+        camera_ = camera.value();
         elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport =
             context.engine().create_viewport({64, 64});
         if (!viewport) {
@@ -255,38 +300,57 @@ class QueuedRenderFailureApplication final : public elf3d::Application {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void>
+    update(elf3d::ApplicationUpdateContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::update);
+        const auto previous = context.previous_frame_statistics();
+        ++update_count_;
+        statistics_valid_ =
+            statistics_valid_ &&
+            (update_count_ == 1 ? !previous.has_value()
+                                : previous.has_value() && previous->frame_index == 0);
         return {};
     }
 
     [[nodiscard]] elf3d::Result<void>
-    build_ui(elf3d::ApplicationUiContext& context) noexcept override {
+    build_ui(elf3d::ApplicationUiContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::build_ui);
-        return context.queue_viewport_render(*viewport_, *scene_, {});
+        // Complete one frame, then fail rendering before presentation can publish another.
+        return context.queue_viewport_render(*viewport_, *scene_,
+                                             update_count_ == 1 ? camera_ : elf3d::EntityId{});
     }
 
-    void stop(elf3d::ApplicationContext&) noexcept override {
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
         trace_.record(CallbackPhase::stop);
         viewport_.reset();
         scene_.reset();
     }
 
-    [[nodiscard]] bool passed() const noexcept {
-        constexpr std::array expected{CallbackPhase::start, CallbackPhase::update,
+    [[nodiscard]] bool passed() const noexcept
+    {
+        constexpr std::array expected{CallbackPhase::start,    CallbackPhase::update,
+                                      CallbackPhase::build_ui, CallbackPhase::update,
                                       CallbackPhase::build_ui, CallbackPhase::stop};
-        return trace_.matches(expected) && scene_ == nullptr && viewport_ == nullptr;
+        return trace_.matches(expected) && statistics_valid_ && scene_ == nullptr &&
+               viewport_ == nullptr;
     }
 
   private:
     CallbackTrace trace_;
     std::unique_ptr<elf3d::Scene> scene_;
     std::unique_ptr<elf3d::Viewport> viewport_;
+    elf3d::EntityId camera_;
+    int update_count_ = 0;
+    bool statistics_valid_ = true;
 };
 
 class CapturedStartupFailureApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::start);
         const elf3d::Result<elf3d::InteractionOwnerId> owner =
             context.interaction_arbiter().create_owner();
@@ -301,6 +365,7 @@ class CapturedStartupFailureApplication final : public elf3d::Application {
         if (!region) {
             return region.error();
         }
+
         const elf3d::Result<void> requested = context.interaction_arbiter().request(
             owner_, region.value(), elf3d::InteractionRequest::navigation);
         if (!requested) {
@@ -310,17 +375,20 @@ class CapturedStartupFailureApplication final : public elf3d::Application {
                             "Injected captured startup failure"};
     }
 
-    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override
+    {
         trace_.record(CallbackPhase::update);
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override
+    {
         trace_.record(CallbackPhase::build_ui);
         return {};
     }
 
-    void stop(elf3d::ApplicationContext& context) noexcept override {
+    void stop(elf3d::ApplicationContext& context) noexcept override
+    {
         trace_.record(CallbackPhase::stop);
         const elf3d::InteractionSnapshot snapshot = context.interaction_arbiter().snapshot(owner_);
         capture_released_ =
@@ -329,7 +397,8 @@ class CapturedStartupFailureApplication final : public elf3d::Application {
         context.interaction_arbiter().destroy_owner(owner_);
     }
 
-    [[nodiscard]] bool passed() const noexcept {
+    [[nodiscard]] bool passed() const noexcept
+    {
         constexpr std::array expected{CallbackPhase::start, CallbackPhase::stop};
         return trace_.matches(expected) && capture_released_;
     }
@@ -340,7 +409,8 @@ class CapturedStartupFailureApplication final : public elf3d::Application {
     bool capture_released_ = false;
 };
 
-[[nodiscard]] elf3d::ApplicationOptions hidden_options() noexcept {
+[[nodiscard]] elf3d::ApplicationOptions hidden_options() noexcept
+{
     elf3d::ApplicationOptions options;
     options.title = "Elf3D application lifecycle test";
     options.initial_window_extent = {320, 240};
@@ -348,24 +418,28 @@ class CapturedStartupFailureApplication final : public elf3d::Application {
     return options;
 }
 
-[[nodiscard]] bool environment_cannot_create_context(elf3d::ErrorCode code) noexcept {
+[[nodiscard]] bool environment_cannot_create_context(elf3d::ErrorCode code) noexcept
+{
     return code == elf3d::ErrorCode::graphics_initialization_failed ||
            code == elf3d::ErrorCode::graphics_context_unavailable ||
            code == elf3d::ErrorCode::unsupported_graphics_version;
 }
 
 [[nodiscard]] bool expected_failure(elf3d::Application& application,
-                                    elf3d::ErrorCode expected_code) noexcept {
+                                    elf3d::ErrorCode expected_code) noexcept
+{
     const elf3d::Result<int> result = elf3d::run_application(hidden_options(), application);
     return !result && result.error().code() == expected_code;
 }
 
-[[nodiscard]] int fail(const char* message) noexcept {
+[[nodiscard]] int fail(const char* message) noexcept
+{
     std::fprintf(stderr, "%s\n", message);
     return 1;
 }
 
-[[nodiscard]] int test_successful_lifecycle() noexcept {
+[[nodiscard]] int test_successful_lifecycle() noexcept
+{
     LifecycleApplication first_lifecycle;
     const elf3d::Result<int> first_result =
         elf3d::run_application(hidden_options(), first_lifecycle);
@@ -382,7 +456,8 @@ class CapturedStartupFailureApplication final : public elf3d::Application {
     return 0;
 }
 
-[[nodiscard]] bool startup_failure_invokes_no_callbacks() noexcept {
+[[nodiscard]] bool startup_failure_invokes_no_callbacks() noexcept
+{
     NoCallbackApplication no_callback;
     elf3d::ApplicationOptions invalid_options = hidden_options();
     invalid_options.initial_window_extent = {};
@@ -392,36 +467,42 @@ class CapturedStartupFailureApplication final : public elf3d::Application {
            no_callback.passed();
 }
 
-[[nodiscard]] bool partial_startup_rolls_back() noexcept {
+[[nodiscard]] bool partial_startup_rolls_back() noexcept
+{
     StartupFailureApplication startup_failure;
     return expected_failure(startup_failure, elf3d::ErrorCode::scene_import_failed) &&
            startup_failure.passed();
 }
 
-[[nodiscard]] bool update_failure_stops() noexcept {
+[[nodiscard]] bool update_failure_stops() noexcept
+{
     UpdateFailureApplication update_failure;
     return expected_failure(update_failure, elf3d::ErrorCode::invalid_argument) &&
            update_failure.passed();
 }
 
-[[nodiscard]] bool ui_failure_stops() noexcept {
+[[nodiscard]] bool ui_failure_stops() noexcept
+{
     UiFailureApplication ui_failure;
     return expected_failure(ui_failure, elf3d::ErrorCode::invalid_argument) && ui_failure.passed();
 }
 
-[[nodiscard]] bool queued_render_failure_stops() noexcept {
+[[nodiscard]] bool queued_render_failure_stops() noexcept
+{
     QueuedRenderFailureApplication render_failure;
     return expected_failure(render_failure, elf3d::ErrorCode::invalid_entity) &&
            render_failure.passed();
 }
 
-[[nodiscard]] bool captured_startup_releases_capture() noexcept {
+[[nodiscard]] bool captured_startup_releases_capture() noexcept
+{
     CapturedStartupFailureApplication captured_failure;
     return expected_failure(captured_failure, elf3d::ErrorCode::invalid_argument) &&
            captured_failure.passed();
 }
 
-[[nodiscard]] bool next_lifecycle_is_clean() noexcept {
+[[nodiscard]] bool next_lifecycle_is_clean() noexcept
+{
     LifecycleApplication final_lifecycle;
     const elf3d::Result<int> final_result =
         elf3d::run_application(hidden_options(), final_lifecycle);
@@ -430,7 +511,8 @@ class CapturedStartupFailureApplication final : public elf3d::Application {
 
 } // namespace
 
-int main() {
+int main()
+{
     if (const int result = test_successful_lifecycle(); result != 0) {
         return result;
     }

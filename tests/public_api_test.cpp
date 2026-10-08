@@ -6,7 +6,8 @@
 
 namespace {
 
-void verify_compile_time_contracts() noexcept {
+void verify_compile_time_contracts() noexcept
+{
     static_assert(sizeof(elf3d::Error) <= 256);
     static_assert(noexcept(std::declval<elf3d::Engine&>().~Engine()));
     static_assert(noexcept(std::declval<elf3d::Engine&>().create_scene()));
@@ -71,7 +72,8 @@ void verify_compile_time_contracts() noexcept {
     static_assert(!std::is_convertible_v<elf3d::ImageHandle, elf3d::TextureAssetHandle>);
 }
 
-[[nodiscard]] bool has_expected_math_defaults() noexcept {
+[[nodiscard]] bool has_expected_math_defaults() noexcept
+{
     const elf3d::Float2 position{4.0F, 8.0F};
     const elf3d::Color4 color{0.1F, 0.2F, 0.3F, 1.0F};
     const elf3d::Extent2D extent{800, 600};
@@ -79,7 +81,8 @@ void verify_compile_time_contracts() noexcept {
            color == elf3d::Color4{0.1F, 0.2F, 0.3F, 1.0F} && extent == elf3d::Extent2D{800, 600};
 }
 
-[[nodiscard]] bool has_expected_navigation_defaults() noexcept {
+[[nodiscard]] bool has_expected_navigation_defaults() noexcept
+{
     const elf3d::TextureHandle texture;
     const elf3d::NavigationInput input;
     const elf3d::OrbitNavigationSettings settings;
@@ -88,7 +91,8 @@ void verify_compile_time_contracts() noexcept {
            settings.orbit_sensitivity == 0.0025F;
 }
 
-[[nodiscard]] bool has_expected_rendering_defaults() noexcept {
+[[nodiscard]] bool has_expected_rendering_defaults() noexcept
+{
     const elf3d::BasicLighting lighting;
     const elf3d::EnvironmentLighting environment;
     const elf3d::DisplayTransform display;
@@ -98,7 +102,8 @@ void verify_compile_time_contracts() noexcept {
            display.exposure_ev == 0.0F && display.tone_mapping == elf3d::ToneMappingMode::standard;
 }
 
-[[nodiscard]] bool has_expected_scene_defaults() noexcept {
+[[nodiscard]] bool has_expected_scene_defaults() noexcept
+{
     const elf3d::Ray3 ray;
     const elf3d::SectionPlane section_plane;
     const elf3d::ClippingBox clipping_box;
@@ -114,7 +119,8 @@ void verify_compile_time_contracts() noexcept {
 
 } // namespace
 
-int main() {
+int main()
+{
     verify_compile_time_contracts();
     return has_expected_math_defaults() && has_expected_navigation_defaults() &&
                    has_expected_rendering_defaults() && has_expected_scene_defaults()

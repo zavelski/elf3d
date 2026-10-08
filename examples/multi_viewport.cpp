@@ -1,3 +1,4 @@
+#include <elf3d/app/application.h>
 #include <elf3d/elf3d.h>
 
 #include <memory>
@@ -5,14 +6,20 @@
 
 namespace elf3d_examples {
 
-[[nodiscard]] elf3d::Result<void> render_two_viewports(elf3d::Engine& engine,
-                                                       const elf3d::Scene& scene,
-                                                       elf3d::EntityId camera_entity) noexcept {
+// Retain both viewports in the Application and release them during stop.
+struct TwoViewports {
+    std::unique_ptr<elf3d::Viewport> first;
+    std::unique_ptr<elf3d::Viewport> second;
+};
+
+[[nodiscard]] elf3d::Result<TwoViewports> create_two_viewports(elf3d::Engine& engine) noexcept
+{
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> first_result =
         engine.create_viewport({640, 480});
     if (!first_result) {
         return first_result.error();
     }
+
     std::unique_ptr<elf3d::Viewport> first = std::move(first_result).value();
 
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> second_result =
@@ -20,6 +27,7 @@ namespace elf3d_examples {
     if (!second_result) {
         return second_result.error();
     }
+
     std::unique_ptr<elf3d::Viewport> second = std::move(second_result).value();
 
     first->set_environment_lighting({1.0F, 0.0F});
@@ -27,15 +35,20 @@ namespace elf3d_examples {
     second->set_environment_lighting({1.0F, 3.14159265359F});
     second->set_display_transform({-0.5F, elf3d::ToneMappingMode::pbr_neutral});
 
-    const elf3d::Result<void> first_render = first->render(scene, camera_entity);
-    if (!first_render) {
-        return first_render.error();
+    return TwoViewports{std::move(first), std::move(second)};
+}
+
+// Call from Application::build_ui; queued references survive until frame completion.
+[[nodiscard]] elf3d::Result<void> queue_two_viewports(elf3d::ApplicationUiContext& context,
+                                                      const TwoViewports& viewports,
+                                                      const elf3d::Scene& scene,
+                                                      elf3d::EntityId camera_entity) noexcept
+{
+    const auto first_queued = context.queue_viewport_render(*viewports.first, scene, camera_entity);
+    if (!first_queued) {
+        return first_queued.error();
     }
-    const elf3d::Result<void> second_render = second->render(scene, camera_entity);
-    if (!second_render) {
-        return second_render.error();
-    }
-    return {};
+    return context.queue_viewport_render(*viewports.second, scene, camera_entity);
 }
 
 } // namespace elf3d_examples

@@ -15,7 +15,8 @@
 namespace elf3d::imgui {
 namespace {
 
-template <typename TextureId> TextureId to_imgui_texture_id(std::uintptr_t value) noexcept {
+template <typename TextureId> TextureId to_imgui_texture_id(std::uintptr_t value) noexcept
+{
     if constexpr (std::is_pointer_v<TextureId>) {
         return reinterpret_cast<TextureId>(value);
     } else {
@@ -23,33 +24,38 @@ template <typename TextureId> TextureId to_imgui_texture_id(std::uintptr_t value
     }
 }
 
-[[nodiscard]] bool has_valid_rgba8_size(const UiTextureDescription& description) noexcept {
+[[nodiscard]] bool has_valid_rgba8_size(const UiTextureDescription& description) noexcept
+{
     constexpr std::size_t channels = 4;
     const std::size_t width = description.extent.width;
     const std::size_t height = description.extent.height;
     if (width == 0 || height == 0 || width > (std::numeric_limits<std::size_t>::max)() / channels) {
         return false;
     }
+
     const std::size_t row_bytes = width * channels;
     return height <= (std::numeric_limits<std::size_t>::max)() / row_bytes &&
            description.rgba8.size() == row_bytes * height;
 }
 
-[[nodiscard]] bool has_supported_gl_extent(Extent2D extent) noexcept {
+[[nodiscard]] bool has_supported_gl_extent(Extent2D extent) noexcept
+{
     const auto maximum_extent = static_cast<std::uint32_t>((std::numeric_limits<GLsizei>::max)());
     return extent.width <= maximum_extent && extent.height <= maximum_extent;
 }
 
 } // namespace
 
-UiTexture::~UiTexture() noexcept {
+UiTexture::~UiTexture() noexcept
+{
     if (texture_ != 0U) {
         glDeleteTextures(1, &texture_);
     }
 }
 
 Result<std::unique_ptr<UiTexture>>
-UiTexture::create(const UiTextureDescription& description) noexcept {
+UiTexture::create(const UiTextureDescription& description) noexcept
+{
     try {
         if (!has_valid_rgba8_size(description) || !has_supported_gl_extent(description.extent)) {
             return Error{ErrorCode::invalid_argument, "The UI texture RGBA8 payload is invalid"};
@@ -61,6 +67,7 @@ UiTexture::create(const UiTextureDescription& description) noexcept {
             return Error{ErrorCode::graphics_initialization_failed,
                          "The UI texture could not be created"};
         }
+
         glBindTexture(GL_TEXTURE_2D, texture->texture_);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -81,17 +88,20 @@ UiTexture::create(const UiTextureDescription& description) noexcept {
     }
 }
 
-bool UiTexture::is_valid() const noexcept {
+bool UiTexture::is_valid() const noexcept
+{
     return texture_ != 0U && extent_.width != 0 && extent_.height != 0;
 }
 
-ImTextureRef UiTexture::texture_ref() const noexcept {
+ImTextureRef UiTexture::texture_ref() const noexcept
+{
     return ImTextureRef{to_imgui_texture_id<ImTextureID>(texture_)};
 }
 
 Result<void> detail::draw_viewport_image(const elf3d::detail::NativeTextureView& texture,
                                          Float2 top_left_screen_position,
-                                         Float2 display_size) noexcept {
+                                         Float2 display_size) noexcept
+{
     if (texture.api != elf3d::detail::NativeGraphicsApi::opengl) {
         return Error{ErrorCode::backend_mismatch,
                      "The Dear ImGui integration requires an OpenGL native texture"};

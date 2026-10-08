@@ -1,6 +1,8 @@
 add_executable(
     elf3d_viewer
     WIN32
+    src/viewer_runtime_state.hpp
+    src/viewer_tool_style.hpp
     src/viewer_application.hpp
     src/viewer_assets.hpp
     src/viewer_browser.hpp
@@ -31,9 +33,12 @@ add_executable(
     src/viewer_rendering_controls.cpp
     src/viewer_retained_frame.cpp
     src/viewer_runtime.cpp
+    src/viewer_command_execution.cpp
     src/viewer_scene_panels.cpp
     src/viewer_status.cpp
     src/viewer_tools.cpp
+    src/viewer_measurement_tool.cpp
+    src/viewer_clipping_tool.cpp
     src/viewer_viewport.cpp
     src/viewer_workflows.cpp
     src/viewer_workflow_execution.cpp
@@ -65,14 +70,16 @@ if(WIN32)
     )
 endif()
 
-add_custom_command(
-    TARGET elf3d_viewer
-    POST_BUILD
-    COMMAND
-        ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-        "$<TARGET_FILE_DIR:elf3d_viewer>/assets"
-)
+if(ELF3D_BUILD_COMPONENT STREQUAL "viewer")
+    elf3d_check_prerequisites(elf3d_viewer elf3d elf3d_imgui elf3d_third_party_imgui glfw elf3d_third_party_glad)
+    include("${PROJECT_SOURCE_DIR}/cmake/viewer-runtime.cmake")
+else()
+    add_custom_command(
+        TARGET elf3d_viewer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:elf3d_viewer>/assets"
+    )
+endif()
 set_target_properties(elf3d_viewer PROPERTIES
     FOLDER "Elf3D/Applications"
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:elf3d_viewer>"
@@ -91,6 +98,8 @@ if(ELF3D_BUILD_TESTING)
         src/viewer_preferences.cpp
         src/viewer_retained_frame.cpp
         src/viewer_tools.cpp
+        src/viewer_measurement_tool.cpp
+        src/viewer_clipping_tool.cpp
         src/viewer_workflows.cpp
     )
     target_compile_features(elf3d_viewer_behavior_tests PRIVATE cxx_std_20)
@@ -118,6 +127,8 @@ if(ELF3D_BUILD_TESTING)
         elf3d_viewer_tools_tests
         tests/viewer_tools_test.cpp
         src/viewer_tools.cpp
+        src/viewer_measurement_tool.cpp
+        src/viewer_clipping_tool.cpp
     )
     target_compile_features(elf3d_viewer_tools_tests PRIVATE cxx_std_20)
     target_include_directories(elf3d_viewer_tools_tests PRIVATE src)
@@ -130,3 +141,5 @@ if(ELF3D_BUILD_TESTING)
     add_test(NAME elf3d.viewer_smoke COMMAND elf3d_viewer --smoke)
     set_tests_properties(elf3d.viewer_smoke PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+
+elf3d_enable_pch(elf3d_viewer viewer)

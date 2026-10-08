@@ -6,19 +6,19 @@
 
 #include <array>
 #include <cmath>
-
-import elf.assets;
-import elf.model;
-import elf.scene;
-import elf.clipping.runtime;
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/clipping_runtime.h>
+#include <elf3d/internal/scene.h>
 
 namespace {
 
-[[nodiscard]] elf3d::SceneId scene_id(std::uint64_t value) noexcept {
+[[nodiscard]] elf3d::SceneId scene_id(std::uint64_t value) noexcept
+{
     return elf3d::detail::SceneHandleAccess::create_scene(61, value);
 }
 
-[[nodiscard]] elf3d::scene::Storage make_scene() {
+[[nodiscard]] elf3d::scene::Storage make_scene()
+{
     elf3d::scene::Storage scene{scene_id(1)};
     const std::array<std::uint32_t, 3> indices{{0, 1, 2}};
     const std::array<elf3d::Float3, 3> document_positions{{
@@ -41,19 +41,22 @@ namespace {
     return scene;
 }
 
-[[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.0001F) noexcept {
+[[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.0001F) noexcept
+{
     return std::abs(left - right) <= tolerance;
 }
 
 [[nodiscard]] int
-verify_initial_state(const elf3d::clipping_runtime::ClippingController& controller) {
+verify_initial_state(const elf3d::clipping_runtime::ClippingController& controller)
+{
     if (controller.snapshot().revision != 0 || controller.snapshot().box_count != 0) {
         return 1;
     }
     return 0;
 }
 
-[[nodiscard]] int verify_section_plane(elf3d::clipping_runtime::ClippingController& controller) {
+[[nodiscard]] int verify_section_plane(elf3d::clipping_runtime::ClippingController& controller)
+{
     elf3d::SectionPlane plane;
     plane.enabled = true;
     plane.normal = {1.0F, 0.0F, 0.0F};
@@ -69,6 +72,7 @@ verify_initial_state(const elf3d::clipping_runtime::ClippingController& controll
             elf3d::PlaneHalfSpace::negative) {
         return 4;
     }
+
     controller.clear_section_plane();
     if (controller.snapshot().section_plane.enabled || controller.snapshot().revision != 3) {
         return 5;
@@ -76,7 +80,8 @@ verify_initial_state(const elf3d::clipping_runtime::ClippingController& controll
     return 0;
 }
 
-[[nodiscard]] int verify_box_addition(elf3d::clipping_runtime::ClippingController& controller) {
+[[nodiscard]] int verify_box_addition(elf3d::clipping_runtime::ClippingController& controller)
+{
     const elf3d::ClippingBox first{{-1.0F, -1.0F, -1.0F}, {0.0F, 1.0F, 1.0F}, true};
     const elf3d::ClippingBox second{{1.0F, -1.0F, -1.0F}, {2.0F, 1.0F, 1.0F}, false};
     const elf3d::ClippingBox third{{3.0F, -1.0F, -1.0F}, {4.0F, 1.0F, 1.0F}, true};
@@ -89,7 +94,8 @@ verify_initial_state(const elf3d::clipping_runtime::ClippingController& controll
     return 0;
 }
 
-[[nodiscard]] int verify_box_removal(elf3d::clipping_runtime::ClippingController& controller) {
+[[nodiscard]] int verify_box_removal(elf3d::clipping_runtime::ClippingController& controller)
+{
     const elf3d::ClippingBox third{{3.0F, -1.0F, -1.0F}, {4.0F, 1.0F, 1.0F}, true};
     if (!controller.remove_box(1) || controller.snapshot().box_count != 2 ||
         controller.snapshot().boxes[1] != third) {
@@ -103,7 +109,8 @@ verify_initial_state(const elf3d::clipping_runtime::ClippingController& controll
 
 [[nodiscard]] int verify_filter_and_bounds(elf3d::clipping_runtime::ClippingController& controller,
                                            elf3d::scene::Storage& scene,
-                                           const elf3d::scene::VisibilityFilter& visibility) {
+                                           const elf3d::scene::VisibilityFilter& visibility)
+{
     controller.clear_boxes();
     elf3d::SectionPlane plane;
     plane.enabled = true;
@@ -113,6 +120,7 @@ verify_initial_state(const elf3d::clipping_runtime::ClippingController& controll
     if (!controller.set_section_plane(plane)) {
         return 9;
     }
+
     const elf3d::clipping::ClippingFilter filter = controller.filter().value();
     const std::optional<elf3d::Bounds3> clipped =
         elf3d::clipping_runtime::visible_bounds(scene, visibility, filter);
@@ -120,6 +128,7 @@ verify_initial_state(const elf3d::clipping_runtime::ClippingController& controll
         !nearly_equal(clipped->maximum.x, 3.0F)) {
         return 10;
     }
+
     controller.clear();
     if (controller.snapshot().section_plane.enabled || controller.snapshot().box_count != 0) {
         return 11;
@@ -129,20 +138,24 @@ verify_initial_state(const elf3d::clipping_runtime::ClippingController& controll
 
 } // namespace
 
-int elf3d_clipping_runtime_test() {
+int elf3d_clipping_runtime_test()
+{
     elf3d::clipping_runtime::ClippingController controller;
     const int initial = verify_initial_state(controller);
     if (initial != 0) {
         return initial;
     }
+
     const int section = verify_section_plane(controller);
     if (section != 0) {
         return section;
     }
+
     const int addition = verify_box_addition(controller);
     if (addition != 0) {
         return addition;
     }
+
     const int removal = verify_box_removal(controller);
     if (removal != 0) {
         return removal;

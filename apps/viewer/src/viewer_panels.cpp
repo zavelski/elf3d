@@ -28,21 +28,25 @@ struct FrameDistribution final {
     std::size_t twice_median_count = 0;
 };
 
-[[nodiscard]] double percentile(const std::vector<double>& sorted, double fraction) noexcept {
+[[nodiscard]] double percentile(const std::vector<double>& sorted, double fraction) noexcept
+{
     if (sorted.empty()) {
         return 0.0;
     }
+
     const std::size_t index =
         static_cast<std::size_t>(std::ceil(fraction * static_cast<double>(sorted.size() - 1)));
     const std::size_t selected = std::min(index, sorted.size() - 1);
     return *(sorted.begin() + static_cast<std::ptrdiff_t>(selected));
 }
 
-[[nodiscard]] FrameDistribution frame_distribution(const ViewerFrameContext& state) {
+[[nodiscard]] FrameDistribution frame_distribution(const ViewerFrameContext& state)
+{
     FrameDistribution result;
     if (state.performance.frame_samples.empty()) {
         return result;
     }
+
     std::vector<double> values;
     values.reserve(state.performance.frame_samples.size());
     for (const ViewerFrameSample& sample : state.performance.frame_samples) {
@@ -61,7 +65,8 @@ struct FrameDistribution final {
     return result;
 }
 
-void draw_diagnostic_modes(ViewerFrameContext& state) {
+void draw_diagnostic_modes(ViewerFrameContext& state)
+{
     ImGui::Checkbox("VSync", &state.rendering.vsync_enabled);
     constexpr std::array<const char*, 2> shading_modes{{"Standard PBR", "Unlit"}};
     int shading = state.rendering.shading_mode == RenderShadingMode::unlit ? 1 : 0;
@@ -79,7 +84,8 @@ void draw_diagnostic_modes(ViewerFrameContext& state) {
     }
 }
 
-void draw_capture_controls(ViewerFrameContext& state) {
+void draw_capture_controls(ViewerFrameContext& state)
+{
     if (ImGui::Checkbox("Capture frame samples", &state.performance.capture_csv) &&
         state.performance.capture_csv) {
         state.performance.frame_samples.clear();
@@ -96,7 +102,8 @@ void draw_capture_controls(ViewerFrameContext& state) {
     }
 }
 
-void draw_frame_distribution(const ViewerFrameContext& state) {
+void draw_frame_distribution(const ViewerFrameContext& state)
+{
     const FrameDistribution distribution = frame_distribution(state);
     ImGui::Text("Frames: %llu (retained %llu)",
                 static_cast<unsigned long long>(state.performance.captured_frame_count),
@@ -120,16 +127,19 @@ void draw_frame_distribution(const ViewerFrameContext& state) {
     }
 }
 
-void draw_performance_diagnostics(ViewerFrameContext& state) {
+void draw_performance_diagnostics(ViewerFrameContext& state)
+{
     if (!ImGui::CollapsingHeader("Performance Diagnostics", ImGuiTreeNodeFlags_DefaultOpen)) {
         return;
     }
+
     draw_diagnostic_modes(state);
     draw_capture_controls(state);
     draw_frame_distribution(state);
 }
 
-void draw_context_diagnostics(const ViewerFrameContext& state) {
+void draw_context_diagnostics(const ViewerFrameContext& state)
+{
     if (!ImGui::CollapsingHeader("OpenGL Context")) {
         return;
     }
@@ -154,7 +164,8 @@ void draw_context_diagnostics(const ViewerFrameContext& state) {
 
 } // namespace
 
-void draw_model_source_information(const SceneSession& scene) {
+void draw_model_source_information(const SceneSession& scene)
+{
     const std::string source =
         scene.is_imported() ? path_to_utf8(scene.source_path) : "Empty scene";
     const std::string extension = scene.source_path.extension().string();
@@ -210,7 +221,8 @@ void draw_model_source_information(const SceneSession& scene) {
     }
 }
 
-void draw_model_render_statistics(const ViewerFrameContext& state) {
+void draw_model_render_statistics(const ViewerFrameContext& state)
+{
     ImGui::Separator();
     ImGui::Text("Latest draw calls: %llu",
                 static_cast<unsigned long long>(state.rendering.statistics.draw_calls));
@@ -274,7 +286,8 @@ void draw_model_render_statistics(const ViewerFrameContext& state) {
                        "documented fallback until tangent-space rendering is available.");
 }
 
-void draw_import_diagnostics(const SceneSession& scene) {
+void draw_import_diagnostics(const SceneSession& scene)
+{
     if (!scene.is_imported()) {
         return;
     }
@@ -287,6 +300,7 @@ void draw_import_diagnostics(const SceneSession& scene) {
         if (!result) {
             continue;
         }
+
         const elf3d::SceneLoadDiagnosticView diagnostic = result.value();
         ImGui::BulletText("%.*s", static_cast<int>(diagnostic.message.size()),
                           diagnostic.message.data());
@@ -300,7 +314,8 @@ void draw_import_diagnostics(const SceneSession& scene) {
 }
 
 void build_model_information(ImGuiID dockspace_id, ViewerFrameContext& state,
-                             const SceneSession& scene) {
+                             const SceneSession& scene)
+{
     if (!state.shell.show_model_information) {
         return;
     }
@@ -319,7 +334,8 @@ void build_model_information(ImGuiID dockspace_id, ViewerFrameContext& state,
 }
 
 void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, SceneSession& scene,
-                           const Viewport& viewport) {
+                           const Viewport& viewport)
+{
     if (!state.shell.show_rendering_panel) {
         return;
     }
@@ -339,11 +355,13 @@ void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, Scen
     ImGui::End();
 }
 
-[[nodiscard]] float radians_to_degrees(float radians) noexcept {
+[[nodiscard]] float radians_to_degrees(float radians) noexcept
+{
     return radians * 57.2957795131F;
 }
 
-[[nodiscard]] const char* interaction_mode_name(elf3d::NavigationInteractionMode mode) noexcept {
+[[nodiscard]] const char* interaction_mode_name(elf3d::NavigationInteractionMode mode) noexcept
+{
     switch (mode) {
     case elf3d::NavigationInteractionMode::none:
         return "None";
@@ -358,7 +376,8 @@ void build_rendering_panel(ImGuiID dockspace_id, ViewerFrameContext& state, Scen
 }
 
 void build_navigation_settings_window(ImGuiID dockspace_id, ViewerFrameContext& state,
-                                      elf3d::Viewport& engine_viewport) {
+                                      elf3d::Viewport& engine_viewport)
+{
     if (!state.shell.show_navigation_settings) {
         return;
     }
@@ -417,7 +436,8 @@ void build_navigation_settings_window(ImGuiID dockspace_id, ViewerFrameContext& 
     ImGui::End();
 }
 
-[[nodiscard]] std::string entity_label(const SceneSession& scene, elf3d::EntityId entity) {
+[[nodiscard]] std::string entity_label(const SceneSession& scene, elf3d::EntityId entity)
+{
     const elf3d::Result<std::string_view> name = scene.scene->entity_name(entity);
     if (name && !name.value().empty()) {
         const std::string_view text = name.value();
@@ -427,12 +447,14 @@ void build_navigation_settings_window(ImGuiID dockspace_id, ViewerFrameContext& 
 }
 
 [[nodiscard]] std::string selected_entity_label(const SceneSession& scene,
-                                                const elf3d::SelectionSnapshot& selection) {
+                                                const elf3d::SelectionSnapshot& selection)
+{
     return selection.entity.has_value() ? entity_label(scene, *selection.entity) : "none";
 }
 
 void build_selection_settings(ViewerFrameContext& state, elf3d::Viewport& viewport,
-                              SelectionTool& selection) {
+                              SelectionTool& selection)
+{
     bool enabled = selection.enabled();
     if (ImGui::Checkbox("Enable Selection", &enabled)) {
         selection.set_enabled(enabled);
@@ -454,17 +476,20 @@ void build_selection_settings(ViewerFrameContext& state, elf3d::Viewport& viewpo
     if (!changed) {
         return;
     }
+
     const elf3d::Result<void> result = selection.set_settings(settings);
     if (!result) {
         set_viewport_error(state, result.error());
     }
 }
 
-void draw_selected_entity(const SceneSession& scene, const elf3d::SelectionSnapshot& selection) {
+void draw_selected_entity(const SceneSession& scene, const elf3d::SelectionSnapshot& selection)
+{
     if (!selection.entity.has_value()) {
         ImGui::TextUnformatted("Selected: none");
         return;
     }
+
     const std::string label = selected_entity_label(scene, selection);
     ImGui::Text("Selected: %s", label.c_str());
     ImGui::Text("Entity ID: %llu",
@@ -473,6 +498,7 @@ void draw_selected_entity(const SceneSession& scene, const elf3d::SelectionSnaps
         ImGui::TextUnformatted("Pick hit: none");
         return;
     }
+
     const elf3d::PickHit& hit = *selection.pick_hit;
     ImGui::Text("Mesh ID: %llu", static_cast<unsigned long long>(hit.mesh.debug_value()));
     ImGui::Text("Primitive: %u", hit.primitive_index);
@@ -486,13 +512,15 @@ void draw_selected_entity(const SceneSession& scene, const elf3d::SelectionSnaps
     ImGui::Text("Distance: %.4g", hit.world_distance);
 }
 
-void draw_picking_statistics(ViewerFrameContext& state, elf3d::Viewport& viewport) {
+void draw_picking_statistics(ViewerFrameContext& state, elf3d::Viewport& viewport)
+{
     const elf3d::Result<elf3d::PickingStatistics> result = viewport.picking_statistics();
     if (!result) {
         set_viewport_error(state, result.error());
         ImGui::TextUnformatted("Picking statistics unavailable");
         return;
     }
+
     const elf3d::PickingStatistics& picking = result.value();
     ImGui::Text("GPU pick requests: %llu",
                 static_cast<unsigned long long>(picking.latest_gpu_requests));
@@ -543,7 +571,8 @@ void draw_picking_statistics(ViewerFrameContext& state, elf3d::Viewport& viewpor
 
 void build_selection_panel(ImGuiID dockspace_id, ViewerFrameContext& state,
                            const SceneSession& scene, elf3d::Viewport& engine_viewport,
-                           ToolCoordinator& tools) {
+                           ToolCoordinator& tools)
+{
     if (!state.shell.show_selection_panel) {
         return;
     }
@@ -565,11 +594,13 @@ void build_selection_panel(ImGuiID dockspace_id, ViewerFrameContext& state,
 }
 
 void draw_measurement_point(const char* label, const SceneSession& scene,
-                            const std::optional<MeasurementPoint>& point) {
+                            const std::optional<MeasurementPoint>& point)
+{
     if (!point.has_value()) {
         ImGui::Text("%s: none", label);
         return;
     }
+
     const std::string entity = entity_label(scene, point->entity);
     ImGui::Text("%s: %s", label, entity.c_str());
     ImGui::Text("  Entity ID: %llu", static_cast<unsigned long long>(point->entity.debug_value()));
@@ -580,7 +611,8 @@ void draw_measurement_point(const char* label, const SceneSession& scene,
                 point->world_normal.z);
 }
 
-void build_measurement_tool_selector(ToolCoordinator& tools) {
+void build_measurement_tool_selector(ToolCoordinator& tools)
+{
     const ViewerTool active_tool = tools.active_tool();
     ImGui::Text("Active tool: %s", tool_name(active_tool));
     if (ImGui::RadioButton("Select", active_tool == ViewerTool::selection)) {
@@ -593,7 +625,8 @@ void build_measurement_tool_selector(ToolCoordinator& tools) {
 }
 
 [[nodiscard]] DistanceMeasurementSettings edit_measurement_settings(ViewerFrameContext& state,
-                                                                    MeasurementTool& measurement) {
+                                                                    MeasurementTool& measurement)
+{
     DistanceMeasurementSettings settings = measurement.settings();
     bool changed = false;
     const char* unit_names[] = {"Automatic metric", "Meters", "Centimeters",
@@ -604,6 +637,7 @@ void build_measurement_tool_selector(ToolCoordinator& tools) {
         settings.display_unit = static_cast<LengthDisplayUnit>(unit_index);
         changed = true;
     }
+
     const char* depth_names[] = {"Depth tested", "Always visible"};
     int depth_index = static_cast<int>(settings.depth_mode);
     if (ImGui::Combo("Overlay depth", &depth_index, depth_names,
@@ -611,18 +645,21 @@ void build_measurement_tool_selector(ToolCoordinator& tools) {
         settings.depth_mode = static_cast<elf3d::OverlayDepthMode>(depth_index);
         changed = true;
     }
+
     std::array<float, 4> line{settings.line_color.red, settings.line_color.green,
                               settings.line_color.blue, settings.line_color.alpha};
     if (ImGui::ColorEdit4("Line color", line.data(), ImGuiColorEditFlags_NoInputs)) {
         settings.line_color = {line[0], line[1], line[2], line[3]};
         changed = true;
     }
+
     std::array<float, 4> first{settings.first_point_color.red, settings.first_point_color.green,
                                settings.first_point_color.blue, settings.first_point_color.alpha};
     if (ImGui::ColorEdit4("First marker color", first.data(), ImGuiColorEditFlags_NoInputs)) {
         settings.first_point_color = {first[0], first[1], first[2], first[3]};
         changed = true;
     }
+
     std::array<float, 4> second{settings.second_point_color.red, settings.second_point_color.green,
                                 settings.second_point_color.blue,
                                 settings.second_point_color.alpha};
@@ -643,13 +680,15 @@ void build_measurement_tool_selector(ToolCoordinator& tools) {
     return settings;
 }
 
-[[nodiscard]] bool measurement_has_points(const DistanceMeasurementSnapshot& measurement) noexcept {
+[[nodiscard]] bool measurement_has_points(const DistanceMeasurementSnapshot& measurement) noexcept
+{
     return measurement.first_point.has_value() || measurement.second_point.has_value() ||
            measurement.preview_point.has_value();
 }
 
 void draw_measurement_snapshot(const SceneSession& scene, elf3d::Viewport& viewport,
-                               ToolCoordinator& tools, LengthDisplayUnit unit) {
+                               ToolCoordinator& tools, LengthDisplayUnit unit)
+{
     const DistanceMeasurementSnapshot measurement = tools.measurement().snapshot(
         *scene.scene, viewport, tools.active_tool() == ViewerTool::distance_measurement);
     ImGui::Text("State: %s", measurement_state_name(measurement.state));
@@ -657,6 +696,7 @@ void draw_measurement_snapshot(const SceneSession& scene, elf3d::Viewport& viewp
         measurement.state == DistanceMeasurementState::awaiting_first_point) {
         ImGui::TextUnformatted("Click a visible surface to set the first point.");
     }
+
     draw_measurement_point("First point", scene, measurement.first_point);
     draw_measurement_point("Second point", scene, measurement.second_point);
     draw_measurement_point("Preview point", scene, measurement.preview_point);
@@ -672,6 +712,7 @@ void draw_measurement_snapshot(const SceneSession& scene, elf3d::Viewport& viewp
     if (measurement.diagnostic.has_value()) {
         ImGui::TextWrapped("Diagnostic: %s", measurement.diagnostic->message());
     }
+
     const bool incomplete = measurement.state == DistanceMeasurementState::awaiting_second_point;
     const bool present = measurement_has_points(measurement);
     ImGui::BeginDisabled(!incomplete);
@@ -687,7 +728,8 @@ void draw_measurement_snapshot(const SceneSession& scene, elf3d::Viewport& viewp
     ImGui::EndDisabled();
 }
 
-void draw_measurement_statistics(const MeasurementTool& measurement) {
+void draw_measurement_statistics(const MeasurementTool& measurement)
+{
     const MeasurementStatistics stats = measurement.statistics();
     ImGui::Text("Committed points: %llu", static_cast<unsigned long long>(stats.committed_points));
     ImGui::Text("Preview picks: %llu", static_cast<unsigned long long>(stats.preview_picks));
@@ -699,7 +741,8 @@ void draw_measurement_statistics(const MeasurementTool& measurement) {
 
 void build_measurement_panel(ImGuiID dockspace_id, ViewerFrameContext& state,
                              const SceneSession& scene, elf3d::Viewport& engine_viewport,
-                             ToolCoordinator& tools) {
+                             ToolCoordinator& tools)
+{
     if (!state.shell.show_measurement_panel) {
         return;
     }

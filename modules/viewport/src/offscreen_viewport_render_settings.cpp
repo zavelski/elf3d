@@ -1,18 +1,16 @@
-module;
+#include <elf3d/internal/viewport.h>
 
 #include <elf3d/viewport.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-
-module elf.viewport;
-
-import elf.math;
+#include <elf3d/internal/math.h>
 
 namespace elf3d::viewport {
 
-void OffscreenViewport::set_clear_color(Color4 color) noexcept {
+void OffscreenViewport::set_clear_color(Color4 color) noexcept
+{
     const Color4 clamped = math::clamp_color(color);
     if (clamped != clear_color_) {
         clear_color_ = clamped;
@@ -20,11 +18,13 @@ void OffscreenViewport::set_clear_color(Color4 color) noexcept {
     }
 }
 
-Color4 OffscreenViewport::clear_color() const noexcept {
+Color4 OffscreenViewport::clear_color() const noexcept
+{
     return clear_color_;
 }
 
-void OffscreenViewport::set_basic_lighting(const BasicLighting& lighting) noexcept {
+void OffscreenViewport::set_basic_lighting(const BasicLighting& lighting) noexcept
+{
     const BasicLighting previous = lighting_;
     const float direction_length_squared = lighting.direction.x * lighting.direction.x +
                                            lighting.direction.y * lighting.direction.y +
@@ -51,11 +51,13 @@ void OffscreenViewport::set_basic_lighting(const BasicLighting& lighting) noexce
     }
 }
 
-BasicLighting OffscreenViewport::basic_lighting() const noexcept {
+BasicLighting OffscreenViewport::basic_lighting() const noexcept
+{
     return lighting_;
 }
 
-void OffscreenViewport::set_environment_lighting(const EnvironmentLighting& lighting) noexcept {
+void OffscreenViewport::set_environment_lighting(const EnvironmentLighting& lighting) noexcept
+{
     EnvironmentLighting sanitized;
     sanitized.intensity =
         std::isfinite(lighting.intensity) ? std::clamp(lighting.intensity, 0.0F, 8.0F) : 2.0F;
@@ -69,11 +71,13 @@ void OffscreenViewport::set_environment_lighting(const EnvironmentLighting& ligh
     }
 }
 
-EnvironmentLighting OffscreenViewport::environment_lighting() const noexcept {
+EnvironmentLighting OffscreenViewport::environment_lighting() const noexcept
+{
     return environment_lighting_;
 }
 
-void OffscreenViewport::set_display_transform(const DisplayTransform& transform) noexcept {
+void OffscreenViewport::set_display_transform(const DisplayTransform& transform) noexcept
+{
     DisplayTransform sanitized;
     sanitized.exposure_ev = std::isfinite(transform.exposure_ev)
                                 ? std::clamp(transform.exposure_ev, -8.0F, 8.0F)
@@ -92,11 +96,13 @@ void OffscreenViewport::set_display_transform(const DisplayTransform& transform)
     }
 }
 
-DisplayTransform OffscreenViewport::display_transform() const noexcept {
+DisplayTransform OffscreenViewport::display_transform() const noexcept
+{
     return display_transform_;
 }
 
-void OffscreenViewport::set_render_shading_mode(RenderShadingMode mode) noexcept {
+void OffscreenViewport::set_render_shading_mode(RenderShadingMode mode) noexcept
+{
     if (mode != RenderShadingMode::standard && mode != RenderShadingMode::unlit) {
         mode = RenderShadingMode::standard;
     }
@@ -106,11 +112,13 @@ void OffscreenViewport::set_render_shading_mode(RenderShadingMode mode) noexcept
     }
 }
 
-RenderShadingMode OffscreenViewport::render_shading_mode() const noexcept {
+RenderShadingMode OffscreenViewport::render_shading_mode() const noexcept
+{
     return shading_mode_;
 }
 
-std::uint64_t OffscreenViewport::render_revision() const noexcept {
+std::uint64_t OffscreenViewport::render_revision() const noexcept
+{
     return render_revision_;
 }
 

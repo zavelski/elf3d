@@ -1,4 +1,6 @@
-module;
+#include "renderer_detail.h"
+
+#include <elf3d/internal/renderer.h>
 
 #include <elf3d/rendering.h>
 
@@ -6,33 +8,33 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/clipping.h>
+#include <elf3d/internal/graphics.h>
+#include <elf3d/internal/math.h>
+#include <elf3d/internal/scene.h>
 #include <limits>
 #include <optional>
 #include <span>
 #include <vector>
-
-module elf.renderer;
-
-import elf.clipping;
-import elf.graphics;
-import elf.math;
-import elf.scene;
 
 namespace elf3d::renderer {
 namespace {
 
 [[nodiscard]] std::optional<GpuPickHit>
 make_gpu_pick_hit(const RenderList& list, const RenderItem& item, graphics::PickingPixel pixel,
-                  Extent2D extent, Float2 position_pixels) noexcept {
+                  Extent2D extent, Float2 position_pixels) noexcept
+{
     if (extent.width == 0 || extent.height == 0 || !std::isfinite(pixel.depth) ||
         pixel.depth < 0.0F || pixel.depth >= 1.0F) {
         return std::nullopt;
     }
+
     const Result<Float3> world = math::unproject_viewport_point(
         list.view_matrix, list.projection_matrix, extent, position_pixels, pixel.depth);
     if (!world) {
         return std::nullopt;
     }
+
     const Float3 world_position = world.value();
     const float world_distance = math::distance(world_position, list.camera_world_position);
     if (!std::isfinite(world_distance) || world_distance < 0.0F) {
@@ -42,11 +44,12 @@ make_gpu_pick_hit(const RenderList& list, const RenderItem& item, graphics::Pick
                       world_position, pixel.depth, world_distance};
 }
 
-[[nodiscard]] double focus_depth_weight(Extent2D extent, std::uint32_t x,
-                                        std::uint32_t y) noexcept {
+[[nodiscard]] double focus_depth_weight(Extent2D extent, std::uint32_t x, std::uint32_t y) noexcept
+{
     if (extent.width == 0U || extent.height == 0U) {
         return 0.0;
     }
+
     const double sample_x =
         (static_cast<double>(x) + 0.5) * 2.0 / static_cast<double>(extent.width) - 1.0;
     const double sample_y =
@@ -55,12 +58,14 @@ make_gpu_pick_hit(const RenderList& list, const RenderItem& item, graphics::Pick
     if (!std::isfinite(radius_squared)) {
         return 0.0;
     }
+
     const double mass = 1.0 - std::min(radius_squared, 1.0);
     return mass * mass;
 }
 
 void apply_clipping_description(const clipping::ClippingFilter& filter,
-                                graphics::PickingDrawDescription& draw) noexcept {
+                                graphics::PickingDrawDescription& draw) noexcept
+{
     draw.clipping_section_plane_enabled = filter.section_plane_enabled;
     draw.clipping_section_plane_normal = filter.section_plane_normal;
     draw.clipping_section_plane_offset = filter.section_plane_offset;
@@ -71,7 +76,8 @@ void apply_clipping_description(const clipping::ClippingFilter& filter,
     }
 }
 
-[[nodiscard]] bool valid_viewport_position(Extent2D extent, Float2 position) noexcept {
+[[nodiscard]] bool valid_viewport_position(Extent2D extent, Float2 position) noexcept
+{
     return extent.width != 0U && extent.height != 0U && std::isfinite(position.x) &&
            std::isfinite(position.y) && position.x >= 0.0F && position.y >= 0.0F &&
            position.x < static_cast<float>(extent.width) &&
@@ -79,18 +85,21 @@ void apply_clipping_description(const clipping::ClippingFilter& filter,
 }
 
 [[nodiscard]] bool valid_pick_coordinates(Extent2D target_extent,
-                                          const GpuPickRequest& request) noexcept {
+                                          const GpuPickRequest& request) noexcept
+{
     return valid_viewport_position(target_extent, request.target_position_pixels) &&
            valid_viewport_position(request.viewport_extent, request.viewport_position_pixels);
 }
 
 [[nodiscard]] bool valid_focus_extents(Extent2D target_extent,
-                                       const GpuFocusDepthRequest& request) noexcept {
+                                       const GpuFocusDepthRequest& request) noexcept
+{
     return target_extent.width != 0U && target_extent.height != 0U &&
            request.viewport_extent.width != 0U && request.viewport_extent.height != 0U;
 }
 
-[[nodiscard]] Result<void> validate_pick_item_count(const RenderList& list) noexcept {
+[[nodiscard]] Result<void> validate_pick_item_count(const RenderList& list) noexcept
+{
     if (list.items.size() >
         static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()) - 1U) {
         return Error{ErrorCode::resource_limit_exceeded,
@@ -102,7 +111,8 @@ void apply_clipping_description(const clipping::ClippingFilter& filter,
 [[nodiscard]] graphics::PickingDrawDescription
 picking_draw_description(const RenderList& list, const RenderItem& item,
                          const scene::RuntimePrimitiveView& primitive, std::uint32_t object_id,
-                         const clipping::ClippingFilter& clipping_filter) noexcept {
+                         const clipping::ClippingFilter& clipping_filter) noexcept
+{
     graphics::PickingDrawDescription draw;
     draw.model_matrix = item.model_matrix.elements;
     draw.view_matrix = list.view_matrix.elements;
@@ -118,10 +128,12 @@ picking_draw_description(const RenderList& list, const RenderItem& item,
 [[nodiscard]] GpuPickResult resolve_gpu_pick(const RenderList& list,
                                              const std::optional<graphics::PickingPixel>& pixel,
                                              const GpuPickRequest& request,
-                                             GpuPickResult result) noexcept {
+                                             GpuPickResult result) noexcept
+{
     if (!pixel.has_value() || pixel->object_id == 0U || pixel->object_id > list.items.size()) {
         return result;
     }
+
     const RenderItem& item = list.items[pixel->object_id - 1U];
     result.hit = make_gpu_pick_hit(list, item, *pixel, request.viewport_extent,
                                    request.viewport_position_pixels);
@@ -129,7 +141,8 @@ picking_draw_description(const RenderList& list, const RenderItem& item,
 }
 
 [[nodiscard]] std::optional<float> weighted_focus_depth(std::span<const float> depths,
-                                                        Extent2D extent) noexcept {
+                                                        Extent2D extent) noexcept
+{
     double weighted_depth = 0.0;
     double total_weight = 0.0;
     for (std::uint32_t y = 0; y < extent.height; ++y) {
@@ -139,6 +152,7 @@ picking_draw_description(const RenderList& list, const RenderItem& item,
             if (!std::isfinite(depth) || depth <= 0.0F || depth >= 1.0F) {
                 continue;
             }
+
             const double weight = focus_depth_weight(extent, x, y);
             if (weight <= 0.0) {
                 continue;
@@ -155,10 +169,12 @@ picking_draw_description(const RenderList& list, const RenderItem& item,
 
 [[nodiscard]] std::optional<Float3> focus_world_position(const RenderList& list,
                                                          Extent2D viewport_extent,
-                                                         std::optional<float> depth) noexcept {
+                                                         std::optional<float> depth) noexcept
+{
     if (!depth.has_value()) {
         return std::nullopt;
     }
+
     const Float2 position{static_cast<float>(viewport_extent.width) * 0.5F,
                           static_cast<float>(viewport_extent.height) * 0.5F};
     const Result<Float3> anchor = math::unproject_viewport_point(
@@ -170,7 +186,8 @@ picking_draw_description(const RenderList& list, const RenderItem& item,
 } // namespace
 
 Result<void>
-Renderer::validate_gpu_picking_context(const scene::Storage& scene_storage) const noexcept {
+Renderer::validate_gpu_picking_context(const scene::Storage& scene_storage) const noexcept
+{
     if (!scene_storage.belongs_to_engine(engine_token_)) {
         return Error{ErrorCode::foreign_engine_object,
                      "The scene was created by a different Elf3D engine instance"};
@@ -181,14 +198,16 @@ Renderer::validate_gpu_picking_context(const scene::Storage& scene_storage) cons
     return {};
 }
 
-Result<std::uint64_t>
-Renderer::draw_picking_items(const scene::Storage& scene_storage, graphics::PickingTarget& target,
-                             const RenderList& list,
-                             const clipping::ClippingFilter& clipping_filter) {
+Result<std::uint64_t> Renderer::draw_picking_items(const scene::Storage& scene_storage,
+                                                   graphics::PickingTarget& target,
+                                                   const RenderList& list,
+                                                   const clipping::ClippingFilter& clipping_filter)
+{
     const Result<void> clear_result = target.clear();
     if (!clear_result) {
         return clear_result.error();
     }
+
     std::vector<graphics::StaticMesh*> meshes;
     std::vector<graphics::PickingDrawDescription> descriptions;
     meshes.reserve(list.items.size());
@@ -206,6 +225,7 @@ Renderer::draw_picking_items(const scene::Storage& scene_storage, graphics::Pick
         if (!mesh_index) {
             return mesh_index.error();
         }
+
         const graphics::PickingDrawDescription draw =
             picking_draw_description(list, item, primitive.value(),
                                      static_cast<std::uint32_t>(item_index + 1U), clipping_filter);
@@ -213,6 +233,7 @@ Renderer::draw_picking_items(const scene::Storage& scene_storage, graphics::Pick
                                mesh_index.value()));
         descriptions.push_back(draw);
     }
+
     const Result<void> drawn = device_->draw_picking_batch(target, meshes, descriptions);
     return drawn ? Result<std::uint64_t>{static_cast<std::uint64_t>(meshes.size())}
                  : Result<std::uint64_t>{drawn.error()};
@@ -222,11 +243,13 @@ Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage,
                                          graphics::PickingTarget& target,
                                          const scene::VisibilityFilter& visibility,
                                          const clipping::ClippingFilter& clipping_filter,
-                                         const GpuPickRequest& request) {
+                                         const GpuPickRequest& request)
+{
     const Result<void> context = validate_gpu_picking_context(scene_storage);
     if (!context) {
         return context.error();
     }
+
     const Extent2D target_extent = target.extent();
     if (target_extent.width == 0U || target_extent.height == 0U) {
         return GpuPickResult{};
@@ -235,6 +258,7 @@ Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage,
         return Error{ErrorCode::invalid_viewport_position,
                      "Picking coordinates are outside the viewport extent"};
     }
+
     const double pass_begin = device_->monotonic_time_milliseconds();
     Result<RenderList> list_result = build_render_list(
         scene_storage, request.camera, request.viewport_extent, visibility, clipping_filter);
@@ -245,15 +269,18 @@ Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage,
     if (list.items.empty()) {
         return GpuPickResult{};
     }
+
     const Result<void> item_count = validate_pick_item_count(list);
     if (!item_count) {
         return item_count.error();
     }
+
     Result<std::uint64_t> draw_calls =
         draw_picking_items(scene_storage, target, list, clipping_filter);
     if (!draw_calls) {
         return draw_calls.error();
     }
+
     const double pass_end = device_->monotonic_time_milliseconds();
 
     const double readback_begin = device_->monotonic_time_milliseconds();
@@ -273,15 +300,18 @@ Result<GpuPickResult> Renderer::gpu_pick(const scene::Storage& scene_storage,
 Result<GpuFocusDepthAnchorResult> Renderer::gpu_focus_depth_anchor(
     const scene::Storage& scene_storage, graphics::PickingTarget& target,
     const scene::VisibilityFilter& visibility, const clipping::ClippingFilter& clipping_filter,
-    const GpuFocusDepthRequest& request) {
+    const GpuFocusDepthRequest& request)
+{
     const Result<void> context = validate_gpu_picking_context(scene_storage);
     if (!context) {
         return context.error();
     }
+
     const Extent2D target_extent = target.extent();
     if (!valid_focus_extents(target_extent, request)) {
         return GpuFocusDepthAnchorResult{};
     }
+
     const double pass_begin = device_->monotonic_time_milliseconds();
     Result<RenderList> list_result = build_render_list(
         scene_storage, request.camera, request.viewport_extent, visibility, clipping_filter);
@@ -292,21 +322,25 @@ Result<GpuFocusDepthAnchorResult> Renderer::gpu_focus_depth_anchor(
     if (list.items.empty()) {
         return GpuFocusDepthAnchorResult{};
     }
+
     const Result<void> item_count = validate_pick_item_count(list);
     if (!item_count) {
         return item_count.error();
     }
+
     Result<std::uint64_t> draw_calls =
         draw_picking_items(scene_storage, target, list, clipping_filter);
     if (!draw_calls) {
         return draw_calls.error();
     }
+
     const double pass_end = device_->monotonic_time_milliseconds();
     const double readback_begin = device_->monotonic_time_milliseconds();
     Result<std::vector<float>> depths = device_->read_picking_depths(target);
     if (!depths) {
         return depths.error();
     }
+
     const std::size_t expected_pixels =
         static_cast<std::size_t>(target_extent.width) * target_extent.height;
     if (depths.value().size() < expected_pixels) {

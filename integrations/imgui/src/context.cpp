@@ -17,15 +17,18 @@
 namespace elf3d::imgui {
 namespace {
 
-[[noreturn]] void fatal_imgui_allocation_failure() noexcept {
+[[noreturn]] void fatal_imgui_allocation_failure() noexcept
+{
     fatal_error("Elf3D Dear ImGui integration memory allocation failed");
 }
 
-[[noreturn]] void fatal_unexpected_imgui_boundary_exception() noexcept {
+[[noreturn]] void fatal_unexpected_imgui_boundary_exception() noexcept
+{
     fatal_error("Elf3D Dear ImGui integration encountered an unexpected exception");
 }
 
-void apply_elf3d_style(GLFWwindow* window, const detail::ContextOptions& options) noexcept {
+void apply_elf3d_style(GLFWwindow* window, const detail::ContextOptions& options) noexcept
+{
     float x_scale = 1.0F;
     float y_scale = 1.0F;
     glfwGetWindowContentScale(window, &x_scale, &y_scale);
@@ -109,7 +112,8 @@ void apply_elf3d_style(GLFWwindow* window, const detail::ContextOptions& options
 
 } // namespace
 
-detail::ContextOwner::~ContextOwner() noexcept {
+detail::ContextOwner::~ContextOwner() noexcept
+{
     if (context_ == nullptr) {
         return;
     }
@@ -128,12 +132,14 @@ detail::ContextOwner::~ContextOwner() noexcept {
 
 Result<std::unique_ptr<detail::ContextOwner>>
 detail::ContextOwner::create(GLFWwindow* window, std::string_view glsl_version,
-                             const ContextOptions& options) noexcept {
+                             const ContextOptions& options) noexcept
+{
     try {
         if (glsl_version.empty()) {
             return Error{ErrorCode::invalid_argument,
                          "Dear ImGui initialization requires a GLSL version string"};
         }
+
         const std::string owned_glsl_version{glsl_version};
         std::unique_ptr<ContextOwner> context = std::make_unique<ContextOwner>(ConstructionKey{});
         const Result<void> initialized =
@@ -150,7 +156,8 @@ detail::ContextOwner::create(GLFWwindow* window, std::string_view glsl_version,
 }
 
 Result<void> detail::ContextOwner::initialize(GLFWwindow* window, const char* glsl_version,
-                                              const ContextOptions& options) {
+                                              const ContextOptions& options)
+{
     if (window == nullptr) {
         return Error{ErrorCode::invalid_argument,
                      "Dear ImGui initialization requires a valid GLFW window"};
@@ -183,25 +190,29 @@ Result<void> detail::ContextOwner::initialize(GLFWwindow* window, const char* gl
     return {};
 }
 
-void detail::ContextOwner::begin_frame() noexcept {
+void detail::ContextOwner::begin_frame() noexcept
+{
     ImGui::SetCurrentContext(context_);
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
 
-void detail::ContextOwner::discard_frame() noexcept {
+void detail::ContextOwner::discard_frame() noexcept
+{
     ImGui::SetCurrentContext(context_);
     ImGui::EndFrame();
 }
 
-void detail::ContextOwner::render() noexcept {
+void detail::ContextOwner::render() noexcept
+{
     ImGui::SetCurrentContext(context_);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-ImFont* load_font(std::string_view path_utf8, float logical_size_pixels, float dpi_scale) noexcept {
+ImFont* load_font(std::string_view path_utf8, float logical_size_pixels, float dpi_scale) noexcept
+{
     try {
         ImGuiIO& io = ImGui::GetIO();
         const float requested_size =

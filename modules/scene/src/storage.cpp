@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/scene.h>
 
 #include <elf3d/core/assert.h>
 
@@ -6,6 +6,9 @@ module;
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/math.h>
+#include <elf3d/model.h>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -15,12 +18,6 @@ module;
 #include <utility>
 #include <vector>
 
-module elf.scene;
-
-import elf.assets;
-import elf.math;
-import elf.model;
-
 namespace elf3d::scene {
 namespace {
 
@@ -29,7 +26,8 @@ constexpr std::uint64_t document_mesh_handle_value_mask = ~document_mesh_handle_
 
 } // namespace
 
-bool valid_camera_description(const PerspectiveCameraDescription& description) noexcept {
+bool valid_camera_description(const PerspectiveCameraDescription& description) noexcept
+{
     constexpr float pi = 3.14159265358979323846F;
     return std::isfinite(description.vertical_field_of_view_radians) &&
            std::isfinite(description.near_plane) && std::isfinite(description.far_plane) &&
@@ -38,49 +36,62 @@ bool valid_camera_description(const PerspectiveCameraDescription& description) n
            description.far_plane > description.near_plane;
 }
 
-Storage::Storage(SceneId id) noexcept : id_(id), assets_(id) {}
+Storage::Storage(SceneId id) noexcept : id_(id), assets_(id)
+{
+}
 
-SceneId Storage::id() const noexcept {
+SceneId Storage::id() const noexcept
+{
     return id_;
 }
 
-bool Storage::belongs_to_engine(std::uint64_t engine_token) const noexcept {
+bool Storage::belongs_to_engine(std::uint64_t engine_token) const noexcept
+{
     return detail::SceneHandleAccess::engine_token(id_) == engine_token;
 }
 
-std::uint64_t Storage::revision() const noexcept {
+std::uint64_t Storage::revision() const noexcept
+{
     return revision_;
 }
 
-std::uint64_t Storage::render_content_revision() const noexcept {
+std::uint64_t Storage::render_content_revision() const noexcept
+{
     return render_content_revision_;
 }
 
-std::uint64_t Storage::hierarchy_revision() const noexcept {
+std::uint64_t Storage::hierarchy_revision() const noexcept
+{
     return hierarchy_revision_;
 }
 
-std::uint64_t Storage::visibility_revision() const noexcept {
+std::uint64_t Storage::visibility_revision() const noexcept
+{
     return visibility_revision_;
 }
 
-std::span<const std::optional<EntityRecord>> Storage::entities() const noexcept {
+std::span<const std::optional<EntityRecord>> Storage::entities() const noexcept
+{
     return entities_;
 }
 
-const assets::Storage& Storage::assets() const noexcept {
+const assets::Storage& Storage::assets() const noexcept
+{
     return assets_;
 }
 
-DocumentView Storage::document() const noexcept {
+DocumentView Storage::document() const noexcept
+{
     return document_ != nullptr ? document_->view() : DocumentView{};
 }
 
-bool Storage::has_document() const noexcept {
+bool Storage::has_document() const noexcept
+{
     return document_ != nullptr;
 }
 
-Result<void> Storage::set_document(Document&& document) {
+Result<void> Storage::set_document(Document&& document)
+{
     auto replacement = std::make_unique<Document>(std::move(document));
     document_mesh_primitives_.clear();
     document_ = std::move(replacement);
@@ -91,7 +102,8 @@ Result<void> Storage::set_document(Document&& document) {
     return {};
 }
 
-Result<EntityId> Storage::create_entity() {
+Result<EntityId> Storage::create_entity()
+{
     if (entities_.size() >=
         static_cast<std::size_t>(std::numeric_limits<std::uint64_t>::max() - 1)) {
         return Error{ErrorCode::invalid_entity, "The scene entity identifier space is exhausted"};
@@ -104,7 +116,8 @@ Result<EntityId> Storage::create_entity() {
     return id;
 }
 
-Result<void> Storage::destroy_entity(EntityId entity_id) {
+Result<void> Storage::destroy_entity(EntityId entity_id)
+{
     const Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -124,7 +137,8 @@ Result<void> Storage::destroy_entity(EntityId entity_id) {
     return {};
 }
 
-Result<void> Storage::set_parent(EntityId entity_id, EntityId parent_id) {
+Result<void> Storage::set_parent(EntityId entity_id, EntityId parent_id)
+{
     Result<EntityRecord*> child = mutable_entity(entity_id);
     if (!child) {
         return child.error();
@@ -149,6 +163,7 @@ Result<void> Storage::set_parent(EntityId entity_id, EntityId parent_id) {
             return Error{ErrorCode::hierarchy_cycle,
                          "The parent assignment would create a scene hierarchy cycle"};
         }
+
         const Result<const EntityRecord*> ancestor_result = entity(ancestor_id);
         if (!ancestor_result) {
             return ancestor_result.error();
@@ -172,7 +187,8 @@ Result<void> Storage::set_parent(EntityId entity_id, EntityId parent_id) {
     return {};
 }
 
-Result<void> Storage::clear_parent(EntityId entity_id) {
+Result<void> Storage::clear_parent(EntityId entity_id)
+{
     Result<EntityRecord*> child = mutable_entity(entity_id);
     if (!child) {
         return child.error();
@@ -180,6 +196,7 @@ Result<void> Storage::clear_parent(EntityId entity_id) {
     if (!child.value()->parent.has_value()) {
         return {};
     }
+
     remove_child(*child.value()->parent, entity_id);
     child.value()->parent.reset();
     update_effective_visibility_from(entity_id);
@@ -192,7 +209,8 @@ Result<void> Storage::clear_parent(EntityId entity_id) {
     return {};
 }
 
-Result<void> Storage::set_local_transform(EntityId entity_id, const Transform& transform) {
+Result<void> Storage::set_local_transform(EntityId entity_id, const Transform& transform)
+{
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -214,11 +232,13 @@ Result<void> Storage::set_local_transform(EntityId entity_id, const Transform& t
     return {};
 }
 
-Result<Transform> Storage::local_transform(EntityId entity_id) const noexcept {
+Result<Transform> Storage::local_transform(EntityId entity_id) const noexcept
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
     }
+
     const EntityRecord& target = *record.value();
     if (!target.local_transform.has_value()) {
         return Error{ErrorCode::transform_requires_matrix_api,
@@ -227,7 +247,8 @@ Result<Transform> Storage::local_transform(EntityId entity_id) const noexcept {
     return *target.local_transform;
 }
 
-Result<void> Storage::set_local_matrix(EntityId entity_id, const Float4x4& matrix) {
+Result<void> Storage::set_local_matrix(EntityId entity_id, const Float4x4& matrix)
+{
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -236,6 +257,7 @@ Result<void> Storage::set_local_matrix(EntityId entity_id, const Float4x4& matri
         return Error{ErrorCode::invalid_transform_matrix,
                      "Entity matrices must be finite, affine, and invertible"};
     }
+
     record.value()->local_transform.reset();
     record.value()->local_matrix = matrix;
     const bool moved_model_spatial = invalidate_spatial_subtree(entity_id);
@@ -246,7 +268,8 @@ Result<void> Storage::set_local_matrix(EntityId entity_id, const Float4x4& matri
     return {};
 }
 
-Result<Float4x4> Storage::local_matrix(EntityId entity_id) const noexcept {
+Result<Float4x4> Storage::local_matrix(EntityId entity_id) const noexcept
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -254,7 +277,8 @@ Result<Float4x4> Storage::local_matrix(EntityId entity_id) const noexcept {
     return record.value()->local_matrix;
 }
 
-Result<void> Storage::set_entity_name(EntityId entity_id, std::string_view name) {
+Result<void> Storage::set_entity_name(EntityId entity_id, std::string_view name)
+{
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -262,13 +286,15 @@ Result<void> Storage::set_entity_name(EntityId entity_id, std::string_view name)
     if (record.value()->name == name) {
         return {};
     }
+
     record.value()->name.assign(name);
     increment_revision();
     increment_hierarchy_revision();
     return {};
 }
 
-Result<std::string_view> Storage::entity_name(EntityId entity_id) const noexcept {
+Result<std::string_view> Storage::entity_name(EntityId entity_id) const noexcept
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -276,7 +302,8 @@ Result<std::string_view> Storage::entity_name(EntityId entity_id) const noexcept
     return std::string_view{record.value()->name};
 }
 
-Result<EntityInfo> Storage::entity_info(EntityId entity_id) const noexcept {
+Result<EntityInfo> Storage::entity_info(EntityId entity_id) const noexcept
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -292,7 +319,8 @@ Result<EntityInfo> Storage::entity_info(EntityId entity_id) const noexcept {
     return info;
 }
 
-Result<MeshHandle> Storage::create_mesh(const MeshDataView& data) {
+Result<MeshHandle> Storage::create_mesh(const MeshDataView& data)
+{
     Result<MeshHandle> result = assets_.create_mesh(data);
     if (result) {
         increment_revision();
@@ -301,7 +329,8 @@ Result<MeshHandle> Storage::create_mesh(const MeshDataView& data) {
     return result;
 }
 
-Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView& data) {
+Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView& data)
+{
     Result<MeshHandle> result = assets_.create_mesh(data);
     if (result) {
         increment_revision();
@@ -310,7 +339,8 @@ Result<MeshHandle> Storage::create_mesh(const TexturedMeshDataView& data) {
     return result;
 }
 
-Result<Bounds3> Storage::mesh_bounds(MeshHandle mesh_handle) const noexcept {
+Result<Bounds3> Storage::mesh_bounds(MeshHandle mesh_handle) const noexcept
+{
     if (is_document_mesh_handle(mesh_handle)) {
         return document_mesh_bounds(mesh_handle);
     }
@@ -321,7 +351,8 @@ Result<Bounds3> Storage::mesh_bounds(MeshHandle mesh_handle) const noexcept {
     return result.value()->bounds;
 }
 
-Result<ImageHandle> Storage::create_image(const ImageDescription& description) {
+Result<ImageHandle> Storage::create_image(const ImageDescription& description)
+{
     Result<ImageHandle> result = assets_.create_image(description);
     if (result) {
         increment_revision();
@@ -330,7 +361,8 @@ Result<ImageHandle> Storage::create_image(const ImageDescription& description) {
     return result;
 }
 
-Result<TextureAssetHandle> Storage::create_texture(const TextureDescription& description) {
+Result<TextureAssetHandle> Storage::create_texture(const TextureDescription& description)
+{
     Result<TextureAssetHandle> result = assets_.create_texture(description);
     if (result) {
         increment_revision();
@@ -339,7 +371,8 @@ Result<TextureAssetHandle> Storage::create_texture(const TextureDescription& des
     return result;
 }
 
-Result<MaterialHandle> Storage::create_material(const MaterialDescription& description) {
+Result<MaterialHandle> Storage::create_material(const MaterialDescription& description)
+{
     Result<MaterialHandle> result = assets_.create_material(description);
     if (result) {
         increment_revision();
@@ -349,7 +382,8 @@ Result<MaterialHandle> Storage::create_material(const MaterialDescription& descr
 }
 
 Result<void> Storage::set_material(MaterialHandle material_handle,
-                                   const MaterialDescription& description) {
+                                   const MaterialDescription& description)
+{
     Result<void> result = assets_.set_material(material_handle, description);
     if (result) {
         increment_revision();
@@ -358,7 +392,8 @@ Result<void> Storage::set_material(MaterialHandle material_handle,
     return result;
 }
 
-Result<MaterialDescription> Storage::material(MaterialHandle material_handle) const noexcept {
+Result<MaterialDescription> Storage::material(MaterialHandle material_handle) const noexcept
+{
     const Result<const assets::MaterialAsset*> result = assets_.material(material_handle);
     if (!result) {
         return result.error();
@@ -366,11 +401,13 @@ Result<MaterialDescription> Storage::material(MaterialHandle material_handle) co
     return result.value()->description;
 }
 
-Result<EntityId> Storage::create_model(MeshHandle mesh, MaterialHandle material) {
+Result<EntityId> Storage::create_model(MeshHandle mesh, MaterialHandle material)
+{
     Result<EntityId> entity_result = create_entity();
     if (!entity_result) {
         return entity_result.error();
     }
+
     const std::array<ModelPrimitiveBinding, 1> primitives{{{mesh, material}}};
     const Result<void> model_result = set_model_primitives(entity_result.value(), primitives);
     if (!model_result) {
@@ -382,7 +419,8 @@ Result<EntityId> Storage::create_model(MeshHandle mesh, MaterialHandle material)
 }
 
 Result<void> Storage::set_model_primitives(EntityId entity_id,
-                                           std::span<const ModelPrimitiveBinding> primitives) {
+                                           std::span<const ModelPrimitiveBinding> primitives)
+{
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -396,6 +434,7 @@ Result<void> Storage::set_model_primitives(EntityId entity_id,
         if (!mesh_result) {
             return mesh_result.error();
         }
+
         const Result<const assets::MaterialAsset*> material_result =
             assets_.material(primitive.material);
         if (!material_result) {
@@ -416,11 +455,13 @@ Result<void> Storage::set_model_primitives(EntityId entity_id,
 
 Result<void>
 Storage::set_model_document_primitives(EntityId entity_id,
-                                       std::span<const PrimitiveId> document_primitives) {
+                                       std::span<const PrimitiveId> document_primitives)
+{
     if (document_ == nullptr) {
         return Error{ErrorCode::invalid_argument,
                      "Document primitive bindings require a scene document"};
     }
+
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -440,6 +481,7 @@ Storage::set_model_document_primitives(EntityId entity_id,
         model.primitives.push_back(ModelPrimitiveBinding{mesh.value(), MaterialHandle{}});
         model.document_primitives.push_back(primitive);
     }
+
     record.value()->model = std::move(model);
     record.value()->world_bounds_dirty = true;
     increment_revision();
@@ -449,21 +491,25 @@ Storage::set_model_document_primitives(EntityId entity_id,
     return {};
 }
 
-Result<MeshHandle> Storage::document_mesh_handle(PrimitiveId primitive) {
+Result<MeshHandle> Storage::document_mesh_handle(PrimitiveId primitive)
+{
     if (document_ == nullptr) {
         return Error{ErrorCode::invalid_argument,
                      "A document mesh handle requires a scene document"};
     }
+
     const Result<PrimitiveView> view = document_->primitive(primitive);
     if (!view) {
         return view.error();
     }
+
     const std::uint64_t value = primitive.debug_value();
     if (value == 0 || value >= document_mesh_handle_marker ||
         value > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max() - 1U)) {
         return Error{ErrorCode::invalid_mesh_handle,
                      "The document primitive cannot receive a runtime mesh handle"};
     }
+
     const std::size_t index = static_cast<std::size_t>(value);
     if (index >= document_mesh_primitives_.size()) {
         document_mesh_primitives_.resize(index + 1U);
@@ -472,27 +518,32 @@ Result<MeshHandle> Storage::document_mesh_handle(PrimitiveId primitive) {
     return detail::SceneHandleAccess::create_mesh(id_, document_mesh_handle_marker | value);
 }
 
-bool Storage::is_document_mesh_handle(MeshHandle mesh) const noexcept {
+bool Storage::is_document_mesh_handle(MeshHandle mesh) const noexcept
+{
     return mesh.is_valid() && detail::SceneHandleAccess::scene(mesh) == id_ &&
            (detail::SceneHandleAccess::value(mesh) & document_mesh_handle_marker) != 0;
 }
 
-Result<Bounds3> Storage::document_mesh_bounds(MeshHandle mesh) const noexcept {
+Result<Bounds3> Storage::document_mesh_bounds(MeshHandle mesh) const noexcept
+{
     if (document_ == nullptr) {
         return Error{ErrorCode::invalid_mesh_handle,
                      "The document mesh handle is stale because the document is unavailable"};
     }
+
     const std::uint64_t value =
         detail::SceneHandleAccess::value(mesh) & document_mesh_handle_value_mask;
     if (value == 0 ||
         value > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max() - 1U)) {
         return Error{ErrorCode::invalid_mesh_handle, "The document mesh handle is invalid"};
     }
+
     const std::size_t index = static_cast<std::size_t>(value);
     if (index >= document_mesh_primitives_.size() ||
         !document_mesh_primitives_[index].has_value()) {
         return Error{ErrorCode::invalid_mesh_handle, "The document mesh handle is stale"};
     }
+
     const Result<PrimitiveView> primitive = document_->primitive(*document_mesh_primitives_[index]);
     if (!primitive) {
         return primitive.error();
@@ -501,11 +552,13 @@ Result<Bounds3> Storage::document_mesh_bounds(MeshHandle mesh) const noexcept {
 }
 
 Result<RuntimePrimitiveView>
-Storage::runtime_primitive(EntityId entity_id, std::uint32_t primitive_index) const noexcept {
+Storage::runtime_primitive(EntityId entity_id, std::uint32_t primitive_index) const noexcept
+{
     const Result<const EntityRecord*> record_result = entity(entity_id);
     if (!record_result) {
         return record_result.error();
     }
+
     const std::optional<ModelComponent>& model = record_result.value()->model;
     if (!model.has_value()) {
         return Error{ErrorCode::invalid_argument,
@@ -528,8 +581,8 @@ Storage::runtime_primitive(EntityId entity_id, std::uint32_t primitive_index) co
     return compatibility_runtime_primitive(binding);
 }
 
-Result<EntityId>
-Storage::create_perspective_camera(const PerspectiveCameraDescription& description) {
+Result<EntityId> Storage::create_perspective_camera(const PerspectiveCameraDescription& description)
+{
     if (!valid_camera_description(description)) {
         return Error{ErrorCode::invalid_camera_configuration,
                      "A perspective camera requires a field of view in (0, pi), positive near "
@@ -540,6 +593,7 @@ Storage::create_perspective_camera(const PerspectiveCameraDescription& descripti
     if (!entity_result) {
         return entity_result.error();
     }
+
     Result<EntityRecord*> record = mutable_entity(entity_result.value());
     record.value()->camera = description;
     increment_revision();
@@ -548,7 +602,8 @@ Storage::create_perspective_camera(const PerspectiveCameraDescription& descripti
 }
 
 Result<void> Storage::attach_perspective_camera(EntityId entity_id,
-                                                const PerspectiveCameraDescription& description) {
+                                                const PerspectiveCameraDescription& description)
+{
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -558,14 +613,15 @@ Result<void> Storage::attach_perspective_camera(EntityId entity_id,
                      "A perspective camera requires a field of view in (0, pi), positive near "
                      "plane, and farther far plane"};
     }
+
     record.value()->camera = description;
     increment_revision();
     increment_hierarchy_revision();
     return {};
 }
 
-Result<PerspectiveCameraDescription>
-Storage::perspective_camera(EntityId entity_id) const noexcept {
+Result<PerspectiveCameraDescription> Storage::perspective_camera(EntityId entity_id) const noexcept
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -578,7 +634,8 @@ Storage::perspective_camera(EntityId entity_id) const noexcept {
 }
 
 Result<void> Storage::set_perspective_camera(EntityId entity_id,
-                                             const PerspectiveCameraDescription& description) {
+                                             const PerspectiveCameraDescription& description)
+{
     Result<EntityRecord*> record = mutable_entity(entity_id);
     if (!record) {
         return record.error();
@@ -592,12 +649,14 @@ Result<void> Storage::set_perspective_camera(EntityId entity_id,
                      "A perspective camera requires a field of view in (0, pi), positive near "
                      "plane, and farther far plane"};
     }
+
     record.value()->camera = description;
     increment_revision();
     return {};
 }
 
-Result<const EntityRecord*> Storage::entity(EntityId entity_id) const noexcept {
+Result<const EntityRecord*> Storage::entity(EntityId entity_id) const noexcept
+{
     if (!owns(entity_id)) {
         return Error{ErrorCode::invalid_entity,
                      "The entity identifier is invalid, stale, or belongs to another scene"};
@@ -610,7 +669,8 @@ Result<const EntityRecord*> Storage::entity(EntityId entity_id) const noexcept {
     return &*entities_[index];
 }
 
-SceneHierarchyStatistics Storage::hierarchy_statistics() const noexcept {
+SceneHierarchyStatistics Storage::hierarchy_statistics() const noexcept
+{
     SceneHierarchyStatistics result;
     for (const std::optional<EntityRecord>& record : entities_) {
         if (!record.has_value()) {
@@ -629,6 +689,7 @@ SceneHierarchyStatistics Storage::hierarchy_statistics() const noexcept {
         if (!record->parent.has_value()) {
             ++result.root_entities;
         }
+
         std::uint64_t depth = 0;
         std::optional<EntityId> parent = record->parent;
         while (parent.has_value()) {
@@ -643,7 +704,8 @@ SceneHierarchyStatistics Storage::hierarchy_statistics() const noexcept {
     return result;
 }
 
-Result<EntityRecord*> Storage::mutable_entity(EntityId entity_id) noexcept {
+Result<EntityRecord*> Storage::mutable_entity(EntityId entity_id) noexcept
+{
     if (!owns(entity_id)) {
         return Error{ErrorCode::invalid_entity,
                      "The entity identifier is invalid, stale, or belongs to another scene"};
@@ -656,11 +718,13 @@ Result<EntityRecord*> Storage::mutable_entity(EntityId entity_id) noexcept {
     return &*entities_[index];
 }
 
-bool Storage::owns(EntityId entity_id) const noexcept {
+bool Storage::owns(EntityId entity_id) const noexcept
+{
     return entity_id.is_valid() && detail::SceneHandleAccess::scene(entity_id) == id_;
 }
 
-void Storage::destroy_subtree(EntityId entity_id) noexcept {
+void Storage::destroy_subtree(EntityId entity_id) noexcept
+{
     while (true) {
         Result<EntityRecord*> current = mutable_entity(entity_id);
         ELF3D_ASSERT(current.has_value());
@@ -669,10 +733,12 @@ void Storage::destroy_subtree(EntityId entity_id) noexcept {
             current = mutable_entity(child);
             ELF3D_ASSERT(current.has_value());
         }
+
         const EntityId leaf = current.value()->id;
         if (current.value()->parent.has_value()) {
             remove_child(*current.value()->parent, leaf);
         }
+
         const std::size_t index =
             static_cast<std::size_t>(detail::SceneHandleAccess::value(leaf) - 1);
         entities_[index].reset();
@@ -682,7 +748,8 @@ void Storage::destroy_subtree(EntityId entity_id) noexcept {
     }
 }
 
-void Storage::remove_child(EntityId parent_id, EntityId child) noexcept {
+void Storage::remove_child(EntityId parent_id, EntityId child) noexcept
+{
     Result<EntityRecord*> parent = mutable_entity(parent_id);
     if (!parent) {
         return;
@@ -691,28 +758,32 @@ void Storage::remove_child(EntityId parent_id, EntityId child) noexcept {
     children.erase(std::remove(children.begin(), children.end(), child), children.end());
 }
 
-void Storage::increment_revision() noexcept {
+void Storage::increment_revision() noexcept
+{
     ++revision_;
     if (revision_ == 0) {
         ++revision_;
     }
 }
 
-void Storage::increment_render_content_revision() noexcept {
+void Storage::increment_render_content_revision() noexcept
+{
     ++render_content_revision_;
     if (render_content_revision_ == 0) {
         ++render_content_revision_;
     }
 }
 
-void Storage::increment_hierarchy_revision() noexcept {
+void Storage::increment_hierarchy_revision() noexcept
+{
     ++hierarchy_revision_;
     if (hierarchy_revision_ == 0) {
         ++hierarchy_revision_;
     }
 }
 
-void Storage::increment_visibility_revision() noexcept {
+void Storage::increment_visibility_revision() noexcept
+{
     ++visibility_revision_;
     if (visibility_revision_ == 0) {
         ++visibility_revision_;

@@ -110,7 +110,8 @@ struct ViewportRenderOptions {
     std::span<const OverlayPointMarker> overlay_markers;
     RenderShadingMode shading_mode = RenderShadingMode::standard;
 
-    [[nodiscard]] bool operator==(const ViewportRenderOptions& other) const noexcept {
+    [[nodiscard]] bool operator==(const ViewportRenderOptions& other) const noexcept
+    {
         return highlight == other.highlight && overlay_lines.data() == other.overlay_lines.data() &&
                overlay_lines.size() == other.overlay_lines.size() &&
                overlay_markers.data() == other.overlay_markers.data() &&

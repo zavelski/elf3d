@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 4.4.3)
 project(Elf3DExternalApplication LANGUAGES C CXX)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 set(ELF3D_SOURCE_DIR "" CACHE PATH "Path to the shared Elf3D source checkout")
 if(NOT EXISTS "${ELF3D_SOURCE_DIR}/include/elf3d/elf3d.h")
@@ -21,7 +22,6 @@ set_target_properties(
     elf3d_external_application
     PROPERTIES
         CXX_EXTENSIONS OFF
-        CXX_SCAN_FOR_MODULES OFF
         VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:elf3d_external_application>"
 )
 if(MSVC)

@@ -7,34 +7,36 @@
 
 #include <array>
 #include <cmath>
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/picking.h>
+#include <elf3d/internal/scene.h>
 #include <optional>
 #include <utility>
 
-import elf.assets;
-import elf.model;
-import elf.picking;
-import elf.scene;
-
 namespace {
 
-[[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.001F) noexcept {
+[[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.001F) noexcept
+{
     return std::abs(left - right) <= tolerance;
 }
 
 [[nodiscard]] bool nearly_equal(elf3d::Float3 left, elf3d::Float3 right,
-                                float tolerance = 0.001F) noexcept {
+                                float tolerance = 0.001F) noexcept
+{
     const float x = left.x - right.x;
     const float y = left.y - right.y;
     const float z = left.z - right.z;
     return std::sqrt(x * x + y * y + z * z) <= tolerance;
 }
 
-[[nodiscard]] elf3d::SceneId scene_id(std::uint64_t value) noexcept {
+[[nodiscard]] elf3d::SceneId scene_id(std::uint64_t value) noexcept
+{
     return elf3d::detail::SceneHandleAccess::create_scene(23, value);
 }
 
 [[nodiscard]] elf3d::picking::PickRequest
-pick_request(elf3d::EntityId camera, elf3d::Float2 position_pixels = {399.5F, 299.5F}) noexcept {
+pick_request(elf3d::EntityId camera, elf3d::Float2 position_pixels = {399.5F, 299.5F}) noexcept
+{
     return {camera, {800, 600}, position_pixels, {}};
 }
 
@@ -46,7 +48,8 @@ struct PickScene {
 };
 
 [[nodiscard]] elf3d::MeshHandle create_triangle_mesh(elf3d::scene::Storage& scene, elf3d::Float3 a,
-                                                     elf3d::Float3 b, elf3d::Float3 c) {
+                                                     elf3d::Float3 b, elf3d::Float3 c)
+{
     const std::array<elf3d::VertexPositionNormal, 3> vertices{{
         {a, {0.0F, 0.0F, 1.0F}},
         {b, {0.0F, 0.0F, 1.0F}},
@@ -57,13 +60,15 @@ struct PickScene {
 }
 
 [[nodiscard]] elf3d::MaterialHandle create_material(elf3d::scene::Storage& scene,
-                                                    bool double_sided = false) {
+                                                    bool double_sided = false)
+{
     elf3d::MaterialDescription material_description;
     material_description.double_sided = double_sided;
     return scene.create_material(material_description).value();
 }
 
-[[nodiscard]] PickScene make_pick_scene() {
+[[nodiscard]] PickScene make_pick_scene()
+{
     elf3d::scene::Storage scene{scene_id(1)};
     const std::array<elf3d::Float3, 3> positions{{
         {-0.75F, -0.75F, 0.0F},
@@ -97,7 +102,8 @@ struct PickScene {
     return PickScene{std::move(scene), near_model, far_model, camera};
 }
 
-[[nodiscard]] PickScene make_slanted_depth_scene() {
+[[nodiscard]] PickScene make_slanted_depth_scene()
+{
     elf3d::scene::Storage scene{scene_id(7)};
     const elf3d::MeshHandle mesh =
         create_triangle_mesh(scene, {-1.0F, -1.0F, 0.5F}, {1.0F, -1.0F, 0.5F}, {0.0F, 1.0F, -0.5F});
@@ -115,7 +121,8 @@ struct PickScene {
     return PickScene{std::move(scene), near_model, far_model, camera};
 }
 
-[[nodiscard]] int verify_ray_bounds_intersections() {
+[[nodiscard]] int verify_ray_bounds_intersections()
+{
     elf3d::Ray3 ray{{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}};
     elf3d::Ray3 miss_ray{{2.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}};
     elf3d::Ray3 inside_ray{{0.0F, 0.0F, -1.5F}, {0.0F, 0.0F, -1.0F}};
@@ -138,7 +145,8 @@ struct PickScene {
     return 0;
 }
 
-[[nodiscard]] int verify_ray_triangle_intersections() {
+[[nodiscard]] int verify_ray_triangle_intersections()
+{
     const elf3d::Ray3 ray{{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}};
     const elf3d::Float3 a{-1.0F, -1.0F, -3.0F};
     const elf3d::Float3 b{1.0F, -1.0F, -3.0F};
@@ -169,7 +177,8 @@ struct PickScene {
     return 0;
 }
 
-[[nodiscard]] int verify_picking_ray_creation() {
+[[nodiscard]] int verify_picking_ray_creation()
+{
     PickScene fixture = make_pick_scene();
     elf3d::picking::PickingService service;
     const elf3d::Result<elf3d::Ray3> center_ray =
@@ -193,7 +202,8 @@ struct PickScene {
 
 [[nodiscard]] bool
 has_expected_nearest_hit(const elf3d::Result<std::optional<elf3d::PickHit>>& pick,
-                         const PickScene& fixture) {
+                         const PickScene& fixture)
+{
     return pick && pick.value().has_value() && pick.value()->entity == fixture.near_model &&
            pick.value()->triangle_index == 0 && pick.value()->primitive_index == 0 &&
            nearly_equal(pick.value()->world_position, {0.0F, 0.0F, -2.0F}) &&
@@ -201,12 +211,14 @@ has_expected_nearest_hit(const elf3d::Result<std::optional<elf3d::PickHit>>& pic
 }
 
 [[nodiscard]] bool has_expected_cache_statistics(const elf3d::PickingStatistics& first,
-                                                 const elf3d::PickingStatistics& second) {
+                                                 const elf3d::PickingStatistics& second)
+{
     return first.latest_bvh_builds == 1 && first.cached_mesh_bvhs == 1 &&
            second.latest_bvh_builds == 0 && second.cached_mesh_bvhs == 1;
 }
 
-[[nodiscard]] int verify_nearest_pick_cache() {
+[[nodiscard]] int verify_nearest_pick_cache()
+{
     PickScene fixture = make_pick_scene();
     elf3d::picking::PickingService service;
     const elf3d::Result<std::optional<elf3d::PickHit>> pick =
@@ -233,14 +245,16 @@ struct ClippingContext {
     elf3d::Ray3 ray{{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}};
 };
 
-[[nodiscard]] ClippingContext make_clipping_context() {
+[[nodiscard]] ClippingContext make_clipping_context()
+{
     PickScene slanted_fixture = make_slanted_depth_scene();
     const elf3d::scene::VisibilityFilter slanted_visibility =
         elf3d::scene::make_visibility_filter(slanted_fixture.scene, std::nullopt).value();
     return ClippingContext{std::move(slanted_fixture), {}, slanted_visibility};
 }
 
-[[nodiscard]] int verify_depth_clipping(ClippingContext& context) {
+[[nodiscard]] int verify_depth_clipping(ClippingContext& context)
+{
     elf3d::SectionPlane depth_plane;
     depth_plane.enabled = true;
     depth_plane.point = {0.0F, 0.0F, -2.25F};
@@ -262,7 +276,8 @@ struct ClippingContext {
     return 0;
 }
 
-[[nodiscard]] int verify_box_clipping(ClippingContext& context) {
+[[nodiscard]] int verify_box_clipping(ClippingContext& context)
+{
     const std::array<elf3d::ClippingBox, 2> union_boxes{{
         {{-0.5F, -0.5F, -4.25F}, {0.5F, 0.5F, -3.75F}, true},
         {{2.0F, 2.0F, -4.25F}, {3.0F, 3.0F, -3.75F}, true},
@@ -281,7 +296,8 @@ struct ClippingContext {
     return 0;
 }
 
-[[nodiscard]] int verify_clipping() {
+[[nodiscard]] int verify_clipping()
+{
     ClippingContext context = make_clipping_context();
     const int depth = verify_depth_clipping(context);
     if (depth != 0) {
@@ -291,20 +307,24 @@ struct ClippingContext {
 }
 
 [[nodiscard]] bool hits_entity(const elf3d::Result<std::optional<elf3d::PickHit>>& pick,
-                               elf3d::EntityId entity) {
+                               elf3d::EntityId entity)
+{
     return pick && pick.value().has_value() && pick.value()->entity == entity;
 }
 
-[[nodiscard]] bool has_no_hit(const elf3d::Result<std::optional<elf3d::PickHit>>& pick) {
+[[nodiscard]] bool has_no_hit(const elf3d::Result<std::optional<elf3d::PickHit>>& pick)
+{
     return pick && !pick.value().has_value();
 }
 
-[[nodiscard]] int verify_visibility_and_release() {
+[[nodiscard]] int verify_visibility_and_release()
+{
     PickScene fixture = make_pick_scene();
     elf3d::picking::PickingService service;
     if (!fixture.scene.set_entity_visible(fixture.near_model, false)) {
         return 41;
     }
+
     const elf3d::Result<std::optional<elf3d::PickHit>> hidden_near_pick =
         service.pick(fixture.scene, pick_request(fixture.camera));
     if (!hits_entity(hidden_near_pick, fixture.far_model)) {
@@ -313,6 +333,7 @@ struct ClippingContext {
     if (!fixture.scene.set_entity_visible(fixture.far_model, false)) {
         return 43;
     }
+
     const elf3d::Result<std::optional<elf3d::PickHit>> all_hidden_pick =
         service.pick(fixture.scene, pick_request(fixture.camera));
     if (!has_no_hit(all_hidden_pick)) {
@@ -335,7 +356,8 @@ struct ClippingContext {
     return 0;
 }
 
-[[nodiscard]] int verify_hierarchy_transform() {
+[[nodiscard]] int verify_hierarchy_transform()
+{
     elf3d::picking::PickingService service;
     elf3d::scene::Storage hierarchy_scene{scene_id(2)};
     const elf3d::EntityId parent = hierarchy_scene.create_entity().value();
@@ -364,7 +386,8 @@ struct ClippingContext {
     return 0;
 }
 
-[[nodiscard]] int verify_multiple_primitives() {
+[[nodiscard]] int verify_multiple_primitives()
+{
     elf3d::picking::PickingService service;
     elf3d::scene::Storage primitive_scene{scene_id(3)};
     const elf3d::MeshHandle side_mesh = create_triangle_mesh(
@@ -393,7 +416,8 @@ struct ClippingContext {
     return 0;
 }
 
-[[nodiscard]] int verify_large_coordinates() {
+[[nodiscard]] int verify_large_coordinates()
+{
     elf3d::picking::PickingService service;
     elf3d::scene::Storage large_scene{scene_id(4)};
     const elf3d::MeshHandle large_mesh = create_triangle_mesh(
@@ -420,7 +444,8 @@ struct ClippingContext {
     return 0;
 }
 
-[[nodiscard]] int verify_cache_isolation() {
+[[nodiscard]] int verify_cache_isolation()
+{
     elf3d::picking::PickingService cache_service;
     elf3d::scene::Storage first_cache_scene{scene_id(5)};
     const elf3d::MeshHandle first_cache_mesh = create_triangle_mesh(
@@ -441,10 +466,12 @@ struct ClippingContext {
     if (cache_service.statistics().cached_mesh_bvhs != 2) {
         return 10;
     }
+
     cache_service.release_scene(first_cache_scene.id());
     if (cache_service.statistics().cached_mesh_bvhs != 1) {
         return 11;
     }
+
     cache_service.release_scene(second_cache_scene.id());
     if (cache_service.statistics().cached_mesh_bvhs != 0) {
         return 12;
@@ -453,7 +480,8 @@ struct ClippingContext {
     return 0;
 }
 
-[[nodiscard]] int first_failure(const std::array<int, 10>& results) {
+[[nodiscard]] int first_failure(const std::array<int, 10>& results)
+{
     for (const int result : results) {
         if (result != 0) {
             return result;
@@ -464,7 +492,8 @@ struct ClippingContext {
 
 } // namespace
 
-int elf3d_picking_test() {
+int elf3d_picking_test()
+{
     return first_failure({verify_ray_bounds_intersections(), verify_ray_triangle_intersections(),
                           verify_picking_ray_creation(), verify_nearest_pick_cache(),
                           verify_clipping(), verify_visibility_and_release(),

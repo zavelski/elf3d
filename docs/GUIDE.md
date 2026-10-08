@@ -8,13 +8,13 @@ complete command and control listing, see `VIEWER.md`.
 Run the Release build:
 
 ```powershell
-.\out\build\windows-release\bin\Release\elf3d_viewer.exe
+.\win\viewer\bin\Release\elf3d_viewer.exe
 ```
 
 Open a model immediately:
 
 ```powershell
-.\out\build\windows-release\bin\Release\elf3d_viewer.exe "C:\Models\scene.gltf"
+.\win\viewer\bin\Release\elf3d_viewer.exe "C:\Models\scene.gltf"
 ```
 
 The viewer accepts `.gltf` and `.glb` files. You can also:

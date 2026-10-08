@@ -1,22 +1,22 @@
-module;
+#include <elf3d/internal/graphics.h>
 
 #include <algorithm>
 #include <cmath>
-
-module elf.graphics;
-
 namespace elf3d::graphics {
 namespace {
 
-[[nodiscard]] float sanitize(float value) noexcept {
+[[nodiscard]] float sanitize(float value) noexcept
+{
     return std::isfinite(value) && value > 0.0F ? value : 0.0F;
 }
 
-[[nodiscard]] float linear_to_srgb(float value) noexcept {
+[[nodiscard]] float linear_to_srgb(float value) noexcept
+{
     return value < 0.0031308F ? 12.92F * value : 1.055F * std::pow(value, 1.0F / 2.4F) - 0.055F;
 }
 
-[[nodiscard]] Float3 pbr_neutral(Float3 color) noexcept {
+[[nodiscard]] Float3 pbr_neutral(Float3 color) noexcept
+{
     constexpr float start_compression = 0.76F;
     constexpr float desaturation = 0.15F;
     const float darkest = std::min(color.x, std::min(color.y, color.z));
@@ -37,7 +37,8 @@ namespace {
             color.z + (compressed_peak - color.z) * weight};
 }
 
-[[nodiscard]] Float3 standard_tone_mapping(Float3 color) noexcept {
+[[nodiscard]] Float3 standard_tone_mapping(Float3 color) noexcept
+{
     constexpr float calibration = 1.590579F;
     return {1.0F - std::exp2(-calibration * color.x), 1.0F - std::exp2(-calibration * color.y),
             1.0F - std::exp2(-calibration * color.z)};
@@ -45,7 +46,8 @@ namespace {
 
 } // namespace
 
-Color4 resolve_display_color(Color4 linear_color, const DisplayTransform& transform) noexcept {
+Color4 resolve_display_color(Color4 linear_color, const DisplayTransform& transform) noexcept
+{
     const float exposure_ev = std::isfinite(transform.exposure_ev)
                                   ? std::clamp(transform.exposure_ev, -8.0F, 8.0F)
                                   : 0.0F;

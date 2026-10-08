@@ -3,16 +3,17 @@
 
 #include <array>
 #include <cmath>
-
-import elf.math;
+#include <elf3d/internal/math.h>
 
 namespace {
 
-bool nearly_equal(float left, float right) noexcept {
+bool nearly_equal(float left, float right) noexcept
+{
     return std::abs(left - right) <= 0.0001F;
 }
 
-[[nodiscard]] int verify_basic_conventions() {
+[[nodiscard]] int verify_basic_conventions()
+{
     const elf3d::Float2 public_value{2.0F, -3.5F};
     const elf3d::math::Vector2 vector = elf3d::math::to_vector(public_value);
     if (vector.x != 2.0F || vector.y != -3.5F || elf3d::math::to_float2(vector) != public_value) {
@@ -20,6 +21,7 @@ bool nearly_equal(float left, float right) noexcept {
     }
 
     const elf3d::Color4 color{0.1F, 0.2F, 0.3F, 0.4F};
+
     if (elf3d::math::to_color4(elf3d::math::to_vector(color)) != color) {
         return 2;
     }
@@ -32,6 +34,7 @@ bool nearly_equal(float left, float right) noexcept {
 
     elf3d::math::Matrix4 column_major{1.0F};
     column_major[0][1] = 2.0F;
+
     column_major[1][0] = 3.0F;
     const float* storage = glm::value_ptr(column_major);
     if (storage[1] != 2.0F || storage[4] != 3.0F) {
@@ -40,7 +43,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_world_composition() {
+[[nodiscard]] int verify_world_composition()
+{
     const elf3d::math::Matrix4 parent =
         glm::translate(elf3d::math::Matrix4{1.0F}, elf3d::math::Vector3{10.0F, 0.0F, 0.0F});
     const elf3d::math::Matrix4 local =
@@ -55,7 +59,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_rotation_transform() {
+[[nodiscard]] int verify_rotation_transform()
+{
     elf3d::Transform rotated_transform;
     rotated_transform.rotation =
         elf3d::Quaternion{0.0F, std::sin(0.7853981634F), 0.0F, std::cos(0.7853981634F)};
@@ -69,7 +74,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_camera_view() {
+[[nodiscard]] int verify_camera_view()
+{
     elf3d::Transform camera_transform;
     camera_transform.translation = {0.0F, 0.0F, 3.0F};
     camera_transform.scale = {2.0F, 3.0F, 4.0F};
@@ -78,6 +84,7 @@ bool nearly_equal(float left, float right) noexcept {
     if (!view) {
         return 7;
     }
+
     const elf3d::math::Matrix4 native_view = elf3d::math::to_matrix(view.value());
     const elf3d::math::Vector4 camera_space_origin =
         native_view * elf3d::math::Vector4{0.0F, 0.0F, 0.0F, 1.0F};
@@ -88,18 +95,21 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_perspective_projection() {
+[[nodiscard]] int verify_perspective_projection()
+{
     const elf3d::Result<elf3d::Float4x4> projection =
         elf3d::math::perspective_matrix(1.5707963268F, 1.0F, 1.0F, 10.0F);
     if (!projection) {
         return 9;
     }
+
     const elf3d::math::Matrix4 native_projection = elf3d::math::to_matrix(projection.value());
     if (!nearly_equal(native_projection[0][0], 1.0F) ||
         !nearly_equal(native_projection[1][1], 1.0F) ||
         !nearly_equal(native_projection[2][3], -1.0F)) {
         return 9;
     }
+
     const elf3d::math::Vector4 near_clip =
         native_projection * elf3d::math::Vector4{0.0F, 0.0F, -1.0F, 1.0F};
     const elf3d::math::Vector4 far_clip =
@@ -111,7 +121,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_normal_matrix_and_orientation() {
+[[nodiscard]] int verify_normal_matrix_and_orientation()
+{
     elf3d::Transform scaled_transform;
     scaled_transform.scale = {2.0F, 4.0F, 5.0F};
     const elf3d::Result<elf3d::math::Matrix3x3> normals =
@@ -133,7 +144,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_unprojection() {
+[[nodiscard]] int verify_unprojection()
+{
     elf3d::Transform camera_transform;
     camera_transform.translation = {0.0F, 0.0F, 3.0F};
     camera_transform.scale = {2.0F, 3.0F, 4.0F};
@@ -144,6 +156,7 @@ bool nearly_equal(float left, float right) noexcept {
     if (!view || !projection) {
         return 13;
     }
+
     const elf3d::Result<elf3d::Float3> near_center = elf3d::math::unproject_viewport_point(
         view.value(), projection.value(), {1, 1}, {0.0F, 0.0F}, 0.0F);
     const elf3d::Result<elf3d::Float3> far_center = elf3d::math::unproject_viewport_point(
@@ -157,7 +170,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_viewport_projection() {
+[[nodiscard]] int verify_viewport_projection()
+{
     elf3d::Transform camera_transform;
     camera_transform.translation = {0.0F, 0.0F, 3.0F};
     camera_transform.scale = {2.0F, 3.0F, 4.0F};
@@ -168,11 +182,13 @@ bool nearly_equal(float left, float right) noexcept {
     if (!view || !projection) {
         return 14;
     }
+
     const elf3d::Result<elf3d::Float3> near_center = elf3d::math::unproject_viewport_point(
         view.value(), projection.value(), {1, 1}, {0.0F, 0.0F}, 0.0F);
     if (!near_center) {
         return 14;
     }
+
     const elf3d::Result<elf3d::math::ViewportProjection> projected_center =
         elf3d::math::project_world_to_viewport_point(view.value(), projection.value(), {1, 1},
                                                      near_center.value());
@@ -184,7 +200,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_small_affine_matrix() {
+[[nodiscard]] int verify_small_affine_matrix()
+{
     elf3d::Transform small_parent;
     small_parent.scale = {0.011111111F, 0.011111111F, 0.011111111F};
     elf3d::Transform small_child;
@@ -205,7 +222,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_singular_matrix() {
+[[nodiscard]] int verify_singular_matrix()
+{
     elf3d::Float4x4 singular;
     singular.elements[0] = 0.0F;
     if (elf3d::math::is_valid_affine_matrix(singular) || elf3d::math::normal_matrix(singular) ||
@@ -215,7 +233,8 @@ bool nearly_equal(float left, float right) noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_project_owned_boundary_operations() {
+[[nodiscard]] int verify_project_owned_boundary_operations()
+{
     const elf3d::Float3 right = elf3d::math::cross({1.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
     const elf3d::Quaternion rotation =
         elf3d::math::rotation_from_axis_angle(1.5707963268F, {0.0F, 1.0F, 0.0F});
@@ -237,7 +256,8 @@ bool nearly_equal(float left, float right) noexcept {
 
 } // namespace
 
-int elf3d_math_conventions_test() {
+int elf3d_math_conventions_test()
+{
     const std::array<int, 11> results{{
         verify_basic_conventions(),
         verify_world_composition(),

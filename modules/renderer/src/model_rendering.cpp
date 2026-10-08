@@ -1,19 +1,19 @@
-module;
+#include "renderer_detail.h"
+
+#include <elf3d/internal/renderer.h>
 
 #include <elf3d/rendering.h>
 
 #include <cstddef>
+#include <elf3d/internal/graphics.h>
+#include <elf3d/internal/scene.h>
 #include <vector>
-
-module elf.renderer;
-
-import elf.graphics;
-import elf.scene;
 
 namespace elf3d::renderer {
 namespace {
 
-[[nodiscard]] TextureWrap runtime_texture_wrap(scene::RuntimeTextureWrap wrap) noexcept {
+[[nodiscard]] TextureWrap runtime_texture_wrap(scene::RuntimeTextureWrap wrap) noexcept
+{
     switch (wrap) {
     case scene::RuntimeTextureWrap::repeat:
         return TextureWrap::repeat;
@@ -25,7 +25,8 @@ namespace {
     return TextureWrap::repeat;
 }
 
-[[nodiscard]] TextureFilter runtime_texture_filter(scene::RuntimeTextureFilter filter) noexcept {
+[[nodiscard]] TextureFilter runtime_texture_filter(scene::RuntimeTextureFilter filter) noexcept
+{
     switch (filter) {
     case scene::RuntimeTextureFilter::nearest:
         return TextureFilter::nearest;
@@ -43,7 +44,8 @@ namespace {
     return TextureFilter::linear;
 }
 
-[[nodiscard]] AlphaMode runtime_alpha_mode(scene::RuntimeAlphaMode mode) noexcept {
+[[nodiscard]] AlphaMode runtime_alpha_mode(scene::RuntimeAlphaMode mode) noexcept
+{
     switch (mode) {
     case scene::RuntimeAlphaMode::opaque:
         return AlphaMode::opaque;
@@ -55,8 +57,8 @@ namespace {
     return AlphaMode::opaque;
 }
 
-[[nodiscard]] TextureMapping
-runtime_texture_mapping(scene::RuntimeTextureMapping mapping) noexcept {
+[[nodiscard]] TextureMapping runtime_texture_mapping(scene::RuntimeTextureMapping mapping) noexcept
+{
     return TextureMapping{mapping.texcoord_set,
                           TextureTransform{mapping.transform.offset, mapping.transform.scale,
                                            mapping.transform.rotation_radians}};
@@ -64,7 +66,8 @@ runtime_texture_mapping(scene::RuntimeTextureMapping mapping) noexcept {
 
 } // namespace
 
-graphics::TextureAddressMode runtime_address_mode(scene::RuntimeTextureWrap wrap) noexcept {
+graphics::TextureAddressMode runtime_address_mode(scene::RuntimeTextureWrap wrap) noexcept
+{
     switch (wrap) {
     case scene::RuntimeTextureWrap::repeat:
         return graphics::TextureAddressMode::repeat;
@@ -76,7 +79,8 @@ graphics::TextureAddressMode runtime_address_mode(scene::RuntimeTextureWrap wrap
     return graphics::TextureAddressMode::repeat;
 }
 
-graphics::TextureFilterMode runtime_filter_mode(scene::RuntimeTextureFilter filter) noexcept {
+graphics::TextureFilterMode runtime_filter_mode(scene::RuntimeTextureFilter filter) noexcept
+{
     switch (filter) {
     case scene::RuntimeTextureFilter::nearest:
         return graphics::TextureFilterMode::nearest;
@@ -94,8 +98,8 @@ graphics::TextureFilterMode runtime_filter_mode(scene::RuntimeTextureFilter filt
     return graphics::TextureFilterMode::linear;
 }
 
-MaterialDescription
-runtime_material_description(const scene::RuntimeMaterialView& source) noexcept {
+MaterialDescription runtime_material_description(const scene::RuntimeMaterialView& source) noexcept
+{
     MaterialDescription target;
     target.base_color = source.base_color;
     target.double_sided = source.double_sided;
@@ -119,7 +123,8 @@ runtime_material_description(const scene::RuntimeMaterialView& source) noexcept 
     return target;
 }
 
-RuntimeVertexBuffer runtime_vertex_buffer(const scene::RuntimePrimitiveView& primitive) {
+RuntimeVertexBuffer runtime_vertex_buffer(const scene::RuntimePrimitiveView& primitive)
+{
     RuntimeVertexBuffer buffer;
     std::size_t stride = 6U;
     if (primitive.vertex_layout() == scene::RuntimeVertexLayout::textured) {

@@ -1,21 +1,19 @@
-module;
+#include <elf3d/internal/scene.h>
 
 #include <elf3d/core/assert.h>
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <elf3d/internal/math.h>
 #include <optional>
 #include <vector>
-
-module elf.scene;
-
-import elf.math;
 
 namespace elf3d::scene {
 namespace {
 
-void expand(std::optional<Bounds3>& bounds, Float3 point) noexcept {
+void expand(std::optional<Bounds3>& bounds, Float3 point) noexcept
+{
     if (!bounds.has_value()) {
         bounds = Bounds3{point, point};
         return;
@@ -28,12 +26,14 @@ void expand(std::optional<Bounds3>& bounds, Float3 point) noexcept {
     bounds->maximum.z = std::max(bounds->maximum.z, point.z);
 }
 
-void expand(std::optional<Bounds3>& bounds, Bounds3 other) noexcept {
+void expand(std::optional<Bounds3>& bounds, Bounds3 other) noexcept
+{
     expand(bounds, other.minimum);
     expand(bounds, other.maximum);
 }
 
-[[nodiscard]] Bounds3 transform_bounds(Bounds3 local, const Float4x4& world) noexcept {
+[[nodiscard]] Bounds3 transform_bounds(Bounds3 local, const Float4x4& world) noexcept
+{
     const std::array<Float3, 8> corners{{
         {local.minimum.x, local.minimum.y, local.minimum.z},
         {local.maximum.x, local.minimum.y, local.minimum.z},
@@ -54,15 +54,18 @@ void expand(std::optional<Bounds3>& bounds, Bounds3 other) noexcept {
 
 } // namespace
 
-std::uint64_t Storage::model_spatial_revision() const noexcept {
+std::uint64_t Storage::model_spatial_revision() const noexcept
+{
     return model_spatial_revision_;
 }
 
-Result<Float4x4> Storage::world_matrix(EntityId entity_id) const noexcept {
+Result<Float4x4> Storage::world_matrix(EntityId entity_id) const
+{
     const Result<const EntityRecord*> target_result = entity(entity_id);
     if (!target_result) {
         return target_result.error();
     }
+
     const EntityRecord* current = target_result.value();
     if (!current->world_matrix_dirty) {
         return current->cached_world_matrix;
@@ -75,6 +78,7 @@ Result<Float4x4> Storage::world_matrix(EntityId entity_id) const noexcept {
             current = nullptr;
             break;
         }
+
         const Result<const EntityRecord*> parent = entity(*current->parent);
         if (!parent) {
             return parent.error();
@@ -83,6 +87,7 @@ Result<Float4x4> Storage::world_matrix(EntityId entity_id) const noexcept {
     }
 
     Float4x4 world = current != nullptr ? current->cached_world_matrix : Float4x4{};
+
     for (auto iterator = dirty_path.rbegin(); iterator != dirty_path.rend(); ++iterator) {
         const EntityRecord* record = *iterator;
         world = math::compose_world(world, record->local_matrix);
@@ -93,11 +98,13 @@ Result<Float4x4> Storage::world_matrix(EntityId entity_id) const noexcept {
     return target_result.value()->cached_world_matrix;
 }
 
-Result<math::Matrix3x3> Storage::world_normal_matrix(EntityId entity_id) const noexcept {
+Result<math::Matrix3x3> Storage::world_normal_matrix(EntityId entity_id) const
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
     }
+
     const Result<Float4x4> world = world_matrix(entity_id);
     if (!world) {
         return world.error();
@@ -111,6 +118,7 @@ Result<math::Matrix3x3> Storage::world_normal_matrix(EntityId entity_id) const n
         if (!orientation) {
             return orientation.error();
         }
+
         record.value()->cached_normal_matrix = normals.value();
         record.value()->cached_orientation_reversed = orientation.value();
         record.value()->cached_render_transform_valid = true;
@@ -118,7 +126,8 @@ Result<math::Matrix3x3> Storage::world_normal_matrix(EntityId entity_id) const n
     return record.value()->cached_normal_matrix;
 }
 
-Result<bool> Storage::world_orientation_reversed(EntityId entity_id) const noexcept {
+Result<bool> Storage::world_orientation_reversed(EntityId entity_id) const
+{
     const Result<math::Matrix3x3> normals = world_normal_matrix(entity_id);
     if (!normals) {
         return normals.error();
@@ -128,16 +137,19 @@ Result<bool> Storage::world_orientation_reversed(EntityId entity_id) const noexc
     return record.value()->cached_orientation_reversed;
 }
 
-void Storage::update_entity_world_bounds(const EntityRecord& record) const noexcept {
+void Storage::update_entity_world_bounds(const EntityRecord& record) const
+{
     record.cached_world_bounds.reset();
     record.cached_primitive_world_bounds.clear();
     if (!record.model.has_value()) {
         record.world_bounds_dirty = false;
         return;
     }
+
     const Result<Float4x4> world = world_matrix(record.id);
     ELF3D_ASSERT(world.has_value());
     record.cached_primitive_world_bounds.reserve(record.model->primitives.size());
+
     for (std::uint32_t index = 0; index < record.model->primitives.size(); ++index) {
         const Result<RuntimePrimitiveView> primitive = runtime_primitive(record.id, index);
         ELF3D_ASSERT(primitive.has_value());
@@ -148,15 +160,16 @@ void Storage::update_entity_world_bounds(const EntityRecord& record) const noexc
     record.world_bounds_dirty = false;
 }
 
-std::optional<Bounds3> Storage::entity_world_bounds(const EntityRecord& record) const noexcept {
+std::optional<Bounds3> Storage::entity_world_bounds(const EntityRecord& record) const
+{
     if (record.world_bounds_dirty) {
         update_entity_world_bounds(record);
     }
     return record.cached_world_bounds;
 }
 
-Result<Bounds3> Storage::primitive_world_bounds(EntityId entity_id,
-                                                std::uint32_t primitive) const noexcept {
+Result<Bounds3> Storage::primitive_world_bounds(EntityId entity_id, std::uint32_t primitive) const
+{
     const Result<const EntityRecord*> record = entity(entity_id);
     if (!record) {
         return record.error();
@@ -170,7 +183,8 @@ Result<Bounds3> Storage::primitive_world_bounds(EntityId entity_id,
     return record.value()->cached_primitive_world_bounds[primitive];
 }
 
-std::optional<Bounds3> Storage::world_bounds() const noexcept {
+std::optional<Bounds3> Storage::world_bounds() const
+{
     if (cached_world_bounds_valid_ &&
         cached_world_bounds_spatial_revision_ == model_spatial_revision_) {
         return cached_world_bounds_;
@@ -190,7 +204,8 @@ std::optional<Bounds3> Storage::world_bounds() const noexcept {
     return result;
 }
 
-bool Storage::invalidate_spatial_subtree(EntityId entity_id) noexcept {
+bool Storage::invalidate_spatial_subtree(EntityId entity_id)
+{
     bool affects_model = false;
     std::vector<EntityId> stack{entity_id};
     while (!stack.empty()) {
@@ -208,7 +223,8 @@ bool Storage::invalidate_spatial_subtree(EntityId entity_id) noexcept {
     return affects_model;
 }
 
-void Storage::invalidate_all_model_bounds() noexcept {
+void Storage::invalidate_all_model_bounds() noexcept
+{
     for (std::optional<EntityRecord>& record : entities_) {
         if (record.has_value() && record->model.has_value()) {
             record->world_bounds_dirty = true;
@@ -216,7 +232,8 @@ void Storage::invalidate_all_model_bounds() noexcept {
     }
 }
 
-void Storage::increment_model_spatial_revision() noexcept {
+void Storage::increment_model_spatial_revision() noexcept
+{
     ++model_spatial_revision_;
     if (model_spatial_revision_ == 0) {
         ++model_spatial_revision_;

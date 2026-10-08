@@ -1,5 +1,7 @@
 #pragma once
 
+#include <elf3d/core/result.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -71,7 +73,8 @@ struct FileDialogResult {
     std::string path;
 };
 
-[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value);
+[[nodiscard]] Result<std::filesystem::path> path_from_utf8(std::string_view value) noexcept;
+void set_file_browser_directory_utf8(FileBrowserState& browser, std::string_view value);
 [[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path);
 [[nodiscard]] std::string lowercase_ascii(std::string value);
 [[nodiscard]] std::string file_name_label(const std::filesystem::path& path);

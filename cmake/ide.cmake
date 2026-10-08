@@ -2,11 +2,6 @@
 # compiles additional files and does not change include visibility.
 function(elf3d_group_sources target_name)
     get_target_property(ide_sources ${target_name} SOURCES)
-    get_target_property(module_sets ${target_name} CXX_MODULE_SETS)
-    foreach(module_set IN LISTS module_sets)
-        get_target_property(module_sources ${target_name} CXX_MODULE_SET_${module_set})
-        list(APPEND ide_sources ${module_sources})
-    endforeach()
     foreach(source IN LISTS ide_sources)
         if(source MATCHES "\\$<")
             continue()

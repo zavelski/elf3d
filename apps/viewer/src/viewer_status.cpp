@@ -13,11 +13,13 @@
 
 namespace elf3d::viewer {
 
-void build_error_modal(ViewerFrameContext& state) {
+void build_error_modal(ViewerFrameContext& state)
+{
     if (state.notifications.request_error_modal) {
         ImGui::OpenPopup("Model Load Error");
         state.notifications.request_error_modal = false;
     }
+
     push_professional_dialog_style();
     ImGui::SetNextWindowSize(ImVec2{600.0F, 0.0F}, ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Model Load Error", nullptr,
@@ -48,11 +50,13 @@ void build_error_modal(ViewerFrameContext& state) {
     pop_professional_dialog_style();
 }
 
-void build_save_error_modal(ViewerFrameContext& state) {
+void build_save_error_modal(ViewerFrameContext& state)
+{
     if (state.notifications.request_save_error_modal) {
         ImGui::OpenPopup("Model Save Error");
         state.notifications.request_save_error_modal = false;
     }
+
     push_professional_dialog_style();
     ImGui::SetNextWindowSize(ImVec2{600.0F, 0.0F}, ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Model Save Error", nullptr,
@@ -75,11 +79,13 @@ void build_save_error_modal(ViewerFrameContext& state) {
     pop_professional_dialog_style();
 }
 
-const char* graphics_backend_name(elf3d::GraphicsBackend backend) noexcept {
+const char* graphics_backend_name(elf3d::GraphicsBackend backend) noexcept
+{
     return backend == elf3d::GraphicsBackend::opengl ? "OpenGL 4.1 core" : "Unknown";
 }
 
-[[nodiscard]] float viewer_frame_rate(const ViewerFrameContext& state) noexcept {
+[[nodiscard]] float viewer_frame_rate(const ViewerFrameContext& state) noexcept
+{
     return state.interaction.frame_delta_seconds > 0.0
                ? static_cast<float>(1.0 / state.interaction.frame_delta_seconds)
                : 0.0F;
@@ -87,10 +93,12 @@ const char* graphics_backend_name(elf3d::GraphicsBackend backend) noexcept {
 
 void build_status_bar(const ViewerFrameContext& state, const elf3d::Engine& engine,
                       const SceneSession& scene, const elf3d::Viewport& engine_viewport,
-                      const ToolCoordinator& tools) {
+                      const ToolCoordinator& tools)
+{
     if (!state.shell.show_status_bar) {
         return;
     }
+
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const float status_height = ImGui::GetFrameHeight();
     ImGui::SetNextWindowPos(
@@ -113,6 +121,7 @@ void build_status_bar(const ViewerFrameContext& state, const elf3d::Engine& engi
         if (isolated.has_value()) {
             isolation_status = entity_label(scene, *isolated);
         }
+
         const DistanceMeasurementSnapshot measurement = tools.measurement().snapshot(
             *scene.scene, engine_viewport, tools.active_tool() == ViewerTool::distance_measurement);
         const elf3d::Result<std::optional<elf3d::Bounds3>> visible_bounds =
@@ -150,7 +159,8 @@ void build_status_bar(const ViewerFrameContext& state, const elf3d::Engine& engi
     ImGui::PopStyleVar();
 }
 
-void build_about_property_row(const char* label, const char* value) {
+void build_about_property_row(const char* label, const char* value)
+{
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::TextDisabled("%s", label);
@@ -158,11 +168,13 @@ void build_about_property_row(const char* label, const char* value) {
     ImGui::TextUnformatted(value);
 }
 
-void build_about_window(ViewerFrameContext& state) {
+void build_about_window(ViewerFrameContext& state)
+{
     if (state.shell.show_about) {
         ImGui::OpenPopup("About Elf3D");
         state.shell.show_about = false;
     }
+
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const ImVec2 center{viewport->WorkPos.x + viewport->WorkSize.x * 0.5F,
                         viewport->WorkPos.y + viewport->WorkSize.y * 0.5F};

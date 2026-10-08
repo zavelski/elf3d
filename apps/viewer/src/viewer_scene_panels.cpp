@@ -20,7 +20,8 @@
 namespace elf3d::viewer {
 
 [[nodiscard]] bool edit_float3(const char* label, elf3d::Float3& value, float speed, float minimum,
-                               float maximum) {
+                               float maximum)
+{
     std::array<float, 3> components{value.x, value.y, value.z};
     if (!ImGui::DragFloat3(label, components.data(), speed, minimum, maximum, "%.4g")) {
         return false;
@@ -30,7 +31,8 @@ namespace elf3d::viewer {
 }
 
 [[nodiscard]] bool draw_section_plane_presets(elf3d::SectionPlane& plane,
-                                              const std::optional<elf3d::Bounds3>& visible_bounds) {
+                                              const std::optional<elf3d::Bounds3>& visible_bounds)
+{
     bool changed = false;
     if (ImGui::SmallButton("X")) {
         plane.normal = {1.0F, 0.0F, 0.0F};
@@ -58,7 +60,8 @@ namespace elf3d::viewer {
 
 void draw_section_plane_editor(ViewerFrameContext& state, elf3d::Viewport& viewport,
                                const elf3d::ClippingSnapshot& snapshot,
-                               const std::optional<elf3d::Bounds3>& visible_bounds) {
+                               const std::optional<elf3d::Bounds3>& visible_bounds)
+{
     if (!ImGui::CollapsingHeader("Section Plane", ImGuiTreeNodeFlags_DefaultOpen)) {
         return;
     }
@@ -103,7 +106,8 @@ struct ClippingPanelContext {
 
 [[nodiscard]] bool draw_clipping_box_row(ViewerFrameContext& state, const SceneSession& scene,
                                          elf3d::Viewport& viewport, ClippingTool& clipping_tool,
-                                         ClippingBoxRow row) {
+                                         ClippingBoxRow row)
+{
     ImGui::PushID(static_cast<int>(row.index));
     ImGui::Separator();
     ImGui::Text("Box %u", row.index + 1U);
@@ -141,8 +145,8 @@ struct ClippingPanelContext {
 }
 
 void draw_clipping_box_collection(const ClippingPanelContext& context,
-                                  const elf3d::ClippingSnapshot& snapshot,
-                                  bool has_visible_bounds) {
+                                  const elf3d::ClippingSnapshot& snapshot, bool has_visible_bounds)
+{
     if (!ImGui::CollapsingHeader("Clipping Boxes", ImGuiTreeNodeFlags_DefaultOpen)) {
         return;
     }
@@ -172,7 +176,8 @@ void draw_clipping_box_collection(const ClippingPanelContext& context,
     ImGui::EndDisabled();
 }
 
-[[nodiscard]] bool edit_helper_color(const char* label, elf3d::Color4& color) {
+[[nodiscard]] bool edit_helper_color(const char* label, elf3d::Color4& color)
+{
     std::array<float, 4> components{color.red, color.green, color.blue, color.alpha};
     if (!ImGui::ColorEdit4(label, components.data(), ImGuiColorEditFlags_NoInputs)) {
         return false;
@@ -181,7 +186,8 @@ void draw_clipping_box_collection(const ClippingPanelContext& context,
     return true;
 }
 
-void draw_clipping_helper_editor(ViewerFrameContext& state, ClippingTool& clipping_tool) {
+void draw_clipping_helper_editor(ViewerFrameContext& state, ClippingTool& clipping_tool)
+{
     if (!ImGui::CollapsingHeader("Helpers", ImGuiTreeNodeFlags_DefaultOpen)) {
         return;
     }
@@ -200,7 +206,8 @@ void draw_clipping_helper_editor(ViewerFrameContext& state, ClippingTool& clippi
 }
 
 void draw_clipping_footer(ViewerFrameContext& state, const SceneSession& scene,
-                          elf3d::Viewport& viewport) {
+                          elf3d::Viewport& viewport)
+{
     ImGui::Separator();
     if (ImGui::Button("Fit to Clipped Content")) {
         const elf3d::Result<void> result = viewport.fit_to_scene(*scene.scene, scene.camera);
@@ -216,7 +223,8 @@ void draw_clipping_footer(ViewerFrameContext& state, const SceneSession& scene,
 
 void build_clipping_panel(ImGuiID dockspace_id, ViewerFrameContext& state,
                           const SceneSession& scene, elf3d::Viewport& engine_viewport,
-                          ToolCoordinator& tools) {
+                          ToolCoordinator& tools)
+{
     if (!state.shell.show_clipping_panel) {
         return;
     }
@@ -244,11 +252,13 @@ void build_clipping_panel(ImGuiID dockspace_id, ViewerFrameContext& state,
     ImGui::End();
 }
 
-void invalidate_hierarchy_snapshot(SceneSession& scene) noexcept {
+void invalidate_hierarchy_snapshot(SceneSession& scene) noexcept
+{
     scene.hierarchy_snapshot_valid = false;
 }
 
-[[nodiscard]] bool refresh_hierarchy_snapshot(ViewerFrameContext& state, SceneSession& scene) {
+[[nodiscard]] bool refresh_hierarchy_snapshot(ViewerFrameContext& state, SceneSession& scene)
+{
     if (scene.hierarchy_snapshot_valid &&
         scene.hierarchy_snapshot.hierarchy_revision() == scene.scene->hierarchy_revision() &&
         scene.hierarchy_snapshot.visibility_revision() == scene.scene->visibility_revision()) {
@@ -268,7 +278,8 @@ void invalidate_hierarchy_snapshot(SceneSession& scene) noexcept {
 [[nodiscard]] std::vector<bool>
 selected_hierarchy_ancestors(const std::vector<elf3d::SceneHierarchyItem>& items,
                              std::optional<elf3d::EntityId> selected,
-                             std::optional<std::size_t>& selected_index) {
+                             std::optional<std::size_t>& selected_index)
+{
     std::vector<bool> ancestors(items.size(), false);
     selected_index.reset();
     if (!selected.has_value()) {
@@ -298,7 +309,8 @@ selected_hierarchy_ancestors(const std::vector<elf3d::SceneHierarchyItem>& items
 }
 
 void draw_hierarchy_visibility_commands(ViewerCommandDispatcher& commands,
-                                        const elf3d::SceneHierarchyItem& item) {
+                                        const elf3d::SceneHierarchyItem& item)
+{
     if (item.local_visible && ImGui::MenuItem("Hide")) {
         commands.emit(SetEntityVisibilityCommand{item.entity, false, EntityVisibilityScope::local});
     }
@@ -309,7 +321,8 @@ void draw_hierarchy_visibility_commands(ViewerCommandDispatcher& commands,
 }
 
 void draw_hierarchy_isolation_commands(ViewerCommandDispatcher& commands,
-                                       const elf3d::SceneHierarchyItem& item) {
+                                       const elf3d::SceneHierarchyItem& item)
+{
     if (ImGui::MenuItem("Isolate")) {
         commands.emit(IsolateEntityCommand{item.entity});
     }
@@ -319,7 +332,8 @@ void draw_hierarchy_isolation_commands(ViewerCommandDispatcher& commands,
 }
 
 void build_hierarchy_row_context(ViewerCommandDispatcher& commands,
-                                 const elf3d::SceneHierarchyItem& item) {
+                                 const elf3d::SceneHierarchyItem& item)
+{
     const ScopedFont default_font{ImGui::GetDefaultFont()};
     if (!ImGui::BeginPopupContextItem()) {
         return;
@@ -327,13 +341,15 @@ void build_hierarchy_row_context(ViewerCommandDispatcher& commands,
     if (ImGui::MenuItem("Select")) {
         commands.emit(SelectEntityCommand{item.entity});
     }
+
     draw_hierarchy_visibility_commands(commands, item);
     draw_hierarchy_isolation_commands(commands, item);
     ImGui::EndPopup();
 }
 
 void draw_hierarchy_summary(const SceneSession& scene, elf3d::Viewport& viewport,
-                            ViewerCommandDispatcher& commands) {
+                            ViewerCommandDispatcher& commands)
+{
     const elf3d::SceneHierarchyStatistics hierarchy = scene.scene->hierarchy_statistics();
     ImGui::Text("Entities: %llu  Roots: %llu  Hidden: %llu / %llu",
                 static_cast<unsigned long long>(hierarchy.entities),
@@ -345,6 +361,7 @@ void draw_hierarchy_summary(const SceneSession& scene, elf3d::Viewport& viewport
         ImGui::TextUnformatted("Isolation: none");
         return;
     }
+
     const std::string label = entity_label(scene, *isolated);
     ImGui::Text("Isolation: %s", label.c_str());
     ImGui::SameLine();
@@ -353,8 +370,8 @@ void draw_hierarchy_summary(const SceneSession& scene, elf3d::Viewport& viewport
     }
 }
 
-void draw_hierarchy_selection_actions(elf3d::Viewport& viewport,
-                                      ViewerCommandDispatcher& commands) {
+void draw_hierarchy_selection_actions(elf3d::Viewport& viewport, ViewerCommandDispatcher& commands)
+{
     const std::optional<EntityId> selected = viewport.selected_entity();
     ImGui::BeginDisabled(!selected.has_value());
     if (ImGui::SmallButton("Hide Selected") && selected.has_value()) {
@@ -381,7 +398,8 @@ struct HierarchyRows {
     std::vector<std::string> names;
 };
 
-[[nodiscard]] HierarchyRows collect_hierarchy_rows(const SceneSession& scene) {
+[[nodiscard]] HierarchyRows collect_hierarchy_rows(const SceneSession& scene)
+{
     HierarchyRows rows;
     rows.items.reserve(scene.hierarchy_snapshot.size());
     rows.names.reserve(scene.hierarchy_snapshot.size());
@@ -399,7 +417,8 @@ struct HierarchyRows {
 
 [[nodiscard]] std::string hierarchy_row_label(const SceneSession& scene,
                                               const elf3d::SceneHierarchyItem& item,
-                                              const std::string& source_name) {
+                                              const std::string& source_name)
+{
     std::string label = source_name.empty() ? entity_label(scene, item.entity) : source_name;
     if (item.has_camera) {
         label += " [camera]";
@@ -411,7 +430,8 @@ struct HierarchyRows {
 
 [[nodiscard]] ImGuiTreeNodeFlags
 hierarchy_row_flags(const elf3d::SceneHierarchyItem& item,
-                    std::optional<elf3d::EntityId> selected) noexcept {
+                    std::optional<elf3d::EntityId> selected) noexcept
+{
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
     if (item.child_count == 0) {
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
@@ -424,7 +444,8 @@ hierarchy_row_flags(const elf3d::SceneHierarchyItem& item,
 
 void draw_hierarchy_visibility_state(const elf3d::SceneHierarchyItem& item,
                                      std::optional<elf3d::EntityId> isolated,
-                                     ViewerCommandDispatcher& commands) {
+                                     ViewerCommandDispatcher& commands)
+{
     ImGui::SameLine();
     if (ImGui::SmallButton(item.local_visible ? "Hide##visible" : "Show##visible")) {
         commands.emit(SetEntityVisibilityCommand{item.entity, !item.local_visible,
@@ -459,7 +480,8 @@ struct HierarchyRowContext {
 };
 
 [[nodiscard]] bool draw_hierarchy_tree_row(ViewerFrameContext& state, SceneSession& scene,
-                                           const HierarchyRowContext& row_context) {
+                                           const HierarchyRowContext& row_context)
+{
     ELF3D_ASSERT(row_context.rows != nullptr);
     ELF3D_ASSERT(row_context.tree != nullptr);
     ELF3D_ASSERT(row_context.commands != nullptr);
@@ -470,6 +492,7 @@ struct HierarchyRowContext {
     if (context.ancestors[index]) {
         ImGui::SetNextItemOpen(true, ImGuiCond_Always);
     }
+
     const std::string label = hierarchy_row_label(scene, item, rows.names[index]);
     const std::string id = std::to_string(item.entity.debug_value());
     ImGui::PushID(id.c_str());
@@ -482,6 +505,7 @@ struct HierarchyRowContext {
         ImGui::SetScrollHereY(0.5F);
         state.hierarchy.last_revealed_selection = item.entity;
     }
+
     build_hierarchy_row_context(*row_context.commands, item);
     draw_hierarchy_visibility_state(item, context.isolated, *row_context.commands);
     ImGui::PopID();
@@ -489,7 +513,8 @@ struct HierarchyRowContext {
 }
 
 [[nodiscard]] std::size_t next_hierarchy_row(const HierarchyRows& rows, std::size_t index,
-                                             bool open) noexcept {
+                                             bool open) noexcept
+{
     const elf3d::SceneHierarchyItem& item = rows.items[index];
     ++index;
     if (item.child_count == 0 || open) {
@@ -502,7 +527,8 @@ struct HierarchyRowContext {
 }
 
 void draw_hierarchy_tree(ViewerFrameContext& state, SceneSession& scene, elf3d::Viewport& viewport,
-                         const HierarchyRows& rows, ViewerCommandDispatcher& commands) {
+                         const HierarchyRows& rows, ViewerCommandDispatcher& commands)
+{
     HierarchyTreeContext context;
     context.selected = viewport.selected_entity();
     context.isolated = viewport.isolated_entity();
@@ -521,6 +547,7 @@ void draw_hierarchy_tree(ViewerFrameContext& state, SceneSession& scene, elf3d::
             ImGui::TreePop();
             --open_depth;
         }
+
         const bool open = draw_hierarchy_tree_row(
             state, scene, HierarchyRowContext{&rows, &context, &commands, index});
         if (item.child_count != 0 && open) {
@@ -536,7 +563,8 @@ void draw_hierarchy_tree(ViewerFrameContext& state, SceneSession& scene, elf3d::
 
 void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerFrameContext& state,
                                  SceneSession& scene, elf3d::Viewport& engine_viewport,
-                                 ViewerCommandDispatcher& commands) {
+                                 ViewerCommandDispatcher& commands)
+{
     if (!state.shell.show_scene_hierarchy) {
         return;
     }
@@ -553,6 +581,7 @@ void build_scene_hierarchy_panel(ImGuiID dockspace_id, ViewerFrameContext& state
         ImGui::End();
         return;
     }
+
     const ScopedFont panel_font{state.presentation.panel_content_font};
     draw_hierarchy_summary(scene, engine_viewport, commands);
     draw_hierarchy_selection_actions(engine_viewport, commands);

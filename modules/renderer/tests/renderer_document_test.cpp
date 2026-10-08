@@ -9,14 +9,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/graphics.h>
+#include <elf3d/internal/renderer.h>
+#include <elf3d/internal/scene.h>
 #include <iostream>
 #include <memory>
 #include <vector>
-
-import elf.graphics;
-import elf.model;
-import elf.renderer;
-import elf.scene;
 
 #include "renderer_test_support.h"
 
@@ -30,7 +28,9 @@ constexpr std::uint64_t engine_token = 17;
 
 struct DocumentContext {
     DocumentContext()
-        : id(elf3d::detail::SceneHandleAccess::create_scene(engine_token, 3)), scene(id) {}
+        : id(elf3d::detail::SceneHandleAccess::create_scene(engine_token, 3)), scene(id)
+    {
+    }
 
     elf3d::SceneId id;
     elf3d::scene::Storage scene;
@@ -38,13 +38,15 @@ struct DocumentContext {
     elf3d::EntityId camera;
 };
 
-[[nodiscard]] bool position_test_camera(elf3d::scene::Storage& scene, elf3d::EntityId camera) {
+[[nodiscard]] bool position_test_camera(elf3d::scene::Storage& scene, elf3d::EntityId camera)
+{
     elf3d::Transform transform;
     transform.translation = {0.0F, 0.0F, 3.0F};
     return static_cast<bool>(scene.set_local_transform(camera, transform));
 }
 
-[[nodiscard]] elf3d::Result<elf3d::TextureId> create_normal_texture(elf3d::Document& document) {
+[[nodiscard]] elf3d::Result<elf3d::TextureId> create_normal_texture(elf3d::Document& document)
+{
     constexpr std::array<std::byte, 4> normal_pixel{std::byte{128}, std::byte{128}, std::byte{255},
                                                     std::byte{255}};
     const auto image = document.create_image(
@@ -57,7 +59,8 @@ struct DocumentContext {
     return document.create_texture(elf3d::ModelTextureDescription{image.value(), sampler.value()});
 }
 
-[[nodiscard]] elf3d::PrimitiveData tangent_quad() {
+[[nodiscard]] elf3d::PrimitiveData tangent_quad()
+{
     elf3d::PrimitiveData quad;
     quad.positions = {
         {-1.0F, -1.0F, 0.0F}, {1.0F, -1.0F, 0.0F}, {1.0F, 1.0F, 0.0F}, {-1.0F, 1.0F, 0.0F}};
@@ -71,7 +74,8 @@ struct DocumentContext {
     return quad;
 }
 
-[[nodiscard]] int prepare_document_scene(DocumentContext& context) {
+[[nodiscard]] int prepare_document_scene(DocumentContext& context)
+{
     elf3d::Document document;
     const auto mesh = document.create_mesh("document-quad");
     const auto normal_texture = create_normal_texture(document);
@@ -100,6 +104,7 @@ struct DocumentContext {
     if (!context.scene.set_document(std::move(document))) {
         return 49;
     }
+
     const auto model = context.scene.create_entity();
     const auto camera =
         context.scene.create_perspective_camera(elf3d::PerspectiveCameraDescription{});
@@ -112,6 +117,7 @@ struct DocumentContext {
     if (!position_test_camera(context.scene, camera.value())) {
         return 49;
     }
+
     const std::array<elf3d::PrimitiveId, 1> primitives{{primitive.value()}};
     if (!context.scene.set_model_document_primitives(model.value(), primitives)) {
         return 49;
@@ -122,7 +128,8 @@ struct DocumentContext {
 }
 
 [[nodiscard]] bool legacy_statistics_equal(const elf3d::RenderStatistics& actual,
-                                           const elf3d::RenderStatistics& expected) noexcept {
+                                           const elf3d::RenderStatistics& expected) noexcept
+{
     return actual.draw_calls == expected.draw_calls && actual.triangles == expected.triangles &&
            actual.vertices == expected.vertices && actual.indices == expected.indices &&
            actual.texture_bindings == expected.texture_bindings &&
@@ -134,7 +141,8 @@ struct DocumentContext {
 
 [[nodiscard]] bool has_expected_document_render(
     const DocumentContext& document, const elf3d::Result<elf3d::renderer::RenderList>& list,
-    const elf3d::Result<elf3d::RenderStatistics>& render, const FakeDeviceState& device) {
+    const elf3d::Result<elf3d::RenderStatistics>& render, const FakeDeviceState& device)
+{
     const elf3d::SceneStatistics expected_scene{2, 1, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 0, 0, 1};
     const elf3d::RenderStatistics expected_render{1, 2, 4, 6, 1, 1, 1, 0, 0};
     if (!list || !render) {
@@ -144,6 +152,7 @@ struct DocumentContext {
         device.texture_descriptions.empty()) {
         return false;
     }
+
     const std::array<bool, 12> matches{
         list.value().items.size() == 1,
         document.scene.statistics() == expected_scene,
@@ -165,10 +174,12 @@ struct DocumentContext {
 }
 
 [[nodiscard]] bool has_expected_unlit_render(const elf3d::Result<elf3d::RenderStatistics>& render,
-                                             const FakeDeviceState& device) {
+                                             const FakeDeviceState& device)
+{
     if (!render || device.draw_texture_presence.empty()) {
         return false;
     }
+
     const std::array<bool, 3> matches{render.value().gpu_texture_uploads == 0,
                                       render.value().environment_preparations == 0,
                                       !device.draw_texture_presence.back()[2]};
@@ -176,10 +187,12 @@ struct DocumentContext {
 }
 
 void report_document_render_failure(const elf3d::Result<elf3d::RenderStatistics>& render,
-                                    const FakeDeviceState& state) {
+                                    const FakeDeviceState& state)
+{
     if (!render) {
         return;
     }
+
     const std::size_t mesh_bytes =
         state.mesh_uploaded_bytes.empty() ? 0U : state.mesh_uploaded_bytes[0];
     const bool normal_present =
@@ -194,7 +207,8 @@ void report_document_render_failure(const elf3d::Result<elf3d::RenderStatistics>
 
 } // namespace
 
-int elf3d_renderer_document_test() {
+int elf3d_renderer_document_test()
+{
     DocumentContext document;
     const int prepared = prepare_document_scene(document);
     if (prepared != 0) {
@@ -208,6 +222,7 @@ int elf3d_renderer_document_test() {
     if (!renderer) {
         return 49;
     }
+
     const auto list =
         elf3d::renderer::build_render_list(document.scene, document.camera, {640, 360});
     FakeRenderTarget target;
@@ -217,6 +232,7 @@ int elf3d_renderer_document_test() {
     if (!has_expected_unlit_render(unlit_render, device_state_owner->state())) {
         return 49;
     }
+
     const elf3d::renderer::RenderRequest request{document.camera, {}, {}, {}, {}};
     const auto render = renderer.value()->render(document.scene, target, request);
     if (!has_expected_document_render(document, list, render, device_state_owner->state())) {

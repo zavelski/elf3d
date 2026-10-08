@@ -38,7 +38,9 @@ class ContextOwner final {
     void discard_frame() noexcept;
     void render() noexcept;
 
-    explicit ContextOwner(ConstructionKey) noexcept {}
+    explicit ContextOwner(ConstructionKey) noexcept
+    {
+    }
 
   private:
     [[nodiscard]] Result<void> initialize(GLFWwindow* window, const char* glsl_version,

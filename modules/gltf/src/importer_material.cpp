@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
@@ -11,6 +11,8 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/core/diagnostics.h>
+#include <elf3d/internal/math.h>
 #include <optional>
 #include <span>
 #include <string>
@@ -18,17 +20,12 @@ module;
 #include <utility>
 #include <vector>
 
-module elf.gltf;
-
-import elf.core;
-import elf.math;
-import elf.model;
-
 namespace elf3d::gltf::importer_detail {
 
 void generate_normals(std::span<const Float3> positions, std::vector<Float3>& normals,
                       std::span<const std::uint32_t> indices, std::uint64_t& degenerate_count,
-                      std::uint64_t& fallback_count) {
+                      std::uint64_t& fallback_count)
+{
     std::vector<Float3> accumulated(positions.size());
     for (std::size_t index = 0; index < indices.size(); index += 3) {
         const Float3 a = positions[indices[index]];
@@ -61,6 +58,7 @@ void generate_normals(std::span<const Float3> positions, std::vector<Float3>& no
             ++fallback_count;
             continue;
         }
+
         const float inverse_length = 1.0F / std::sqrt(length_squared);
         normals[index] =
             Float3{normal.x * inverse_length, normal.y * inverse_length, normal.z * inverse_length};
@@ -77,7 +75,8 @@ struct MaterialBuildState {
     bool primitive_specific_fallback = false;
 };
 
-[[nodiscard]] Result<MaterialId> default_material_for(ImportState& state) {
+[[nodiscard]] Result<MaterialId> default_material_for(ImportState& state)
+{
     if (!state.default_material.has_value()) {
         const Result<MaterialId> created =
             state.builder.create_material(ModelMaterialDescription{});
@@ -92,14 +91,16 @@ struct MaterialBuildState {
 [[nodiscard]] Result<ImportedTextureView> import_material_texture(MaterialBuildState& state,
                                                                   const cgltf_texture_view& view,
                                                                   std::string_view slot,
-                                                                  std::string_view context_suffix) {
+                                                                  std::string_view context_suffix)
+{
     PrimitiveTextureState primitive_state{state.available_texcoords,
                                           state.primitive_specific_fallback};
     return import_texture_view(state.import_state, primitive_state, view, slot,
                                state.context + std::string{context_suffix});
 }
 
-[[nodiscard]] Result<void> apply_metallic_roughness(MaterialBuildState& state) {
+[[nodiscard]] Result<void> apply_metallic_roughness(MaterialBuildState& state)
+{
     const cgltf_pbr_metallic_roughness& pbr = state.source.pbr_metallic_roughness;
     state.description.base_color = Color4{pbr.base_color_factor[0], pbr.base_color_factor[1],
                                           pbr.base_color_factor[2], pbr.base_color_factor[3]};
@@ -127,7 +128,8 @@ struct MaterialBuildState {
     return {};
 }
 
-[[nodiscard]] Result<void> apply_specular_glossiness(MaterialBuildState& state) {
+[[nodiscard]] Result<void> apply_specular_glossiness(MaterialBuildState& state)
+{
     const cgltf_pbr_specular_glossiness& pbr = state.source.pbr_specular_glossiness;
     state.description.base_color = Color4{pbr.diffuse_factor[0], pbr.diffuse_factor[1],
                                           pbr.diffuse_factor[2], pbr.diffuse_factor[3]};
@@ -143,6 +145,7 @@ struct MaterialBuildState {
         state.description.base_color_texture = texture.value().texture;
         state.description.base_color_texture_mapping = texture.value().mapping;
     }
+
     const std::string message =
         pbr.specular_glossiness_texture.texture != nullptr
             ? "KHR_materials_pbrSpecularGlossiness was approximated as a dielectric "
@@ -154,7 +157,8 @@ struct MaterialBuildState {
     return {};
 }
 
-[[nodiscard]] Result<void> apply_primary_material(MaterialBuildState& state) {
+[[nodiscard]] Result<void> apply_primary_material(MaterialBuildState& state)
+{
     if (state.source.has_pbr_metallic_roughness) {
         return apply_metallic_roughness(state);
     }
@@ -164,7 +168,8 @@ struct MaterialBuildState {
     return {};
 }
 
-void apply_material_factors(MaterialBuildState& state) {
+void apply_material_factors(MaterialBuildState& state)
+{
     const cgltf_material& source = state.source;
     state.description.emissive_factor = {source.emissive_factor[0], source.emissive_factor[1],
                                          source.emissive_factor[2]};
@@ -189,7 +194,8 @@ void apply_material_factors(MaterialBuildState& state) {
     }
 }
 
-[[nodiscard]] Result<void> apply_auxiliary_textures(MaterialBuildState& state) {
+[[nodiscard]] Result<void> apply_auxiliary_textures(MaterialBuildState& state)
+{
     const cgltf_material& source = state.source;
     if (source.normal_texture.texture != nullptr) {
         Result<ImportedTextureView> texture =
@@ -223,7 +229,8 @@ void apply_material_factors(MaterialBuildState& state) {
     return {};
 }
 
-[[nodiscard]] Result<void> apply_alpha_mode(MaterialBuildState& state) {
+[[nodiscard]] Result<void> apply_alpha_mode(MaterialBuildState& state)
+{
     switch (state.source.alpha_mode) {
     case cgltf_alpha_mode_opaque:
         state.description.alpha_mode = AlphaMode::opaque;
@@ -243,7 +250,8 @@ void apply_material_factors(MaterialBuildState& state) {
 }
 
 [[nodiscard]] bool
-base_material_factors_are_finite(const ModelMaterialDescription& description) noexcept {
+base_material_factors_are_finite(const ModelMaterialDescription& description) noexcept
+{
     return std::isfinite(description.base_color.red) &&
            std::isfinite(description.base_color.green) &&
            std::isfinite(description.base_color.blue) &&
@@ -253,7 +261,8 @@ base_material_factors_are_finite(const ModelMaterialDescription& description) no
 }
 
 [[nodiscard]] bool
-extension_material_factors_are_finite(const ModelMaterialDescription& description) noexcept {
+extension_material_factors_are_finite(const ModelMaterialDescription& description) noexcept
+{
     return math::is_finite(description.emissive_factor) &&
            std::isfinite(description.normal_scale) &&
            std::isfinite(description.occlusion_strength) && std::isfinite(description.ior) &&
@@ -262,13 +271,14 @@ extension_material_factors_are_finite(const ModelMaterialDescription& descriptio
            std::isfinite(description.alpha_cutoff);
 }
 
-[[nodiscard]] bool
-material_factors_are_finite(const ModelMaterialDescription& description) noexcept {
+[[nodiscard]] bool material_factors_are_finite(const ModelMaterialDescription& description) noexcept
+{
     return base_material_factors_are_finite(description) &&
            extension_material_factors_are_finite(description);
 }
 
-[[nodiscard]] Result<MaterialId> store_material(MaterialBuildState& state) {
+[[nodiscard]] Result<MaterialId> store_material(MaterialBuildState& state)
+{
     state.description.double_sided = state.source.double_sided != 0;
     const Result<MaterialId> created =
         state.import_state.builder.create_material(state.description);
@@ -282,13 +292,15 @@ material_factors_are_finite(const ModelMaterialDescription& description) noexcep
     return created.value();
 }
 
-[[nodiscard]] std::string material_context(const cgltf_material& material, std::size_t index) {
+[[nodiscard]] std::string material_context(const cgltf_material& material, std::size_t index)
+{
     return "material " +
            (material.name != nullptr ? std::string{material.name} : std::to_string(index));
 }
 
 [[nodiscard]] Result<MaterialId> material_for(ImportState& state, const cgltf_material* material,
-                                              const TexcoordAvailability& available_texcoords) {
+                                              const TexcoordAvailability& available_texcoords)
+{
     const cgltf_data& data = state.data;
     auto& materials = state.ids.material_cache;
     if (material == nullptr) {
@@ -300,6 +312,7 @@ material_factors_are_finite(const ModelMaterialDescription& description) noexcep
         return Error{ErrorCode::scene_import_failed,
                      "A glTF primitive references a material outside the material table"};
     }
+
     const std::string context = material_context(*material, index);
     Result<bool> primitive_specific =
         material_uses_unavailable_texcoord(*material, available_texcoords, context);
@@ -314,6 +327,7 @@ material_factors_are_finite(const ModelMaterialDescription& description) noexcep
     if (const Result<void> primary = apply_primary_material(build); !primary) {
         return primary.error();
     }
+
     apply_material_factors(build);
     if (const Result<void> textures = apply_auxiliary_textures(build); !textures) {
         return textures.error();

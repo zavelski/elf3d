@@ -1,14 +1,12 @@
-module;
+#include <elf3d/internal/visibility.h>
 
+#include <elf3d/internal/scene.h>
 #include <optional>
-
-module elf.visibility;
-
-import elf.scene;
 
 namespace elf3d::visibility {
 
-Result<void> VisibilityController::isolate_entity(const scene::Storage& scene, EntityId entity) {
+Result<void> VisibilityController::isolate_entity(const scene::Storage& scene, EntityId entity)
+{
     const Result<const scene::EntityRecord*> record = scene.entity(entity);
     if (!record) {
         return record.error();
@@ -22,18 +20,21 @@ Result<void> VisibilityController::isolate_entity(const scene::Storage& scene, E
     return {};
 }
 
-void VisibilityController::clear_isolation() noexcept {
+void VisibilityController::clear_isolation() noexcept
+{
     isolated_scene_ = {};
     isolated_entity_.reset();
 }
 
-void VisibilityController::clear_scene(SceneId scene) noexcept {
+void VisibilityController::clear_scene(SceneId scene) noexcept
+{
     if (isolated_scene_ == scene) {
         clear_isolation();
     }
 }
 
-void VisibilityController::validate_against(const scene::Storage& scene) noexcept {
+void VisibilityController::validate_against(const scene::Storage& scene) noexcept
+{
     if (!isolated_entity_.has_value()) {
         return;
     }
@@ -41,21 +42,25 @@ void VisibilityController::validate_against(const scene::Storage& scene) noexcep
         clear_isolation();
         return;
     }
+
     const Result<const scene::EntityRecord*> record = scene.entity(*isolated_entity_);
     if (!record) {
         clear_isolation();
     }
 }
 
-bool VisibilityController::is_isolating() const noexcept {
+bool VisibilityController::is_isolating() const noexcept
+{
     return isolated_entity_.has_value();
 }
 
-std::optional<EntityId> VisibilityController::isolated_entity() const noexcept {
+std::optional<EntityId> VisibilityController::isolated_entity() const noexcept
+{
     return isolated_entity_;
 }
 
-Result<scene::VisibilityFilter> VisibilityController::filter_for(const scene::Storage& scene) {
+Result<scene::VisibilityFilter> VisibilityController::filter_for(const scene::Storage& scene)
+{
     validate_against(scene);
     if (!isolated_entity_.has_value()) {
         return scene::make_visibility_filter(scene, std::nullopt);

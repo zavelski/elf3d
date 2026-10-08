@@ -8,7 +8,8 @@ namespace elf3d_examples {
 
 class MinimalApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
         elf3d::Result<std::unique_ptr<elf3d::Scene>> scene = context.engine().create_scene();
         if (!scene) {
             return scene.error();
@@ -17,15 +18,18 @@ class MinimalApplication final : public elf3d::Application {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> update(elf3d::ApplicationUpdateContext&) noexcept override
+    {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override
+    {
         return {};
     }
 
-    void stop(elf3d::ApplicationContext&) noexcept override {
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
         scene_.reset();
     }
 
@@ -33,7 +37,8 @@ class MinimalApplication final : public elf3d::Application {
     std::unique_ptr<elf3d::Scene> scene_;
 };
 
-[[nodiscard]] elf3d::Result<int> run_minimal_standard_application() noexcept {
+[[nodiscard]] elf3d::Result<int> run_minimal_standard_application() noexcept
+{
     MinimalApplication application;
     elf3d::ApplicationOptions options;
     options.title = "Minimal Elf3D Application";

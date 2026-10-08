@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/assert.h>
 #include <elf3d/core/error.h>
@@ -6,6 +6,7 @@ module;
 #include <elf3d/model.h>
 
 #include "exporter_internal.hpp"
+#include "file_path.hpp"
 
 #include <png.h>
 
@@ -14,6 +15,7 @@ module;
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/image.h>
 #include <filesystem>
 #include <limits>
 #include <new>
@@ -23,10 +25,6 @@ module;
 #include <string_view>
 #include <utility>
 #include <vector>
-
-module elf.gltf;
-
-import elf.image;
 
 namespace elf3d::gltf {
 
@@ -42,15 +40,18 @@ namespace {
 
 using namespace exporter_detail;
 
-[[noreturn]] void fatal_export_allocation_failure() noexcept {
+[[noreturn]] void fatal_export_allocation_failure() noexcept
+{
     fatal_error("Elf3D glTF exporter memory allocation failed");
 }
 
-[[noreturn]] void fatal_unexpected_export_boundary_exception() noexcept {
+[[noreturn]] void fatal_unexpected_export_boundary_exception() noexcept
+{
     fatal_error("Elf3D glTF exporter encountered an unexpected exception");
 }
 
-[[nodiscard]] Result<std::uint32_t> checked_index(std::size_t value) noexcept {
+[[nodiscard]] Result<std::uint32_t> checked_index(std::size_t value) noexcept
+{
     if (value > std::numeric_limits<std::uint32_t>::max()) {
         return Error{ErrorCode::size_overflow, "glTF output exceeds the 32-bit index limit"};
     }
@@ -59,7 +60,8 @@ using namespace exporter_detail;
 
 template <typename Id>
 [[nodiscard]] std::optional<std::uint32_t> find_index(const std::vector<IdIndex<Id>>& indices,
-                                                      Id id) noexcept {
+                                                      Id id) noexcept
+{
     for (const IdIndex<Id>& entry : indices) {
         if (entry.id == id) {
             return entry.index;
@@ -69,7 +71,8 @@ template <typename Id>
 }
 
 template <typename T>
-[[nodiscard]] Result<void> append_view(std::vector<T>& destination, Result<T> source) {
+[[nodiscard]] Result<void> append_view(std::vector<T>& destination, Result<T> source)
+{
     if (!source) {
         return source.error();
     }
@@ -79,7 +82,8 @@ template <typename T>
 
 template <typename Id, typename T>
 [[nodiscard]] Result<void> append_index(std::vector<IdIndex<Id>>& destination, const T& view,
-                                        std::size_t index) {
+                                        std::size_t index)
+{
     const Result<std::uint32_t> converted = checked_index(index);
     if (!converted) {
         return converted.error();
@@ -91,7 +95,8 @@ template <typename Id, typename T>
 template <typename T, typename Id, typename Reader>
 [[nodiscard]] Result<void> collect_indexed_views(std::vector<T>& views,
                                                  std::vector<IdIndex<Id>>& indices,
-                                                 std::size_t count, Reader reader) {
+                                                 std::size_t count, Reader reader)
+{
     for (std::size_t index = 0; index < count; ++index) {
         if (const Result<void> appended = append_view(views, reader(index)); !appended) {
             return appended.error();
@@ -103,7 +108,8 @@ template <typename T, typename Id, typename Reader>
     return {};
 }
 
-[[nodiscard]] Result<void> collect_scenes(ExportData& result, DocumentView document) {
+[[nodiscard]] Result<void> collect_scenes(ExportData& result, DocumentView document)
+{
     for (std::size_t index = 0; index < document.scene_count(); ++index) {
         if (const Result<void> appended = append_view(result.scenes, document.scene_at(index));
             !appended) {
@@ -113,7 +119,8 @@ template <typename T, typename Id, typename Reader>
     return {};
 }
 
-[[nodiscard]] Result<void> collect_meshes(ExportData& result, DocumentView document) {
+[[nodiscard]] Result<void> collect_meshes(ExportData& result, DocumentView document)
+{
     for (std::size_t index = 0; index < document.mesh_count(); ++index) {
         if (const Result<void> appended = append_view(result.meshes, document.mesh_at(index));
             !appended) {
@@ -132,7 +139,8 @@ template <typename T, typename Id, typename Reader>
     return {};
 }
 
-[[nodiscard]] Result<void> collect_document_views(ExportData& result, DocumentView document) {
+[[nodiscard]] Result<void> collect_document_views(ExportData& result, DocumentView document)
+{
     if (const Result<void> scenes = collect_scenes(result, document); !scenes) {
         return scenes.error();
     }
@@ -174,7 +182,8 @@ template <typename T, typename Id, typename Reader>
         [document](std::size_t index) { return document.sampler_at(index); });
 }
 
-void clear_preserved_metadata(ExportData& result) noexcept {
+void clear_preserved_metadata(ExportData& result) noexcept
+{
     result.root_metadata = {};
     result.asset_metadata = {};
     for (DocumentSceneView& scene : result.scenes) {
@@ -203,7 +212,8 @@ void clear_preserved_metadata(ExportData& result) noexcept {
     }
 }
 
-[[nodiscard]] Result<ExportData> collect_document(DocumentView document) {
+[[nodiscard]] Result<ExportData> collect_document(DocumentView document)
+{
     if (validate_document(document).has_errors()) {
         return Error{ErrorCode::invalid_argument, "Cannot export an invalid model document"};
     }
@@ -221,16 +231,19 @@ void clear_preserved_metadata(ExportData& result) noexcept {
     return result;
 }
 
-[[nodiscard]] std::string_view image_mime_text(ModelImageMimeType mime_type) noexcept {
+[[nodiscard]] std::string_view image_mime_text(ModelImageMimeType mime_type) noexcept
+{
     return mime_type == ModelImageMimeType::jpeg ? "image/jpeg" : "image/png";
 }
 
-[[nodiscard]] std::string_view image_extension(ModelImageMimeType mime_type) noexcept {
+[[nodiscard]] std::string_view image_extension(ModelImageMimeType mime_type) noexcept
+{
     return mime_type == ModelImageMimeType::jpeg ? ".jpg" : ".png";
 }
 
 [[nodiscard]] Result<std::uint32_t> append_buffer_view(std::vector<ByteRange>& views,
-                                                       ByteRange range) {
+                                                       ByteRange range)
+{
     const Result<std::uint32_t> index = checked_index(views.size());
     if (!index) {
         return index.error();
@@ -240,11 +253,13 @@ void clear_preserved_metadata(ExportData& result) noexcept {
 }
 
 [[nodiscard]] Result<std::uint32_t> append_accessor(std::vector<Accessor>& accessors,
-                                                    const AccessorDescription& description) {
+                                                    const AccessorDescription& description)
+{
     const Result<std::uint32_t> converted_count = checked_index(description.count);
     if (!converted_count) {
         return converted_count.error();
     }
+
     const Result<std::uint32_t> index = checked_index(accessors.size());
     if (!index) {
         return index.error();
@@ -258,15 +273,18 @@ void clear_preserved_metadata(ExportData& result) noexcept {
                                                      BinaryBuilder& binary,
                                                      std::vector<ByteRange>& views,
                                                      std::vector<Accessor>& accessors,
-                                                     PrimitiveOutput& output) {
+                                                     PrimitiveOutput& output)
+{
     const Result<ByteRange> positions = binary.append_positions(primitive.data.positions);
     if (!positions) {
         return positions.error();
     }
+
     const Result<std::uint32_t> position_view = append_buffer_view(views, positions.value());
     if (!position_view) {
         return position_view.error();
     }
+
     const Result<std::uint32_t> position_accessor =
         append_accessor(accessors, {position_view.value(), 5126U, primitive.data.positions.size(),
                                     "VEC3", primitive.bounds});
@@ -280,11 +298,13 @@ void clear_preserved_metadata(ExportData& result) noexcept {
 [[nodiscard]] Result<std::uint32_t> append_vec3_attribute(std::span<const Float3> values,
                                                           BinaryBuilder& binary,
                                                           std::vector<ByteRange>& views,
-                                                          std::vector<Accessor>& accessors) {
+                                                          std::vector<Accessor>& accessors)
+{
     const Result<ByteRange> bytes = binary.append_positions(values);
     if (!bytes) {
         return bytes.error();
     }
+
     const Result<std::uint32_t> view = append_buffer_view(views, bytes.value());
     if (!view) {
         return view.error();
@@ -295,11 +315,13 @@ void clear_preserved_metadata(ExportData& result) noexcept {
 [[nodiscard]] Result<std::uint32_t> append_vec2_attribute(std::span<const Float2> values,
                                                           BinaryBuilder& binary,
                                                           std::vector<ByteRange>& views,
-                                                          std::vector<Accessor>& accessors) {
+                                                          std::vector<Accessor>& accessors)
+{
     const Result<ByteRange> bytes = binary.append_texcoords(values);
     if (!bytes) {
         return bytes.error();
     }
+
     const Result<std::uint32_t> view = append_buffer_view(views, bytes.value());
     if (!view) {
         return view.error();
@@ -311,7 +333,8 @@ void clear_preserved_metadata(ExportData& result) noexcept {
                                                       BinaryBuilder& binary,
                                                       std::vector<ByteRange>& views,
                                                       std::vector<Accessor>& accessors,
-                                                      PrimitiveOutput& output) {
+                                                      PrimitiveOutput& output)
+{
     if (!primitive.data.normals.empty()) {
         const Result<std::uint32_t> normals =
             append_vec3_attribute(primitive.data.normals, binary, views, accessors);
@@ -343,18 +366,22 @@ void clear_preserved_metadata(ExportData& result) noexcept {
                                                   BinaryBuilder& binary,
                                                   std::vector<ByteRange>& views,
                                                   std::vector<Accessor>& accessors,
-                                                  PrimitiveOutput& output) {
+                                                  PrimitiveOutput& output)
+{
     if (primitive.data.colors.empty()) {
         return {};
     }
+
     const Result<ByteRange> bytes = binary.append_colors(primitive.data.colors);
     if (!bytes) {
         return bytes.error();
     }
+
     const Result<std::uint32_t> view = append_buffer_view(views, bytes.value());
     if (!view) {
         return view.error();
     }
+
     const Result<std::uint32_t> colors = append_accessor(
         accessors, {view.value(), 5126U, primitive.data.colors.size(), "VEC4", std::nullopt});
     if (!colors) {
@@ -368,18 +395,22 @@ void clear_preserved_metadata(ExportData& result) noexcept {
                                                     BinaryBuilder& binary,
                                                     std::vector<ByteRange>& views,
                                                     std::vector<Accessor>& accessors,
-                                                    PrimitiveOutput& output) {
+                                                    PrimitiveOutput& output)
+{
     if (primitive.data.tangents.empty()) {
         return {};
     }
+
     const Result<ByteRange> bytes = binary.append_tangents(primitive.data.tangents);
     if (!bytes) {
         return bytes.error();
     }
+
     const Result<std::uint32_t> view = append_buffer_view(views, bytes.value());
     if (!view) {
         return view.error();
     }
+
     const Result<std::uint32_t> tangents = append_accessor(
         accessors, {view.value(), 5126U, primitive.data.tangents.size(), "VEC4", std::nullopt});
     if (!tangents) {
@@ -393,15 +424,18 @@ void clear_preserved_metadata(ExportData& result) noexcept {
                                                   BinaryBuilder& binary,
                                                   std::vector<ByteRange>& views,
                                                   std::vector<Accessor>& accessors,
-                                                  PrimitiveOutput& output) {
+                                                  PrimitiveOutput& output)
+{
     const Result<EncodedIndexRange> index_bytes = binary.append_indices(primitive.data.indices);
     if (!index_bytes) {
         return index_bytes.error();
     }
+
     const Result<std::uint32_t> index_view = append_buffer_view(views, index_bytes.value().bytes);
     if (!index_view) {
         return index_view.error();
     }
+
     const Result<std::uint32_t> index_accessor =
         append_accessor(accessors, {index_view.value(), index_bytes.value().component_type,
                                     primitive.data.indices.size(), "SCALAR", std::nullopt});
@@ -414,7 +448,8 @@ void clear_preserved_metadata(ExportData& result) noexcept {
 
 [[nodiscard]] Result<PrimitiveOutput>
 append_primitive(const PrimitiveView& primitive, const ExportData& document, BinaryBuilder& binary,
-                 std::vector<ByteRange>& views, std::vector<Accessor>& accessors) {
+                 std::vector<ByteRange>& views, std::vector<Accessor>& accessors)
+{
     const std::optional<std::uint32_t> material =
         find_index(document.material_indices, primitive.material);
     if (!material.has_value()) {
@@ -450,7 +485,8 @@ append_primitive(const PrimitiveView& primitive, const ExportData& document, Bin
     return output;
 }
 
-void append_uint32(std::vector<std::byte>& output, std::uint32_t value) {
+void append_uint32(std::vector<std::byte>& output, std::uint32_t value)
+{
     output.push_back(static_cast<std::byte>(value & 0xffU));
     output.push_back(static_cast<std::byte>((value >> 8U) & 0xffU));
     output.push_back(static_cast<std::byte>((value >> 16U) & 0xffU));
@@ -458,19 +494,23 @@ void append_uint32(std::vector<std::byte>& output, std::uint32_t value) {
 }
 
 [[nodiscard]] Result<std::vector<std::byte>> build_glb(std::string json,
-                                                       const std::vector<std::byte>& binary) {
+                                                       const std::vector<std::byte>& binary)
+{
     while (json.size() % 4U != 0U) {
         json.push_back(' ');
     }
+
     std::vector<std::byte> binary_chunk = binary;
     while (binary_chunk.size() % 4U != 0U) {
         binary_chunk.push_back(std::byte{0});
     }
+
     const std::size_t total =
         20U + json.size() + (binary_chunk.empty() ? 0U : 8U + binary_chunk.size());
     if (total > std::numeric_limits<std::uint32_t>::max()) {
         return Error{ErrorCode::size_overflow, "GLB output exceeds the 32-bit container limit"};
     }
+
     std::vector<std::byte> output;
     output.reserve(total);
     append_uint32(output, 0x46546c67U);
@@ -489,7 +529,8 @@ void append_uint32(std::vector<std::byte>& output, std::uint32_t value) {
     return output;
 }
 
-[[nodiscard]] std::vector<std::byte> bytes_from_text(std::string_view text) {
+[[nodiscard]] std::vector<std::byte> bytes_from_text(std::string_view text)
+{
     std::vector<std::byte> result;
     result.reserve(text.size());
     for (const char character : text) {
@@ -500,7 +541,8 @@ void append_uint32(std::vector<std::byte>& output, std::uint32_t value) {
 
 [[nodiscard]] ModelWriteReport
 build_write_report(std::span<const EncodedImageOutput> encoded_images,
-                   bool preserved_metadata_dropped) {
+                   bool preserved_metadata_dropped)
+{
     ModelWriteReport report;
     for (std::size_t index = 0; index < encoded_images.size(); ++index) {
         if (!encoded_images[index].reencoded) {
@@ -523,12 +565,14 @@ build_write_report(std::span<const EncodedImageOutput> encoded_images,
 
 [[nodiscard]] Result<ExportPackage> initialize_export_package(const OutputPath& path,
                                                               DocumentView document,
-                                                              const ModelWriteOptions& options) {
+                                                              const ModelWriteOptions& options)
+{
     const std::string extension = path.extension().string();
     if (extension != ".gltf" && extension != ".glb") {
         return Error{ErrorCode::unsupported_model_format,
                      "Document output paths must use a .gltf or .glb extension"};
     }
+
     Result<ExportData> collected = collect_document(document);
     if (!collected) {
         return collected.error();
@@ -546,7 +590,8 @@ build_write_report(std::span<const EncodedImageOutput> encoded_images,
     return package;
 }
 
-[[nodiscard]] Result<void> append_package_primitives(ExportPackage& package) {
+[[nodiscard]] Result<void> append_package_primitives(ExportPackage& package)
+{
     for (const PrimitiveView& primitive : package.document.primitives) {
         const Result<PrimitiveOutput> output = append_primitive(
             primitive, package.document, package.binary, package.views, package.accessors);
@@ -558,7 +603,8 @@ build_write_report(std::span<const EncodedImageOutput> encoded_images,
     return {};
 }
 
-[[nodiscard]] Result<void> append_package_images(ExportPackage& package) {
+[[nodiscard]] Result<void> append_package_images(ExportPackage& package)
+{
     for (const ImageView& image : package.document.images) {
         Result<EncodedImageOutput> encoded = encoded_image(image);
         if (!encoded) {
@@ -570,11 +616,13 @@ build_write_report(std::span<const EncodedImageOutput> encoded_images,
             package.image_views.push_back(std::nullopt);
             continue;
         }
+
         const Result<ByteRange> range =
             package.binary.append_bytes(package.encoded_images.back().bytes);
         if (!range) {
             return range.error();
         }
+
         const Result<std::uint32_t> view = append_buffer_view(package.views, range.value());
         if (!view) {
             return view.error();
@@ -584,7 +632,8 @@ build_write_report(std::span<const EncodedImageOutput> encoded_images,
     return {};
 }
 
-void append_package_uris(ExportPackage& package, const OutputPath& path) {
+void append_package_uris(ExportPackage& package, const OutputPath& path)
+{
     const std::string stem = path.stem().string();
     package.buffer_uri = stem + ".bin";
     for (std::size_t index = 0; index < package.encoded_images.size(); ++index) {
@@ -596,7 +645,8 @@ void append_package_uris(ExportPackage& package, const OutputPath& path) {
 
 [[nodiscard]] Result<ExportPackage> prepare_export_package(const OutputPath& path,
                                                            DocumentView document,
-                                                           const ModelWriteOptions& options) {
+                                                           const ModelWriteOptions& options)
+{
     Result<ExportPackage> initialized = initialize_export_package(path, document, options);
     if (!initialized) {
         return initialized.error();
@@ -608,12 +658,14 @@ void append_package_uris(ExportPackage& package, const OutputPath& path) {
     if (const Result<void> images = append_package_images(package); !images) {
         return images.error();
     }
+
     append_package_uris(package, path);
     return package;
 }
 
 [[nodiscard]] Result<std::vector<exporter_output::OutputFile>>
-build_output_artifacts(const OutputPath& path, ExportPackage& package, const std::string& json) {
+build_output_artifacts(const OutputPath& path, ExportPackage& package, const std::string& json)
+{
     std::vector<exporter_output::OutputFile> artifacts;
     if (!package.embedded) {
         for (std::size_t index = 0; index < package.encoded_images.size(); ++index) {
@@ -637,32 +689,38 @@ build_output_artifacts(const OutputPath& path, ExportPackage& package, const std
 }
 
 [[nodiscard]] Result<ModelWriteReport> save(const OutputPath& path, DocumentView document,
-                                            const ModelWriteOptions& options) {
+                                            const ModelWriteOptions& options)
+{
     Result<ExportPackage> prepared = prepare_export_package(path, document, options);
     if (!prepared) {
         return prepared.error();
     }
     ExportPackage package = std::move(prepared).value();
     const Result<std::string> json = build_json(package);
+
     if (!json) {
         return json.error();
     }
+
     Result<std::vector<exporter_output::OutputFile>> built =
         build_output_artifacts(path, package, json.value());
     if (!built) {
         return built.error();
     }
+
     std::vector<exporter_output::OutputFile> artifacts = std::move(built).value();
     if (const Result<void> published = exporter_output::publish(artifacts); !published) {
         return published.error();
     }
+
     return build_write_report(package.encoded_images, package.document.preserved_metadata_dropped);
 }
 
 } // namespace
 
 Result<ModelWriteReport> save_document(const std::filesystem::path& path, DocumentView document,
-                                       const ModelWriteOptions& options) noexcept {
+                                       const ModelWriteOptions& options) noexcept
+{
     try {
         return save(path, document, options);
     } catch (const std::bad_alloc&) {
@@ -677,19 +735,13 @@ Result<ModelWriteReport> save_document(const std::filesystem::path& path, Docume
 namespace elf3d {
 
 Result<ModelWriteReport> save_document(std::string_view path_utf8, DocumentView document,
-                                       const ModelWriteOptions& options) noexcept {
-    try {
-        std::u8string utf8;
-        utf8.reserve(path_utf8.size());
-        for (const char character : path_utf8) {
-            utf8.push_back(static_cast<char8_t>(static_cast<unsigned char>(character)));
-        }
-        return gltf::save_document(std::filesystem::path{utf8}, document, options);
-    } catch (const std::bad_alloc&) {
-        fatal_error("Elf3D glTF exporter memory allocation failed");
-    } catch (...) {
-        fatal_error("Elf3D glTF exporter encountered an unexpected exception");
+                                       const ModelWriteOptions& options) noexcept
+{
+    Result<std::filesystem::path> path = gltf::file_path::from_utf8(path_utf8);
+    if (!path) {
+        return path.error();
     }
+    return gltf::save_document(path.value(), document, options);
 }
 
 } // namespace elf3d

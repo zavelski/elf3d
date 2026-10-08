@@ -3,47 +3,52 @@
 #include <elf3d/scene.h>
 
 #include <cstdint>
+#include <elf3d/internal/assets.h>
+#include <elf3d/internal/scene.h>
+#include <elf3d/internal/visibility.h>
 #include <optional>
-
-import elf.assets;
-import elf.scene;
-import elf.visibility;
 
 namespace {
 
-[[nodiscard]] elf3d::SceneId scene_id(std::uint64_t value) noexcept {
+[[nodiscard]] elf3d::SceneId scene_id(std::uint64_t value) noexcept
+{
     return elf3d::detail::SceneHandleAccess::create_scene(41, value);
 }
 
 [[nodiscard]] bool is_isolated_branch_visible(const elf3d::scene::Storage& scene,
                                               const elf3d::scene::VisibilityFilter& filter,
                                               elf3d::EntityId root, elf3d::EntityId child,
-                                              elf3d::EntityId sibling) {
+                                              elf3d::EntityId sibling)
+{
     return filter.has_isolation() && elf3d::scene::entity_visible_in_filter(scene, filter, root) &&
            elf3d::scene::entity_visible_in_filter(scene, filter, child) &&
            !elf3d::scene::entity_visible_in_filter(scene, filter, sibling);
 }
 
 [[nodiscard]] bool is_cleared_filter(const elf3d::visibility::VisibilityController& visibility,
-                                     const elf3d::Result<elf3d::scene::VisibilityFilter>& filter) {
+                                     const elf3d::Result<elf3d::scene::VisibilityFilter>& filter)
+{
     return filter && !visibility.is_isolating() && !filter.value().has_isolation();
 }
 
 [[nodiscard]] bool has_active_isolation(elf3d::scene::Storage& scene,
                                         elf3d::visibility::VisibilityController& visibility,
-                                        elf3d::EntityId root) {
+                                        elf3d::EntityId root)
+{
     return visibility.isolate_entity(scene, root) && visibility.is_isolating() &&
            visibility.isolated_entity() == root;
 }
 
 [[nodiscard]] bool is_hidden_in_filter(const elf3d::scene::Storage& scene,
                                        const elf3d::Result<elf3d::scene::VisibilityFilter>& filter,
-                                       elf3d::EntityId entity) {
+                                       elf3d::EntityId entity)
+{
     return filter && !elf3d::scene::entity_visible_in_filter(scene, filter.value(), entity);
 }
 
 [[nodiscard]] bool rejects_foreign_entity(elf3d::scene::Storage& scene,
-                                          elf3d::visibility::VisibilityController& visibility) {
+                                          elf3d::visibility::VisibilityController& visibility)
+{
     elf3d::scene::Storage other_scene{scene_id(2)};
     const elf3d::EntityId other = other_scene.create_entity().value();
     return visibility.isolate_entity(scene, other).error().code() ==
@@ -52,8 +57,8 @@ namespace {
 
 int verify_isolation_lifecycle(elf3d::scene::Storage& scene,
                                elf3d::visibility::VisibilityController& visibility,
-                               elf3d::EntityId root, elf3d::EntityId child,
-                               elf3d::EntityId sibling) {
+                               elf3d::EntityId root, elf3d::EntityId child, elf3d::EntityId sibling)
+{
     const elf3d::Result<elf3d::scene::VisibilityFilter> filter = visibility.filter_for(scene);
     if (!filter || !is_isolated_branch_visible(scene, filter.value(), root, child, sibling)) {
         return 4;
@@ -61,6 +66,7 @@ int verify_isolation_lifecycle(elf3d::scene::Storage& scene,
     if (!scene.set_entity_visible(child, false)) {
         return 5;
     }
+
     const elf3d::Result<elf3d::scene::VisibilityFilter> hidden_filter =
         visibility.filter_for(scene);
     if (!is_hidden_in_filter(scene, hidden_filter, child)) {
@@ -69,6 +75,7 @@ int verify_isolation_lifecycle(elf3d::scene::Storage& scene,
     if (!scene.destroy_entity(root)) {
         return 7;
     }
+
     const elf3d::Result<elf3d::scene::VisibilityFilter> cleared = visibility.filter_for(scene);
     if (!is_cleared_filter(visibility, cleared)) {
         return 8;
@@ -78,7 +85,8 @@ int verify_isolation_lifecycle(elf3d::scene::Storage& scene,
 
 } // namespace
 
-int elf3d_visibility_test() {
+int elf3d_visibility_test()
+{
     elf3d::scene::Storage scene{scene_id(1)};
     const elf3d::EntityId root = scene.create_entity().value();
     const elf3d::EntityId child = scene.create_entity().value();

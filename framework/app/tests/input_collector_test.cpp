@@ -7,12 +7,14 @@
 
 namespace {
 
-[[nodiscard]] int fail(const char* message) noexcept {
+[[nodiscard]] int fail(const char* message) noexcept
+{
     std::fprintf(stderr, "%s\n", message);
     return 1;
 }
 
-[[nodiscard]] bool transitions_are_edge_triggered() noexcept {
+[[nodiscard]] bool transitions_are_edge_triggered() noexcept
+{
     using elf3d::app::detail::normalized_input_transition;
     const elf3d::InputTransition idle = normalized_input_transition(false, false);
     const elf3d::InputTransition pressed = normalized_input_transition(true, false);
@@ -24,7 +26,8 @@ namespace {
            released == elf3d::InputTransition{false, false, true, 0};
 }
 
-[[nodiscard]] bool wheel_is_accumulated_once() noexcept {
+[[nodiscard]] bool wheel_is_accumulated_once() noexcept
+{
     elf3d::Float2 accumulated;
     elf3d::app::detail::accumulate_wheel_delta(accumulated, 0.25, 1.5);
     elf3d::app::detail::accumulate_wheel_delta(accumulated, 0.5, -0.25);
@@ -35,7 +38,8 @@ namespace {
     return captured == elf3d::Float2{0.75F, 1.25F} && next_frame == elf3d::Float2{};
 }
 
-[[nodiscard]] bool window_metadata_is_normalized() noexcept {
+[[nodiscard]] bool window_metadata_is_normalized() noexcept
+{
     elf3d::InputSnapshot focused;
     const elf3d::app::detail::WindowSnapshot fractional_dpi{{800, 600}, {1000, 750}, 1.25F, true};
     elf3d::app::detail::normalize_window_input(focused, fractional_dpi, true, false);
@@ -59,7 +63,8 @@ namespace {
 
 } // namespace
 
-int main() {
+int main()
+{
     if (!transitions_are_edge_triggered()) {
         return fail("Normalized input transitions were not edge-triggered");
     }

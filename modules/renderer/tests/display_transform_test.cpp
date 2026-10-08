@@ -1,17 +1,18 @@
 #include <elf3d/rendering.h>
 
 #include <cmath>
+#include <elf3d/internal/graphics.h>
 #include <limits>
-
-import elf.graphics;
 
 namespace {
 
-[[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.0001F) noexcept {
+[[nodiscard]] bool nearly_equal(float left, float right, float tolerance = 0.0001F) noexcept
+{
     return std::abs(left - right) <= tolerance;
 }
 
-[[nodiscard]] bool neutral_invariants() noexcept {
+[[nodiscard]] bool neutral_invariants() noexcept
+{
     const elf3d::DisplayTransform neutral;
     const elf3d::Color4 black =
         elf3d::graphics::resolve_display_color({0.0F, 0.0F, 0.0F, 1.0F}, neutral);
@@ -26,7 +27,8 @@ namespace {
            hdr.red < 1.0F && std::isfinite(hdr.red);
 }
 
-[[nodiscard]] bool exposure_and_transfer_invariants() noexcept {
+[[nodiscard]] bool exposure_and_transfer_invariants() noexcept
+{
     const elf3d::DisplayTransform neutral;
     const elf3d::Color4 gray =
         elf3d::graphics::resolve_display_color({0.5F, 0.5F, 0.5F, 1.0F}, neutral);
@@ -42,7 +44,8 @@ namespace {
            nearly_equal(encoded_once.red, 0.735357F, 0.0001F);
 }
 
-[[nodiscard]] bool standard_preserves_dark_material_detail() noexcept {
+[[nodiscard]] bool standard_preserves_dark_material_detail() noexcept
+{
     const elf3d::Color4 dark_linear{0.02F, 0.02F, 0.02F, 1.0F};
     const elf3d::Color4 standard =
         elf3d::graphics::resolve_display_color(dark_linear, elf3d::DisplayTransform{});
@@ -52,7 +55,8 @@ namespace {
     return standard.red > pbr_neutral.red * 3.0F && standard.red < 0.2F;
 }
 
-[[nodiscard]] bool sanitization_invariants() noexcept {
+[[nodiscard]] bool sanitization_invariants() noexcept
+{
     const elf3d::Color4 invalid = elf3d::graphics::resolve_display_color(
         {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -1.0F,
          std::numeric_limits<float>::quiet_NaN()},
@@ -62,7 +66,8 @@ namespace {
 
 } // namespace
 
-int elf3d_display_transform_test() {
+int elf3d_display_transform_test()
+{
     return neutral_invariants() && exposure_and_transfer_invariants() &&
                    standard_preserves_dark_material_detail() && sanitization_invariants()
                ? 0

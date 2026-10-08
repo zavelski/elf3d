@@ -1,5 +1,7 @@
 #pragma once
 
+#include "file_path.hpp"
+
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
 #include <elf3d/model.h>
@@ -25,7 +27,6 @@ struct BufferLoadContext {
     std::string diagnostic;
 };
 
-[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value);
 [[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path);
 cgltf_result read_external_file(const cgltf_memory_options* memory,
                                 const cgltf_file_options* file_options, const char* path,
@@ -75,7 +76,8 @@ namespace elf3d::gltf::importer_detail {
 inline constexpr std::uint64_t maximum_total_encoded_image_bytes = 512ULL * 1024ULL * 1024ULL;
 
 [[nodiscard]] constexpr std::uint64_t
-maximum_total_decoded_image_bytes_for(std::size_t pointer_size) noexcept {
+maximum_total_decoded_image_bytes_for(std::size_t pointer_size) noexcept
+{
     return pointer_size >= 8U ? 2ULL * 1024ULL * 1024ULL * 1024ULL : 512ULL * 1024ULL * 1024ULL;
 }
 
@@ -90,14 +92,14 @@ static_assert(maximum_total_decoded_image_bytes_for(8U) == 2ULL * 1024ULL * 1024
 
 using importer_geometry::import_indices;
 using importer_input::BufferLoadContext;
-using importer_input::path_from_utf8;
 using importer_input::path_to_utf8;
 using importer_input::read_external_file;
 using importer_input::release_external_file;
 using model::detail::DocumentBuilder;
 
 struct CgltfDeleter {
-    void operator()(cgltf_data* data) const noexcept {
+    void operator()(cgltf_data* data) const noexcept
+    {
         cgltf_free(data);
     }
 };

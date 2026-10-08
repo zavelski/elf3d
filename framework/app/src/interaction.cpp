@@ -7,18 +7,21 @@
 namespace elf3d {
 namespace {
 
-[[nodiscard]] bool finite_float2(Float2 value) noexcept {
+[[nodiscard]] bool finite_float2(Float2 value) noexcept
+{
     return std::isfinite(value.x) && std::isfinite(value.y);
 }
 
 [[nodiscard]] bool
-valid_region_description(const InteractionRegionDescription& description) noexcept {
+valid_region_description(const InteractionRegionDescription& description) noexcept
+{
     return finite_float2(description.minimum_window) && finite_float2(description.size_window) &&
            description.size_window.x > 0.0F && description.size_window.y > 0.0F &&
            description.target_extent.width != 0 && description.target_extent.height != 0;
 }
 
-[[nodiscard]] bool any_pointer_pressed(const InputSnapshot& input) noexcept {
+[[nodiscard]] bool any_pointer_pressed(const InputSnapshot& input) noexcept
+{
     for (const InputTransition& button : input.buttons) {
         if (button.pressed) {
             return true;
@@ -27,7 +30,8 @@ valid_region_description(const InteractionRegionDescription& description) noexce
     return false;
 }
 
-[[nodiscard]] bool any_pointer_down(const InputSnapshot& input) noexcept {
+[[nodiscard]] bool any_pointer_down(const InputSnapshot& input) noexcept
+{
     for (const InputTransition& button : input.buttons) {
         if (button.down) {
             return true;
@@ -36,7 +40,8 @@ valid_region_description(const InteractionRegionDescription& description) noexce
     return false;
 }
 
-[[nodiscard]] InteractionState state_for_request(InteractionRequest request) noexcept {
+[[nodiscard]] InteractionState state_for_request(InteractionRequest request) noexcept
+{
     switch (request) {
     case InteractionRequest::pending_click:
         return InteractionState::pending_click;
@@ -52,8 +57,8 @@ valid_region_description(const InteractionRegionDescription& description) noexce
 
 } // namespace
 
-InteractionArbiter::OwnerRecord*
-InteractionArbiter::owner_record(InteractionOwnerId owner) noexcept {
+InteractionArbiter::OwnerRecord* InteractionArbiter::owner_record(InteractionOwnerId owner) noexcept
+{
     for (OwnerRecord& record : owners_) {
         if (record.active && record.id == owner) {
             return &record;
@@ -63,7 +68,8 @@ InteractionArbiter::owner_record(InteractionOwnerId owner) noexcept {
 }
 
 const InteractionArbiter::OwnerRecord*
-InteractionArbiter::owner_record(InteractionOwnerId owner) const noexcept {
+InteractionArbiter::owner_record(InteractionOwnerId owner) const noexcept
+{
     for (const OwnerRecord& record : owners_) {
         if (record.active && record.id == owner) {
             return &record;
@@ -73,7 +79,8 @@ InteractionArbiter::owner_record(InteractionOwnerId owner) const noexcept {
 }
 
 InteractionArbiter::RegionRecord*
-InteractionArbiter::region_record(InteractionRegionId region) noexcept {
+InteractionArbiter::region_record(InteractionRegionId region) noexcept
+{
     for (RegionRecord& record : regions_) {
         if (record.active && record.id == region) {
             return &record;
@@ -83,7 +90,8 @@ InteractionArbiter::region_record(InteractionRegionId region) noexcept {
 }
 
 const InteractionArbiter::RegionRecord*
-InteractionArbiter::region_record(InteractionRegionId region) const noexcept {
+InteractionArbiter::region_record(InteractionRegionId region) const noexcept
+{
     for (const RegionRecord& record : regions_) {
         if (record.active && record.id == region) {
             return &record;
@@ -92,7 +100,8 @@ InteractionArbiter::region_record(InteractionRegionId region) const noexcept {
     return nullptr;
 }
 
-Result<InteractionOwnerId> InteractionArbiter::create_owner(InteractionPriority priority) noexcept {
+Result<InteractionOwnerId> InteractionArbiter::create_owner(InteractionPriority priority) noexcept
+{
     if (next_owner_value_ == 0) {
         return Error{ErrorCode::resource_limit_exceeded,
                      "The interaction owner identity space is exhausted"};
@@ -107,7 +116,8 @@ Result<InteractionOwnerId> InteractionArbiter::create_owner(InteractionPriority 
                  "The application exceeds the interaction owner limit"};
 }
 
-void InteractionArbiter::destroy_owner(InteractionOwnerId owner) noexcept {
+void InteractionArbiter::destroy_owner(InteractionOwnerId owner) noexcept
+{
     OwnerRecord* record = owner_record(owner);
     if (record == nullptr) {
         return;
@@ -129,7 +139,8 @@ void InteractionArbiter::destroy_owner(InteractionOwnerId owner) noexcept {
 
 Result<InteractionRegionId>
 InteractionArbiter::register_region(InteractionOwnerId owner, InteractionRegionId prior,
-                                    const InteractionRegionDescription& description) noexcept {
+                                    const InteractionRegionDescription& description) noexcept
+{
     if (owner_record(owner) == nullptr) {
         return Error{ErrorCode::invalid_interaction_owner,
                      "Interaction region registration requires a live owner"};
@@ -163,7 +174,8 @@ InteractionArbiter::register_region(InteractionOwnerId owner, InteractionRegionI
                  "The application exceeds the interaction region limit"};
 }
 
-void InteractionArbiter::begin_frame(const InputSnapshot& input) noexcept {
+void InteractionArbiter::begin_frame(const InputSnapshot& input) noexcept
+{
     if (frame_ == std::numeric_limits<std::uint64_t>::max()) {
         frame_ = 1;
         for (RegionRecord& region : regions_) {
@@ -179,7 +191,8 @@ void InteractionArbiter::begin_frame(const InputSnapshot& input) noexcept {
 }
 
 bool InteractionArbiter::pointer_inside(
-    const InteractionRegionDescription& description) const noexcept {
+    const InteractionRegionDescription& description) const noexcept
+{
     const Float2 maximum{description.minimum_window.x + description.size_window.x,
                          description.minimum_window.y + description.size_window.y};
     return description.enabled && input_.pointer_inside_window &&
@@ -189,13 +202,14 @@ bool InteractionArbiter::pointer_inside(
            input_.pointer_position_window.y < maximum.y;
 }
 
-InteractionPriority
-InteractionArbiter::priority_for_owner(InteractionOwnerId owner) const noexcept {
+InteractionPriority InteractionArbiter::priority_for_owner(InteractionOwnerId owner) const noexcept
+{
     const OwnerRecord* record = owner_record(owner);
     return record != nullptr ? record->priority : InteractionPriority::background;
 }
 
-InteractionRegionId InteractionArbiter::highest_priority_hovered_region() const noexcept {
+InteractionRegionId InteractionArbiter::highest_priority_hovered_region() const noexcept
+{
     InteractionRegionId selected;
     InteractionPriority selected_priority = InteractionPriority::background;
     bool has_selected = false;
@@ -203,6 +217,7 @@ InteractionRegionId InteractionArbiter::highest_priority_hovered_region() const 
         if (!region.active || region.seen_frame != frame_ || !pointer_inside(region.description)) {
             continue;
         }
+
         const InteractionPriority priority = priority_for_owner(region.owner);
         if (!has_selected ||
             static_cast<std::uint8_t>(priority) > static_cast<std::uint8_t>(selected_priority)) {
@@ -214,12 +229,14 @@ InteractionRegionId InteractionArbiter::highest_priority_hovered_region() const 
     return selected;
 }
 
-InteractionOwnerId InteractionArbiter::owner_for_region(InteractionRegionId region) const noexcept {
+InteractionOwnerId InteractionArbiter::owner_for_region(InteractionRegionId region) const noexcept
+{
     const RegionRecord* record = region_record(region);
     return record != nullptr ? record->owner : InteractionOwnerId{};
 }
 
-void InteractionArbiter::cancel_from_frame_input() noexcept {
+void InteractionArbiter::cancel_from_frame_input() noexcept
+{
     if (!active_owner_.is_valid()) {
         return;
     }
@@ -232,7 +249,8 @@ void InteractionArbiter::cancel_from_frame_input() noexcept {
     }
 }
 
-void InteractionArbiter::focus_hovered_region() noexcept {
+void InteractionArbiter::focus_hovered_region() noexcept
+{
     const InteractionRegionId hovered = highest_priority_hovered_region();
     if (!hovered.is_valid() || !any_pointer_pressed(input_)) {
         return;
@@ -246,7 +264,8 @@ void InteractionArbiter::focus_hovered_region() noexcept {
     }
 }
 
-void InteractionArbiter::finalize_regions() noexcept {
+void InteractionArbiter::finalize_regions() noexcept
+{
     if (regions_finalized_) {
         return;
     }
@@ -260,14 +279,16 @@ void InteractionArbiter::finalize_regions() noexcept {
 }
 
 bool InteractionArbiter::region_belongs_to(InteractionOwnerId owner,
-                                           InteractionRegionId region) const noexcept {
+                                           InteractionRegionId region) const noexcept
+{
     const RegionRecord* record = region_record(region);
     return record != nullptr && record->owner == owner && record->seen_frame == frame_;
 }
 
 InteractionRegionInput
 InteractionArbiter::map_region_input(const RegionRecord& record,
-                                     InteractionRegionId region) const noexcept {
+                                     InteractionRegionId region) const noexcept
+{
     const InteractionRegionId hovered_region = highest_priority_hovered_region();
     InteractionRegionInput result;
     result.hovered = hovered_region == region;
@@ -294,7 +315,8 @@ InteractionArbiter::map_region_input(const RegionRecord& record,
 
 Result<InteractionRegionInput>
 InteractionArbiter::region_input(InteractionOwnerId owner,
-                                 InteractionRegionId region) const noexcept {
+                                 InteractionRegionId region) const noexcept
+{
     if (!regions_finalized_) {
         return Error{ErrorCode::invalid_interaction_region,
                      "Interaction regions must be finalized before routed input is queried"};
@@ -303,6 +325,7 @@ InteractionArbiter::region_input(InteractionOwnerId owner,
         return Error{ErrorCode::invalid_interaction_owner,
                      "Routed input requires a live interaction owner"};
     }
+
     const RegionRecord* record = region_record(region);
     if (record == nullptr || record->owner != owner || record->seen_frame != frame_) {
         return Error{ErrorCode::invalid_interaction_region,
@@ -312,7 +335,8 @@ InteractionArbiter::region_input(InteractionOwnerId owner,
     return map_region_input(*record, region);
 }
 
-bool InteractionArbiter::may_replace_active(InteractionOwnerId owner) const noexcept {
+bool InteractionArbiter::may_replace_active(InteractionOwnerId owner) const noexcept
+{
     if (!active_owner_.is_valid() || active_owner_ == owner) {
         return true;
     }
@@ -321,7 +345,8 @@ bool InteractionArbiter::may_replace_active(InteractionOwnerId owner) const noex
 }
 
 Result<void> InteractionArbiter::request(InteractionOwnerId owner, InteractionRegionId region,
-                                         InteractionRequest request_value) noexcept {
+                                         InteractionRequest request_value) noexcept
+{
     if (owner_record(owner) == nullptr) {
         return Error{ErrorCode::invalid_interaction_owner,
                      "Interaction requests require a live owner"};
@@ -352,7 +377,8 @@ Result<void> InteractionArbiter::request(InteractionOwnerId owner, InteractionRe
     return {};
 }
 
-void InteractionArbiter::clear_active() noexcept {
+void InteractionArbiter::clear_active() noexcept
+{
     active_owner_ = {};
     active_region_ = {};
     state_ = InteractionState::idle;
@@ -360,7 +386,8 @@ void InteractionArbiter::clear_active() noexcept {
     pointer_captured_ = false;
 }
 
-void InteractionArbiter::release(InteractionOwnerId owner) noexcept {
+void InteractionArbiter::release(InteractionOwnerId owner) noexcept
+{
     if (active_owner_ != owner) {
         return;
     }
@@ -371,31 +398,37 @@ void InteractionArbiter::release(InteractionOwnerId owner) noexcept {
         pointer_captured_ = true;
         return;
     }
+
     clear_active();
 }
 
 void InteractionArbiter::remember_cancellation(InteractionOwnerId owner,
-                                               InteractionCancellationReason reason) noexcept {
+                                               InteractionCancellationReason reason) noexcept
+{
     last_cancelled_owner_ = owner;
     last_cancellation_ = reason;
 }
 
 void InteractionArbiter::cancel(InteractionOwnerId owner,
-                                InteractionCancellationReason reason) noexcept {
+                                InteractionCancellationReason reason) noexcept
+{
     if (active_owner_ != owner) {
         return;
     }
+
     remember_cancellation(owner, reason);
     clear_active();
 }
 
-void InteractionArbiter::cancel_all(InteractionCancellationReason reason) noexcept {
+void InteractionArbiter::cancel_all(InteractionCancellationReason reason) noexcept
+{
     if (active_owner_.is_valid()) {
         cancel(active_owner_, reason);
     }
 }
 
-void InteractionArbiter::end_frame() noexcept {
+void InteractionArbiter::end_frame() noexcept
+{
     finalize_regions();
     for (RegionRecord& region : regions_) {
         if (!region.active || region.seen_frame == frame_) {
@@ -413,7 +446,8 @@ void InteractionArbiter::end_frame() noexcept {
     regions_finalized_ = false;
 }
 
-InteractionSnapshot InteractionArbiter::snapshot(InteractionOwnerId owner) const noexcept {
+InteractionSnapshot InteractionArbiter::snapshot(InteractionOwnerId owner) const noexcept
+{
     InteractionSnapshot result;
     result.active_owner = active_owner_;
     result.active_region = active_region_;
@@ -427,7 +461,8 @@ InteractionSnapshot InteractionArbiter::snapshot(InteractionOwnerId owner) const
     return result;
 }
 
-bool InteractionArbiter::pointer_capture_requested() const noexcept {
+bool InteractionArbiter::pointer_capture_requested() const noexcept
+{
     return pointer_captured_;
 }
 

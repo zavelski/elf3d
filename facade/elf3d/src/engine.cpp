@@ -5,6 +5,13 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <elf3d/internal/backend_opengl.h>
+#include <elf3d/internal/gltf.h>
+#include <elf3d/internal/graphics.h>
+#include <elf3d/internal/picking.h>
+#include <elf3d/internal/renderer.h>
+#include <elf3d/internal/scene.h>
+#include <elf3d/internal/viewport.h>
 #include <filesystem>
 #include <memory>
 #include <new>
@@ -14,14 +21,6 @@
 #include <utility>
 #include <vector>
 
-import elf.backend.opengl;
-import elf.gltf;
-import elf.graphics;
-import elf.picking;
-import elf.renderer;
-import elf.scene;
-import elf.viewport;
-
 #include "engine_access.h"
 #include "studio_environment_resource.h"
 #include "viewport_impl.h"
@@ -29,15 +28,18 @@ import elf.viewport;
 namespace elf3d {
 namespace {
 
-[[noreturn]] void fatal_allocation_failure() noexcept {
+[[noreturn]] void fatal_allocation_failure() noexcept
+{
     fatal_error("Elf3D memory allocation failed");
 }
 
-[[noreturn]] void fatal_unexpected_boundary_exception() noexcept {
+[[noreturn]] void fatal_unexpected_boundary_exception() noexcept
+{
     fatal_error("Elf3D boundary encountered an unexpected exception");
 }
 
-[[nodiscard]] std::uint64_t allocate_engine_owner_token() noexcept {
+[[nodiscard]] std::uint64_t allocate_engine_owner_token() noexcept
+{
     static std::atomic<std::uint64_t> next_token{1};
     const std::uint64_t token = next_token.fetch_add(1, std::memory_order_relaxed);
     if (token == 0) {
@@ -46,7 +48,8 @@ namespace {
     return token;
 }
 
-[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value) {
+[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value)
+{
     std::u8string utf8;
     utf8.reserve(value.size());
     for (const char character : value) {
@@ -56,7 +59,8 @@ namespace {
 }
 
 [[nodiscard]] SceneLoadDiagnosticSeverity
-scene_diagnostic_severity(ModelLoadDiagnosticSeverity severity) noexcept {
+scene_diagnostic_severity(ModelLoadDiagnosticSeverity severity) noexcept
+{
     switch (severity) {
     case ModelLoadDiagnosticSeverity::information:
         return SceneLoadDiagnosticSeverity::information;
@@ -67,7 +71,8 @@ scene_diagnostic_severity(ModelLoadDiagnosticSeverity severity) noexcept {
 }
 
 [[nodiscard]] SceneLoadDiagnosticCategory
-scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept {
+scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept
+{
     switch (category) {
     case ModelLoadDiagnosticCategory::geometry:
         return SceneLoadDiagnosticCategory::geometry;
@@ -91,7 +96,8 @@ scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept {
     return SceneLoadDiagnosticCategory::scene;
 }
 
-[[nodiscard]] bool is_base_scene_diagnostic(ModelLoadDiagnosticCode code) noexcept {
+[[nodiscard]] bool is_base_scene_diagnostic(ModelLoadDiagnosticCode code) noexcept
+{
     constexpr std::array base_codes{
         ModelLoadDiagnosticCode::generated_normals,
         ModelLoadDiagnosticCode::degenerate_geometry,
@@ -106,7 +112,8 @@ scene_diagnostic_category(ModelLoadDiagnosticCategory category) noexcept {
 }
 
 [[nodiscard]] SceneLoadDiagnosticCode
-base_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
+base_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept
+{
     switch (code) {
     case ModelLoadDiagnosticCode::generated_normals:
         return SceneLoadDiagnosticCode::generated_normals;
@@ -130,7 +137,8 @@ base_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
 }
 
 [[nodiscard]] SceneLoadDiagnosticCode
-extended_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
+extended_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept
+{
     switch (code) {
     case ModelLoadDiagnosticCode::ignored_animation:
         return SceneLoadDiagnosticCode::ignored_animation;
@@ -155,7 +163,8 @@ extended_scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
     }
 }
 
-[[nodiscard]] SceneLoadDiagnosticCode scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept {
+[[nodiscard]] SceneLoadDiagnosticCode scene_diagnostic_code(ModelLoadDiagnosticCode code) noexcept
+{
     return is_base_scene_diagnostic(code) ? base_scene_diagnostic_code(code)
                                           : extended_scene_diagnostic_code(code);
 }
@@ -169,7 +178,9 @@ class SceneLoadReport::Impl final {
 
 SceneLoadReport::SceneLoadReport() noexcept = default;
 
-SceneLoadReport::SceneLoadReport(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
+SceneLoadReport::SceneLoadReport(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl))
+{
+}
 
 SceneLoadReport::~SceneLoadReport() noexcept = default;
 
@@ -177,15 +188,18 @@ SceneLoadReport::SceneLoadReport(SceneLoadReport&&) noexcept = default;
 
 SceneLoadReport& SceneLoadReport::operator=(SceneLoadReport&&) noexcept = default;
 
-std::size_t SceneLoadReport::diagnostic_count() const noexcept {
+std::size_t SceneLoadReport::diagnostic_count() const noexcept
+{
     return impl_ != nullptr ? impl_->diagnostics.size() : 0;
 }
 
-Result<SceneLoadDiagnosticView> SceneLoadReport::diagnostic(std::size_t index) const noexcept {
+Result<SceneLoadDiagnosticView> SceneLoadReport::diagnostic(std::size_t index) const noexcept
+{
     if (impl_ == nullptr || index >= impl_->diagnostics.size()) {
         return Error{ErrorCode::invalid_argument,
                      "The scene-load diagnostic index is out of range"};
     }
+
     const ModelLoadDiagnostic& diagnostic = impl_->diagnostics[index];
     std::optional<std::string_view> source_context;
     if (diagnostic.source_context.has_value()) {
@@ -197,7 +211,8 @@ Result<SceneLoadDiagnosticView> SceneLoadReport::diagnostic(std::size_t index) c
                                    std::string_view{diagnostic.message}, source_context};
 }
 
-bool SceneLoadReport::has_warnings() const noexcept {
+bool SceneLoadReport::has_warnings() const noexcept
+{
     if (impl_ == nullptr) {
         return false;
     }
@@ -216,9 +231,12 @@ class Engine::Impl final {
         std::weak_ptr<picking::PickingService> picking;
     };
 
-    Impl() noexcept : engine_token(allocate_engine_owner_token()) {}
+    Impl() noexcept : engine_token(allocate_engine_owner_token())
+    {
+    }
 
-    static void release_scene(std::uintptr_t context, SceneId scene) noexcept {
+    static void release_scene(std::uintptr_t context, SceneId scene) noexcept
+    {
         std::unique_ptr<SceneReleaseTicket> ticket{reinterpret_cast<SceneReleaseTicket*>(context)};
         if (ticket == nullptr) {
             return;
@@ -239,12 +257,15 @@ class Engine::Impl final {
     std::uint64_t next_scene_value = 1;
 };
 
-Engine::Engine(ConstructionKey, std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
+Engine::Engine(ConstructionKey, std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl))
+{
+}
 
 Engine::~Engine() noexcept = default;
 
 Result<std::unique_ptr<Engine>>
-detail::EngineAccess::create(const detail::EngineCreateOptions& options) noexcept {
+detail::EngineAccess::create(const detail::EngineCreateOptions& options) noexcept
+{
     try {
         Result<std::unique_ptr<graphics::Device>> device_result = backend::opengl::create_device(
             backend::opengl::DeviceOptions{options.load_opengl_procedure});
@@ -270,11 +291,13 @@ detail::EngineAccess::create(const detail::EngineCreateOptions& options) noexcep
     }
 }
 
-GraphicsBackend Engine::graphics_backend() const noexcept {
+GraphicsBackend Engine::graphics_backend() const noexcept
+{
     return impl_ != nullptr ? GraphicsBackend::opengl : GraphicsBackend::none;
 }
 
-Result<std::unique_ptr<Viewport>> Engine::create_viewport(Extent2D initial_extent) noexcept {
+Result<std::unique_ptr<Viewport>> Engine::create_viewport(Extent2D initial_extent) noexcept
+{
     if (impl_ == nullptr || impl_->renderer == nullptr || impl_->picking == nullptr) {
         return Error{ErrorCode::graphics_shutdown,
                      "Viewport creation requires an initialized graphics backend"};
@@ -297,7 +320,8 @@ Result<std::unique_ptr<Viewport>> Engine::create_viewport(Extent2D initial_exten
     }
 }
 
-Result<std::unique_ptr<Scene>> Engine::create_scene() noexcept {
+Result<std::unique_ptr<Scene>> Engine::create_scene() noexcept
+{
     if (impl_ == nullptr || impl_->next_scene_value == 0) {
         return Error{ErrorCode::invalid_argument, "Scene creation requires a live Elf3D engine"};
     }
@@ -314,6 +338,7 @@ Result<std::unique_ptr<Scene>> Engine::create_scene() noexcept {
         if (!scene) {
             return scene.error();
         }
+
         release_ticket.release();
         return scene;
     } catch (const std::bad_alloc&) {
@@ -324,12 +349,14 @@ Result<std::unique_ptr<Scene>> Engine::create_scene() noexcept {
 }
 
 Result<LoadedScene> Engine::load_scene(std::string_view path_utf8,
-                                       const ModelLoadOptions& options) noexcept {
+                                       const ModelLoadOptions& options) noexcept
+{
     try {
         Result<std::unique_ptr<Scene>> scene_result = create_scene();
         if (!scene_result) {
             return scene_result.error();
         }
+
         std::unique_ptr<Scene> scene = std::move(scene_result).value();
         scene::Storage* storage = scene::Access::storage(*scene);
         if (storage == nullptr) {
@@ -359,7 +386,8 @@ Result<LoadedScene> Engine::load_scene(std::string_view path_utf8,
 }
 
 Result<detail::NativeTextureView>
-detail::EngineAccess::native_texture_view(const Engine& engine, TextureHandle texture) noexcept {
+detail::EngineAccess::native_texture_view(const Engine& engine, TextureHandle texture) noexcept
+{
     if (engine.impl_ == nullptr || engine.impl_->renderer == nullptr) {
         return Error{ErrorCode::graphics_shutdown,
                      "Native texture access requires an initialized graphics backend"};
@@ -371,6 +399,7 @@ detail::EngineAccess::native_texture_view(const Engine& engine, TextureHandle te
         if (!view) {
             return view.error();
         }
+
         const graphics::NativeTextureView& value = view.value();
         const detail::NativeGraphicsApi api = value.api == graphics::NativeGraphicsApi::opengl
                                                   ? detail::NativeGraphicsApi::opengl

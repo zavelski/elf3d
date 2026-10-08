@@ -1,99 +1,20 @@
-#include <elf3d/embed/runtime.h>
+#include <elf3d/app/application.h>
+#include <elf3d/elf3d.h>
 
-#include <glad/gl.h>
-
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
-
-#include <cstddef>
+#include <array>
 #include <cstdint>
-#include <filesystem>
 #include <iostream>
 #include <memory>
-#include <string>
-#include <vector>
+#include <string_view>
 
 namespace {
-
-constexpr int skipped = 77;
-
-class GlfwRuntime final {
-  public:
-    GlfwRuntime() = default;
-    ~GlfwRuntime() {
-        if (initialized_) {
-            glfwTerminate();
-        }
-    }
-
-    GlfwRuntime(const GlfwRuntime&) = delete;
-    GlfwRuntime& operator=(const GlfwRuntime&) = delete;
-
-    [[nodiscard]] bool initialize() noexcept {
-        initialized_ = glfwInit() == GLFW_TRUE;
-        return initialized_;
-    }
-
-  private:
-    bool initialized_ = false;
-};
-
-class Window final {
-  public:
-    explicit Window(GLFWwindow* window) noexcept : window_(window) {}
-    ~Window() {
-        if (window_ != nullptr) {
-            glfwDestroyWindow(window_);
-        }
-    }
-
-    Window(const Window&) = delete;
-    Window& operator=(const Window&) = delete;
-
-    [[nodiscard]] GLFWwindow* get() const noexcept {
-        return window_;
-    }
-
-  private:
-    GLFWwindow* window_ = nullptr;
-};
-
-elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcept {
-    return glfwGetProcAddress(name);
-}
-
-[[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path) {
-    const std::u8string utf8 = path.u8string();
-    std::string result;
-    result.reserve(utf8.size());
-    for (const char8_t character : utf8) {
-        result.push_back(static_cast<char>(character));
-    }
-    return result;
-}
-
-[[nodiscard]] int fail(int code, const char* message) {
+int fail(int code, const char* message)
+{
     std::cerr << message << '\n';
     return code;
 }
-
-void configure_hidden_context() noexcept {
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-#if defined(__APPLE__)
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-#endif
-}
-
-[[nodiscard]] bool is_skippable_graphics_error(elf3d::ErrorCode code) noexcept {
-    return code == elf3d::ErrorCode::unsupported_graphics_version ||
-           code == elf3d::ErrorCode::graphics_context_unavailable ||
-           code == elf3d::ErrorCode::graphics_initialization_failed;
-}
-
-[[nodiscard]] int verify_model_import(const elf3d::LoadedScene& loaded) {
+[[nodiscard]] int verify_model_import(const elf3d::LoadedScene& loaded)
+{
     const elf3d::SceneStatistics expected_statistics{1, 1, 2, 2, 2, 8, 12, 4, 1, 2, 2, 16, 2, 1};
     if (loaded.report.diagnostic_count() != 0 ||
         loaded.scene->statistics() != expected_statistics) {
@@ -102,120 +23,108 @@ void configure_hidden_context() noexcept {
     return 0;
 }
 
-[[nodiscard]] int verify_render_statistics(elf3d::Viewport& viewport, elf3d::Scene& scene,
-                                           elf3d::EntityId camera) {
-    const elf3d::Result<void> render_result = viewport.render(scene, camera);
-    const elf3d::RenderStatistics statistics = viewport.render_statistics();
-    if (!render_result || statistics.draw_calls != 2 || statistics.triangles != 4 ||
-        statistics.vertices != 8 || statistics.indices != 12 || statistics.texture_bindings != 3 ||
-        statistics.gpu_texture_uploads != 3 || statistics.unique_gpu_textures != 3) {
-        return fail(7, "Embedded-model quick test produced unexpected render statistics");
-    }
-    return 0;
+bool valid_render_statistics(const elf3d::RenderStatistics& statistics) noexcept
+{
+    return !(statistics.draw_calls != 2 || statistics.triangles != 4 || statistics.vertices != 8 ||
+             statistics.indices != 12 || statistics.texture_bindings != 3 ||
+             statistics.gpu_texture_uploads != 3 || statistics.unique_gpu_textures != 3);
 }
 
-[[nodiscard]] int verify_rendered_pixels(elf3d::EmbeddedRuntime& runtime,
-                                         elf3d::Viewport& viewport) {
-    const elf3d::Result<elf3d::NativeTextureView> texture_result =
-        runtime.native_texture_view(viewport.color_texture());
-    if (!texture_result || texture_result.value().extent != elf3d::Extent2D{64U, 64U}) {
-        return fail(8, "Embedded-model quick test returned an unexpected texture view");
-    }
-    std::vector<std::uint8_t> pixels(64U * 64U * 4U);
-    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_result.value().value));
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-    if (glGetError() != GL_NO_ERROR) {
-        return fail(9, "Embedded-model quick test failed to read the rendered texture");
-    }
-    std::size_t colored_pixels = 0;
-    for (std::size_t pixel = 0; pixel < pixels.size(); pixel += 4U) {
-        if (pixels[pixel] > 8U || pixels[pixel + 1U] > 8U || pixels[pixel + 2U] > 8U) {
-            ++colored_pixels;
+class ModelApplication final : public elf3d::Application {
+  public:
+    elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
+        constexpr std::string_view path =
+            ELF3D_TEST_SOURCE_DIR "/tests/fixtures/elf3d_smoke/elf3d_smoke.gltf";
+        auto loaded = context.engine().load_scene(path);
+        if (!loaded) {
+            return loaded.error();
         }
-    }
-    if (colored_pixels < 256U) {
-        return fail(10, "Embedded smoke model did not produce enough visible pixels");
-    }
-    return 0;
-}
-
-[[nodiscard]] int run_model_quick(elf3d::EmbeddedRuntime& runtime) {
-    elf3d::Engine& engine = runtime.engine();
-    const std::filesystem::path model_path = std::filesystem::path{ELF3D_TEST_SOURCE_DIR} /
-                                             "tests" / "fixtures" / "elf3d_smoke" /
-                                             "elf3d_smoke.gltf";
-    elf3d::Result<elf3d::LoadedScene> loaded_result = engine.load_scene(path_to_utf8(model_path));
-    if (!loaded_result) {
-        std::cerr << loaded_result.error().message() << '\n';
-        return 3;
-    }
-    elf3d::LoadedScene loaded = std::move(loaded_result).value();
-    const int imported = verify_model_import(loaded);
-    if (imported != 0) {
-        return imported;
-    }
-    const elf3d::Result<elf3d::EntityId> camera =
-        loaded.scene->create_perspective_camera_entity({});
-    elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
-        engine.create_viewport({64, 64});
-    if (!camera || !viewport_result) {
-        return fail(5, "Embedded-model quick test failed to create a camera or viewport");
-    }
-    std::unique_ptr<elf3d::Viewport> viewport = std::move(viewport_result).value();
-    viewport->set_clear_color({0.0F, 0.0F, 0.0F, 1.0F});
-    if (!viewport->reset_view(*loaded.scene, camera.value())) {
-        return fail(6, "Embedded-model quick test failed to frame the model");
-    }
-    const int rendered = verify_render_statistics(*viewport, *loaded.scene, camera.value());
-    if (rendered != 0) {
-        return rendered;
-    }
-    return verify_rendered_pixels(runtime, *viewport);
-}
-
-[[nodiscard]] int run_model_quick_with_runtime() {
-    const elf3d::EmbeddedRuntimeOptions options{load_opengl_procedure};
-    elf3d::Result<std::unique_ptr<elf3d::EmbeddedRuntime>> runtime_result =
-        elf3d::EmbeddedRuntime::create(options);
-    if (!runtime_result) {
-        if (is_skippable_graphics_error(runtime_result.error().code())) {
-            std::cout << "Skipping embedded-model quick test: " << runtime_result.error().message()
-                      << '\n';
-            return skipped;
+        if (verify_model_import(loaded.value()) != 0) {
+            return elf3d::Error{elf3d::ErrorCode::scene_import_failed, "Unexpected model facts"};
         }
-        std::cerr << runtime_result.error().message() << '\n';
-        return 2;
+        scene_ = std::move(loaded).value().scene;
+        auto camera = scene_->create_perspective_camera_entity({});
+        auto viewport = context.engine().create_viewport({64, 64});
+        if (!camera) {
+            return camera.error();
+        }
+        if (!viewport) {
+            return viewport.error();
+        }
+        camera_ = camera.value();
+        viewport_ = std::move(viewport).value();
+        viewport_->set_clear_color({0, 0, 0, 1});
+        return viewport_->reset_view(*scene_, camera_);
     }
-    std::unique_ptr<elf3d::EmbeddedRuntime> runtime = std::move(runtime_result).value();
-    return run_model_quick(*runtime);
-}
+    elf3d::Result<void> update(elf3d::ApplicationUpdateContext& context) noexcept override
+    {
+        if (!context.previous_frame_statistics()) {
+            return {};
+        }
+        if (!valid_render_statistics(viewport_->render_statistics())) {
+            return elf3d::Error{elf3d::ErrorCode::draw_submission_failed,
+                                "Unexpected model render statistics"};
+        }
+        std::array<std::uint8_t, 64U * 64U * 4U> pixels{};
+        const auto readback = viewport_->read_color_pixels(pixels);
+        if (!readback) {
+            return readback.error();
+        }
+        std::size_t colored = 0;
+        for (std::size_t pixel = 0; pixel < pixels.size(); pixel += 4U) {
+            if (pixels[pixel] > 8U || pixels[pixel + 1U] > 8U || pixels[pixel + 2U] > 8U) {
+                ++colored;
+            }
+        }
+        if (colored < 256U) {
+            return elf3d::Error{elf3d::ErrorCode::draw_submission_failed,
+                                "Model did not produce enough visible pixels"};
+        }
+        passed_ = true;
+        context.request_exit();
+        return {};
+    }
+    elf3d::Result<void> build_ui(elf3d::ApplicationUiContext& context) noexcept override
+    {
+        return context.queue_viewport_render(*viewport_, *scene_, camera_);
+    }
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
+        viewport_.reset();
+        scene_.reset();
+    }
+    bool passed() const noexcept
+    {
+        return passed_;
+    }
 
+  private:
+    std::unique_ptr<elf3d::Scene> scene_;
+    std::unique_ptr<elf3d::Viewport> viewport_;
+    elf3d::EntityId camera_;
+    bool passed_ = false;
+};
 } // namespace
 
-int main() {
-    GlfwRuntime glfw;
-    if (!glfw.initialize()) {
-        std::cout << "Skipping embedded-model quick test: GLFW initialization failed\n";
-        return skipped;
+int main()
+{
+    ModelApplication application;
+    elf3d::ApplicationOptions options;
+    options.initial_window_extent = {64, 64};
+    options.initial_visibility = elf3d::ApplicationWindowVisibility::hidden;
+    options.presentation_mode = elf3d::PresentationMode::immediate;
+    const auto result = elf3d::run_application(options, application);
+    if (!result) {
+        const auto code = result.error().code();
+        if (code == elf3d::ErrorCode::graphics_initialization_failed ||
+            code == elf3d::ErrorCode::graphics_context_unavailable ||
+            code == elf3d::ErrorCode::unsupported_graphics_version) {
+            std::cout << "SKIP: " << result.error().message() << '\n';
+            return 77;
+        }
+        std::cerr << result.error().message() << '\n';
+        return 1;
     }
-
-    configure_hidden_context();
-
-    Window window{glfwCreateWindow(64, 64, "Elf3D model quick test", nullptr, nullptr)};
-    if (window.get() == nullptr) {
-        std::cout << "Skipping embedded-model quick test: hidden context creation failed\n";
-        return skipped;
-    }
-    glfwMakeContextCurrent(window.get());
-    if (glfwGetCurrentContext() != window.get()) {
-        return fail(1, "GLFW did not make the quick-test context current");
-    }
-
-    const int loaded_version = gladLoadGL(load_opengl_procedure);
-    if (loaded_version == 0 || GLAD_GL_VERSION_4_1 == 0) {
-        std::cout << "Skipping embedded-model quick test: OpenGL 4.1 is unavailable\n";
-        return skipped;
-    }
-    return run_model_quick_with_runtime();
+    return application.passed() ? 0 : 1;
 }

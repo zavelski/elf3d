@@ -1,12 +1,11 @@
-module;
-
-module elf.interaction;
+#include <elf3d/internal/interaction.h>
 
 namespace elf3d::interaction {
 namespace {
 
 [[nodiscard]] bool active_button_released(PointerButton button,
-                                          const PointerInputSnapshot& input) noexcept {
+                                          const PointerInputSnapshot& input) noexcept
+{
     switch (button) {
     case PointerButton::left:
         return !input.left_button_down;
@@ -20,7 +19,8 @@ namespace {
     return false;
 }
 
-[[nodiscard]] InteractionMode left_button_mode(const PointerInputSnapshot& input) noexcept {
+[[nodiscard]] InteractionMode left_button_mode(const PointerInputSnapshot& input) noexcept
+{
     if (input.pan_modifier_down) {
         return InteractionMode::pan;
     }
@@ -31,7 +31,8 @@ namespace {
 }
 
 [[nodiscard]] InteractionMode button_mode(PointerButton button,
-                                          const PointerInputSnapshot& input) noexcept {
+                                          const PointerInputSnapshot& input) noexcept
+{
     switch (button) {
     case PointerButton::left:
         return left_button_mode(input);
@@ -46,7 +47,8 @@ namespace {
 }
 
 [[nodiscard]] PointerButton held_button_after_release(PointerButton released,
-                                                      const PointerInputSnapshot& input) noexcept {
+                                                      const PointerInputSnapshot& input) noexcept
+{
     const auto first_held = [&input](PointerButton first,
                                      PointerButton second) noexcept -> PointerButton {
         if (!active_button_released(first, input)) {
@@ -69,13 +71,15 @@ namespace {
 
 void start_drag(PointerButton button, const PointerInputSnapshot& input,
                 ViewportInteractionFrame& frame, PointerButton& active_button,
-                InteractionMode& mode) noexcept {
+                InteractionMode& mode) noexcept
+{
     active_button = button;
     mode = button_mode(button, input);
     frame.drag_started = true;
 }
 
-[[nodiscard]] float squared_distance(Float2 left, Float2 right) noexcept {
+[[nodiscard]] float squared_distance(Float2 left, Float2 right) noexcept
+{
     const float x = left.x - right.x;
     const float y = left.y - right.y;
     return x * x + y * y;
@@ -83,7 +87,8 @@ void start_drag(PointerButton button, const PointerInputSnapshot& input,
 
 [[nodiscard]] PointerButton pending_click_drag_button(const PointerInputSnapshot& input,
                                                       float movement_squared,
-                                                      float threshold_squared) noexcept {
+                                                      float threshold_squared) noexcept
+{
     if (input.left_button_down && input.right_button_down) {
         return PointerButton::right;
     }
@@ -96,7 +101,8 @@ void start_drag(PointerButton button, const PointerInputSnapshot& input,
     return PointerButton::none;
 }
 
-[[nodiscard]] PointerButton pressed_button(const ViewportInteractionFrame& frame) noexcept {
+[[nodiscard]] PointerButton pressed_button(const ViewportInteractionFrame& frame) noexcept
+{
     if (frame.left_pressed) {
         return PointerButton::left;
     }
@@ -108,8 +114,9 @@ void start_drag(PointerButton button, const PointerInputSnapshot& input,
 
 } // namespace
 
-ViewportInteractionFrame ViewportInteractionState::button_transition_frame(
-    const PointerInputSnapshot& input) const noexcept {
+ViewportInteractionFrame
+ViewportInteractionState::button_transition_frame(const PointerInputSnapshot& input) const noexcept
+{
     ViewportInteractionFrame frame;
     frame.left_pressed = input.left_button_down && !previous_left_down_;
     frame.left_released = !input.left_button_down && previous_left_down_;
@@ -122,7 +129,8 @@ ViewportInteractionFrame ViewportInteractionState::button_transition_frame(
 
 ViewportInteractionFrame
 ViewportInteractionState::focused_out_frame(const PointerInputSnapshot& input,
-                                            ViewportInteractionFrame frame) noexcept {
+                                            ViewportInteractionFrame frame) noexcept
+{
     frame.drag_ended = active_button_ != PointerButton::none;
     frame.click_cancelled = pending_left_click_;
     cancel();
@@ -132,10 +140,12 @@ ViewportInteractionState::focused_out_frame(const PointerInputSnapshot& input,
 
 void ViewportInteractionState::update_pending_click(const PointerInputSnapshot& input,
                                                     float threshold_squared,
-                                                    ViewportInteractionFrame& frame) noexcept {
+                                                    ViewportInteractionFrame& frame) noexcept
+{
     if (!pending_left_click_) {
         return;
     }
+
     const float movement_squared =
         squared_distance(input.position_pixels, pending_left_press_position_pixels_);
     const PointerButton drag_button =
@@ -154,10 +164,12 @@ void ViewportInteractionState::update_pending_click(const PointerInputSnapshot& 
 }
 
 void ViewportInteractionState::start_pressed_interaction(const PointerInputSnapshot& input,
-                                                         ViewportInteractionFrame& frame) noexcept {
+                                                         ViewportInteractionFrame& frame) noexcept
+{
     if (pending_left_click_ || active_button_ != PointerButton::none || !input.hovered) {
         return;
     }
+
     const PointerButton button = pressed_button(frame);
     if (button == PointerButton::none) {
         return;
@@ -167,14 +179,17 @@ void ViewportInteractionState::start_pressed_interaction(const PointerInputSnaps
         pending_left_press_position_pixels_ = input.position_pixels;
         return;
     }
+
     start_drag(button, input, frame, active_button_, mode_);
 }
 
 void ViewportInteractionState::finish_released_drag(const PointerInputSnapshot& input,
-                                                    ViewportInteractionFrame& frame) noexcept {
+                                                    ViewportInteractionFrame& frame) noexcept
+{
     if (active_button_ == PointerButton::none || !active_button_released(active_button_, input)) {
         return;
     }
+
     const PointerButton next_button = held_button_after_release(active_button_, input);
     if (next_button != PointerButton::none) {
         start_drag(next_button, input, frame, active_button_, mode_);
@@ -186,7 +201,8 @@ void ViewportInteractionState::finish_released_drag(const PointerInputSnapshot& 
 }
 
 void ViewportInteractionState::finish_frame(const PointerInputSnapshot& input,
-                                            ViewportInteractionFrame& frame) noexcept {
+                                            ViewportInteractionFrame& frame) noexcept
+{
     frame.drag_active = active_button_ != PointerButton::none;
     frame.pending_click = pending_left_click_;
     frame.mode = mode_;
@@ -196,7 +212,8 @@ void ViewportInteractionState::finish_frame(const PointerInputSnapshot& input,
     remember_buttons(input);
 }
 
-void ViewportInteractionState::remember_buttons(const PointerInputSnapshot& input) noexcept {
+void ViewportInteractionState::remember_buttons(const PointerInputSnapshot& input) noexcept
+{
     previous_left_down_ = input.left_button_down;
     previous_middle_down_ = input.middle_button_down;
     previous_right_down_ = input.right_button_down;
@@ -204,7 +221,8 @@ void ViewportInteractionState::remember_buttons(const PointerInputSnapshot& inpu
 
 ViewportInteractionFrame
 ViewportInteractionState::update(const PointerInputSnapshot& input,
-                                 float click_drag_threshold_pixels) noexcept {
+                                 float click_drag_threshold_pixels) noexcept
+{
     ViewportInteractionFrame frame = button_transition_frame(input);
 
     if (!input.focused) {
@@ -222,17 +240,20 @@ ViewportInteractionState::update(const PointerInputSnapshot& input,
     return frame;
 }
 
-void ViewportInteractionState::cancel() noexcept {
+void ViewportInteractionState::cancel() noexcept
+{
     pending_left_click_ = false;
     active_button_ = PointerButton::none;
     mode_ = InteractionMode::none;
 }
 
-bool ViewportInteractionState::pointer_captured() const noexcept {
+bool ViewportInteractionState::pointer_captured() const noexcept
+{
     return active_button_ != PointerButton::none || pending_left_click_;
 }
 
-InteractionMode ViewportInteractionState::mode() const noexcept {
+InteractionMode ViewportInteractionState::mode() const noexcept
+{
     return mode_;
 }
 

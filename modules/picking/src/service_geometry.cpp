@@ -1,4 +1,6 @@
-module;
+#include "acceleration_detail.h"
+
+#include <elf3d/internal/picking.h>
 
 #include <elf3d/clipping.h>
 #include <elf3d/core/assert.h>
@@ -11,15 +13,12 @@ module;
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <elf3d/internal/clipping.h>
+#include <elf3d/internal/math.h>
+#include <elf3d/internal/scene.h>
 #include <limits>
 #include <optional>
 #include <utility>
-
-module elf.picking;
-
-import elf.clipping;
-import elf.math;
-import elf.scene;
 
 namespace elf3d::picking {
 using geometry_detail::Double3;
@@ -38,22 +37,26 @@ struct BoundsD {
 
 namespace geometry_detail {
 
-bool finite_float3(Float3 value) noexcept {
+bool finite_float3(Float3 value) noexcept
+{
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
-bool valid_bounds(Bounds3 bounds) noexcept {
+bool valid_bounds(Bounds3 bounds) noexcept
+{
     return finite_float3(bounds.minimum) && finite_float3(bounds.maximum) &&
            bounds.minimum.x <= bounds.maximum.x && bounds.minimum.y <= bounds.maximum.y &&
            bounds.minimum.z <= bounds.maximum.z;
 }
 
-[[nodiscard]] BoundsD to_bounds_d(Bounds3 bounds) noexcept {
+[[nodiscard]] BoundsD to_bounds_d(Bounds3 bounds) noexcept
+{
     ELF3D_ASSERT(valid_bounds(bounds));
     return BoundsD{to_double3(bounds.minimum), to_double3(bounds.maximum)};
 }
 
-void expand(std::optional<BoundsD>& bounds, const Double3& point) noexcept {
+void expand(std::optional<BoundsD>& bounds, const Double3& point) noexcept
+{
     ELF3D_ASSERT(finite_double3(point));
     if (!bounds.has_value()) {
         bounds = BoundsD{point, point};
@@ -63,18 +66,21 @@ void expand(std::optional<BoundsD>& bounds, const Double3& point) noexcept {
     bounds->maximum = component_max(bounds->maximum, point);
 }
 
-void expand(std::optional<BoundsD>& bounds, Bounds3 other) noexcept {
+void expand(std::optional<BoundsD>& bounds, Bounds3 other) noexcept
+{
     const BoundsD converted = to_bounds_d(other);
     expand(bounds, converted.minimum);
     expand(bounds, converted.maximum);
 }
 
-[[nodiscard]] Bounds3 to_bounds3(const BoundsD& bounds) noexcept {
+[[nodiscard]] Bounds3 to_bounds3(const BoundsD& bounds) noexcept
+{
     ELF3D_ASSERT(finite_double3(bounds.minimum) && finite_double3(bounds.maximum));
     return Bounds3{to_float3_checked(bounds.minimum), to_float3_checked(bounds.maximum)};
 }
 
-Bounds3 triangle_bounds(Float3 a, Float3 b, Float3 c) noexcept {
+Bounds3 triangle_bounds(Float3 a, Float3 b, Float3 c) noexcept
+{
     std::optional<BoundsD> bounds;
     expand(bounds, to_double3(a));
     expand(bounds, to_double3(b));
@@ -83,18 +89,21 @@ Bounds3 triangle_bounds(Float3 a, Float3 b, Float3 c) noexcept {
     return to_bounds3(*bounds);
 }
 
-Float3 triangle_centroid(Float3 a, Float3 b, Float3 c) noexcept {
+Float3 triangle_centroid(Float3 a, Float3 b, Float3 c) noexcept
+{
     const Double3 centroid =
         scale(add(add(to_double3(a), to_double3(b)), to_double3(c)), 1.0 / 3.0);
     return to_float3_checked(centroid);
 }
 
-Bounds3 bounds_around_point(Float3 point) noexcept {
+Bounds3 bounds_around_point(Float3 point) noexcept
+{
     const Double3 converted = to_double3(point);
     return to_bounds3(BoundsD{converted, converted});
 }
 
-Bounds3 merge_bounds(Bounds3 bounds, Bounds3 other) noexcept {
+Bounds3 merge_bounds(Bounds3 bounds, Bounds3 other) noexcept
+{
     std::optional<BoundsD> merged;
     expand(merged, bounds);
     expand(merged, other);
@@ -102,7 +111,8 @@ Bounds3 merge_bounds(Bounds3 bounds, Bounds3 other) noexcept {
     return to_bounds3(*merged);
 }
 
-Bounds3 merge_bounds(Bounds3 bounds, Float3 point) noexcept {
+Bounds3 merge_bounds(Bounds3 bounds, Float3 point) noexcept
+{
     std::optional<BoundsD> merged;
     expand(merged, bounds);
     expand(merged, to_double3(point));
@@ -110,7 +120,8 @@ Bounds3 merge_bounds(Bounds3 bounds, Float3 point) noexcept {
     return to_bounds3(*merged);
 }
 
-double axis_value(Float3 value, int axis) noexcept {
+double axis_value(Float3 value, int axis) noexcept
+{
     if (axis == 0) {
         return value.x;
     }
@@ -120,7 +131,8 @@ double axis_value(Float3 value, int axis) noexcept {
     return value.z;
 }
 
-int longest_axis(Bounds3 bounds) noexcept {
+int longest_axis(Bounds3 bounds) noexcept
+{
     const Float3 extent{bounds.maximum.x - bounds.minimum.x, bounds.maximum.y - bounds.minimum.y,
                         bounds.maximum.z - bounds.minimum.z};
     if (extent.x >= extent.y && extent.x >= extent.z) {
@@ -132,7 +144,8 @@ int longest_axis(Bounds3 bounds) noexcept {
     return 2;
 }
 
-bool finite_matrix(const Float4x4& matrix) noexcept {
+bool finite_matrix(const Float4x4& matrix) noexcept
+{
     for (const float value : matrix.elements) {
         if (!std::isfinite(value)) {
             return false;
@@ -141,7 +154,8 @@ bool finite_matrix(const Float4x4& matrix) noexcept {
     return true;
 }
 
-Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4& world) noexcept {
+Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4& world) noexcept
+{
     ELF3D_ASSERT(valid_bounds(local_bounds) && finite_matrix(world));
     const std::array<Float3, 8> corners{{
         {local_bounds.minimum.x, local_bounds.minimum.y, local_bounds.minimum.z},
@@ -161,7 +175,8 @@ Bounds3 transform_bounds(Bounds3 local_bounds, const Float4x4& world) noexcept {
     return to_bounds3(*result);
 }
 
-Result<Ray3> transform_ray_to_local(const Ray3& world_ray, const Float4x4& inverse_world) {
+Result<Ray3> transform_ray_to_local(const Ray3& world_ray, const Float4x4& inverse_world)
+{
     const Float3 origin = math::transform_point(inverse_world, world_ray.origin);
     const Float3 local_direction = math::transform_direction(inverse_world, world_ray.direction);
     const float length = math::vector_length(local_direction);
@@ -173,12 +188,14 @@ Result<Ray3> transform_ray_to_local(const Ray3& world_ray, const Float4x4& inver
     return Ray3{origin, math::scale(local_direction, 1.0F / length)};
 }
 
-[[nodiscard]] bool valid_hit_identity_and_position(const PickHit& hit) noexcept {
+[[nodiscard]] bool valid_hit_identity_and_position(const PickHit& hit) noexcept
+{
     return hit.entity.is_valid() && hit.mesh.is_valid() && finite_float3(hit.world_position) &&
            std::isfinite(hit.world_distance) && hit.world_distance >= 0.0F;
 }
 
-[[nodiscard]] bool valid_hit_normal(const PickHit& hit) noexcept {
+[[nodiscard]] bool valid_hit_normal(const PickHit& hit) noexcept
+{
     const float normal_length = std::sqrt(hit.world_normal.x * hit.world_normal.x +
                                           hit.world_normal.y * hit.world_normal.y +
                                           hit.world_normal.z * hit.world_normal.z);
@@ -186,19 +203,22 @@ Result<Ray3> transform_ray_to_local(const Ray3& world_ray, const Float4x4& inver
            normal_length > 0.999F && normal_length < 1.001F;
 }
 
-[[nodiscard]] bool valid_hit_barycentric(const PickHit& hit) noexcept {
+[[nodiscard]] bool valid_hit_barycentric(const PickHit& hit) noexcept
+{
     const float barycentric_sum = hit.barycentric_coordinates.x + hit.barycentric_coordinates.y +
                                   hit.barycentric_coordinates.z;
     return finite_float3(hit.barycentric_coordinates) && std::isfinite(barycentric_sum) &&
            std::abs(barycentric_sum - 1.0F) < 0.001F;
 }
 
-bool validate_pick_hit(const PickHit& hit) noexcept {
+bool validate_pick_hit(const PickHit& hit) noexcept
+{
     return valid_hit_identity_and_position(hit) && valid_hit_normal(hit) &&
            valid_hit_barycentric(hit);
 }
 
-Result<Float4x4> world_matrix(const scene::Storage& scene, EntityId entity) noexcept {
+Result<Float4x4> world_matrix(const scene::Storage& scene, EntityId entity)
+{
     const Result<Float4x4> world = scene.world_matrix(entity);
     if (!world) {
         return world.error();
@@ -206,7 +226,8 @@ Result<Float4x4> world_matrix(const scene::Storage& scene, EntityId entity) noex
     return world.value();
 }
 
-Result<void> validate_refinement_request(const Ray3& ray, const PickCandidate& candidate) noexcept {
+Result<void> validate_refinement_request(const Ray3& ray, const PickCandidate& candidate) noexcept
+{
     if (!is_valid_ray(ray)) {
         return Error{ErrorCode::invalid_picking_ray,
                      "Picking requires a finite normalized world-space ray"};
@@ -220,11 +241,13 @@ Result<void> validate_refinement_request(const Ray3& ray, const PickCandidate& c
 
 Result<std::optional<scene::RuntimePrimitiveView>>
 refinement_primitive(const scene::Storage& scene, const scene::VisibilityFilter& visibility,
-                     const PickCandidate& candidate) {
+                     const PickCandidate& candidate)
+{
     const Result<const scene::EntityRecord*> record_result = scene.entity(candidate.entity);
     if (!record_result) {
         return record_result.error();
     }
+
     const scene::EntityRecord& record = *record_result.value();
     if (!record.model.has_value() ||
         !scene::entity_visible_in_filter(scene, visibility, candidate.entity)) {
@@ -233,6 +256,7 @@ refinement_primitive(const scene::Storage& scene, const scene::VisibilityFilter&
     if (static_cast<std::size_t>(candidate.primitive_index) >= record.model->primitives.size()) {
         return std::optional<scene::RuntimePrimitiveView>{};
     }
+
     const Result<scene::RuntimePrimitiveView> primitive =
         scene.runtime_primitive(candidate.entity, candidate.primitive_index);
     if (!primitive) {
@@ -245,15 +269,18 @@ refinement_primitive(const scene::Storage& scene, const scene::VisibilityFilter&
 }
 
 Result<std::optional<std::pair<Float4x4, Ray3>>>
-refinement_transform(const scene::Storage& scene, EntityId entity, const Ray3& world_ray) {
+refinement_transform(const scene::Storage& scene, EntityId entity, const Ray3& world_ray)
+{
     const Result<Float4x4> world = world_matrix(scene, entity);
     if (!world || !finite_matrix(world.value())) {
         return std::optional<std::pair<Float4x4, Ray3>>{};
     }
+
     const Result<Float4x4> inverse_world = math::inverse_affine_matrix(world.value());
     if (!inverse_world) {
         return std::optional<std::pair<Float4x4, Ray3>>{};
     }
+
     const Result<Ray3> local_ray = transform_ray_to_local(world_ray, inverse_world.value());
     if (!local_ray) {
         return std::optional<std::pair<Float4x4, Ray3>>{};
@@ -261,8 +288,8 @@ refinement_transform(const scene::Storage& scene, EntityId entity, const Ray3& w
     return std::optional{std::pair{world.value(), local_ray.value()}};
 }
 
-void reset_latest_statistics(PickingStatistics& statistics,
-                             std::uint64_t cached_mesh_bvhs) noexcept {
+void reset_latest_statistics(PickingStatistics& statistics, std::uint64_t cached_mesh_bvhs) noexcept
+{
     statistics.latest_instance_bounds_tests = 0;
     statistics.latest_mesh_bounds_tests = 0;
     statistics.latest_bvh_node_tests = 0;
@@ -275,7 +302,8 @@ void reset_latest_statistics(PickingStatistics& statistics,
 }
 
 bool accept_refined_position(const clipping::ClippingFilter& filter, Float3 world_position,
-                             PickingStatistics& statistics) noexcept {
+                             PickingStatistics& statistics) noexcept
+{
     if (!filter.has_clipping()) {
         return true;
     }
@@ -288,7 +316,8 @@ bool accept_refined_position(const clipping::ClippingFilter& filter, Float3 worl
 }
 
 [[nodiscard]] Result<void> validate_viewport_request(Extent2D extent,
-                                                     Float2 position_pixels) noexcept {
+                                                     Float2 position_pixels) noexcept
+{
     if (extent.width == 0 || extent.height == 0) {
         return Error{ErrorCode::invalid_viewport_dimensions,
                      "Picking requires a nonzero viewport extent"};
@@ -315,7 +344,8 @@ struct PickingCameraFrame final {
 };
 
 [[nodiscard]] Result<PickingCameraFrame> camera_frame(const scene::Storage& scene, EntityId camera,
-                                                      Extent2D extent, Float2 position_pixels) {
+                                                      Extent2D extent, Float2 position_pixels)
+{
     const Result<void> viewport = validate_viewport_request(extent, position_pixels);
     if (!viewport) {
         return viewport.error();
@@ -330,15 +360,18 @@ struct PickingCameraFrame final {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Picking requires a valid perspective camera configuration"};
     }
+
     const Result<Float4x4> camera_world = world_matrix(scene, camera);
     if (!camera_world) {
         return camera_world.error();
     }
+
     const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
     if (!finite_matrix(camera_world.value()) || !std::isfinite(aspect)) {
         return Error{ErrorCode::invalid_camera_configuration,
                      "Picking requires a finite camera transform and aspect ratio"};
     }
+
     const float ndc_x = 2.0F * (position_pixels.x + 0.5F) / static_cast<float>(extent.width) - 1.0F;
     const float ndc_y =
         1.0F - 2.0F * (position_pixels.y + 0.5F) / static_cast<float>(extent.height);
@@ -353,7 +386,8 @@ struct CameraBasis final {
     Float3 backward;
 };
 
-[[nodiscard]] Result<CameraBasis> camera_basis(const Float4x4& camera_world) {
+[[nodiscard]] Result<CameraBasis> camera_basis(const Float4x4& camera_world)
+{
     const Double3 origin = to_double3(math::matrix_column(camera_world, 3));
     Float3 right = math::matrix_column(camera_world, 0);
     Float3 up = math::matrix_column(camera_world, 1);
@@ -378,11 +412,13 @@ struct CameraBasis final {
     return CameraBasis{origin, right, up, backward};
 }
 
-[[nodiscard]] Result<Ray3> ray_from_camera_frame(const PickingCameraFrame& frame) {
+[[nodiscard]] Result<Ray3> ray_from_camera_frame(const PickingCameraFrame& frame)
+{
     const Result<CameraBasis> basis = camera_basis(frame.world);
     if (!basis) {
         return basis.error();
     }
+
     const float tan_half_fov = std::tan(frame.description.vertical_field_of_view_radians * 0.5F);
     const Float3 world_direction = math::subtract(
         math::add(math::scale(basis.value().right, frame.ndc_x * frame.aspect * tan_half_fov),
@@ -404,7 +440,8 @@ struct CameraBasis final {
 }
 
 Result<Ray3> make_picking_ray(const scene::Storage& scene, EntityId camera, Extent2D extent,
-                              Float2 position_pixels) {
+                              Float2 position_pixels)
+{
     const Result<PickingCameraFrame> frame = camera_frame(scene, camera, extent, position_pixels);
     if (!frame) {
         return frame.error();
@@ -422,7 +459,8 @@ struct RayInterval final {
 };
 
 [[nodiscard]] bool update_ray_interval(double origin, double direction, double minimum,
-                                       double maximum, RayInterval& interval) noexcept {
+                                       double maximum, RayInterval& interval) noexcept
+{
     if (std::abs(direction) <= ray_epsilon) {
         return origin >= minimum && origin <= maximum;
     }
@@ -447,11 +485,13 @@ struct TriangleFrame final {
 };
 
 [[nodiscard]] std::optional<TriangleFrame> triangle_frame(const Ray3& ray, Float3 a, Float3 b,
-                                                          Float3 c) noexcept {
+                                                          Float3 c) noexcept
+{
     if (!is_valid_ray(ray) || !geometry_detail::finite_float3(a) ||
         !geometry_detail::finite_float3(b) || !geometry_detail::finite_float3(c)) {
         return std::nullopt;
     }
+
     const Double3 vertex = geometry_detail::to_double3(a);
     const Double3 edge1 = geometry_detail::subtract(geometry_detail::to_double3(b), vertex);
     const Double3 edge2 = geometry_detail::subtract(geometry_detail::to_double3(c), vertex);
@@ -470,7 +510,8 @@ struct TriangleFrame final {
 }
 
 [[nodiscard]] std::optional<double> triangle_determinant(const TriangleFrame& frame,
-                                                         bool cull_back_face) noexcept {
+                                                         bool cull_back_face) noexcept
+{
     const double determinant =
         geometry_detail::dot(frame.edge1, geometry_detail::cross(frame.direction, frame.edge2));
     if (cull_back_face) {
@@ -479,7 +520,8 @@ struct TriangleFrame final {
     return std::abs(determinant) > triangle_epsilon ? std::optional{determinant} : std::nullopt;
 }
 
-[[nodiscard]] bool inside_barycentric_triangle(double u, double v) noexcept {
+[[nodiscard]] bool inside_barycentric_triangle(double u, double v) noexcept
+{
     return u >= -triangle_epsilon && u <= 1.0 + triangle_epsilon && v >= -triangle_epsilon &&
            u + v <= 1.0 + triangle_epsilon;
 }
@@ -492,7 +534,8 @@ struct TriangleCoordinates final {
 };
 
 [[nodiscard]] std::optional<TriangleCoordinates> triangle_coordinates(const TriangleFrame& frame,
-                                                                      double determinant) noexcept {
+                                                                      double determinant) noexcept
+{
     const double inverse_determinant = 1.0 / determinant;
     const Double3 offset = geometry_detail::subtract(frame.origin, frame.vertex);
     const Double3 cross_offset = geometry_detail::cross(offset, frame.edge1);
@@ -503,10 +546,12 @@ struct TriangleCoordinates final {
     if (!inside_barycentric_triangle(u, v)) {
         return std::nullopt;
     }
+
     const double distance = inverse_determinant * geometry_detail::dot(frame.edge2, cross_offset);
     if (distance < 0.0 || !std::isfinite(distance)) {
         return std::nullopt;
     }
+
     const double w = 1.0 - u - v;
     if (!std::isfinite(u) || !std::isfinite(v) || !std::isfinite(w)) {
         return std::nullopt;
@@ -516,18 +561,21 @@ struct TriangleCoordinates final {
 
 } // namespace
 
-bool is_valid_ray(const Ray3& ray) noexcept {
+bool is_valid_ray(const Ray3& ray) noexcept
+{
     if (!geometry_detail::finite_float3(ray.origin) ||
         !geometry_detail::finite_float3(ray.direction)) {
         return false;
     }
+
     const float length =
         std::sqrt(ray.direction.x * ray.direction.x + ray.direction.y * ray.direction.y +
                   ray.direction.z * ray.direction.z);
     return std::isfinite(length) && length > 0.999F && length < 1.001F;
 }
 
-bool intersect_ray_bounds(const Ray3& ray, Bounds3 bounds, RayBoundsHit& hit) noexcept {
+bool intersect_ray_bounds(const Ray3& ray, Bounds3 bounds, RayBoundsHit& hit) noexcept
+{
     if (!is_valid_ray(ray) || !geometry_detail::valid_bounds(bounds)) {
         return false;
     }
@@ -553,20 +601,24 @@ bool intersect_ray_bounds(const Ray3& ray, Bounds3 bounds, RayBoundsHit& hit) no
 }
 
 std::optional<TriangleHit> intersect_ray_triangle(const Ray3& ray, Float3 a, Float3 b, Float3 c,
-                                                  bool cull_back_face) noexcept {
+                                                  bool cull_back_face) noexcept
+{
     const std::optional<TriangleFrame> frame = triangle_frame(ray, a, b, c);
     if (!frame.has_value()) {
         return std::nullopt;
     }
+
     const std::optional<double> determinant = triangle_determinant(*frame, cull_back_face);
     if (!determinant.has_value()) {
         return std::nullopt;
     }
+
     const std::optional<TriangleCoordinates> coordinates =
         triangle_coordinates(*frame, *determinant);
     if (!coordinates.has_value()) {
         return std::nullopt;
     }
+
     const Double3 normalized_normal =
         geometry_detail::scale(frame->normal, 1.0 / frame->normal_length);
     return TriangleHit{static_cast<float>(coordinates->distance), 0,

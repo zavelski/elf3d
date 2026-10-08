@@ -11,7 +11,8 @@
 
 namespace elf3d::viewer {
 
-void draw_file_property(const char* label, const std::string& value) {
+void draw_file_property(const char* label, const std::string& value)
+{
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::TextDisabled("%s", label);
@@ -19,12 +20,14 @@ void draw_file_property(const char* label, const std::string& value) {
     ImGui::TextWrapped("%s", value.c_str());
 }
 
-[[nodiscard]] std::string model_file_type(const std::filesystem::path& path) {
+[[nodiscard]] std::string model_file_type(const std::filesystem::path& path)
+{
     const std::string extension = lowercase_ascii(path_to_utf8(path.extension()));
     return extension == ".glb" ? "glTF Binary Model (.glb)" : "glTF Model (.gltf)";
 }
 
-void build_file_properties_popup(FileBrowserState& browser, const FileBrowserFrameInput& input) {
+void build_file_properties_popup(FileBrowserState& browser, const FileBrowserFrameInput& input)
+{
     if (browser.request_properties) {
         ImGui::OpenPopup("File Properties");
         browser.request_properties = false;
@@ -67,7 +70,8 @@ void build_file_properties_popup(FileBrowserState& browser, const FileBrowserFra
 void build_external_editor_menu_item(const char* label,
                                      const std::optional<std::filesystem::path>& editor,
                                      const OpenBrowserEntry& entry, FileBrowserState& browser,
-                                     ExternalEditorWorkflow& workflow) {
+                                     ExternalEditorWorkflow& workflow)
+{
     if (ImGui::MenuItem(label, nullptr, false, editor.has_value()) &&
         workflow.activate(ExternalEditorLaunchRequest{*editor, entry.path, label}) !=
             WorkflowActivation::accepted) {
@@ -77,7 +81,8 @@ void build_external_editor_menu_item(const char* label,
 
 void build_file_context_menu(const OpenBrowserEntry& entry, FileBrowserState& browser,
                              std::optional<std::filesystem::path>& open_request,
-                             ExternalEditorWorkflow& workflow) {
+                             ExternalEditorWorkflow& workflow)
+{
     if (!ImGui::BeginPopupContextItem("##FileContextMenu")) {
         return;
     }

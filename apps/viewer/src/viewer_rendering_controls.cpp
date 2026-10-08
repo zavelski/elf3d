@@ -10,14 +10,16 @@
 namespace elf3d::viewer {
 namespace {
 
-[[nodiscard]] const char* tone_mapping_name(ToneMappingMode mode) noexcept {
+[[nodiscard]] const char* tone_mapping_name(ToneMappingMode mode) noexcept
+{
     if (mode == ToneMappingMode::none) {
         return "none";
     }
     return mode == ToneMappingMode::pbr_neutral ? "pbr_neutral" : "standard";
 }
 
-void build_tone_mapping_control(DisplayTransform& display) {
+void build_tone_mapping_control(DisplayTransform& display)
+{
     constexpr std::array<const char*, 3> modes{{"Standard", "PBR Neutral", "None (diagnostic)"}};
     int selected = 0;
     if (display.tone_mapping == ToneMappingMode::pbr_neutral) {
@@ -39,7 +41,8 @@ void build_tone_mapping_control(DisplayTransform& display) {
 
 [[nodiscard]] std::string camera_evidence_text(const ViewerFrameContext& state,
                                                const SceneSession& session,
-                                               const Viewport& viewport) {
+                                               const Viewport& viewport)
+{
     std::ostringstream stream;
     stream << std::fixed << std::setprecision(6);
     const Result<Float4x4> matrix = session.scene->local_matrix(session.camera);
@@ -59,6 +62,7 @@ void build_tone_mapping_control(DisplayTransform& display) {
                << "near_plane=" << camera.value().near_plane << '\n'
                << "far_plane=" << camera.value().far_plane << '\n';
     }
+
     const Extent2D extent = viewport.extent();
     stream << "viewport_extent=" << extent.width << 'x' << extent.height << '\n'
            << "light_direction=" << state.rendering.lighting.direction.x << ','
@@ -76,10 +80,12 @@ void build_tone_mapping_control(DisplayTransform& display) {
 
 } // namespace
 
-void build_lighting_controls(ViewerFrameContext& state) {
+void build_lighting_controls(ViewerFrameContext& state)
+{
     if (!ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
         return;
     }
+
     std::array<float, 3> direction{state.rendering.lighting.direction.x,
                                    state.rendering.lighting.direction.y,
                                    state.rendering.lighting.direction.z};
@@ -111,10 +117,12 @@ void build_lighting_controls(ViewerFrameContext& state) {
 }
 
 void build_camera_evidence(const ViewerFrameContext& state, const SceneSession& scene,
-                           const Viewport& viewport) {
+                           const Viewport& viewport)
+{
     if (!ImGui::CollapsingHeader("Camera Evidence")) {
         return;
     }
+
     const std::string evidence = camera_evidence_text(state, scene, viewport);
     ImGui::TextWrapped("%s", evidence.c_str());
     if (ImGui::Button("Copy Camera Evidence")) {

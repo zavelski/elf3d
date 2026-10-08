@@ -68,7 +68,7 @@ jobs:
       - name: Verify toolchain
         run: .\cmake\check-windows-environment.ps1
       - name: Configure
-        run: cmake --preset windows-debug
+        run: cmake --preset windows-full
       - name: Build
         run: cmake --build --preset windows-debug --parallel 4
       - name: Test
@@ -105,7 +105,7 @@ jobs:
       - name: Verify toolchain
         run: .\cmake\check-windows-environment.ps1
       - name: Configure
-        run: cmake --preset windows-model-debug
+        run: cmake --preset windows-model
       - name: Build
         run: cmake --build --preset windows-model-debug --parallel 4
       - name: Test
@@ -122,8 +122,10 @@ jobs:
         include:
           - profile: full
             preset: windows-release
+            configure: windows-full
           - profile: model-only
             preset: windows-model-release
+            configure: windows-model
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -140,7 +142,7 @@ jobs:
       - name: Verify toolchain
         run: .\cmake\check-windows-environment.ps1
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.configure }}
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel 4
       - name: Test

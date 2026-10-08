@@ -1,9 +1,5 @@
-#include <elf3d/embed/runtime.h>
-
-#include <glad/gl.h>
-
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
+#include <elf3d/app/application.h>
+#include <elf3d/elf3d.h>
 
 #include <algorithm>
 #include <array>
@@ -67,24 +63,22 @@ struct ContextDiagnostics final {
     int window_height = 0;
     int framebuffer_width = 0;
     int framebuffer_height = 0;
-    GLint context_flags = 0;
-    GLint profile_mask = 0;
-    GLint red_bits = 0;
-    GLint green_bits = 0;
-    GLint blue_bits = 0;
-    GLint alpha_bits = 0;
-    GLint depth_bits = 0;
-    GLint stencil_bits = 0;
-    GLint samples = 0;
-    GLint maximum_texture_size = 0;
+    int red_bits = 0;
+    int green_bits = 0;
+    int blue_bits = 0;
+    int alpha_bits = 0;
+    int depth_bits = 0;
+    int stencil_bits = 0;
+    int samples = 0;
+    int maximum_texture_size = 0;
     bool framebuffer_srgb_enabled = false;
 };
 
 struct ReportEnvironment final {
-    const char* vendor = "unavailable";
-    const char* renderer = "unavailable";
-    const char* version = "unavailable";
-    const char* shading_language = "unavailable";
+    std::string vendor = "unavailable";
+    std::string renderer = "unavailable";
+    std::string version = "unavailable";
+    std::string shading_language = "unavailable";
     ContextDiagnostics context;
 };
 
@@ -96,106 +90,44 @@ struct FrameReport final {
     const ReportEnvironment& environment;
 };
 
-[[nodiscard]] ContextDiagnostics capture_context_diagnostics() noexcept {
-    ContextDiagnostics context;
-    GLFWwindow* window = glfwGetCurrentContext();
-    if (window != nullptr) {
-        glfwGetWindowSize(window, &context.window_width, &context.window_height);
-        glfwGetFramebufferSize(window, &context.framebuffer_width, &context.framebuffer_height);
-    }
-    glGetIntegerv(GL_CONTEXT_FLAGS, &context.context_flags);
-    glGetIntegerv(GL_CONTEXT_PROFILE_MASK, &context.profile_mask);
-    GLint draw_framebuffer = 0;
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer);
-    if (draw_framebuffer == 0) {
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_BACK_LEFT,
-                                              GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
-                                              &context.red_bits);
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_BACK_LEFT,
-                                              GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
-                                              &context.green_bits);
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_BACK_LEFT,
-                                              GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
-                                              &context.blue_bits);
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_BACK_LEFT,
-                                              GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE,
-                                              &context.alpha_bits);
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_DEPTH,
-                                              GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE,
-                                              &context.depth_bits);
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_STENCIL,
-                                              GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE,
-                                              &context.stencil_bits);
-    }
-    glGetIntegerv(GL_SAMPLES, &context.samples);
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &context.maximum_texture_size);
-    context.framebuffer_srgb_enabled = glIsEnabled(GL_FRAMEBUFFER_SRGB) == GL_TRUE;
-    return context;
+[[nodiscard]] ReportEnvironment capture_report_environment(const elf3d::ApplicationContext& context)
+{
+    const auto& graphics = context.graphics_context();
+    const auto window = context.window_extent();
+    const auto framebuffer = context.framebuffer_extent();
+    ContextDiagnostics diagnostics;
+    diagnostics.window_width = static_cast<int>(window.width);
+    diagnostics.window_height = static_cast<int>(window.height);
+    diagnostics.framebuffer_width = static_cast<int>(framebuffer.width);
+    diagnostics.framebuffer_height = static_cast<int>(framebuffer.height);
+    diagnostics.red_bits = graphics.red_bits;
+    diagnostics.green_bits = graphics.green_bits;
+    diagnostics.blue_bits = graphics.blue_bits;
+    diagnostics.alpha_bits = graphics.alpha_bits;
+    diagnostics.depth_bits = graphics.depth_bits;
+    diagnostics.stencil_bits = graphics.stencil_bits;
+    diagnostics.samples = graphics.samples;
+    diagnostics.maximum_texture_size = graphics.maximum_texture_extent;
+    diagnostics.framebuffer_srgb_enabled = graphics.default_framebuffer_srgb;
+    return ReportEnvironment{std::string{graphics.vendor_name}, std::string{graphics.device_name},
+                             std::string{graphics.api_version},
+                             std::string{graphics.shading_language_version}, diagnostics};
 }
 
-[[nodiscard]] const char* graphics_string(GLenum name) noexcept {
-    const auto* value = glGetString(name);
-    return value == nullptr ? "unavailable" : reinterpret_cast<const char*>(value);
-}
-
-[[nodiscard]] ReportEnvironment capture_report_environment() noexcept {
-    return ReportEnvironment{
-        graphics_string(GL_VENDOR), graphics_string(GL_RENDERER), graphics_string(GL_VERSION),
-        graphics_string(GL_SHADING_LANGUAGE_VERSION), capture_context_diagnostics()};
-}
-
-class GlfwRuntime final {
-  public:
-    ~GlfwRuntime() {
-        if (initialized_) {
-            glfwTerminate();
-        }
-    }
-
-    [[nodiscard]] bool initialize() noexcept {
-        initialized_ = glfwInit() == GLFW_TRUE;
-        return initialized_;
-    }
-
-  private:
-    bool initialized_ = false;
-};
-
-class Window final {
-  public:
-    explicit Window(GLFWwindow* value) noexcept : value_(value) {}
-    ~Window() {
-        if (value_ != nullptr) {
-            glfwDestroyWindow(value_);
-        }
-    }
-
-    Window(const Window&) = delete;
-    Window& operator=(const Window&) = delete;
-
-    [[nodiscard]] GLFWwindow* get() const noexcept {
-        return value_;
-    }
-
-  private:
-    GLFWwindow* value_ = nullptr;
-};
-
-[[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path) {
+[[nodiscard]] std::string path_to_utf8(const std::filesystem::path& path)
+{
     const std::u8string utf8 = path.u8string();
     return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};
 }
 
-[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value) {
+[[nodiscard]] std::filesystem::path path_from_utf8(std::string_view value)
+{
     const auto* begin = reinterpret_cast<const char8_t*>(value.data());
     return std::filesystem::path{std::u8string{begin, begin + value.size()}};
 }
 
-elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcept {
-    return glfwGetProcAddress(name);
-}
-
-[[nodiscard]] std::optional<std::uint32_t> unsigned_value(std::string_view value) noexcept {
+[[nodiscard]] std::optional<std::uint32_t> unsigned_value(std::string_view value) noexcept
+{
     std::uint32_t parsed = 0;
     const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
     if (result.ec != std::errc{} || result.ptr != value.data() + value.size()) {
@@ -204,11 +136,13 @@ elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcep
     return parsed;
 }
 
-[[nodiscard]] std::optional<elf3d::Extent2D> extent_value(std::string_view value) noexcept {
+[[nodiscard]] std::optional<elf3d::Extent2D> extent_value(std::string_view value) noexcept
+{
     const std::size_t separator = value.find('x');
     if (separator == std::string_view::npos) {
         return std::nullopt;
     }
+
     const std::optional<std::uint32_t> width = unsigned_value(value.substr(0, separator));
     const std::optional<std::uint32_t> height = unsigned_value(value.substr(separator + 1));
     if (!width.has_value() || !height.has_value() || *width == 0 || *height == 0) {
@@ -217,7 +151,8 @@ elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcep
     return elf3d::Extent2D{*width, *height};
 }
 
-[[nodiscard]] std::optional<Scenario> scenario_value(std::string_view value) noexcept {
+[[nodiscard]] std::optional<Scenario> scenario_value(std::string_view value) noexcept
+{
     if (value == "first-frame") {
         return Scenario::first_frame;
     }
@@ -243,7 +178,8 @@ elf3d::EmbeddedGraphicsProcedure load_opengl_procedure(const char* name) noexcep
 }
 
 template <typename Value>
-[[nodiscard]] bool set_once(Value& destination, bool& present, Value value) {
+[[nodiscard]] bool set_once(Value& destination, bool& present, Value value)
+{
     if (present) {
         return false;
     }
@@ -253,7 +189,8 @@ template <typename Value>
 }
 
 [[nodiscard]] bool parse_path_option(std::string_view option, std::string_view value,
-                                     Options& options, OptionPresence& presence) {
+                                     Options& options, OptionPresence& presence)
+{
     if (option == "--model") {
         return set_once(options.model, presence.model, path_from_utf8(value));
     }
@@ -264,7 +201,8 @@ template <typename Value>
 }
 
 [[nodiscard]] bool parse_frame_option(std::string_view option, std::string_view value,
-                                      Options& options, OptionPresence& presence) {
+                                      Options& options, OptionPresence& presence)
+{
     const std::optional<std::uint32_t> frames = unsigned_value(value);
     if (!frames.has_value()) {
         return false;
@@ -279,7 +217,8 @@ template <typename Value>
 }
 
 [[nodiscard]] bool parse_value_option(std::string_view option, std::string_view value,
-                                      Options& options, OptionPresence& presence) {
+                                      Options& options, OptionPresence& presence)
+{
     if (option == "--extent") {
         const std::optional<elf3d::Extent2D> extent = extent_value(value);
         return extent.has_value() && set_once(options.extent, presence.extent, *extent);
@@ -297,7 +236,8 @@ template <typename Value>
     return false;
 }
 
-[[nodiscard]] std::optional<Options> parse_options(int count, char** values) {
+[[nodiscard]] std::optional<Options> parse_options(int count, char** values)
+{
     Options options;
     OptionPresence presence;
     for (int index = 1; index < count; index += 2) {
@@ -314,6 +254,7 @@ template <typename Value>
             return std::nullopt;
         }
     }
+
     const std::array required{presence.model,  presence.extent, presence.scenario,
                               presence.warmup, presence.frames, presence.report};
     if (!std::all_of(required.begin(), required.end(), [](bool value) { return value; })) {
@@ -325,7 +266,8 @@ template <typename Value>
     return options;
 }
 
-void print_usage() {
+void print_usage()
+{
     std::cerr << "Usage: elf3d_render_benchmark --model <path|procedural-material> "
                  "--extent <width>x<height> "
                  "--scenario first-frame|steady|orbit|pan|wheel|orbit-anchor|pick "
@@ -333,7 +275,8 @@ void print_usage() {
 }
 
 [[nodiscard]] elf3d::NavigationInput scripted_input(Scenario scenario, std::uint32_t frame,
-                                                    elf3d::Extent2D extent) noexcept {
+                                                    elf3d::Extent2D extent) noexcept
+{
     elf3d::NavigationInput input;
     input.pointer_position_pixels = {static_cast<float>(extent.width) * 0.5F,
                                      static_cast<float>(extent.height) * 0.5F};
@@ -354,7 +297,8 @@ void print_usage() {
 
 [[nodiscard]] elf3d::Result<void> execute_frame(const Options& options, std::uint32_t frame,
                                                 elf3d::Viewport& viewport, elf3d::Scene& scene,
-                                                elf3d::EntityId camera) {
+                                                elf3d::EntityId camera)
+{
     if (options.scenario == Scenario::orbit_anchor) {
         elf3d::NavigationInput pressed = scripted_input(options.scenario, 0, options.extent);
         const elf3d::Result<void> press = viewport.update_navigation(scene, camera, pressed);
@@ -368,7 +312,7 @@ void print_usage() {
         if (!moved) {
             return moved.error();
         }
-        return viewport.render(scene, camera);
+        return {};
     }
     if (options.scenario == Scenario::orbit || options.scenario == Scenario::pan ||
         options.scenario == Scenario::wheel) {
@@ -387,11 +331,13 @@ void print_usage() {
             return picked.error();
         }
     }
-    return viewport.render(scene, camera);
+    return {};
 }
 
-void write_report_header(std::ofstream& stream) {
-    stream << "scenario,frame,load_ms,frame_ms,draw_calls,triangles,candidate_primitives,"
+void write_report_header(std::ofstream& stream)
+{
+    stream << "report_schema,timing_scope,scenario,frame,load_ms,frame_ms,draw_calls,triangles,"
+              "candidate_primitives,"
               "visible_primitives,culled_primitives,buffer_uploads,buffer_uploaded_bytes,"
               "draw_packet_rebuilds,"
               "resident_geometry_bytes,resident_texture_bytes,resident_environment_bytes,"
@@ -401,21 +347,23 @@ void write_report_header(std::ofstream& stream) {
               "pick_pixels_read,pick_target_allocations,pick_pass_ms,pick_readback_ms,"
               "pick_allocation_ms,pick_cpu_ms,pick_gpu_available,pick_gpu_ms,gl_vendor,"
               "gl_renderer,gl_version,glsl_version,window_width,window_height,framebuffer_width,"
-              "framebuffer_height,target_width,target_height,vsync,context_flags,profile_mask,"
+              "framebuffer_height,target_width,target_height,vsync,"
               "red_bits,green_bits,blue_bits,alpha_bits,depth_bits,stencil_bits,samples,"
               "framebuffer_srgb_enabled,max_texture_size\n";
 }
 
-void write_frame_report(std::ofstream& stream, const FrameReport& report) {
+void write_frame_report(std::ofstream& stream, const FrameReport& report)
+{
     const ContextDiagnostics& context = report.environment.context;
     const FrameResult& frame = report.frame;
-    stream << report.options.scenario_name << ',' << report.index << ',' << report.load_milliseconds
-           << ',' << frame.milliseconds << ',' << frame.render.draw_calls << ','
-           << frame.render.triangles << ',' << frame.render.candidate_primitives << ','
-           << frame.render.visible_primitives << ',' << frame.render.frustum_culled_primitives
-           << ',' << frame.render.gpu_buffer_uploads << ','
-           << frame.render.gpu_buffer_uploaded_bytes << ',' << frame.render.draw_packet_rebuilds
-           << ',' << frame.render.estimated_resident_geometry_bytes << ','
+    stream << "2,framework_frame," << report.options.scenario_name << ',' << report.index << ','
+           << report.load_milliseconds << ',' << frame.milliseconds << ','
+           << frame.render.draw_calls << ',' << frame.render.triangles << ','
+           << frame.render.candidate_primitives << ',' << frame.render.visible_primitives << ','
+           << frame.render.frustum_culled_primitives << ',' << frame.render.gpu_buffer_uploads
+           << ',' << frame.render.gpu_buffer_uploaded_bytes << ','
+           << frame.render.draw_packet_rebuilds << ','
+           << frame.render.estimated_resident_geometry_bytes << ','
            << frame.render.estimated_resident_texture_bytes << ','
            << frame.render.estimated_resident_environment_bytes << ','
            << frame.render.environment_preparations << ','
@@ -439,30 +387,32 @@ void write_frame_report(std::ofstream& stream, const FrameReport& report) {
            << "\",\"" << report.environment.shading_language << "\"," << context.window_width << ','
            << context.window_height << ',' << context.framebuffer_width << ','
            << context.framebuffer_height << ',' << report.options.extent.width << ','
-           << report.options.extent.height << ",0," << context.context_flags << ','
-           << context.profile_mask << ',' << context.red_bits << ',' << context.green_bits << ','
-           << context.blue_bits << ',' << context.alpha_bits << ',' << context.depth_bits << ','
-           << context.stencil_bits << ',' << context.samples << ','
+           << report.options.extent.height << ",0," << context.red_bits << ',' << context.green_bits
+           << ',' << context.blue_bits << ',' << context.alpha_bits << ',' << context.depth_bits
+           << ',' << context.stencil_bits << ',' << context.samples << ','
            << (context.framebuffer_srgb_enabled ? 1 : 0) << ',' << context.maximum_texture_size
            << '\n';
 }
 
 [[nodiscard]] bool write_report(const Options& options, double load_milliseconds,
-                                const std::vector<FrameResult>& frames) {
+                                const std::vector<FrameResult>& frames,
+                                const ReportEnvironment& environment)
+{
     std::error_code error;
     std::filesystem::create_directories(options.report.parent_path(), error);
     if (error) {
         std::cerr << "Could not create report directory: " << error.message() << '\n';
         return false;
     }
+
     std::ofstream stream{options.report, std::ios::trunc};
     if (!stream) {
         std::cerr << "Could not create report: " << path_to_utf8(options.report) << '\n';
         return false;
     }
+
     write_report_header(stream);
     stream << std::fixed << std::setprecision(6);
-    const ReportEnvironment environment = capture_report_environment();
     for (std::size_t index = 0; index < frames.size(); ++index) {
         write_frame_report(
             stream, FrameReport{options, load_milliseconds, index, frames[index], environment});
@@ -471,7 +421,6 @@ void write_frame_report(std::ofstream& stream, const FrameReport& report) {
 }
 
 struct BenchmarkScene final {
-    std::unique_ptr<elf3d::EmbeddedRuntime> runtime;
     std::unique_ptr<elf3d::Scene> scene;
     std::unique_ptr<elf3d::Viewport> viewport;
     elf3d::EntityId camera;
@@ -483,7 +432,8 @@ struct SphereMesh final {
     std::vector<std::uint32_t> indices;
 };
 
-[[nodiscard]] SphereMesh make_sphere() {
+[[nodiscard]] SphereMesh make_sphere()
+{
     constexpr std::uint32_t longitude_count = 48;
     constexpr std::uint32_t latitude_count = 24;
     constexpr float pi = 3.14159265359F;
@@ -515,11 +465,13 @@ struct SphereMesh final {
 }
 
 [[nodiscard]] elf3d::Result<std::unique_ptr<elf3d::Scene>>
-create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
+create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera)
+{
     auto scene_result = engine.create_scene();
     if (!scene_result) {
         return scene_result.error();
     }
+
     std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
     const SphereMesh sphere = make_sphere();
     const auto mesh = scene->create_mesh({sphere.vertices, sphere.indices});
@@ -544,6 +496,7 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
         if (!material) {
             return material.error();
         }
+
         const auto model = scene->create_model_entity(mesh.value(), material.value());
         if (!model) {
             return model.error();
@@ -555,6 +508,7 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
             return positioned.error();
         }
     }
+
     const auto camera_result = scene->create_perspective_camera_entity({});
     if (!camera_result) {
         return camera_result.error();
@@ -563,42 +517,10 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
     return scene;
 }
 
-[[nodiscard]] int initialize_graphics(const Options& options, GlfwRuntime& glfw,
-                                      std::unique_ptr<Window>& window) {
-    if (!glfw.initialize()) {
-        std::cerr << "GLFW initialization failed\n";
-        return 4;
-    }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    window = std::make_unique<Window>(glfwCreateWindow(static_cast<int>(options.extent.width),
-                                                       static_cast<int>(options.extent.height),
-                                                       "Elf3D render benchmark", nullptr, nullptr));
-    if (window->get() == nullptr) {
-        std::cerr << "Hidden OpenGL 4.1 context creation failed\n";
-        return 5;
-    }
-    glfwMakeContextCurrent(window->get());
-    glfwSwapInterval(0);
-    if (gladLoadGL(load_opengl_procedure) == 0 || GLAD_GL_VERSION_4_1 == 0) {
-        std::cerr << "OpenGL 4.1 is unavailable\n";
-        return 6;
-    }
-    return 0;
-}
-
-[[nodiscard]] elf3d::Result<BenchmarkScene> create_benchmark_scene(const Options& options) {
-    const elf3d::EmbeddedRuntimeOptions runtime_options{load_opengl_procedure};
-    elf3d::Result<std::unique_ptr<elf3d::EmbeddedRuntime>> runtime_result =
-        elf3d::EmbeddedRuntime::create(runtime_options);
-    if (!runtime_result) {
-        return runtime_result.error();
-    }
+[[nodiscard]] elf3d::Result<BenchmarkScene> create_benchmark_scene(const Options& options,
+                                                                   elf3d::Engine& engine)
+{
     BenchmarkScene benchmark;
-    benchmark.runtime = std::move(runtime_result).value();
-    elf3d::Engine& engine = benchmark.runtime->engine();
     const auto load_begin = std::chrono::steady_clock::now();
     if (path_to_utf8(options.model) == procedural_material_model) {
         auto scene_result = create_material_scene(engine, benchmark.camera);
@@ -620,6 +542,7 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
         }
         benchmark.camera = camera.value();
     }
+
     const auto load_end = std::chrono::steady_clock::now();
     elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport_result =
         engine.create_viewport(options.extent);
@@ -637,100 +560,118 @@ create_material_scene(elf3d::Engine& engine, elf3d::EntityId& camera) {
     return benchmark;
 }
 
-[[nodiscard]] elf3d::Result<void> warm_up(const Options& options, BenchmarkScene& benchmark,
-                                          GLFWwindow& window) {
-    for (std::uint32_t frame = 0; frame < options.warmup_frames; ++frame) {
-        const bool event_scenario =
-            options.scenario == Scenario::orbit_anchor || options.scenario == Scenario::pick;
-        const elf3d::Result<void> result =
-            event_scenario ? benchmark.viewport->render(*benchmark.scene, benchmark.camera)
-                           : execute_frame(options, frame, *benchmark.viewport, *benchmark.scene,
-                                           benchmark.camera);
-        if (!result) {
-            return result.error();
-        }
-        const elf3d::Result<elf3d::NativeTextureView> resolved =
-            benchmark.runtime->native_texture_view(benchmark.viewport->color_texture());
-        if (!resolved) {
-            return resolved.error();
-        }
-        glfwSwapBuffers(&window);
+class BenchmarkApplication final : public elf3d::Application {
+  public:
+    explicit BenchmarkApplication(Options options) : options_(std::move(options))
+    {
     }
-    return {};
-}
-
-[[nodiscard]] elf3d::Result<std::vector<FrameResult>>
-measure(const Options& options, BenchmarkScene& benchmark, GLFWwindow& window) {
-    std::vector<FrameResult> frames;
-    frames.reserve(options.measured_frames);
-    for (std::uint32_t frame = 0; frame < options.measured_frames; ++frame) {
-        const auto begin = std::chrono::steady_clock::now();
-        const elf3d::Result<void> result =
-            execute_frame(options, options.warmup_frames + frame, *benchmark.viewport,
-                          *benchmark.scene, benchmark.camera);
-        if (!result) {
-            return result.error();
+    elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
+        try {
+            auto created = create_benchmark_scene(options_, context.engine());
+            if (!created) {
+                return created.error();
+            }
+            scene_ = std::move(created).value();
+            environment_ = capture_report_environment(context);
+            frames_.reserve(options_.measured_frames);
+            return {};
+        } catch (...) {
+            elf3d::fatal_error("Benchmark startup failed unexpectedly");
         }
-        const elf3d::Result<elf3d::NativeTextureView> resolved =
-            benchmark.runtime->native_texture_view(benchmark.viewport->color_texture());
-        glfwSwapBuffers(&window);
-        const auto end = std::chrono::steady_clock::now();
-        if (!resolved) {
-            return resolved.error();
-        }
-        elf3d::PickingStatistics picking;
-        const elf3d::Result<elf3d::PickingStatistics> picking_result =
-            benchmark.viewport->picking_statistics();
-        if (picking_result) {
-            picking = picking_result.value();
-        }
-        frames.push_back(FrameResult{std::chrono::duration<double, std::milli>(end - begin).count(),
-                                     benchmark.viewport->render_statistics(), picking});
     }
-    return frames;
-}
+    elf3d::Result<void> update(elf3d::ApplicationUpdateContext& context) noexcept override
+    {
+        try {
+            const auto previous = context.previous_frame_statistics();
+            if (previous) {
+                const auto collected = collect_completed_frame(*previous);
+                if (!collected) {
+                    return collected.error();
+                }
+                if (collected.value()) {
+                    context.request_exit();
+                    return {};
+                }
+            }
+            const bool neutral = next_frame_ < options_.warmup_frames &&
+                                 (options_.scenario == Scenario::orbit_anchor ||
+                                  options_.scenario == Scenario::pick);
+            if (neutral) {
+                return {};
+            }
+            // CLI frame counts are uint32; scripted input only distinguishes frame zero.
+            const auto script_frame = next_frame_ == 0 ? 0U : 1U;
+            return execute_frame(options_, script_frame, *scene_.viewport, *scene_.scene,
+                                 scene_.camera);
+        } catch (...) {
+            elf3d::fatal_error("Benchmark update failed unexpectedly");
+        }
+    }
+    elf3d::Result<void> build_ui(elf3d::ApplicationUiContext& context) noexcept override
+    {
+        return context.queue_viewport_render(*scene_.viewport, *scene_.scene, scene_.camera);
+    }
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
+        scene_.viewport.reset();
+        scene_.scene.reset();
+    }
 
-[[nodiscard]] int run(const Options& options) {
+  private:
+    elf3d::Result<bool> collect_completed_frame(const elf3d::ApplicationFrameStatistics& statistics)
+    {
+        if (statistics.frame_index >= options_.warmup_frames) {
+            elf3d::PickingStatistics picking;
+            const auto picked = scene_.viewport->picking_statistics();
+            if (picked) {
+                picking = picked.value();
+            }
+            frames_.push_back(FrameResult{statistics.wall_milliseconds,
+                                          scene_.viewport->render_statistics(), picking});
+        }
+        next_frame_ = statistics.frame_index + 1U;
+        if (frames_.size() == options_.measured_frames) {
+            if (!write_report(options_, scene_.load_milliseconds, frames_, environment_)) {
+                return elf3d::Error{elf3d::ErrorCode::source_file_write_failed,
+                                    "Could not write benchmark report"};
+            }
+            return true;
+        }
+        return false;
+    }
+    Options options_;
+    BenchmarkScene scene_;
+    ReportEnvironment environment_;
+    std::vector<FrameResult> frames_;
+    std::uint64_t next_frame_ = 0;
+};
+
+[[nodiscard]] int run(const Options& options)
+{
     if (path_to_utf8(options.model) != procedural_material_model &&
         !std::filesystem::is_regular_file(options.model)) {
         std::cerr << "Model does not exist: " << path_to_utf8(options.model) << '\n';
         return 3;
     }
-    GlfwRuntime glfw;
-    std::unique_ptr<Window> window;
-    const int graphics_status = initialize_graphics(options, glfw, window);
-    if (graphics_status != 0) {
-        return graphics_status;
-    }
-    elf3d::Result<BenchmarkScene> benchmark_result = create_benchmark_scene(options);
-    if (!benchmark_result) {
-        std::cerr << benchmark_result.error().message() << '\n';
+    BenchmarkApplication application{options};
+    elf3d::ApplicationOptions configuration;
+    configuration.title = "Elf3D render benchmark";
+    configuration.initial_window_extent = options.extent;
+    configuration.initial_visibility = elf3d::ApplicationWindowVisibility::hidden;
+    configuration.presentation_mode = elf3d::PresentationMode::immediate;
+    const auto result = elf3d::run_application(configuration, application);
+    if (!result) {
+        std::cerr << result.error().message() << '\n';
         return 7;
     }
-    BenchmarkScene benchmark = std::move(benchmark_result).value();
-    const elf3d::Result<void> warmed = warm_up(options, benchmark, *window->get());
-    if (!warmed) {
-        std::cerr << warmed.error().message() << '\n';
-        return 11;
-    }
-    elf3d::Result<std::vector<FrameResult>> frames_result =
-        measure(options, benchmark, *window->get());
-    if (!frames_result) {
-        std::cerr << frames_result.error().message() << '\n';
-        return 12;
-    }
-    const std::vector<FrameResult>& frames = frames_result.value();
-    if (!write_report(options, benchmark.load_milliseconds, frames)) {
-        return 13;
-    }
-    std::cout << "Wrote " << frames.size() << " frame(s) to " << path_to_utf8(options.report)
-              << '\n';
-    return 0;
+    return result.value();
 }
 
 } // namespace
 
-int main(int count, char** values) {
+int main(int count, char** values)
+{
     const std::optional<Options> options = parse_options(count, values);
     if (!options.has_value()) {
         print_usage();

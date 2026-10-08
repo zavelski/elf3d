@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/gltf.h>
 
 #include <elf3d/core/result.h>
 #include <elf3d/model.h>
@@ -8,17 +8,13 @@ module;
 
 #include <algorithm>
 #include <cstddef>
+#include <elf3d/core/diagnostics.h>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
-
-module elf.gltf;
-
-import elf.core;
-import elf.model;
 
 namespace elf3d::gltf::importer_metadata {
 
@@ -48,19 +44,22 @@ struct MetadataCopyState {
     model::detail::ImportedDocumentMetadata imported;
     std::vector<ModelLoadDiagnostic> warnings;
 
-    [[nodiscard]] std::vector<ModelLoadDiagnostic>& diagnostics() noexcept {
+    [[nodiscard]] std::vector<ModelLoadDiagnostic>& diagnostics() noexcept
+    {
         return warnings;
     }
 };
 
 [[nodiscard]] bool source_has_metadata(const cgltf_extras& extras,
-                                       cgltf_size extensions_count) noexcept {
+                                       cgltf_size extensions_count) noexcept
+{
     return extras.data != nullptr || extras.end_offset > extras.start_offset ||
            extensions_count != 0;
 }
 
 void add_metadata_not_preserved(std::vector<ModelLoadDiagnostic>& diagnostics,
-                                std::string_view context, std::string_view reason) {
+                                std::string_view context, std::string_view reason)
+{
     diagnostics.push_back(ModelLoadDiagnostic{
         ModelLoadDiagnosticSeverity::warning, ModelLoadDiagnosticCategory::metadata,
         ModelLoadDiagnosticCode::metadata_not_preserved,
@@ -68,7 +67,8 @@ void add_metadata_not_preserved(std::vector<ModelLoadDiagnostic>& diagnostics,
         std::string{context}});
 }
 
-[[nodiscard]] bool reserve_metadata_bytes(MetadataBudget& budget, std::size_t bytes) noexcept {
+[[nodiscard]] bool reserve_metadata_bytes(MetadataBudget& budget, std::size_t bytes) noexcept
+{
     if (bytes > maximum_preserved_json_bytes - budget.bytes) {
         return false;
     }
@@ -77,16 +77,19 @@ void add_metadata_not_preserved(std::vector<ModelLoadDiagnostic>& diagnostics,
 }
 
 [[nodiscard]] std::span<const cgltf_extension> extension_span(const cgltf_extension* extensions,
-                                                              cgltf_size count) noexcept {
+                                                              cgltf_size count) noexcept
+{
     return {extensions, static_cast<std::size_t>(count)};
 }
 
 [[nodiscard]] std::optional<std::string>
 copy_extras_metadata(const cgltf_extras& extras, MetadataBudget& budget,
-                     std::vector<ModelLoadDiagnostic>& diagnostics, std::string_view context) {
+                     std::vector<ModelLoadDiagnostic>& diagnostics, std::string_view context)
+{
     if (extras.data == nullptr) {
         return std::nullopt;
     }
+
     const std::string_view data{extras.data};
     if (data.empty() || data.size() > maximum_preserved_json_block_bytes ||
         !reserve_metadata_bytes(budget, data.size())) {
@@ -98,7 +101,8 @@ copy_extras_metadata(const cgltf_extras& extras, MetadataBudget& budget,
 }
 
 [[nodiscard]] bool extension_is_duplicate(std::span<const ModelJsonExtension> extensions,
-                                          std::string_view name) noexcept {
+                                          std::string_view name) noexcept
+{
     return std::any_of(
         extensions.begin(), extensions.end(),
         [name](const ModelJsonExtension& preserved) noexcept { return preserved.name == name; });
@@ -107,12 +111,14 @@ copy_extras_metadata(const cgltf_extras& extras, MetadataBudget& budget,
 [[nodiscard]] std::optional<ModelJsonExtension>
 copy_extension(const cgltf_extension& extension,
                std::span<const ModelJsonExtension> preserved_extensions, MetadataBudget& budget,
-               std::vector<ModelLoadDiagnostic>& diagnostics, std::string_view context) {
+               std::vector<ModelLoadDiagnostic>& diagnostics, std::string_view context)
+{
     if (extension.name == nullptr || extension.data == nullptr) {
         add_metadata_not_preserved(diagnostics, context,
                                    "an unknown extension has missing raw data");
         return std::nullopt;
     }
+
     const std::string_view name{extension.name};
     const std::string_view data{extension.data};
     const bool duplicate = extension_is_duplicate(preserved_extensions, name);
@@ -132,13 +138,15 @@ copy_extension(const cgltf_extension& extension,
                                               std::span<const cgltf_extension> extensions,
                                               MetadataBudget& budget,
                                               std::vector<ModelLoadDiagnostic>& diagnostics,
-                                              std::string_view context) {
+                                              std::string_view context)
+{
     ModelJsonMetadata result;
     if (std::optional<std::string> extras_json =
             copy_extras_metadata(extras, budget, diagnostics, context);
         extras_json.has_value()) {
         result.extras_json = std::move(extras_json).value();
     }
+
     result.extensions.reserve(extensions.size());
     for (const cgltf_extension& extension : extensions) {
         std::optional<ModelJsonExtension> copied =
@@ -152,7 +160,8 @@ copy_extension(const cgltf_extension& extension,
 
 [[nodiscard]] std::optional<std::string>
 copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, MetadataBudget& budget,
-                   std::vector<ModelLoadDiagnostic>& diagnostics, std::string_view context) {
+                   std::vector<ModelLoadDiagnostic>& diagnostics, std::string_view context)
+{
     if (extras.data != nullptr || extras.end_offset <= extras.start_offset) {
         return std::nullopt;
     }
@@ -161,6 +170,7 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
                                    "legacy raw extras offsets are outside the source JSON");
         return std::nullopt;
     }
+
     const std::string_view data{source.json + extras.start_offset,
                                 extras.end_offset - extras.start_offset};
     if (data.empty() || data.size() > maximum_preserved_json_block_bytes ||
@@ -175,7 +185,8 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
 [[nodiscard]] ModelJsonMetadata copy_mesh_metadata(const cgltf_data& data, const cgltf_mesh& mesh,
                                                    MetadataBudget& budget,
                                                    std::vector<ModelLoadDiagnostic>& diagnostics,
-                                                   std::string_view context) {
+                                                   std::string_view context)
+{
     ModelJsonMetadata metadata =
         copy_metadata(mesh.extras, extension_span(mesh.extensions, mesh.extensions_count), budget,
                       diagnostics, context);
@@ -187,7 +198,8 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
     return metadata;
 }
 
-[[nodiscard]] bool has_buffer_metadata(const cgltf_data& data) noexcept {
+[[nodiscard]] bool has_buffer_metadata(const cgltf_data& data) noexcept
+{
     for (cgltf_size index = 0; index < data.buffers_count; ++index) {
         if (source_has_metadata(data.buffers[index].extras, data.buffers[index].extensions_count)) {
             return true;
@@ -208,7 +220,8 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
     return false;
 }
 
-[[nodiscard]] bool has_camera_metadata(const cgltf_data& data) noexcept {
+[[nodiscard]] bool has_camera_metadata(const cgltf_data& data) noexcept
+{
     for (cgltf_size index = 0; index < data.cameras_count; ++index) {
         const cgltf_camera& camera = data.cameras[index];
         const cgltf_extras& projection_extras = camera.type == cgltf_camera_type_perspective
@@ -222,7 +235,8 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
     return false;
 }
 
-[[nodiscard]] bool has_animation_metadata(const cgltf_data& data) noexcept {
+[[nodiscard]] bool has_animation_metadata(const cgltf_data& data) noexcept
+{
     for (cgltf_size index = 0; index < data.animations_count; ++index) {
         const cgltf_animation& animation = data.animations[index];
         if (source_has_metadata(animation.extras, animation.extensions_count)) {
@@ -244,7 +258,8 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
     return false;
 }
 
-[[nodiscard]] bool has_auxiliary_object_metadata(const cgltf_data& data) noexcept {
+[[nodiscard]] bool has_auxiliary_object_metadata(const cgltf_data& data) noexcept
+{
     for (cgltf_size index = 0; index < data.skins_count; ++index) {
         if (source_has_metadata(data.skins[index].extras, data.skins[index].extensions_count)) {
             return true;
@@ -263,7 +278,8 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
     return false;
 }
 
-[[nodiscard]] bool has_mapping_metadata(const cgltf_data& data) noexcept {
+[[nodiscard]] bool has_mapping_metadata(const cgltf_data& data) noexcept
+{
     for (cgltf_size mesh_index = 0; mesh_index < data.meshes_count; ++mesh_index) {
         const cgltf_mesh& mesh = data.meshes[mesh_index];
         for (cgltf_size primitive_index = 0; primitive_index < mesh.primitives_count;
@@ -280,7 +296,8 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
 }
 
 void diagnose_unsupported_scope_metadata(const cgltf_data& data,
-                                         std::vector<ModelLoadDiagnostic>& diagnostics) {
+                                         std::vector<ModelLoadDiagnostic>& diagnostics)
+{
     if (!has_buffer_metadata(data) && !has_camera_metadata(data) && !has_animation_metadata(data) &&
         !has_auxiliary_object_metadata(data) && !has_mapping_metadata(data)) {
         return;
@@ -291,18 +308,21 @@ void diagnose_unsupported_scope_metadata(const cgltf_data& data,
         "one-to-one Document metadata identity");
 }
 
-[[nodiscard]] bool has_preserved_values(const ModelJsonMetadata& metadata) noexcept {
+[[nodiscard]] bool has_preserved_values(const ModelJsonMetadata& metadata) noexcept
+{
     return metadata.extras_json.has_value() || !metadata.extensions.empty();
 }
 
 template <typename Container, typename Id>
-void store_preserved_metadata(Container& destination, Id id, ModelJsonMetadata metadata) {
+void store_preserved_metadata(Container& destination, Id id, ModelJsonMetadata metadata)
+{
     if (has_preserved_values(metadata)) {
         destination.emplace_back(id, std::move(metadata));
     }
 }
 
-void copy_root_metadata(const cgltf_data& data, MetadataCopyState& state) {
+void copy_root_metadata(const cgltf_data& data, MetadataCopyState& state)
+{
     state.imported.root =
         copy_metadata(data.extras, extension_span(data.data_extensions, data.data_extensions_count),
                       state.budget, state.diagnostics(), "document root");
@@ -312,7 +332,8 @@ void copy_root_metadata(const cgltf_data& data, MetadataCopyState& state) {
 }
 
 void copy_scene_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
-                         MetadataCopyState& state) {
+                         MetadataCopyState& state)
+{
     for (cgltf_size index = 0; index < data.scenes_count; ++index) {
         const cgltf_scene& source = data.scenes[index];
         ModelJsonMetadata metadata =
@@ -323,7 +344,8 @@ void copy_scene_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
 }
 
 void copy_node_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
-                        MetadataCopyState& state) {
+                        MetadataCopyState& state)
+{
     for (cgltf_size index = 0; index < data.nodes_count; ++index) {
         const cgltf_node& source = data.nodes[index];
         if (!source_has_metadata(source.extras, source.extensions_count)) {
@@ -342,18 +364,21 @@ void copy_node_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
 }
 
 void copy_primitive_metadata(const cgltf_mesh& mesh, std::size_t mesh_index,
-                             const ImportedMetadataIds& ids, MetadataCopyState& state) {
+                             const ImportedMetadataIds& ids, MetadataCopyState& state)
+{
     for (cgltf_size primitive_index = 0; primitive_index < mesh.primitives_count;
          ++primitive_index) {
         const cgltf_primitive& source = mesh.primitives[primitive_index];
         if (!source_has_metadata(source.extras, source.extensions_count)) {
             continue;
         }
+
         std::optional<PrimitiveId> id;
         if (mesh_index < ids.primitives.size() &&
             primitive_index < ids.primitives[mesh_index].size()) {
             id = ids.primitives[mesh_index][primitive_index];
         }
+
         const std::string context =
             "mesh " + std::to_string(mesh_index) + ", primitive " + std::to_string(primitive_index);
         if (!id.has_value()) {
@@ -369,7 +394,8 @@ void copy_primitive_metadata(const cgltf_mesh& mesh, std::size_t mesh_index,
 }
 
 void copy_mesh_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
-                        MetadataCopyState& state) {
+                        MetadataCopyState& state)
+{
     for (cgltf_size mesh_index = 0; mesh_index < data.meshes_count; ++mesh_index) {
         const cgltf_mesh& source = data.meshes[mesh_index];
         if (source_has_metadata(source.extras, source.extensions_count)) {
@@ -390,7 +416,8 @@ void copy_mesh_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
 }
 
 void copy_material_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
-                            MetadataCopyState& state) {
+                            MetadataCopyState& state)
+{
     for (cgltf_size index = 0; index < data.materials_count; ++index) {
         const cgltf_material& source = data.materials[index];
         if (!source_has_metadata(source.extras, source.extensions_count)) {
@@ -413,12 +440,14 @@ void copy_material_metadata(const cgltf_data& data, const ImportedMetadataIds& i
 template <typename Source, typename Id, typename Destination>
 void copy_indexed_metadata(std::span<const Source> sources, std::span<const std::optional<Id>> ids,
                            Destination& destination, std::string_view label,
-                           MetadataCopyState& state) {
+                           MetadataCopyState& state)
+{
     for (std::size_t index = 0; index < sources.size(); ++index) {
         const Source& source = sources[index];
         if (!source_has_metadata(source.extras, source.extensions_count)) {
             continue;
         }
+
         const std::string context = std::string{label} + " " + std::to_string(index);
         if (!ids[index].has_value()) {
             add_metadata_not_preserved(state.diagnostics(), context, "the object was not imported");
@@ -432,7 +461,8 @@ void copy_indexed_metadata(std::span<const Source> sources, std::span<const std:
 }
 
 void append_metadata_diagnostics(std::vector<ModelLoadDiagnostic>& destination,
-                                 std::vector<ModelLoadDiagnostic>& source) {
+                                 std::vector<ModelLoadDiagnostic>& source)
+{
     for (ModelLoadDiagnostic& diagnostic : source) {
         destination.push_back(std::move(diagnostic));
     }
@@ -442,7 +472,8 @@ void append_metadata_diagnostics(std::vector<ModelLoadDiagnostic>& destination,
 
 Result<void> attach_imported_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
                                       Document& document,
-                                      std::vector<ModelLoadDiagnostic>& diagnostics) {
+                                      std::vector<ModelLoadDiagnostic>& diagnostics)
+{
     MetadataCopyState state;
     copy_root_metadata(data, state);
     copy_scene_metadata(data, ids, state);

@@ -1,18 +1,16 @@
-module;
+#include <elf3d/internal/viewport.h>
 
 #include <elf3d/viewport.h>
 
 #include <cmath>
-
-module elf.viewport;
-
-import elf.math;
-import elf.scene;
+#include <elf3d/internal/math.h>
+#include <elf3d/internal/scene.h>
 
 namespace elf3d::viewport {
 namespace {
 
-[[nodiscard]] bool finite_float3(Float3 value) noexcept {
+[[nodiscard]] bool finite_float3(Float3 value) noexcept
+{
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
@@ -20,7 +18,8 @@ namespace {
 
 Result<ProjectedViewportPoint>
 OffscreenViewport::project_world_to_viewport(const scene::Storage& scene, EntityId camera,
-                                             Float3 world_position) const {
+                                             Float3 world_position) const
+{
     const Extent2D target_extent = extent();
     if (target_extent.width == 0 || target_extent.height == 0) {
         return Error{ErrorCode::invalid_viewport_dimensions,
@@ -40,14 +39,17 @@ OffscreenViewport::project_world_to_viewport(const scene::Storage& scene, Entity
         return Error{ErrorCode::invalid_camera_configuration,
                      "World-to-viewport projection requires a valid perspective camera"};
     }
+
     const Result<Float4x4> camera_world = scene.world_matrix(camera);
     if (!camera_world) {
         return camera_world.error();
     }
+
     const Result<Float4x4> view = math::camera_view_matrix(camera_world.value());
     if (!view) {
         return view.error();
     }
+
     const float aspect =
         static_cast<float>(target_extent.width) / static_cast<float>(target_extent.height);
     const Result<Float4x4> projection = math::perspective_matrix(

@@ -1,19 +1,16 @@
-module;
+#include <elf3d/internal/viewport.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <elf3d/internal/clipping.h>
+#include <elf3d/internal/graphics.h>
+#include <elf3d/internal/picking.h>
+#include <elf3d/internal/renderer.h>
+#include <elf3d/internal/scene.h>
 #include <memory>
 #include <optional>
 #include <utility>
-
-module elf.viewport;
-
-import elf.clipping;
-import elf.graphics;
-import elf.picking;
-import elf.renderer;
-import elf.scene;
 
 namespace elf3d::viewport {
 namespace {
@@ -21,7 +18,8 @@ namespace {
 constexpr std::uint32_t picking_target_downsample = 2U;
 constexpr std::uint32_t focus_depth_max_side = 256U;
 
-[[nodiscard]] std::uint32_t picking_dimension(std::uint32_t dimension) noexcept {
+[[nodiscard]] std::uint32_t picking_dimension(std::uint32_t dimension) noexcept
+{
     if (dimension == 0U) {
         return 0U;
     }
@@ -29,11 +27,13 @@ constexpr std::uint32_t focus_depth_max_side = 256U;
            (dimension % picking_target_downsample == 0U ? 0U : 1U);
 }
 
-[[nodiscard]] Extent2D picking_target_extent(Extent2D viewport_extent) noexcept {
+[[nodiscard]] Extent2D picking_target_extent(Extent2D viewport_extent) noexcept
+{
     return {picking_dimension(viewport_extent.width), picking_dimension(viewport_extent.height)};
 }
 
-[[nodiscard]] Extent2D focus_depth_target_extent(Extent2D viewport_extent) noexcept {
+[[nodiscard]] Extent2D focus_depth_target_extent(Extent2D viewport_extent) noexcept
+{
     if (viewport_extent.width == 0U || viewport_extent.height == 0U) {
         return {};
     }
@@ -57,7 +57,8 @@ constexpr std::uint32_t focus_depth_max_side = 256U;
     return {width, focus_depth_max_side};
 }
 
-[[nodiscard]] bool contains_viewport_position(Extent2D extent, Float2 position_pixels) noexcept {
+[[nodiscard]] bool contains_viewport_position(Extent2D extent, Float2 position_pixels) noexcept
+{
     return std::isfinite(position_pixels.x) && std::isfinite(position_pixels.y) &&
            position_pixels.x >= 0.0F && position_pixels.y >= 0.0F &&
            position_pixels.x < static_cast<float>(extent.width) &&
@@ -65,10 +66,12 @@ constexpr std::uint32_t focus_depth_max_side = 256U;
 }
 
 [[nodiscard]] float scale_pixel_coordinate(float position, std::uint32_t source_dimension,
-                                           std::uint32_t target_dimension) noexcept {
+                                           std::uint32_t target_dimension) noexcept
+{
     if (source_dimension == 0U || target_dimension == 0U || source_dimension == target_dimension) {
         return position;
     }
+
     const double source = static_cast<double>(source_dimension);
     const double target = static_cast<double>(target_dimension);
     const double scaled = (static_cast<double>(position) + 0.5) * target / source - 0.5;
@@ -78,13 +81,15 @@ constexpr std::uint32_t focus_depth_max_side = 256U;
 
 [[nodiscard]] Float2 scale_viewport_position_to_picking_target(Float2 position_pixels,
                                                                Extent2D viewport_extent,
-                                                               Extent2D target_extent) noexcept {
+                                                               Extent2D target_extent) noexcept
+{
     return {
         scale_pixel_coordinate(position_pixels.x, viewport_extent.width, target_extent.width),
         scale_pixel_coordinate(position_pixels.y, viewport_extent.height, target_extent.height)};
 }
 
-void reset_latest_gpu_picking_statistics(PickingStatistics& statistics) noexcept {
+void reset_latest_gpu_picking_statistics(PickingStatistics& statistics) noexcept
+{
     statistics.latest_gpu_requests = 0;
     statistics.latest_gpu_hits = 0;
     statistics.latest_gpu_misses = 0;
@@ -101,25 +106,28 @@ void reset_latest_gpu_picking_statistics(PickingStatistics& statistics) noexcept
     statistics.latest_gpu_timing_available = false;
 }
 
-void record_target_allocation(PickingStatistics& statistics, double milliseconds) noexcept {
+void record_target_allocation(PickingStatistics& statistics, double milliseconds) noexcept
+{
     ++statistics.latest_target_allocations;
     ++statistics.lifetime_target_allocations;
     statistics.latest_allocation_milliseconds += milliseconds;
 }
 
 void record_delayed_gpu_picking_timing(graphics::Device& device,
-                                       PickingStatistics& statistics) noexcept {
+                                       PickingStatistics& statistics) noexcept
+{
     const graphics::GpuTimingSample timing =
         device.delayed_gpu_timing(graphics::GpuTimingPass::picking);
     statistics.latest_gpu_milliseconds = timing.milliseconds;
     statistics.latest_gpu_timing_available = timing.available;
 }
 
-[[nodiscard]] Result<bool> resize_target_if_needed(graphics::PickingTarget* target,
-                                                   Extent2D extent) {
+[[nodiscard]] Result<bool> resize_target_if_needed(graphics::PickingTarget* target, Extent2D extent)
+{
     if (target == nullptr || target->extent() == extent) {
         return false;
     }
+
     const Result<void> resized = target->resize(extent);
     return resized ? Result<bool>{true} : Result<bool>{resized.error()};
 }
@@ -139,7 +147,8 @@ struct GpuPickPreparation final {
                                                          Extent2D viewport_extent,
                                                          Float2 position_pixels,
                                                          graphics::Device& device,
-                                                         PickingStatistics& statistics) {
+                                                         PickingStatistics& statistics)
+{
     if (target == nullptr) {
         return {GpuPickAction::cpu_fallback, {}};
     }
@@ -149,6 +158,7 @@ struct GpuPickPreparation final {
     if (!contains_viewport_position(viewport_extent, position_pixels)) {
         return {GpuPickAction::cpu_fallback, {}};
     }
+
     const double allocation_begin = device.monotonic_time_milliseconds();
     const Result<bool> resized =
         resize_target_if_needed(target, picking_target_extent(viewport_extent));
@@ -159,6 +169,7 @@ struct GpuPickPreparation final {
     if (resized.value()) {
         record_target_allocation(statistics, allocation_end - allocation_begin);
     }
+
     const Extent2D target_extent = target->extent();
     if (target_extent.width == 0U || target_extent.height == 0U) {
         return {};
@@ -170,17 +181,20 @@ struct GpuPickPreparation final {
 } // namespace
 
 Result<std::unique_ptr<OffscreenViewport>> OffscreenViewport::create(graphics::Device& device,
-                                                                     Extent2D initial_extent) {
+                                                                     Extent2D initial_extent)
+{
     Result<std::unique_ptr<graphics::RenderTarget>> target_result =
         device.create_render_target(initial_extent);
     if (!target_result) {
         return target_result.error();
     }
+
     Result<std::unique_ptr<graphics::PickingTarget>> picking_target_result =
         device.create_picking_target(picking_target_extent(initial_extent));
     if (!picking_target_result) {
         return picking_target_result.error();
     }
+
     Result<std::unique_ptr<graphics::PickingTarget>> focus_depth_target_result =
         device.create_picking_target(focus_depth_target_extent(initial_extent));
     if (!focus_depth_target_result) {
@@ -192,11 +206,13 @@ Result<std::unique_ptr<OffscreenViewport>> OffscreenViewport::create(graphics::D
     return std::make_unique<OffscreenViewport>(ConstructionKey{}, std::move(resources));
 }
 
-Extent2D OffscreenViewport::extent() const noexcept {
+Extent2D OffscreenViewport::extent() const noexcept
+{
     return render_target_ != nullptr ? render_target_->extent() : Extent2D{};
 }
 
-Result<void> OffscreenViewport::resize(Extent2D extent) {
+Result<void> OffscreenViewport::resize(Extent2D extent)
+{
     if (render_target_ == nullptr) {
         return Error{ErrorCode::graphics_shutdown, "Viewport graphics resources are unavailable"};
     }
@@ -205,8 +221,10 @@ Result<void> OffscreenViewport::resize(Extent2D extent) {
         if (!render_resize) {
             return render_resize.error();
         }
+        has_rendered_image_ = false;
         ++render_revision_;
     }
+
     const auto resize_and_record = [&](graphics::PickingTarget* target,
                                        Extent2D desired) -> Result<void> {
         const Result<bool> resized = resize_target_if_needed(target, desired);
@@ -230,7 +248,8 @@ Result<void> OffscreenViewport::resize(Extent2D extent) {
 
 Result<std::optional<PickHit>> OffscreenViewport::pick_gpu_first(
     renderer::Renderer& renderer, picking::PickingService& picking, const scene::Storage& scene,
-    const scene::VisibilityFilter& visibility, const PickOperation& operation) {
+    const scene::VisibilityFilter& visibility, const PickOperation& operation)
+{
     const Extent2D viewport_extent = extent();
     reset_latest_gpu_picking_statistics(gpu_picking_statistics_);
     const double cpu_begin = renderer.device().monotonic_time_milliseconds();
@@ -313,7 +332,8 @@ Result<std::optional<PickHit>> OffscreenViewport::pick_gpu_first(
 Result<std::optional<Float3>>
 OffscreenViewport::focus_depth_anchor(renderer::Renderer& renderer, const scene::Storage& scene,
                                       EntityId camera, const scene::VisibilityFilter& visibility,
-                                      const clipping::ClippingFilter& clipping_filter) {
+                                      const clipping::ClippingFilter& clipping_filter)
+{
     reset_latest_gpu_picking_statistics(gpu_picking_statistics_);
     const double cpu_begin = renderer.device().monotonic_time_milliseconds();
 
@@ -322,12 +342,14 @@ OffscreenViewport::focus_depth_anchor(renderer::Renderer& renderer, const scene:
             renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return std::optional<Float3>{};
     }
+
     const Extent2D viewport_extent = extent();
     if (viewport_extent.width == 0U || viewport_extent.height == 0U) {
         gpu_picking_statistics_.latest_cpu_milliseconds =
             renderer.device().monotonic_time_milliseconds() - cpu_begin;
         return std::optional<Float3>{};
     }
+
     const double allocation_begin = renderer.device().monotonic_time_milliseconds();
     const Result<bool> resized = resize_target_if_needed(
         focus_depth_target_.get(), focus_depth_target_extent(viewport_extent));
@@ -378,7 +400,8 @@ OffscreenViewport::focus_depth_anchor(renderer::Renderer& renderer, const scene:
 }
 
 PickingStatistics
-OffscreenViewport::picking_statistics(const picking::PickingService& picking) const noexcept {
+OffscreenViewport::picking_statistics(const picking::PickingService& picking) const noexcept
+{
     PickingStatistics result = picking.statistics();
     result.latest_gpu_requests = gpu_picking_statistics_.latest_gpu_requests;
     result.latest_gpu_hits = gpu_picking_statistics_.latest_gpu_hits;

@@ -1,0 +1,23 @@
+# PCH is a private optimization, never a library usage requirement.
+function(elf3d_enable_pch target profile)
+    if(NOT WIN32 OR NOT MSVC)
+        return()
+    endif()
+    if(profile STREQUAL "imgui")
+        set(headers <cassert> <cfloat> <climits> <cmath> <cstdarg> <cstddef>
+            <cstdint> <cstdio> <cstdlib> <cstring>)
+    elseif(profile STREQUAL "integration")
+        set(headers <array> <cstddef> <cstdint> <memory> <span> <string_view> <utility>)
+    else()
+        set(headers <algorithm> <array> <cmath> <cstddef> <cstdint> <limits>
+            <memory> <optional> <span> <string> <string_view> <utility> <variant> <vector>)
+        if(profile STREQUAL "viewer")
+            list(APPEND headers <filesystem>)
+        elseif(NOT profile STREQUAL "engine")
+            message(FATAL_ERROR "Unknown Elf3D PCH profile: ${profile}")
+        endif()
+    endif()
+    foreach(header IN LISTS headers)
+        target_precompile_headers(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${header}>")
+    endforeach()
+endfunction()

@@ -8,7 +8,8 @@ namespace elf3d_examples {
 
 [[nodiscard]] elf3d::Result<elf3d::LoadedScene>
 load_and_validate_report(elf3d::Engine& engine, std::string_view path_utf8,
-                         const elf3d::ModelLoadOptions& options = {}) noexcept {
+                         const elf3d::ModelLoadOptions& options = {}) noexcept
+{
     elf3d::Result<elf3d::LoadedScene> loaded_result = engine.load_scene(path_utf8, options);
     if (!loaded_result) {
         return loaded_result.error();

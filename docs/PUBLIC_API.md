@@ -60,21 +60,22 @@ options.title = "My Elf3D Application";
 auto exit_result = elf3d::run_application(options, application);
 ```
 
-`elf3d_embed` / `elf3d::embed` is the separately named integration for a host
-that must own its native window, current OpenGL context, event loop, input,
-presentation, and teardown. Such a host creates `EmbeddedRuntime` with a
-procedure loader, uses its borrowed `engine()`, and destroys the runtime and all
-objects created through it before destroying the external graphics context.
-
-```cpp
-#include <elf3d/embed/runtime.h>
-```
-
-Link a standard application to `elf3d::app` and an explicit embedding host to
-`elf3d::embed`; each target brings the Runtime SDK dependency transitively.
+All graphical applications link `elf3d::app` and use `run_application()`.
+The framework owns the complete native lifecycle, including hidden utility
+applications. The Runtime SDK exposes no public Engine factory or native
+texture presentation interface.
 
 CPU-only model work does not require either lifecycle; link `elf3d_model` and
 use the `Document` API directly.
+
+Document construction, mutation, and validation are `noexcept`. Expected
+validation and I/O failures remain `Result` errors or validation diagnostics;
+memory exhaustion is process-fatal, not a recoverable error. Scene and Model
+SDK boundaries route escaping allocation failures through `fatal_error`.
+Standard-library operations that themselves terminate cannot be intercepted
+by an outer boundary. Elf3D does not install process-wide exception handlers.
+Import and export reject paths containing embedded nulls and report failed
+UTF-8/native path conversion as `ErrorCode::invalid_argument`.
 
 ## Loading a Scene
 
@@ -144,17 +145,17 @@ if (!queued) {
 }
 ```
 
-The standard framework executes queued rendering after application UI
-participation and presents the final frame. Direct `Viewport::render()` is an
-embedding operation, and only `EmbeddedRuntime::native_texture_view()` exposes
-its non-owning presentation texture to an external host.
+The framework executes queued rendering after application UI participation,
+resolves the display image, and presents the final frame. Direct
+`Viewport::render()` remains a low-level operation within the framework-owned
+graphics lifetime, used by focused backend tests.
 
 `RenderStatistics` reports primitive visibility, passes, draw/resource work,
 resident-byte estimates, CPU phases, and delayed nonblocking GPU main/resolve
 timings. `PickingStatistics` reports the corresponding picking pass, readback,
 allocation, CPU, and delayed GPU timing. A GPU value remains unavailable until
 an older timer query completes; rendering never waits for the current query.
-Hosts may select diagnostic `RenderShadingMode::unlit`, retain a rendered
+Applications may select diagnostic `RenderShadingMode::unlit`, retain a rendered
 texture until `Scene::revision()` or `Viewport::render_revision()` changes,
 and keep the default standard PBR path unchanged.
 
@@ -165,6 +166,26 @@ no-tone-map path. The defaults are environment intensity `2`, rotation `0`,
 exposure `0 EV`, and Standard. Environment intensity is clamped to `[0, 8]`,
 exposure to `[-8, 8]`, and invalid values are sanitized; each effective change
 advances `Viewport::render_revision()` without mutating Scene state.
+
+## Frame Statistics and Image Readback
+
+`ApplicationUpdateContext::previous_frame_statistics()` returns no value in the
+first update, then the last fully presented frame's zero-based `frame_index`
+and `wall_milliseconds`. The interval starts before event processing and ends
+after swap returns. Failed frames and updates that request exit do not publish
+new samples. The four Application callbacks are unchanged.
+
+`Viewport::read_color_pixels(std::span<std::uint8_t>)` synchronously reads the
+last rendered image after the current display transform. Allocate exactly
+`extent.width * extent.height * 4` bytes with checked arithmetic; output is
+tightly packed RGBA8, top row first. The operation runs on the graphics thread,
+may wait for GPU completion, and does not render the scene again. Before the
+first successful render or after target recreation it returns
+`texture_unavailable`; a mismatched buffer returns `invalid_argument`, byte-size
+overflow returns `size_overflow`, and GPU read failure returns
+`gpu_texture_readback_failed`. Changing the display transform can resolve the
+retained HDR image without another scene render. Read in the next `update`
+after queueing a render in `build_ui`.
 
 ## Main API Areas
 
@@ -178,8 +199,6 @@ advances `Viewport::render_revision()` without mutating Scene state.
 - `Application`: canonical standard lifecycle, normalized `InputSnapshot`
   participation, owner-scoped interaction arbitration, queued rendering, and
   deterministic teardown.
-- `EmbeddedRuntime`: explicit host-owned context/loop composition and native
-  texture presentation access.
 - `Engine`: runtime scene and viewport creation and loading.
 - `Scene`: hierarchy, transforms, cameras, model-backed loaded data,
   Scene-created convenience assets, visibility, bounds, surface-anchor
@@ -211,9 +230,9 @@ raw-metadata setter. Image placement uses
 
 ## Ownership and Shutdown
 
-Elf3D objects are returned as `std::unique_ptr`. The framework or
-`EmbeddedRuntime` owns the engine, which must outlive every scene and viewport
-created from it.
+Elf3D objects are returned as `std::unique_ptr`. The framework owns the engine,
+which must outlive every scene and viewport created from it. Release these
+objects in `Application::stop`.
 
 Shutdown in this order:
 
@@ -221,7 +240,7 @@ Shutdown in this order:
 2. destroy viewports while their OpenGL context is current;
 3. destroy scenes;
 4. destroy the engine;
-5. destroy the host OpenGL context and window.
+5. let the framework destroy its graphics context and window.
 
 Scene mutation, loading, rendering, navigation, picking, and graphics-resource
 management are used from the owning application and graphics thread.
@@ -231,7 +250,6 @@ management are used from the owning application and graphics thread.
 The canonical examples are compiled by the normal full-engine test build:
 
 - [`standard_application.cpp`](../examples/standard_application.cpp)
-- [`embedded_viewer.cpp`](../examples/embedded_viewer.cpp)
 - [`load_and_report.cpp`](../examples/load_and_report.cpp)
 - [`procedural_scene.cpp`](../examples/procedural_scene.cpp)
 - [`picking_and_selection.cpp`](../examples/picking_and_selection.cpp)
@@ -240,3 +258,7 @@ The canonical examples are compiled by the normal full-engine test build:
 
 They check every `Result` before value access and are the preferred source for
 application integration code.
+
+The standalone [`external_application`](../examples/external_application/main.cpp)
+also queues one frame, reads its display pixels and statistics in the next
+update, and exits without rendering another frame.

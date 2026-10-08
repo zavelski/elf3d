@@ -30,7 +30,7 @@ file(WRITE "${ELF3D_EMBED_OUTPUT}" [=[
 #include <memory>
 #include <span>
 
-import elf.renderer;
+#include <elf3d/internal/renderer.h>
 
 namespace elf3d::detail {
 namespace {

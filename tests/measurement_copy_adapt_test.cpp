@@ -10,21 +10,25 @@
 
 namespace {
 
-[[nodiscard]] elf3d::Result<void> failure(const char* message) noexcept {
+[[nodiscard]] elf3d::Result<void> failure(const char* message) noexcept
+{
     return elf3d::Error{elf3d::ErrorCode::invalid_argument, message};
 }
 
-[[nodiscard]] bool nearly_equal(double left, double right) noexcept {
+[[nodiscard]] bool nearly_equal(double left, double right) noexcept
+{
     return std::abs(left - right) <= 1.0e-8;
 }
 
 class CopyAdaptApplication final : public elf3d::Application {
   public:
-    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override {
+    [[nodiscard]] elf3d::Result<void> start(elf3d::ApplicationContext& context) noexcept override
+    {
         const elf3d::Result<void> initialized = initialize_scene(context);
         if (!initialized) {
             return initialized.error();
         }
+
         const elf3d::Result<void> verified = verify_measurement();
         if (!verified) {
             return verified.error();
@@ -33,7 +37,8 @@ class CopyAdaptApplication final : public elf3d::Application {
     }
 
     [[nodiscard]] elf3d::Result<void>
-    update(elf3d::ApplicationUpdateContext& context) noexcept override {
+    update(elf3d::ApplicationUpdateContext& context) noexcept override
+    {
         ++update_count_;
         if (update_count_ >= 2) {
             context.request_exit();
@@ -41,7 +46,8 @@ class CopyAdaptApplication final : public elf3d::Application {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override {
+    [[nodiscard]] elf3d::Result<void> build_ui(elf3d::ApplicationUiContext&) noexcept override
+    {
         elf3d::ViewportRenderOptions options;
         options.overlay_lines = overlay_.line_span();
         options.overlay_markers = overlay_.marker_span();
@@ -50,17 +56,20 @@ class CopyAdaptApplication final : public elf3d::Application {
         return {};
     }
 
-    void stop(elf3d::ApplicationContext&) noexcept override {
+    void stop(elf3d::ApplicationContext&) noexcept override
+    {
         viewport_.reset();
         scene_.reset();
     }
 
-    [[nodiscard]] bool passed() const noexcept {
+    [[nodiscard]] bool passed() const noexcept
+    {
         return verified_ && render_options_composed_ && scene_ == nullptr && viewport_ == nullptr;
     }
 
   private:
-    [[nodiscard]] elf3d::Result<void> initialize_scene(elf3d::ApplicationContext& context) {
+    [[nodiscard]] elf3d::Result<void> initialize_scene(elf3d::ApplicationContext& context)
+    {
         elf3d::Result<std::unique_ptr<elf3d::Scene>> scene = context.engine().create_scene();
         elf3d::Result<std::unique_ptr<elf3d::Viewport>> viewport =
             context.engine().create_viewport({320, 240});
@@ -94,7 +103,8 @@ class CopyAdaptApplication final : public elf3d::Application {
         return {};
     }
 
-    [[nodiscard]] elf3d::PickHit hit(elf3d::Float3 barycentric) const noexcept {
+    [[nodiscard]] elf3d::PickHit hit(elf3d::Float3 barycentric) const noexcept
+    {
         elf3d::PickHit result;
         result.entity = model_;
         result.mesh = mesh_;
@@ -104,19 +114,23 @@ class CopyAdaptApplication final : public elf3d::Application {
         return result;
     }
 
-    [[nodiscard]] elf3d::Result<void> verify_measurement() {
+    [[nodiscard]] elf3d::Result<void> verify_measurement()
+    {
         const elf3d::Result<void> first = verify_first_point();
         if (!first) {
             return first.error();
         }
+
         const elf3d::Result<void> preview = verify_preview();
         if (!preview) {
             return preview.error();
         }
+
         const elf3d::Result<void> complete = verify_completion();
         if (!complete) {
             return complete.error();
         }
+
         const elf3d::Result<void> visibility = verify_visibility_and_clear();
         if (!visibility) {
             return visibility.error();
@@ -125,11 +139,13 @@ class CopyAdaptApplication final : public elf3d::Application {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> verify_first_point() {
+    [[nodiscard]] elf3d::Result<void> verify_first_point()
+    {
         const elf3d::Result<void> first = tool_.place_hit(*scene_, hit({1.0F, 0.0F, 0.0F}));
         if (!first) {
             return first.error();
         }
+
         const elf3d::Result<elf3d_external::MeasurementSnapshot> awaiting =
             tool_.snapshot(*scene_, *viewport_);
         if (!awaiting ||
@@ -140,17 +156,20 @@ class CopyAdaptApplication final : public elf3d::Application {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> verify_preview() {
+    [[nodiscard]] elf3d::Result<void> verify_preview()
+    {
         elf3d::Transform moved;
         moved.translation = {2.0F, 0.0F, 0.0F};
         const elf3d::Result<void> transformed = scene_->set_local_transform(model_, moved);
         if (!transformed) {
             return transformed.error();
         }
+
         const elf3d::Result<void> preview = tool_.update_preview(*scene_, hit({0.0F, 1.0F, 0.0F}));
         if (!preview) {
             return preview.error();
         }
+
         const elf3d::Result<elf3d_external::MeasurementSnapshot> preview_snapshot =
             tool_.snapshot(*scene_, *viewport_);
         if (!preview_snapshot || !preview_snapshot.value().first_point.has_value() ||
@@ -162,11 +181,13 @@ class CopyAdaptApplication final : public elf3d::Application {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> verify_completion() {
+    [[nodiscard]] elf3d::Result<void> verify_completion()
+    {
         const elf3d::Result<void> second = tool_.place_hit(*scene_, hit({0.0F, 1.0F, 0.0F}));
         if (!second) {
             return second.error();
         }
+
         const elf3d::Result<elf3d_external::MeasurementSnapshot> complete =
             tool_.snapshot(*scene_, *viewport_);
         const elf3d::Result<elf3d_external::MeasurementOverlay> overlay =
@@ -180,11 +201,13 @@ class CopyAdaptApplication final : public elf3d::Application {
         return {};
     }
 
-    [[nodiscard]] elf3d::Result<void> verify_visibility_and_clear() {
+    [[nodiscard]] elf3d::Result<void> verify_visibility_and_clear()
+    {
         const elf3d::Result<void> hidden = scene_->set_entity_local_visibility(model_, false);
         if (!hidden) {
             return hidden.error();
         }
+
         const elf3d::Result<elf3d_external::MeasurementSnapshot> hidden_snapshot =
             tool_.snapshot(*scene_, *viewport_);
         const elf3d::Result<elf3d_external::MeasurementOverlay> hidden_overlay =
@@ -193,10 +216,12 @@ class CopyAdaptApplication final : public elf3d::Application {
             hidden_overlay.value().line_count != 0 || hidden_overlay.value().marker_count != 0) {
             return failure("Copied Measurement Tool ignored public viewport visibility");
         }
+
         const elf3d::Result<void> shown = scene_->set_entity_local_visibility(model_, true);
         if (!shown) {
             return shown.error();
         }
+
         tool_.clear();
         const elf3d::Result<elf3d_external::MeasurementSnapshot> cleared =
             tool_.snapshot(*scene_, *viewport_);
@@ -217,7 +242,8 @@ class CopyAdaptApplication final : public elf3d::Application {
     bool render_options_composed_ = false;
 };
 
-[[nodiscard]] bool environment_cannot_create_context(elf3d::ErrorCode code) noexcept {
+[[nodiscard]] bool environment_cannot_create_context(elf3d::ErrorCode code) noexcept
+{
     return code == elf3d::ErrorCode::graphics_initialization_failed ||
            code == elf3d::ErrorCode::graphics_context_unavailable ||
            code == elf3d::ErrorCode::unsupported_graphics_version;
@@ -225,7 +251,8 @@ class CopyAdaptApplication final : public elf3d::Application {
 
 } // namespace
 
-int main() {
+int main()
+{
     CopyAdaptApplication application;
     elf3d::ApplicationOptions options;
     options.title = "Elf3D external Measurement Tool copy/adapt proof";

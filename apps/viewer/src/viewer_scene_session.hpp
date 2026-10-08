@@ -19,7 +19,8 @@ struct SceneSession {
     SceneHierarchySnapshot hierarchy_snapshot;
     SceneLoadReport load_report;
 
-    [[nodiscard]] bool is_imported() const noexcept {
+    [[nodiscard]] bool is_imported() const noexcept
+    {
         return !source_path.empty();
     }
 };

@@ -13,12 +13,13 @@ struct ProceduralScene {
     elf3d::EntityId camera_entity;
 };
 
-[[nodiscard]] elf3d::Result<ProceduralScene>
-create_procedural_scene(elf3d::Engine& engine) noexcept {
+[[nodiscard]] elf3d::Result<ProceduralScene> create_procedural_scene(elf3d::Engine& engine) noexcept
+{
     elf3d::Result<std::unique_ptr<elf3d::Scene>> scene_result = engine.create_scene();
     if (!scene_result) {
         return scene_result.error();
     }
+
     std::unique_ptr<elf3d::Scene> scene = std::move(scene_result).value();
 
     const std::array<elf3d::VertexPositionNormal, 3> vertices{{
@@ -45,6 +46,7 @@ create_procedural_scene(elf3d::Engine& engine) noexcept {
     if (!model) {
         return model.error();
     }
+
     const elf3d::Result<elf3d::EntityId> camera = scene->create_perspective_camera_entity({});
     if (!camera) {
         return camera.error();

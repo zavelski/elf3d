@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <elf3d/internal/gltf.h>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -9,9 +10,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-
-import elf.gltf;
-import elf.model;
 
 namespace {
 
@@ -44,13 +42,15 @@ constexpr std::string_view expected_root_extension =
 
 class TemporaryDirectory final {
   public:
-    TemporaryDirectory() : path_(std::filesystem::path{ELF3D_TEST_BINARY_DIR} / "gltf_metadata") {
+    TemporaryDirectory() : path_(std::filesystem::path{ELF3D_TEST_BINARY_DIR} / "gltf_metadata")
+    {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
         std::filesystem::create_directories(path_);
     }
 
-    ~TemporaryDirectory() {
+    ~TemporaryDirectory()
+    {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
     }
@@ -58,7 +58,8 @@ class TemporaryDirectory final {
     TemporaryDirectory(const TemporaryDirectory&) = delete;
     TemporaryDirectory& operator=(const TemporaryDirectory&) = delete;
 
-    [[nodiscard]] const std::filesystem::path& path() const noexcept {
+    [[nodiscard]] const std::filesystem::path& path() const noexcept
+    {
         return path_;
     }
 
@@ -66,13 +67,15 @@ class TemporaryDirectory final {
     std::filesystem::path path_;
 };
 
-[[nodiscard]] bool write_text(const std::filesystem::path& path, std::string_view text) {
+[[nodiscard]] bool write_text(const std::filesystem::path& path, std::string_view text)
+{
     std::ofstream stream{path, std::ios::binary};
     stream.write(text.data(), static_cast<std::streamsize>(text.size()));
     return static_cast<bool>(stream);
 }
 
-[[nodiscard]] std::optional<std::string> read_text(const std::filesystem::path& path) {
+[[nodiscard]] std::optional<std::string> read_text(const std::filesystem::path& path)
+{
     std::ifstream stream{path, std::ios::binary};
     if (!stream) {
         return std::nullopt;
@@ -80,7 +83,8 @@ class TemporaryDirectory final {
     return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
 }
 
-[[nodiscard]] bool metadata_matches(elf3d::ModelJsonMetadataView metadata, std::string_view scope) {
+[[nodiscard]] bool metadata_matches(elf3d::ModelJsonMetadataView metadata, std::string_view scope)
+{
     const std::string expected_extras = "{\"tag\":\"" + std::string{scope} + "\"}";
     const std::string expected_extension = "{\"tag\":\"" + std::string{scope} + "-ext\"}";
     return metadata.extras_json == std::optional<std::string_view>{expected_extras} &&
@@ -88,11 +92,13 @@ class TemporaryDirectory final {
            metadata.extensions[0].data == expected_extension;
 }
 
-[[nodiscard]] bool metadata_is_empty(elf3d::ModelJsonMetadataView metadata) noexcept {
+[[nodiscard]] bool metadata_is_empty(elf3d::ModelJsonMetadataView metadata) noexcept
+{
     return !metadata.extras_json.has_value() && metadata.extensions.empty();
 }
 
-[[nodiscard]] bool root_metadata_matches(const elf3d::DocumentView& view) {
+[[nodiscard]] bool root_metadata_matches(const elf3d::DocumentView& view)
+{
     return view.root_metadata().extras_json ==
                std::optional<std::string_view>{expected_root_extras} &&
            view.root_metadata().extensions.size() == 1U &&
@@ -100,7 +106,8 @@ class TemporaryDirectory final {
            metadata_matches(view.asset_metadata(), "asset");
 }
 
-[[nodiscard]] bool scene_graph_metadata_matches(const elf3d::DocumentView& view) {
+[[nodiscard]] bool scene_graph_metadata_matches(const elf3d::DocumentView& view)
+{
     const auto scene = view.scene_at(0U);
     const auto node = view.node_at(0U);
     const auto mesh = view.mesh_at(0U);
@@ -112,7 +119,8 @@ class TemporaryDirectory final {
            metadata_matches(primitive.value().metadata, "primitive");
 }
 
-[[nodiscard]] bool resource_metadata_matches(const elf3d::DocumentView& view) {
+[[nodiscard]] bool resource_metadata_matches(const elf3d::DocumentView& view)
+{
     const auto material = view.material_at(0U);
     const auto image = view.image_at(0U);
     const auto texture = view.texture_at(0U);
@@ -125,13 +133,15 @@ class TemporaryDirectory final {
            material.value().description.ior == 1.33F;
 }
 
-[[nodiscard]] bool all_supported_metadata_matches(const elf3d::Document& document) {
+[[nodiscard]] bool all_supported_metadata_matches(const elf3d::Document& document)
+{
     const elf3d::DocumentView view = document.view();
     return root_metadata_matches(view) && scene_graph_metadata_matches(view) &&
            resource_metadata_matches(view);
 }
 
-[[nodiscard]] bool scene_graph_metadata_is_empty(const elf3d::DocumentView& view) {
+[[nodiscard]] bool scene_graph_metadata_is_empty(const elf3d::DocumentView& view)
+{
     const auto scene = view.scene_at(0U);
     const auto node = view.node_at(0U);
     const auto mesh = view.mesh_at(0U);
@@ -141,7 +151,8 @@ class TemporaryDirectory final {
            metadata_is_empty(primitive.value().metadata);
 }
 
-[[nodiscard]] bool resource_metadata_is_empty(const elf3d::DocumentView& view) {
+[[nodiscard]] bool resource_metadata_is_empty(const elf3d::DocumentView& view)
+{
     const auto material = view.material_at(0U);
     const auto image = view.image_at(0U);
     const auto texture = view.texture_at(0U);
@@ -153,13 +164,15 @@ class TemporaryDirectory final {
            metadata_is_empty(sampler.value().metadata);
 }
 
-[[nodiscard]] bool all_supported_metadata_is_empty(const elf3d::Document& document) {
+[[nodiscard]] bool all_supported_metadata_is_empty(const elf3d::Document& document)
+{
     const elf3d::DocumentView view = document.view();
     return metadata_is_empty(view.root_metadata()) && metadata_is_empty(view.asset_metadata()) &&
            scene_graph_metadata_is_empty(view) && resource_metadata_is_empty(view);
 }
 
-[[nodiscard]] bool has_unpreserved_metadata_diagnostic(const elf3d::ModelLoadReport& report) {
+[[nodiscard]] bool has_unpreserved_metadata_diagnostic(const elf3d::ModelLoadReport& report)
+{
     return std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
                        [](const elf3d::ModelLoadDiagnostic& diagnostic) noexcept {
                            return diagnostic.code ==
@@ -168,7 +181,8 @@ class TemporaryDirectory final {
 }
 
 [[nodiscard]] bool round_trip_preserves(const std::filesystem::path& path,
-                                        const elf3d::Document& document) {
+                                        const elf3d::Document& document)
+{
     const auto written = elf3d::save_document(path.string(), document.view());
     const auto loaded = elf3d::load_document(path.string());
     return written && written.value().diagnostics.empty() && loaded &&
@@ -176,7 +190,8 @@ class TemporaryDirectory final {
 }
 
 [[nodiscard]] bool stale_write_drops(const std::filesystem::path& path,
-                                     const elf3d::Document& document) {
+                                     const elf3d::Document& document)
+{
     const auto written = elf3d::save_document(path.string(), document.view());
     const auto loaded = elf3d::load_document(path.string());
     return written && written.value().diagnostics.size() == 1U &&
@@ -187,7 +202,8 @@ class TemporaryDirectory final {
 }
 
 [[nodiscard]] int verify_preserved_metadata(const TemporaryDirectory& temporary,
-                                            const elf3d::LoadedDocument& loaded) {
+                                            const elf3d::LoadedDocument& loaded)
+{
     if (!all_supported_metadata_matches(loaded.document)) {
         return 21;
     }
@@ -201,6 +217,7 @@ class TemporaryDirectory final {
         !round_trip_preserves(temporary.path() / "preserved.glb", loaded.document)) {
         return 3;
     }
+
     const auto json = read_text(temporary.path() / "preserved.gltf");
     if (!json || json->find(R"json("extensionsUsed": ["KHR_materials_ior", "EXT_elf_raw"])json") ==
                      std::string::npos) {
@@ -209,13 +226,15 @@ class TemporaryDirectory final {
     return 0;
 }
 
-[[nodiscard]] int mark_metadata_stale(elf3d::Document& document) {
+[[nodiscard]] int mark_metadata_stale(elf3d::Document& document)
+{
     elf3d::Document foreign;
     const auto foreign_node = foreign.create_node();
     if (!foreign_node || document.set_node_matrix(foreign_node.value(), {}) ||
         document.preserved_metadata_stale()) {
         return 5;
     }
+
     const auto node = document.node_at(0U);
     if (!node) {
         return 6;
@@ -230,7 +249,8 @@ class TemporaryDirectory final {
 }
 
 [[nodiscard]] int verify_stale_outputs(const TemporaryDirectory& temporary,
-                                       const elf3d::Document& document) {
+                                       const elf3d::Document& document)
+{
     const elf3d::DocumentValidationReport validation = elf3d::validate_document(document.view());
     const std::size_t warnings = static_cast<std::size_t>(std::count_if(
         validation.diagnostics.begin(), validation.diagnostics.end(),
@@ -242,6 +262,7 @@ class TemporaryDirectory final {
         !stale_write_drops(temporary.path() / "stale.glb", document)) {
         return 8;
     }
+
     const auto json = read_text(temporary.path() / "stale.gltf");
     if (!json || json->find("EXT_elf_raw") != std::string::npos ||
         json->find("KHR_materials_ior") == std::string::npos) {
@@ -250,11 +271,13 @@ class TemporaryDirectory final {
     return 0;
 }
 
-[[nodiscard]] int verify_replacement_stales(const std::filesystem::path& source) {
+[[nodiscard]] int verify_replacement_stales(const std::filesystem::path& source)
+{
     auto loaded = elf3d::load_document(source.string());
     if (!loaded) {
         return 10;
     }
+
     const auto primitive = loaded.value().document.primitive_at(0U);
     if (!primitive) {
         return 10;
@@ -281,7 +304,8 @@ class TemporaryDirectory final {
 
 } // namespace
 
-int elf3d_gltf_metadata_round_trip_test() {
+int elf3d_gltf_metadata_round_trip_test()
+{
     TemporaryDirectory temporary;
     const std::filesystem::path source = temporary.path() / "metadata.gltf";
     if (!write_text(source, metadata_fixture)) {
@@ -291,14 +315,17 @@ int elf3d_gltf_metadata_round_trip_test() {
     if (!loaded) {
         return 20;
     }
+
     const int preserved = verify_preserved_metadata(temporary, loaded.value());
     if (preserved != 0) {
         return preserved;
     }
+
     const int stale = mark_metadata_stale(loaded.value().document);
     if (stale != 0) {
         return stale;
     }
+
     const int stale_outputs = verify_stale_outputs(temporary, loaded.value().document);
     if (stale_outputs != 0) {
         return stale_outputs;

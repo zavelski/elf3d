@@ -51,6 +51,29 @@ function Assert-CacheValue {
     }
 }
 
+function Resolve-ConfigurePreset {
+    param([object]$Preset, [object[]]$Entries)
+    $result = [ordered]@{}
+    $cache = @{}
+    if ($Preset.PSObject.Properties['inherits']) {
+        foreach ($parentName in @($Preset.inherits)) {
+            $parent = Resolve-ConfigurePreset (Get-NamedEntry $Entries $parentName 'configure preset') $Entries
+            foreach ($property in $parent.PSObject.Properties) {
+                if (-not $result.Contains($property.Name)) { $result[$property.Name] = $property.Value }
+            }
+            foreach ($property in $parent.cacheVariables.PSObject.Properties) {
+                if (-not $cache.ContainsKey($property.Name)) { $cache[$property.Name] = $property.Value }
+            }
+        }
+    }
+    foreach ($property in $Preset.PSObject.Properties) { $result[$property.Name] = $property.Value }
+    if ($Preset.PSObject.Properties['cacheVariables']) {
+        foreach ($property in $Preset.cacheVariables.PSObject.Properties) { $cache[$property.Name] = $property.Value }
+    }
+    $result['cacheVariables'] = [pscustomobject]$cache
+    return [pscustomobject]$result
+}
+
 function Read-ConfiguredTargets {
     param(
         [Parameter(Mandatory)]
@@ -156,7 +179,7 @@ $legacyFiles = if (Test-Path -LiteralPath (Join-Path $repositoryPath '.git')) {
 } else {
     # Source archives have no Git metadata; do not inspect a parent repository.
     Get-ChildItem -LiteralPath $repositoryPath -Force |
-        Where-Object { $_.Name -notin 'out', '.local' } |
+        Where-Object { $_.Name -notin 'out', 'win', '.local' } |
         ForEach-Object {
             if ($_.PSIsContainer) {
                 Get-ChildItem -LiteralPath $_.FullName -Recurse -File -Filter '*.sln'
@@ -166,7 +189,7 @@ $legacyFiles = if (Test-Path -LiteralPath (Join-Path $repositoryPath '.git')) {
 $legacyFiles = @($legacyFiles)
 if ($legacyFiles.Count) { throw "Legacy source solutions are unsupported: $($legacyFiles -join ', ')." }
 foreach ($relative in @('CMakePresets.json', 'CMakeLists.txt', '.github/workflows/ci.yml',
-    'examples/external_application/CMakeLists.txt', 'cmake/create-study-solution.ps1',
+    'examples/external_application/CMakeLists.txt', 'cmake/configure-win.ps1',
     '.agents/skills/elf3d-corpus/scripts/run-corpus.ps1')) {
     $path = Join-Path $repositoryPath $relative
     if (-not (Test-Path -LiteralPath $path)) { continue } # Internal scripts are absent in public exports.
@@ -178,6 +201,7 @@ foreach ($relative in @('CMakePresets.json', 'CMakeLists.txt', '.github/workflow
 $contracts = @(
     [pscustomobject]@{
         Name = "windows-debug"
+        ConfigureName = "windows-full"
         Configuration = "Debug"
         Engine = "ON"
         Viewer = "ON"
@@ -186,6 +210,7 @@ $contracts = @(
             "elf3d_model",
             "elf3d",
             "elf3d_imgui",
+            "elf3d_app",
             "elf3d_viewer",
             "elf3d_render_benchmark"
         )
@@ -193,6 +218,7 @@ $contracts = @(
     },
     [pscustomobject]@{
         Name = "windows-release"
+        ConfigureName = "windows-full"
         Configuration = "Release"
         Engine = "ON"
         Viewer = "ON"
@@ -201,6 +227,7 @@ $contracts = @(
             "elf3d_model",
             "elf3d",
             "elf3d_imgui",
+            "elf3d_app",
             "elf3d_viewer",
             "elf3d_render_benchmark"
         )
@@ -208,6 +235,7 @@ $contracts = @(
     },
     [pscustomobject]@{
         Name = "windows-model-debug"
+        ConfigureName = "windows-model"
         Configuration = "Debug"
         Engine = "OFF"
         Viewer = "OFF"
@@ -222,6 +250,7 @@ $contracts = @(
         ForbiddenTargets = @(
             "elf3d",
             "elf3d_imgui",
+            "elf3d_app",
             "elf3d_viewer",
             "elf3d_render_benchmark",
             "elf3d_domain_modules",
@@ -233,6 +262,7 @@ $contracts = @(
     },
     [pscustomobject]@{
         Name = "windows-model-release"
+        ConfigureName = "windows-model"
         Configuration = "Release"
         Engine = "OFF"
         Viewer = "OFF"
@@ -247,6 +277,7 @@ $contracts = @(
         ForbiddenTargets = @(
             "elf3d",
             "elf3d_imgui",
+            "elf3d_app",
             "elf3d_viewer",
             "elf3d_render_benchmark",
             "elf3d_domain_modules",
@@ -265,7 +296,8 @@ if ($minimum.major -ne 4 -or $minimum.minor -ne 4 -or $minimum.patch -ne 3) {
 }
 foreach ($contract in $contracts) {
     $configurePreset = Get-NamedEntry -Entries @($presets.configurePresets) `
-        -Name $contract.Name -Kind "configure preset"
+        -Name $contract.ConfigureName -Kind "configure preset"
+    $configurePreset = Resolve-ConfigurePreset $configurePreset $presets.configurePresets
     if ($configurePreset.generator -ne "Visual Studio 18 2026" -or
         $configurePreset.architecture -ne "x64" -or $configurePreset.toolset -ne "v145,host=x64") {
         throw "Configure preset '$($contract.Name)' must use Visual Studio 2026 x64."
@@ -283,14 +315,14 @@ foreach ($contract in $contracts) {
 
     $buildPreset = Get-NamedEntry -Entries @($presets.buildPresets) `
         -Name $contract.Name -Kind "build preset"
-    if ($buildPreset.configurePreset -ne $contract.Name -or
+    if ($buildPreset.configurePreset -ne $contract.ConfigureName -or
         $buildPreset.configuration -ne $contract.Configuration) {
         throw "Build preset '$($contract.Name)' does not match its configure/configuration contract."
     }
 
     $testPreset = Get-NamedEntry -Entries @($presets.testPresets) `
         -Name $contract.Name -Kind "test preset"
-    if ($testPreset.configurePreset -ne $contract.Name -or
+    if ($testPreset.configurePreset -ne $contract.ConfigureName -or
         $testPreset.configuration -ne $contract.Configuration) {
         throw "Test preset '$($contract.Name)' does not match its configure/configuration contract."
     }
@@ -310,21 +342,21 @@ if (-not $runRoot.StartsWith($outPrefix, [System.StringComparison]::OrdinalIgnor
 
 New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
 try {
-    foreach ($contract in $contracts) {
-        $buildDirectory = Join-Path $runRoot $contract.Name
+    foreach ($contract in @($contracts | Group-Object ConfigureName | ForEach-Object { $_.Group[0] })) {
+        $buildDirectory = Join-Path $runRoot $contract.ConfigureName
         $queryDirectory = Join-Path $buildDirectory ".cmake/api/v1/query"
         New-Item -ItemType Directory -Path $queryDirectory -Force | Out-Null
         New-Item -ItemType File -Path (Join-Path $queryDirectory "codemodel-v2") -Force |
             Out-Null
 
         Write-Host "Configuring preset contract '$($contract.Name)'..."
-        & cmake --preset $contract.Name -S $repositoryPath -B $buildDirectory --fresh
+        & cmake --preset $contract.ConfigureName -S $repositoryPath -B $buildDirectory --fresh
         if ($LASTEXITCODE -ne 0) {
             throw "CMake configure failed for preset '$($contract.Name)' with exit code $LASTEXITCODE."
         }
 
         # Regeneration must not accumulate duplicate projects or legacy solutions.
-        & cmake --preset $contract.Name -S $repositoryPath -B $buildDirectory
+        & cmake --preset $contract.ConfigureName -S $repositoryPath -B $buildDirectory
         if ($LASTEXITCODE -ne 0) { throw "Repeated configure failed for '$($contract.Name)'." }
 
         $targets = Read-ConfiguredTargets -BuildDirectory $buildDirectory
@@ -354,7 +386,7 @@ try {
 
     # On a fresh standalone configure the Elf3D default follows BUILD_TESTING.
     $noTestsBuild = Join-Path $runRoot 'standalone-no-tests'
-    & cmake --preset windows-model-debug -S $repositoryPath -B $noTestsBuild `
+    & cmake --preset windows-model -S $repositoryPath -B $noTestsBuild `
         -DBUILD_TESTING=OFF -U ELF3D_BUILD_TESTING
     if ($LASTEXITCODE -ne 0) { throw 'Standalone testing-default configure failed.' }
     $cache = Get-Content -LiteralPath (Join-Path $noTestsBuild 'CMakeCache.txt') -Raw
@@ -369,6 +401,7 @@ try {
     if ('elf3d_model_tests' -notin $enabledProjects.Name) {
         throw 'Explicit ELF3D_BUILD_TESTING=ON must take precedence over BUILD_TESTING=OFF.'
     }
+    & (Join-Path $PSScriptRoot "check-win-components.ps1") -BuildRoot (Join-Path $runRoot "components")
     Write-Host "All Elf3D preset contracts passed."
 }
 finally {

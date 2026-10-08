@@ -1,3 +1,6 @@
+#include <elf3d/model.h>
+
+#include <elf3d/core/detail/exception_boundary.h>
 #include <elf3d/model/detail/document_storage.h>
 
 #include <algorithm>
@@ -12,7 +15,8 @@
 namespace elf3d::model::detail {
 namespace {
 
-[[nodiscard]] std::uint64_t allocate_document_owner_token() noexcept {
+[[nodiscard]] std::uint64_t allocate_document_owner_token() noexcept
+{
     static std::atomic<std::uint64_t> next_token{1};
     const std::uint64_t token = next_token.fetch_add(1, std::memory_order_relaxed);
     if (token == 0) {
@@ -23,37 +27,45 @@ namespace {
 
 } // namespace
 
-[[nodiscard]] bool finite(float value) noexcept {
+[[nodiscard]] bool finite(float value) noexcept
+{
     return std::isfinite(value);
 }
 
-[[nodiscard]] bool finite(Float2 value) noexcept {
+[[nodiscard]] bool finite(Float2 value) noexcept
+{
     return finite(value.x) && finite(value.y);
 }
 
-[[nodiscard]] bool finite(Float3 value) noexcept {
+[[nodiscard]] bool finite(Float3 value) noexcept
+{
     return finite(value.x) && finite(value.y) && finite(value.z);
 }
 
-[[nodiscard]] bool finite(Color4 value) noexcept {
+[[nodiscard]] bool finite(Color4 value) noexcept
+{
     return finite(value.red) && finite(value.green) && finite(value.blue) && finite(value.alpha);
 }
 
-[[nodiscard]] bool finite(const Float4x4& value) noexcept {
+[[nodiscard]] bool finite(const Float4x4& value) noexcept
+{
     return std::all_of(value.elements.begin(), value.elements.end(),
                        [](float element) noexcept { return finite(element); });
 }
 
-[[nodiscard]] bool valid_alpha(AlphaMode mode) noexcept {
+[[nodiscard]] bool valid_alpha(AlphaMode mode) noexcept
+{
     return mode == AlphaMode::opaque || mode == AlphaMode::mask || mode == AlphaMode::blend;
 }
 
-[[nodiscard]] bool valid_wrap(TextureWrap wrap) noexcept {
+[[nodiscard]] bool valid_wrap(TextureWrap wrap) noexcept
+{
     return wrap == TextureWrap::repeat || wrap == TextureWrap::mirrored_repeat ||
            wrap == TextureWrap::clamp_to_edge;
 }
 
-[[nodiscard]] bool valid_filter(TextureFilter filter) noexcept {
+[[nodiscard]] bool valid_filter(TextureFilter filter) noexcept
+{
     return filter == TextureFilter::nearest || filter == TextureFilter::linear ||
            filter == TextureFilter::nearest_mipmap_nearest ||
            filter == TextureFilter::linear_mipmap_nearest ||
@@ -61,12 +73,14 @@ namespace {
            filter == TextureFilter::linear_mipmap_linear;
 }
 
-[[nodiscard]] bool valid_mag_filter(TextureFilter filter) noexcept {
+[[nodiscard]] bool valid_mag_filter(TextureFilter filter) noexcept
+{
     return filter == TextureFilter::nearest || filter == TextureFilter::linear;
 }
 
 [[nodiscard]] bool
-valid_perspective_camera(const PerspectiveCameraDescription& description) noexcept {
+valid_perspective_camera(const PerspectiveCameraDescription& description) noexcept
+{
     constexpr float pi = 3.14159265358979323846F;
     return finite(description.vertical_field_of_view_radians) && finite(description.near_plane) &&
            finite(description.far_plane) && description.vertical_field_of_view_radians > 0.0F &&
@@ -74,32 +88,37 @@ valid_perspective_camera(const PerspectiveCameraDescription& description) noexce
            description.far_plane > description.near_plane;
 }
 
-[[nodiscard]] bool valid_mapping(TextureMapping mapping) noexcept {
+[[nodiscard]] bool valid_mapping(TextureMapping mapping) noexcept
+{
     return mapping.texcoord_set < maximum_texture_coordinate_sets &&
            finite(mapping.transform.offset) && finite(mapping.transform.scale) &&
            finite(mapping.transform.rotation_radians);
 }
 
 [[nodiscard]] bool
-valid_material_color_factors(const ModelMaterialDescription& description) noexcept {
+valid_material_color_factors(const ModelMaterialDescription& description) noexcept
+{
     return finite(description.base_color) && finite(description.emissive_factor) &&
            finite(description.specular_color_factor);
 }
 
 [[nodiscard]] bool
-valid_material_scalar_factors(const ModelMaterialDescription& description) noexcept {
+valid_material_scalar_factors(const ModelMaterialDescription& description) noexcept
+{
     return finite(description.metallic_factor) && finite(description.roughness_factor) &&
            finite(description.alpha_cutoff) && finite(description.emissive_strength) &&
            finite(description.normal_scale) && finite(description.occlusion_strength) &&
            finite(description.ior) && finite(description.specular_factor);
 }
 
-[[nodiscard]] bool valid_material_factors(const ModelMaterialDescription& description) noexcept {
+[[nodiscard]] bool valid_material_factors(const ModelMaterialDescription& description) noexcept
+{
     return valid_material_color_factors(description) &&
            valid_material_scalar_factors(description) && valid_alpha(description.alpha_mode);
 }
 
-[[nodiscard]] bool valid_material_mappings(const ModelMaterialDescription& description) noexcept {
+[[nodiscard]] bool valid_material_mappings(const ModelMaterialDescription& description) noexcept
+{
     return valid_mapping(description.base_color_texture_mapping) &&
            valid_mapping(description.metallic_roughness_texture_mapping) &&
            valid_mapping(description.normal_texture_mapping) &&
@@ -110,7 +129,8 @@ valid_material_scalar_factors(const ModelMaterialDescription& description) noexc
 inline constexpr std::size_t model_maximum_image_bytes = 256ULL * 1024ULL * 1024ULL;
 inline constexpr std::size_t model_maximum_source_image_bytes = 64ULL * 1024ULL * 1024ULL;
 
-[[nodiscard]] bool png_source_bytes_match(std::span<const std::byte> bytes) noexcept {
+[[nodiscard]] bool png_source_bytes_match(std::span<const std::byte> bytes) noexcept
+{
     constexpr std::array<std::uint8_t, 8> signature{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
     if (bytes.size() < signature.size()) {
         return false;
@@ -123,14 +143,16 @@ inline constexpr std::size_t model_maximum_source_image_bytes = 64ULL * 1024ULL 
     return true;
 }
 
-[[nodiscard]] bool jpeg_source_bytes_match(std::span<const std::byte> bytes) noexcept {
+[[nodiscard]] bool jpeg_source_bytes_match(std::span<const std::byte> bytes) noexcept
+{
     return bytes.size() >= 3U && std::to_integer<std::uint8_t>(bytes[0]) == 0xffU &&
            std::to_integer<std::uint8_t>(bytes[1]) == 0xd8U &&
            std::to_integer<std::uint8_t>(bytes[2]) == 0xffU;
 }
 
 [[nodiscard]] bool source_bytes_match(ModelImageMimeType mime,
-                                      std::span<const std::byte> bytes) noexcept {
+                                      std::span<const std::byte> bytes) noexcept
+{
     if (mime == ModelImageMimeType::none) {
         return bytes.empty();
     }
@@ -145,7 +167,8 @@ inline constexpr std::size_t model_maximum_source_image_bytes = 64ULL * 1024ULL 
 
 [[nodiscard]] Result<std::size_t> expected_image_bytes(std::uint32_t image_width,
                                                        std::uint32_t image_height,
-                                                       PixelFormat format) noexcept {
+                                                       PixelFormat format) noexcept
+{
     if (image_width == 0 || image_height == 0) {
         return Error{ErrorCode::zero_image_dimensions, "Images require nonzero dimensions"};
     }
@@ -153,8 +176,10 @@ inline constexpr std::size_t model_maximum_source_image_bytes = 64ULL * 1024ULL 
         return Error{ErrorCode::unsupported_texture_format,
                      "Document images currently support only RGBA8 UNORM pixels"};
     }
+
     const std::size_t width = image_width;
     const std::size_t height = image_height;
+
     if (width > model_maximum_image_bytes / 4 || height > model_maximum_image_bytes / (width * 4)) {
         return Error{ErrorCode::decoded_image_size_overflow,
                      "Image dimensions overflow the decoded byte limit"};
@@ -163,7 +188,8 @@ inline constexpr std::size_t model_maximum_source_image_bytes = 64ULL * 1024ULL 
 }
 
 [[nodiscard]] Result<void>
-validate_image_description(const ModelImageDescription& description) noexcept {
+validate_image_description(const ModelImageDescription& description) noexcept
+{
     const Result<std::size_t> expected_bytes =
         expected_image_bytes(description.width, description.height, description.format);
     if (!expected_bytes) {
@@ -179,7 +205,8 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     return {};
 }
 
-[[nodiscard]] Bounds3 merge(Bounds3 left, Bounds3 right) noexcept {
+[[nodiscard]] Bounds3 merge(Bounds3 left, Bounds3 right) noexcept
+{
     return Bounds3{
         Float3{std::min(left.minimum.x, right.minimum.x), std::min(left.minimum.y, right.minimum.y),
                std::min(left.minimum.z, right.minimum.z)},
@@ -188,11 +215,13 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     };
 }
 
-[[nodiscard]] Result<Bounds3> primitive_bounds(const PrimitiveDataView& data) noexcept {
+[[nodiscard]] Result<Bounds3> primitive_bounds(const PrimitiveDataView& data) noexcept
+{
     if (data.positions.empty()) {
         return Error{ErrorCode::invalid_mesh_data, "A model primitive requires positions"};
     }
     Bounds3 bounds{data.positions.front(), data.positions.front()};
+
     for (const Float3 position : data.positions) {
         if (!finite(position)) {
             return Error{ErrorCode::non_finite_position,
@@ -208,11 +237,13 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     return bounds;
 }
 
-[[nodiscard]] bool matching_attribute_count(std::size_t count, std::size_t positions) noexcept {
+[[nodiscard]] bool matching_attribute_count(std::size_t count, std::size_t positions) noexcept
+{
     return count == 0 || count == positions;
 }
 
-[[nodiscard]] Result<void> validate_attribute_counts(const PrimitiveDataView& data) noexcept {
+[[nodiscard]] Result<void> validate_attribute_counts(const PrimitiveDataView& data) noexcept
+{
     const std::size_t positions = data.positions.size();
     if (matching_attribute_count(data.normals.size(), positions) &&
         matching_attribute_count(data.texcoord0.size(), positions) &&
@@ -225,11 +256,13 @@ validate_image_description(const ModelImageDescription& description) noexcept {
                  "Primitive attribute arrays must be empty or match POSITION count"};
 }
 
-[[nodiscard]] Result<void> validate_tangents(std::span<const Float4> tangents) noexcept {
+[[nodiscard]] Result<void> validate_tangents(std::span<const Float4> tangents) noexcept
+{
     constexpr float minimum_length_squared = 0.000000000001F;
     for (const Float4 tangent : tangents) {
         const float length_squared =
             tangent.x * tangent.x + tangent.y * tangent.y + tangent.z * tangent.z;
+
         if (!std::isfinite(tangent.x) || !std::isfinite(tangent.y) || !std::isfinite(tangent.z) ||
             !std::isfinite(tangent.w) || !std::isfinite(length_squared) ||
             length_squared <= minimum_length_squared || (tangent.w != -1.0F && tangent.w != 1.0F)) {
@@ -238,10 +271,12 @@ validate_image_description(const ModelImageDescription& description) noexcept {
                 "Primitive tangents must contain finite non-zero XYZ and W equal to -1 or +1"};
         }
     }
+
     return {};
 }
 
-[[nodiscard]] Result<void> validate_normals(std::span<const Float3> normals) noexcept {
+[[nodiscard]] Result<void> validate_normals(std::span<const Float3> normals) noexcept
+{
     for (const Float3 normal : normals) {
         if (!finite(normal)) {
             return Error{ErrorCode::invalid_accessor, "Primitive normals must be finite"};
@@ -251,7 +286,8 @@ validate_image_description(const ModelImageDescription& description) noexcept {
 }
 
 [[nodiscard]] Result<void> validate_texcoords(std::span<const Float2> texcoords,
-                                              std::string_view semantic) noexcept {
+                                              std::string_view semantic) noexcept
+{
     for (const Float2 texcoord : texcoords) {
         if (!finite(texcoord)) {
             return Error{ErrorCode::invalid_texcoord, semantic};
@@ -260,7 +296,8 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     return {};
 }
 
-[[nodiscard]] Result<void> validate_colors(std::span<const Color4> colors) noexcept {
+[[nodiscard]] Result<void> validate_colors(std::span<const Color4> colors) noexcept
+{
     for (const Color4 color : colors) {
         if (!finite(color)) {
             return Error{ErrorCode::invalid_accessor, "Primitive colors must be finite"};
@@ -270,7 +307,8 @@ validate_image_description(const ModelImageDescription& description) noexcept {
 }
 
 [[nodiscard]] Result<void> validate_indices(std::span<const std::uint32_t> indices,
-                                            std::size_t vertex_count) noexcept {
+                                            std::size_t vertex_count) noexcept
+{
     for (const std::uint32_t index : indices) {
         if (static_cast<std::size_t>(index) >= vertex_count) {
             return Error{ErrorCode::mesh_index_out_of_range,
@@ -280,7 +318,8 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     return {};
 }
 
-[[nodiscard]] Result<void> validate_primitive_data(const PrimitiveDataView& data) noexcept {
+[[nodiscard]] Result<void> validate_primitive_data(const PrimitiveDataView& data) noexcept
+{
     if (data.positions.empty()) {
         return Error{ErrorCode::invalid_mesh_data, "A model primitive requires positions"};
     }
@@ -314,7 +353,8 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     return validate_indices(data.indices, data.positions.size());
 }
 
-[[nodiscard]] PrimitiveData copy_primitive_data(const PrimitiveDataView& view) {
+[[nodiscard]] PrimitiveData copy_primitive_data(const PrimitiveDataView& view)
+{
     PrimitiveData result;
     result.positions.assign(view.positions.begin(), view.positions.end());
     result.normals.assign(view.normals.begin(), view.normals.end());
@@ -326,7 +366,8 @@ validate_image_description(const ModelImageDescription& description) noexcept {
     return result;
 }
 
-[[nodiscard]] ModelJsonMetadataView metadata_view(const ModelJsonMetadata& metadata) noexcept {
+[[nodiscard]] ModelJsonMetadataView metadata_view(const ModelJsonMetadata& metadata) noexcept
+{
     return ModelJsonMetadataView{
         metadata.extras_json.has_value()
             ? std::optional<std::string_view>{std::string_view{*metadata.extras_json}}
@@ -334,7 +375,8 @@ validate_image_description(const ModelImageDescription& description) noexcept {
         metadata.extensions};
 }
 
-[[nodiscard]] bool has_metadata(const ModelJsonMetadata& metadata) noexcept {
+[[nodiscard]] bool has_metadata(const ModelJsonMetadata& metadata) noexcept
+{
     return metadata.extras_json.has_value() || !metadata.extensions.empty();
 }
 
@@ -342,7 +384,8 @@ inline constexpr std::size_t model_maximum_json_block_bytes = 1024ULL * 1024ULL;
 inline constexpr std::size_t model_maximum_json_metadata_bytes = 64ULL * 1024ULL * 1024ULL;
 inline constexpr std::size_t model_maximum_extension_name_bytes = 256ULL;
 
-[[nodiscard]] bool add_metadata_size(std::size_t size, std::size_t& total_bytes) noexcept {
+[[nodiscard]] bool add_metadata_size(std::size_t size, std::size_t& total_bytes) noexcept
+{
     if (size > model_maximum_json_metadata_bytes - total_bytes) {
         return false;
     }
@@ -351,7 +394,8 @@ inline constexpr std::size_t model_maximum_extension_name_bytes = 256ULL;
 }
 
 [[nodiscard]] bool valid_metadata_extras(const ModelJsonMetadata& metadata,
-                                         std::size_t& total_bytes) noexcept {
+                                         std::size_t& total_bytes) noexcept
+{
     if (!metadata.extras_json.has_value()) {
         return true;
     }
@@ -361,7 +405,8 @@ inline constexpr std::size_t model_maximum_extension_name_bytes = 256ULL;
 }
 
 [[nodiscard]] bool valid_metadata_extension(const ModelJsonExtension& extension,
-                                            std::size_t& total_bytes) noexcept {
+                                            std::size_t& total_bytes) noexcept
+{
     return !extension.name.empty() && extension.name.size() <= model_maximum_extension_name_bytes &&
            !extension.data.empty() && extension.data.size() <= model_maximum_json_block_bytes &&
            add_metadata_size(extension.name.size(), total_bytes) &&
@@ -369,7 +414,8 @@ inline constexpr std::size_t model_maximum_extension_name_bytes = 256ULL;
 }
 
 [[nodiscard]] bool unique_extension_name(const ModelJsonMetadata& metadata,
-                                         std::size_t index) noexcept {
+                                         std::size_t index) noexcept
+{
     for (std::size_t previous = 0; previous < index; ++previous) {
         if (metadata.extensions[previous].name == metadata.extensions[index].name) {
             return false;
@@ -379,12 +425,14 @@ inline constexpr std::size_t model_maximum_extension_name_bytes = 256ULL;
 }
 
 [[nodiscard]] bool valid_metadata(const ModelJsonMetadata& metadata,
-                                  std::size_t& total_bytes) noexcept {
+                                  std::size_t& total_bytes) noexcept
+{
     if (!valid_metadata_extras(metadata, total_bytes)) {
         return false;
     }
     for (std::size_t index = 0; index < metadata.extensions.size(); ++index) {
         const ModelJsonExtension& extension = metadata.extensions[index];
+
         if (!valid_metadata_extension(extension, total_bytes) ||
             !unique_extension_name(metadata, index)) {
             return false;
@@ -400,21 +448,27 @@ namespace elf3d {
 using model::detail::merge;
 using model::detail::metadata_view;
 
-Document::Storage::Storage() noexcept
-    : owner_token_(model::detail::allocate_document_owner_token()) {}
+Document::Storage::Storage() noexcept : owner_token_(model::detail::allocate_document_owner_token())
+{
+}
 
-std::uint64_t Document::Storage::token() const noexcept {
+std::uint64_t Document::Storage::token() const noexcept
+{
     return owner_token_;
 }
 
-bool DocumentValidationReport::has_errors() const noexcept {
+bool DocumentValidationReport::has_errors() const noexcept
+{
     return std::any_of(diagnostics.begin(), diagnostics.end(),
                        [](const DocumentDiagnostic& diagnostic) noexcept {
                            return diagnostic.severity == DocumentDiagnosticSeverity::error;
                        });
 }
 
-Document::Document() : storage_(std::make_unique<Storage>()) {}
+Document::Document() noexcept
+    : storage_(detail::fatal_exception_boundary([] { return std::make_unique<Storage>(); }))
+{
+}
 
 Document::~Document() noexcept = default;
 
@@ -422,66 +476,81 @@ Document::Document(Document&&) noexcept = default;
 
 Document& Document::operator=(Document&&) noexcept = default;
 
-DocumentView Document::view() const noexcept {
+DocumentView Document::view() const noexcept
+{
     return DocumentView{this};
 }
 
-DocumentStatistics Document::statistics() const noexcept {
+DocumentStatistics Document::statistics() const noexcept
+{
     if (storage_ == nullptr) {
         return {};
     }
     return storage_->statistics();
 }
 
-std::optional<DocumentSceneId> Document::default_scene() const noexcept {
+std::optional<DocumentSceneId> Document::default_scene() const noexcept
+{
     return storage_ != nullptr ? storage_->default_scene : std::nullopt;
 }
 
-ModelJsonMetadataView Document::root_metadata() const noexcept {
+ModelJsonMetadataView Document::root_metadata() const noexcept
+{
     return storage_ != nullptr ? metadata_view(storage_->root_metadata) : ModelJsonMetadataView{};
 }
 
-ModelJsonMetadataView Document::asset_metadata() const noexcept {
+ModelJsonMetadataView Document::asset_metadata() const noexcept
+{
     return storage_ != nullptr ? metadata_view(storage_->asset_metadata) : ModelJsonMetadataView{};
 }
 
-bool Document::preserved_metadata_stale() const noexcept {
+bool Document::preserved_metadata_stale() const noexcept
+{
     return storage_ != nullptr && storage_->preserved_metadata_stale;
 }
 
-std::size_t Document::scene_count() const noexcept {
+std::size_t Document::scene_count() const noexcept
+{
     return storage_ != nullptr ? storage_->scenes.size() : 0;
 }
 
-std::size_t Document::node_count() const noexcept {
+std::size_t Document::node_count() const noexcept
+{
     return storage_ != nullptr ? storage_->nodes.size() : 0;
 }
 
-std::size_t Document::mesh_count() const noexcept {
+std::size_t Document::mesh_count() const noexcept
+{
     return storage_ != nullptr ? storage_->meshes.size() : 0;
 }
 
-std::size_t Document::primitive_count() const noexcept {
+std::size_t Document::primitive_count() const noexcept
+{
     return storage_ != nullptr ? storage_->primitives.size() : 0;
 }
 
-std::size_t Document::material_count() const noexcept {
+std::size_t Document::material_count() const noexcept
+{
     return storage_ != nullptr ? storage_->materials.size() : 0;
 }
 
-std::size_t Document::image_count() const noexcept {
+std::size_t Document::image_count() const noexcept
+{
     return storage_ != nullptr ? storage_->images.size() : 0;
 }
 
-std::size_t Document::texture_count() const noexcept {
+std::size_t Document::texture_count() const noexcept
+{
     return storage_ != nullptr ? storage_->textures.size() : 0;
 }
 
-std::size_t Document::sampler_count() const noexcept {
+std::size_t Document::sampler_count() const noexcept
+{
     return storage_ != nullptr ? storage_->samplers.size() : 0;
 }
 
-Result<DocumentSceneView> Document::scene_at(std::size_t index) const noexcept {
+Result<DocumentSceneView> Document::scene_at(std::size_t index) const noexcept
+{
     if (storage_ == nullptr || index >= storage_->scenes.size()) {
         return Error{ErrorCode::invalid_document_scene_id,
                      "The document scene index is outside the document"};
@@ -490,7 +559,8 @@ Result<DocumentSceneView> Document::scene_at(std::size_t index) const noexcept {
     return DocumentSceneView{record.id, record.name, record.roots, metadata_view(record.metadata)};
 }
 
-Result<NodeView> Document::node_at(std::size_t index) const noexcept {
+Result<NodeView> Document::node_at(std::size_t index) const noexcept
+{
     if (storage_ == nullptr || index >= storage_->nodes.size()) {
         return Error{ErrorCode::invalid_node_id, "The document node index is outside the document"};
     }
@@ -505,7 +575,8 @@ Result<NodeView> Document::node_at(std::size_t index) const noexcept {
                     metadata_view(record.metadata)};
 }
 
-Result<MeshView> Document::mesh_at(std::size_t index) const noexcept {
+Result<MeshView> Document::mesh_at(std::size_t index) const noexcept
+{
     if (storage_ == nullptr || index >= storage_->meshes.size()) {
         return Error{ErrorCode::invalid_mesh_id, "The document mesh index is outside the document"};
     }
@@ -514,7 +585,8 @@ Result<MeshView> Document::mesh_at(std::size_t index) const noexcept {
                     metadata_view(record.metadata)};
 }
 
-Result<PrimitiveView> Document::primitive_at(std::size_t index) const noexcept {
+Result<PrimitiveView> Document::primitive_at(std::size_t index) const noexcept
+{
     if (storage_ == nullptr || index >= storage_->primitives.size()) {
         return Error{ErrorCode::invalid_primitive_id,
                      "The document primitive index is outside the document"};
@@ -524,7 +596,8 @@ Result<PrimitiveView> Document::primitive_at(std::size_t index) const noexcept {
                          record.bounds, record.data.view(), metadata_view(record.metadata)};
 }
 
-Result<MaterialView> Document::material_at(std::size_t index) const noexcept {
+Result<MaterialView> Document::material_at(std::size_t index) const noexcept
+{
     if (storage_ == nullptr || index >= storage_->materials.size()) {
         return Error{ErrorCode::invalid_material_id,
                      "The document material index is outside the document"};
@@ -533,7 +606,8 @@ Result<MaterialView> Document::material_at(std::size_t index) const noexcept {
     return MaterialView{record.id, record.description, metadata_view(record.metadata)};
 }
 
-Result<ImageView> Document::image_at(std::size_t index) const noexcept {
+Result<ImageView> Document::image_at(std::size_t index) const noexcept
+{
     if (storage_ == nullptr || index >= storage_->images.size()) {
         return Error{ErrorCode::invalid_image_id,
                      "The document image index is outside the document"};
@@ -545,7 +619,8 @@ Result<ImageView> Document::image_at(std::size_t index) const noexcept {
                      record.source_bytes, metadata_view(record.metadata)};
 }
 
-Result<TextureView> Document::texture_at(std::size_t index) const noexcept {
+Result<TextureView> Document::texture_at(std::size_t index) const noexcept
+{
     if (storage_ == nullptr || index >= storage_->textures.size()) {
         return Error{ErrorCode::invalid_texture_id,
                      "The document texture index is outside the document"};
@@ -554,7 +629,8 @@ Result<TextureView> Document::texture_at(std::size_t index) const noexcept {
     return TextureView{record.id, record.description, metadata_view(record.metadata)};
 }
 
-Result<SamplerView> Document::sampler_at(std::size_t index) const noexcept {
+Result<SamplerView> Document::sampler_at(std::size_t index) const noexcept
+{
     if (storage_ == nullptr || index >= storage_->samplers.size()) {
         return Error{ErrorCode::invalid_sampler_id,
                      "The document sampler index is outside the document"};
@@ -563,10 +639,12 @@ Result<SamplerView> Document::sampler_at(std::size_t index) const noexcept {
     return SamplerView{record.id, record.description, metadata_view(record.metadata)};
 }
 
-Result<DocumentSceneView> Document::scene(DocumentSceneId scene_id) const noexcept {
+Result<DocumentSceneView> Document::scene(DocumentSceneId scene_id) const noexcept
+{
     if (storage_ == nullptr) {
         return Error{ErrorCode::invalid_document_scene_id, "The document is empty"};
     }
+
     const Result<const Storage::SceneRecord*> record = storage_->scene(scene_id);
     if (!record) {
         return record.error();
@@ -575,10 +653,12 @@ Result<DocumentSceneView> Document::scene(DocumentSceneId scene_id) const noexce
                              metadata_view(record.value()->metadata)};
 }
 
-Result<NodeView> Document::node(NodeId node_id) const noexcept {
+Result<NodeView> Document::node(NodeId node_id) const noexcept
+{
     if (storage_ == nullptr) {
         return Error{ErrorCode::invalid_node_id, "The document is empty"};
     }
+
     const Result<const Storage::NodeRecord*> record = storage_->node(node_id);
     if (!record) {
         return record.error();
@@ -593,10 +673,12 @@ Result<NodeView> Document::node(NodeId node_id) const noexcept {
                     metadata_view(record.value()->metadata)};
 }
 
-Result<MeshView> Document::mesh(MeshId mesh_id) const noexcept {
+Result<MeshView> Document::mesh(MeshId mesh_id) const noexcept
+{
     if (storage_ == nullptr) {
         return Error{ErrorCode::invalid_mesh_id, "The document is empty"};
     }
+
     const Result<const Storage::MeshRecord*> record = storage_->mesh(mesh_id);
     if (!record) {
         return record.error();
@@ -605,10 +687,12 @@ Result<MeshView> Document::mesh(MeshId mesh_id) const noexcept {
                     record.value()->bounds, metadata_view(record.value()->metadata)};
 }
 
-Result<PrimitiveView> Document::primitive(PrimitiveId primitive_id) const noexcept {
+Result<PrimitiveView> Document::primitive(PrimitiveId primitive_id) const noexcept
+{
     if (storage_ == nullptr) {
         return Error{ErrorCode::invalid_primitive_id, "The document is empty"};
     }
+
     const Result<const Storage::PrimitiveRecord*> record = storage_->primitive(primitive_id);
     if (!record) {
         return record.error();
@@ -618,10 +702,12 @@ Result<PrimitiveView> Document::primitive(PrimitiveId primitive_id) const noexce
                          record.value()->data.view(), metadata_view(record.value()->metadata)};
 }
 
-Result<MaterialView> Document::material(MaterialId material_id) const noexcept {
+Result<MaterialView> Document::material(MaterialId material_id) const noexcept
+{
     if (storage_ == nullptr) {
         return Error{ErrorCode::invalid_material_id, "The document is empty"};
     }
+
     const Result<const Storage::MaterialRecord*> record = storage_->material(material_id);
     if (!record) {
         return record.error();
@@ -630,10 +716,12 @@ Result<MaterialView> Document::material(MaterialId material_id) const noexcept {
                         metadata_view(record.value()->metadata)};
 }
 
-Result<ImageView> Document::image(ImageId image_id) const noexcept {
+Result<ImageView> Document::image(ImageId image_id) const noexcept
+{
     if (storage_ == nullptr) {
         return Error{ErrorCode::invalid_image_id, "The document is empty"};
     }
+
     const Result<const Storage::ImageRecord*> record = storage_->image(image_id);
     if (!record) {
         return record.error();
@@ -648,10 +736,12 @@ Result<ImageView> Document::image(ImageId image_id) const noexcept {
                      metadata_view(record.value()->metadata)};
 }
 
-Result<TextureView> Document::texture(TextureId texture_id) const noexcept {
+Result<TextureView> Document::texture(TextureId texture_id) const noexcept
+{
     if (storage_ == nullptr) {
         return Error{ErrorCode::invalid_texture_id, "The document is empty"};
     }
+
     const Result<const Storage::TextureRecord*> record = storage_->texture(texture_id);
     if (!record) {
         return record.error();
@@ -660,10 +750,12 @@ Result<TextureView> Document::texture(TextureId texture_id) const noexcept {
                        metadata_view(record.value()->metadata)};
 }
 
-Result<SamplerView> Document::sampler(SamplerId sampler_id) const noexcept {
+Result<SamplerView> Document::sampler(SamplerId sampler_id) const noexcept
+{
     if (storage_ == nullptr) {
         return Error{ErrorCode::invalid_sampler_id, "The document is empty"};
     }
+
     const Result<const Storage::SamplerRecord*> record = storage_->sampler(sampler_id);
     if (!record) {
         return record.error();
@@ -672,10 +764,12 @@ Result<SamplerView> Document::sampler(SamplerId sampler_id) const noexcept {
                        metadata_view(record.value()->metadata)};
 }
 
-std::optional<Bounds3> Document::bounds() const noexcept {
+std::optional<Bounds3> Document::bounds() const noexcept
+{
     if (storage_ == nullptr) {
         return std::nullopt;
     }
+
     std::optional<Bounds3> result;
     for (const Storage::MeshRecord& mesh_record : storage_->meshes) {
         if (!mesh_record.bounds.has_value()) {

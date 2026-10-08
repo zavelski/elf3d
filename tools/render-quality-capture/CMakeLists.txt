@@ -12,6 +12,8 @@ endif()
 add_executable(
     elf3d_render_quality_capture
     render_quality_capture.cpp
+    capture_options.cpp
+    material_validation.cpp
 )
 
 target_compile_features(elf3d_render_quality_capture PRIVATE cxx_std_20)
@@ -23,10 +25,8 @@ target_compile_definitions(
 target_link_libraries(
     elf3d_render_quality_capture
     PRIVATE
-        elf3d::embed
-        elf3d::third_party_glad
+        elf3d::app
         elf3d_third_party_png
-        glfw
         bcrypt
 )
 set_target_properties(elf3d_render_quality_capture PROPERTIES FOLDER "Elf3D/Tools")
@@ -47,6 +47,6 @@ if(ELF3D_BUILD_TESTING)
     set_tests_properties(
         elf3d.render_quality_material_pixels
         PROPERTIES
-            SKIP_REGULAR_EXPRESSION "Hidden OpenGL 4\\.1 context initialization failed"
+            SKIP_RETURN_CODE 77
     )
 endif()

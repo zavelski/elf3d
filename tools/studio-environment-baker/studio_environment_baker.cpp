@@ -120,36 +120,44 @@ struct CubeMipPixels final {
     std::array<std::vector<std::uint16_t>, cubemap_face_count> faces;
 };
 
-[[nodiscard]] Vector3 add(Vector3 left, Vector3 right) noexcept {
+[[nodiscard]] Vector3 add(Vector3 left, Vector3 right) noexcept
+{
     return {left.x + right.x, left.y + right.y, left.z + right.z};
 }
 
-[[nodiscard]] Vector3 subtract(Vector3 left, Vector3 right) noexcept {
+[[nodiscard]] Vector3 subtract(Vector3 left, Vector3 right) noexcept
+{
     return {left.x - right.x, left.y - right.y, left.z - right.z};
 }
 
-[[nodiscard]] Vector3 multiply(Vector3 value, float scale) noexcept {
+[[nodiscard]] Vector3 multiply(Vector3 value, float scale) noexcept
+{
     return {value.x * scale, value.y * scale, value.z * scale};
 }
 
-[[nodiscard]] Vector3 multiply(Vector3 left, Vector3 right) noexcept {
+[[nodiscard]] Vector3 multiply(Vector3 left, Vector3 right) noexcept
+{
     return {left.x * right.x, left.y * right.y, left.z * right.z};
 }
 
-[[nodiscard]] Vector3 divide(Vector3 numerator, Vector3 denominator) noexcept {
+[[nodiscard]] Vector3 divide(Vector3 numerator, Vector3 denominator) noexcept
+{
     return {numerator.x / denominator.x, numerator.y / denominator.y, numerator.z / denominator.z};
 }
 
-[[nodiscard]] float dot(Vector3 left, Vector3 right) noexcept {
+[[nodiscard]] float dot(Vector3 left, Vector3 right) noexcept
+{
     return left.x * right.x + left.y * right.y + left.z * right.z;
 }
 
-[[nodiscard]] Vector3 cross(Vector3 left, Vector3 right) noexcept {
+[[nodiscard]] Vector3 cross(Vector3 left, Vector3 right) noexcept
+{
     return {left.y * right.z - left.z * right.y, left.z * right.x - left.x * right.z,
             left.x * right.y - left.y * right.x};
 }
 
-[[nodiscard]] Vector3 normalize(Vector3 value) noexcept {
+[[nodiscard]] Vector3 normalize(Vector3 value) noexcept
+{
     const float length_squared = dot(value, value);
     if (!std::isfinite(length_squared) || length_squared <= 0.00000001F) {
         return {0.0F, 1.0F, 0.0F};
@@ -157,16 +165,19 @@ struct CubeMipPixels final {
     return multiply(value, 1.0F / std::sqrt(length_squared));
 }
 
-[[nodiscard]] Vector3 mix(Vector3 left, Vector3 right, float amount) noexcept {
+[[nodiscard]] Vector3 mix(Vector3 left, Vector3 right, float amount) noexcept
+{
     return add(multiply(left, 1.0F - amount), multiply(right, amount));
 }
 
-[[nodiscard]] float smoothstep(float lower, float upper, float value) noexcept {
+[[nodiscard]] float smoothstep(float lower, float upper, float value) noexcept
+{
     const float amount = std::clamp((value - lower) / (upper - lower), 0.0F, 1.0F);
     return amount * amount * (3.0F - 2.0F * amount);
 }
 
-[[nodiscard]] Vector3 legacy_environment_radiance(Vector3 direction) noexcept {
+[[nodiscard]] Vector3 legacy_environment_radiance(Vector3 direction) noexcept
+{
     const Vector3 normalized = normalize(direction);
     const float height = std::clamp(normalized.y, -1.0F, 1.0F);
     Vector3 result = height >= 0.0F ? mix(legacy_studio.horizon, legacy_studio.zenith, height)
@@ -179,7 +190,8 @@ struct CubeMipPixels final {
     return result;
 }
 
-[[nodiscard]] float softbox_response(Vector3 direction, const StudioSoftbox& softbox) noexcept {
+[[nodiscard]] float softbox_response(Vector3 direction, const StudioSoftbox& softbox) noexcept
+{
     const Vector3 forward = normalize(softbox.direction);
     const Vector3 right = normalize(cross(softbox.up_hint, forward));
     const Vector3 up = normalize(cross(forward, right));
@@ -187,6 +199,7 @@ struct CubeMipPixels final {
     if (forward_distance <= 0.0001F) {
         return 0.0F;
     }
+
     const float horizontal = std::abs(dot(direction, right) / forward_distance) /
                              std::tan(softbox.horizontal_half_angle_radians);
     const float vertical = std::abs(dot(direction, up) / forward_distance) /
@@ -198,7 +211,8 @@ struct CubeMipPixels final {
     return 1.0F - smoothstep(1.0F, 1.0F + softbox.relative_edge_softness, distance);
 }
 
-[[nodiscard]] Vector3 unscaled_environment_radiance(Vector3 direction) noexcept {
+[[nodiscard]] Vector3 unscaled_environment_radiance(Vector3 direction) noexcept
+{
     const Vector3 normalized = normalize(direction);
     const float height = std::clamp(normalized.y, -1.0F, 1.0F);
     Vector3 result = height >= 0.0F
@@ -210,7 +224,8 @@ struct CubeMipPixels final {
     return result;
 }
 
-[[nodiscard]] float radical_inverse(std::uint32_t bits) noexcept {
+[[nodiscard]] float radical_inverse(std::uint32_t bits) noexcept
+{
     bits = (bits << 16U) | (bits >> 16U);
     bits = ((bits & 0x55555555U) << 1U) | ((bits & 0xAAAAAAAAU) >> 1U);
     bits = ((bits & 0x33333333U) << 2U) | ((bits & 0xCCCCCCCCU) >> 2U);
@@ -219,11 +234,13 @@ struct CubeMipPixels final {
     return static_cast<float>(bits) * 2.3283064365386963e-10F;
 }
 
-[[nodiscard]] std::array<float, 2> hammersley(std::uint32_t index, std::uint32_t count) noexcept {
+[[nodiscard]] std::array<float, 2> hammersley(std::uint32_t index, std::uint32_t count) noexcept
+{
     return {static_cast<float>(index) / static_cast<float>(count), radical_inverse(index)};
 }
 
-[[nodiscard]] Vector3 tangent_to_world(Vector3 local, Vector3 normal) noexcept {
+[[nodiscard]] Vector3 tangent_to_world(Vector3 local, Vector3 normal) noexcept
+{
     const Vector3 reference =
         std::abs(normal.z) < 0.999F ? Vector3{0.0F, 0.0F, 1.0F} : Vector3{1.0F, 0.0F, 0.0F};
     const Vector3 tangent = normalize(cross(reference, normal));
@@ -232,7 +249,8 @@ struct CubeMipPixels final {
                          multiply(normal, local.z)));
 }
 
-[[nodiscard]] Vector3 cosine_hemisphere(std::array<float, 2> sample, Vector3 normal) noexcept {
+[[nodiscard]] Vector3 cosine_hemisphere(std::array<float, 2> sample, Vector3 normal) noexcept
+{
     const float radius = std::sqrt(sample[0]);
     const float angle = 2.0F * pi * sample[1];
     const Vector3 local{radius * std::cos(angle), radius * std::sin(angle),
@@ -241,7 +259,8 @@ struct CubeMipPixels final {
 }
 
 [[nodiscard]] Vector3 importance_sample_ggx(std::array<float, 2> sample, Vector3 normal,
-                                            float roughness) noexcept {
+                                            float roughness) noexcept
+{
     const float alpha = roughness * roughness;
     const float alpha_squared = alpha * alpha;
     const float angle = 2.0F * pi * sample[0];
@@ -252,7 +271,8 @@ struct CubeMipPixels final {
 }
 
 [[nodiscard]] Vector3 cube_direction(std::size_t face, std::uint32_t x, std::uint32_t y,
-                                     std::uint32_t extent) noexcept {
+                                     std::uint32_t extent) noexcept
+{
     const float u = (2.0F * (static_cast<float>(x) + 0.5F) / static_cast<float>(extent)) - 1.0F;
     const float v = (2.0F * (static_cast<float>(y) + 0.5F) / static_cast<float>(extent)) - 1.0F;
     switch (face) {
@@ -272,14 +292,16 @@ struct CubeMipPixels final {
 }
 
 [[nodiscard]] float cube_texel_solid_angle_weight(std::uint32_t x, std::uint32_t y,
-                                                  std::uint32_t extent) noexcept {
+                                                  std::uint32_t extent) noexcept
+{
     const float u = (2.0F * (static_cast<float>(x) + 0.5F) / static_cast<float>(extent)) - 1.0F;
     const float v = (2.0F * (static_cast<float>(y) + 0.5F) / static_cast<float>(extent)) - 1.0F;
     return 1.0F / std::pow(1.0F + u * u + v * v, 1.5F);
 }
 
 template <typename Radiance>
-[[nodiscard]] Vector3 solid_angle_weighted_mean(Radiance&& radiance) noexcept {
+[[nodiscard]] Vector3 solid_angle_weighted_mean(Radiance&& radiance) noexcept
+{
     Vector3 accumulated;
     float total_weight = 0.0F;
     for (std::size_t face = 0; face < cubemap_face_count; ++face) {
@@ -297,17 +319,20 @@ template <typename Radiance>
     return multiply(accumulated, 1.0F / total_weight);
 }
 
-[[nodiscard]] StudioEnergyCalibration calibrate_studio_energy() noexcept {
+[[nodiscard]] StudioEnergyCalibration calibrate_studio_energy() noexcept
+{
     const Vector3 legacy_mean = solid_angle_weighted_mean(legacy_environment_radiance);
     const Vector3 unscaled_mean = solid_angle_weighted_mean(unscaled_environment_radiance);
     return {legacy_mean, unscaled_mean, divide(legacy_mean, unscaled_mean)};
 }
 
-[[nodiscard]] Vector3 environment_radiance(Vector3 direction, Vector3 calibration) noexcept {
+[[nodiscard]] Vector3 environment_radiance(Vector3 direction, Vector3 calibration) noexcept
+{
     return multiply(unscaled_environment_radiance(direction), calibration);
 }
 
-[[nodiscard]] std::uint16_t float_to_half(float value) noexcept {
+[[nodiscard]] std::uint16_t float_to_half(float value) noexcept
+{
     const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
     const std::uint32_t sign = (bits >> 16U) & 0x8000U;
     const std::uint32_t exponent = (bits >> 23U) & 0xFFU;
@@ -315,11 +340,13 @@ template <typename Radiance>
     if (exponent == 0xFFU) {
         return static_cast<std::uint16_t>(sign | (mantissa == 0U ? 0x7C00U : 0x7E00U));
     }
+
     const int adjusted_exponent = static_cast<int>(exponent) - 127 + 15;
     if (adjusted_exponent <= 0) {
         if (adjusted_exponent < -10) {
             return static_cast<std::uint16_t>(sign);
         }
+
         const std::uint32_t significand = mantissa | 0x800000U;
         const std::uint32_t shift = static_cast<std::uint32_t>(14 - adjusted_exponent);
         return static_cast<std::uint16_t>(sign | ((significand + (1U << (shift - 1U))) >> shift));
@@ -327,19 +354,22 @@ template <typename Radiance>
     if (adjusted_exponent >= 31) {
         return static_cast<std::uint16_t>(sign | 0x7C00U);
     }
+
     const std::uint32_t rounded = mantissa + 0x1000U;
     return static_cast<std::uint16_t>(
         sign | (static_cast<std::uint32_t>(adjusted_exponent) << 10U) | (rounded >> 13U));
 }
 
-void append_half_color(std::vector<std::uint16_t>& pixels, Vector3 color) {
+void append_half_color(std::vector<std::uint16_t>& pixels, Vector3 color)
+{
     pixels.push_back(float_to_half(std::max(color.x, 0.0F)));
     pixels.push_back(float_to_half(std::max(color.y, 0.0F)));
     pixels.push_back(float_to_half(std::max(color.z, 0.0F)));
     pixels.push_back(float_to_half(1.0F));
 }
 
-[[nodiscard]] CubeMipPixels generate_diffuse_irradiance(Vector3 calibration) {
+[[nodiscard]] CubeMipPixels generate_diffuse_irradiance(Vector3 calibration)
+{
     CubeMipPixels mip;
     mip.extent = diffuse_extent;
     for (std::size_t face = 0; face < mip.faces.size(); ++face) {
@@ -364,7 +394,8 @@ void append_half_color(std::vector<std::uint16_t>& pixels, Vector3 color) {
 }
 
 [[nodiscard]] Vector3 filtered_specular_radiance(const Vector3& reflection, float roughness,
-                                                 Vector3 calibration) noexcept {
+                                                 Vector3 calibration) noexcept
+{
     Vector3 accumulated;
     float total_weight = 0.0F;
     for (std::uint32_t sample_index = 0; sample_index < environment_integration_sample_count;
@@ -383,7 +414,8 @@ void append_half_color(std::vector<std::uint16_t>& pixels, Vector3 color) {
     return multiply(accumulated, 1.0F / std::max(total_weight, 0.001F));
 }
 
-[[nodiscard]] CubeMipPixels generate_specular_mip(std::uint32_t level, Vector3 calibration) {
+[[nodiscard]] CubeMipPixels generate_specular_mip(std::uint32_t level, Vector3 calibration)
+{
     CubeMipPixels mip;
     mip.extent = std::max(specular_extent >> level, 1U);
     const float roughness = static_cast<float>(level) / static_cast<float>(specular_mip_count - 1U);
@@ -405,12 +437,14 @@ void append_half_color(std::vector<std::uint16_t>& pixels, Vector3 color) {
     return mip;
 }
 
-[[nodiscard]] float geometry_schlick_ggx(float n_dot_v, float roughness) noexcept {
+[[nodiscard]] float geometry_schlick_ggx(float n_dot_v, float roughness) noexcept
+{
     const float k = roughness * roughness * 0.5F;
     return n_dot_v / std::max(n_dot_v * (1.0F - k) + k, 0.0001F);
 }
 
-[[nodiscard]] std::array<float, 2> integrate_brdf(float n_dot_v, float roughness) noexcept {
+[[nodiscard]] std::array<float, 2> integrate_brdf(float n_dot_v, float roughness) noexcept
+{
     const Vector3 normal{0.0F, 0.0F, 1.0F};
     const Vector3 view{std::sqrt(std::max(1.0F - n_dot_v * n_dot_v, 0.0F)), 0.0F, n_dot_v};
     float scale = 0.0F;
@@ -436,7 +470,8 @@ void append_half_color(std::vector<std::uint16_t>& pixels, Vector3 color) {
     return {scale / brdf_integration_sample_count, bias / brdf_integration_sample_count};
 }
 
-[[nodiscard]] std::vector<std::uint16_t> generate_brdf_lut() {
+[[nodiscard]] std::vector<std::uint16_t> generate_brdf_lut()
+{
     std::vector<std::uint16_t> pixels;
     pixels.reserve(static_cast<std::size_t>(brdf_extent) * brdf_extent * 4U);
     for (std::uint32_t y = 0; y < brdf_extent; ++y) {
@@ -453,24 +488,28 @@ void append_half_color(std::vector<std::uint16_t>& pixels, Vector3 color) {
     return pixels;
 }
 
-void append_u16(std::vector<std::byte>& destination, std::uint16_t value) {
+void append_u16(std::vector<std::byte>& destination, std::uint16_t value)
+{
     destination.push_back(static_cast<std::byte>(value & 0xFFU));
     destination.push_back(static_cast<std::byte>((value >> 8U) & 0xFFU));
 }
 
-void append_u32(std::vector<std::byte>& destination, std::uint32_t value) {
+void append_u32(std::vector<std::byte>& destination, std::uint32_t value)
+{
     for (std::uint32_t shift = 0; shift < 32U; shift += 8U) {
         destination.push_back(static_cast<std::byte>((value >> shift) & 0xFFU));
     }
 }
 
-void append_u64(std::vector<std::byte>& destination, std::uint64_t value) {
+void append_u64(std::vector<std::byte>& destination, std::uint64_t value)
+{
     for (std::uint32_t shift = 0; shift < 64U; shift += 8U) {
         destination.push_back(static_cast<std::byte>((value >> shift) & 0xFFU));
     }
 }
 
-void append_pixels(std::vector<std::byte>& destination, std::span<const std::uint16_t> pixels) {
+void append_pixels(std::vector<std::byte>& destination, std::span<const std::uint16_t> pixels)
+{
     for (const std::uint16_t value : pixels) {
         append_u16(destination, value);
     }
@@ -481,7 +520,8 @@ struct BakeResult final {
     StudioEnergyCalibration calibration;
 };
 
-[[nodiscard]] std::uint64_t fnv1a64(std::span<const std::byte> bytes) noexcept {
+[[nodiscard]] std::uint64_t fnv1a64(std::span<const std::byte> bytes) noexcept
+{
     std::uint64_t value = 14'695'981'039'346'656'037ULL;
     for (const std::byte byte : bytes) {
         value ^= std::to_integer<std::uint8_t>(byte);
@@ -490,7 +530,8 @@ struct BakeResult final {
     return value;
 }
 
-[[nodiscard]] BakeResult bake_resource() {
+[[nodiscard]] BakeResult bake_resource()
+{
     const StudioEnergyCalibration calibration = calibrate_studio_energy();
     const Vector3 calibrated_mean = multiply(calibration.unscaled_mean, calibration.scale);
     const auto energy_is_calibrated = [](float calibrated, float legacy) noexcept {
@@ -501,11 +542,13 @@ struct BakeResult final {
         !energy_is_calibrated(calibrated_mean.z, calibration.legacy_mean.z)) {
         return {};
     }
+
     const CubeMipPixels diffuse = generate_diffuse_irradiance(calibration.scale);
     std::array<CubeMipPixels, specular_mip_count> specular;
     for (std::uint32_t level = 0; level < specular_mip_count; ++level) {
         specular[level] = generate_specular_mip(level, calibration.scale);
     }
+
     const std::vector<std::uint16_t> brdf = generate_brdf_lut();
 
     std::vector<std::byte> payload;
@@ -518,6 +561,7 @@ struct BakeResult final {
             append_pixels(payload, face);
         }
     }
+
     append_pixels(payload, brdf);
     const std::size_t brdf_bytes = brdf.size() * sizeof(std::uint16_t);
     if (payload.size() != expected_payload_bytes ||
@@ -545,7 +589,8 @@ struct BakeResult final {
 }
 
 [[nodiscard]] bool write_resource(const std::filesystem::path& path,
-                                  std::span<const std::byte> resource) {
+                                  std::span<const std::byte> resource)
+{
     std::error_code error;
     if (const std::filesystem::path parent = path.parent_path(); !parent.empty()) {
         std::filesystem::create_directories(parent, error);
@@ -553,25 +598,30 @@ struct BakeResult final {
             return false;
         }
     }
+
     std::ofstream stream{path, std::ios::binary | std::ios::trunc};
     if (!stream) {
         return false;
     }
+
     stream.write(reinterpret_cast<const char*>(resource.data()),
                  static_cast<std::streamsize>(resource.size()));
     return static_cast<bool>(stream);
 }
 
-[[nodiscard]] std::vector<std::byte> read_resource(const std::filesystem::path& path) {
+[[nodiscard]] std::vector<std::byte> read_resource(const std::filesystem::path& path)
+{
     std::ifstream stream{path, std::ios::binary | std::ios::ate};
     if (!stream) {
         return {};
     }
+
     const std::streampos end = stream.tellg();
     if (end <= 0 ||
         end > static_cast<std::streamoff>(std::numeric_limits<std::streamsize>::max())) {
         return {};
     }
+
     std::vector<std::byte> result(static_cast<std::size_t>(end));
     stream.seekg(0, std::ios::beg);
     stream.read(reinterpret_cast<char*>(result.data()),
@@ -579,11 +629,13 @@ struct BakeResult final {
     return stream ? result : std::vector<std::byte>{};
 }
 
-void print_usage() {
+void print_usage()
+{
     std::cerr << "Usage: elf3d_studio_environment_baker --output <path> | --verify <path>\n";
 }
 
-void print_calibration(const StudioEnergyCalibration& calibration) {
+void print_calibration(const StudioEnergyCalibration& calibration)
+{
     std::cout << "Studio energy legacy_mean=" << calibration.legacy_mean.x << ','
               << calibration.legacy_mean.y << ',' << calibration.legacy_mean.z
               << " unscaled_mean=" << calibration.unscaled_mean.x << ','
@@ -594,11 +646,13 @@ void print_calibration(const StudioEnergyCalibration& calibration) {
 
 } // namespace
 
-int main(int argument_count, char** arguments) {
+int main(int argument_count, char** arguments)
+{
     if (argument_count != 3) {
         print_usage();
         return 2;
     }
+
     const std::string_view operation = arguments[1];
     const std::filesystem::path path = arguments[2];
     try {
@@ -607,6 +661,7 @@ int main(int argument_count, char** arguments) {
             std::cerr << "Studio environment bake produced an invalid byte count\n";
             return 3;
         }
+
         print_calibration(bake.calibration);
         if (operation == "--output") {
             if (!write_resource(path, bake.resource)) {

@@ -7,9 +7,7 @@ target_compile_features(elf3d_render_benchmark PRIVATE cxx_std_20)
 target_link_libraries(
     elf3d_render_benchmark
     PRIVATE
-        elf3d::embed
-        elf3d::third_party_glad
-        glfw
+        elf3d::app
 )
 set_target_properties(elf3d_render_benchmark PROPERTIES FOLDER "Elf3D/Tools")
 

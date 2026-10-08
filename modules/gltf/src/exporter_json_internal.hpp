@@ -2,6 +2,8 @@
 
 #include <elf3d/model.h>
 
+#include "exporter_internal.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -11,6 +13,20 @@
 #include <vector>
 
 namespace elf3d::gltf::exporter_detail {
+
+template <typename Id>
+[[nodiscard]] std::optional<std::uint32_t> find_index(const std::vector<IdIndex<Id>>& indices,
+                                                      Id id) noexcept
+{
+    for (const IdIndex<Id>& entry : indices) {
+        if (entry.id == id) {
+            return entry.index;
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] Result<void> append_materials(std::string& output, const ExportData& document);
 
 inline constexpr char preserved_json_begin = '\x1e';
 inline constexpr char preserved_json_end = '\x1f';

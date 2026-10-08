@@ -5,7 +5,8 @@
 namespace elf3d_external {
 namespace {
 
-[[nodiscard]] double distance_between(elf3d::Float3 left, elf3d::Float3 right) noexcept {
+[[nodiscard]] double distance_between(elf3d::Float3 left, elf3d::Float3 right) noexcept
+{
     const double x = static_cast<double>(right.x) - static_cast<double>(left.x);
     const double y = static_cast<double>(right.y) - static_cast<double>(left.y);
     const double z = static_cast<double>(right.z) - static_cast<double>(left.z);
@@ -19,7 +20,8 @@ constexpr elf3d::Color4 second_color{1.0F, 0.35F, 0.2F, 1.0F};
 } // namespace
 
 elf3d::Result<void> MeasurementTool::place_hit(const elf3d::Scene& scene,
-                                               const elf3d::PickHit& hit) noexcept {
+                                               const elf3d::PickHit& hit) noexcept
+{
     const elf3d::Result<elf3d::SurfaceAnchor> anchor = scene.create_surface_anchor(hit);
     if (!anchor) {
         return anchor.error();
@@ -30,16 +32,19 @@ elf3d::Result<void> MeasurementTool::place_hit(const elf3d::Scene& scene,
     } else {
         second_ = anchor.value();
     }
+
     preview_.reset();
     return {};
 }
 
 elf3d::Result<void> MeasurementTool::update_preview(const elf3d::Scene& scene,
-                                                    const elf3d::PickHit& hit) noexcept {
+                                                    const elf3d::PickHit& hit) noexcept
+{
     if (!first_.has_value() || second_.has_value()) {
         preview_.reset();
         return {};
     }
+
     const elf3d::Result<elf3d::SurfaceAnchor> anchor = scene.create_surface_anchor(hit);
     if (!anchor) {
         return anchor.error();
@@ -50,7 +55,8 @@ elf3d::Result<void> MeasurementTool::update_preview(const elf3d::Scene& scene,
     return {};
 }
 
-void MeasurementTool::clear() noexcept {
+void MeasurementTool::clear() noexcept
+{
     first_.reset();
     second_.reset();
     preview_.reset();
@@ -58,12 +64,14 @@ void MeasurementTool::clear() noexcept {
 
 elf3d::Result<MeasurementTool::ResolvedPoint>
 MeasurementTool::resolve(const elf3d::Scene& scene, const elf3d::Viewport& viewport,
-                         const elf3d::SurfaceAnchor& anchor) const noexcept {
+                         const elf3d::SurfaceAnchor& anchor) const noexcept
+{
     const elf3d::Result<elf3d::ResolvedSurfaceAnchor> resolved =
         scene.resolve_surface_anchor(anchor);
     if (!resolved) {
         return resolved.error();
     }
+
     const elf3d::Result<bool> visible = viewport.surface_anchor_visible(scene, resolved.value());
     if (!visible) {
         return visible.error();
@@ -72,8 +80,8 @@ MeasurementTool::resolve(const elf3d::Scene& scene, const elf3d::Viewport& viewp
 }
 
 elf3d::Result<MeasurementSnapshot>
-MeasurementTool::snapshot(const elf3d::Scene& scene,
-                          const elf3d::Viewport& viewport) const noexcept {
+MeasurementTool::snapshot(const elf3d::Scene& scene, const elf3d::Viewport& viewport) const noexcept
+{
     MeasurementSnapshot result;
     if (!first_.has_value()) {
         return result;
@@ -114,8 +122,8 @@ MeasurementTool::snapshot(const elf3d::Scene& scene,
 }
 
 elf3d::Result<MeasurementOverlay>
-MeasurementTool::overlay(const elf3d::Scene& scene,
-                         const elf3d::Viewport& viewport) const noexcept {
+MeasurementTool::overlay(const elf3d::Scene& scene, const elf3d::Viewport& viewport) const noexcept
+{
     const elf3d::Result<MeasurementSnapshot> value = snapshot(scene, viewport);
     if (!value) {
         return value.error();

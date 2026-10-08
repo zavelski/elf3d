@@ -1,4 +1,6 @@
-module;
+#include "renderer_detail.h"
+
+#include <elf3d/internal/renderer.h>
 
 #include <elf3d/core/result.h>
 
@@ -6,13 +8,10 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/graphics.h>
 #include <memory>
 #include <span>
 #include <utility>
-
-module elf.renderer;
-
-import elf.graphics;
 
 namespace elf3d::renderer {
 namespace {
@@ -65,8 +64,8 @@ struct StudioEnvironmentView final {
     std::span<const std::byte> brdf_pixels;
 };
 
-[[nodiscard]] std::uint32_t read_u32(std::span<const std::byte> bytes,
-                                     std::size_t offset) noexcept {
+[[nodiscard]] std::uint32_t read_u32(std::span<const std::byte> bytes, std::size_t offset) noexcept
+{
     std::uint32_t value = 0;
     for (std::size_t index = 0; index < sizeof(value); ++index) {
         value |= static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[offset + index]))
@@ -75,8 +74,8 @@ struct StudioEnvironmentView final {
     return value;
 }
 
-[[nodiscard]] std::uint64_t read_u64(std::span<const std::byte> bytes,
-                                     std::size_t offset) noexcept {
+[[nodiscard]] std::uint64_t read_u64(std::span<const std::byte> bytes, std::size_t offset) noexcept
+{
     std::uint64_t value = 0;
     for (std::size_t index = 0; index < sizeof(value); ++index) {
         value |= static_cast<std::uint64_t>(std::to_integer<std::uint8_t>(bytes[offset + index]))
@@ -85,7 +84,8 @@ struct StudioEnvironmentView final {
     return value;
 }
 
-[[nodiscard]] std::uint64_t fnv1a64(std::span<const std::byte> bytes) noexcept {
+[[nodiscard]] std::uint64_t fnv1a64(std::span<const std::byte> bytes) noexcept
+{
     std::uint64_t value = 14'695'981'039'346'656'037ULL;
     for (const std::byte byte : bytes) {
         value ^= std::to_integer<std::uint8_t>(byte);
@@ -94,7 +94,8 @@ struct StudioEnvironmentView final {
     return value;
 }
 
-[[nodiscard]] bool has_expected_header(std::span<const std::byte> resource) noexcept {
+[[nodiscard]] bool has_expected_header(std::span<const std::byte> resource) noexcept
+{
     if (resource.size() < resource_header_bytes) {
         return false;
     }
@@ -112,17 +113,20 @@ struct StudioEnvironmentView final {
 }
 
 [[nodiscard]] Result<std::span<const std::byte>>
-validated_payload(std::span<const std::byte> resource) noexcept {
+validated_payload(std::span<const std::byte> resource) noexcept
+{
     if (!has_expected_header(resource)) {
         return Error{ErrorCode::graphics_initialization_failed,
                      "The built-in studio environment header is invalid"};
     }
+
     const std::uint64_t payload_bytes = read_u64(resource, payload_size_offset);
     if (payload_bytes != expected_payload_bytes || payload_bytes > maximum_environment_bytes ||
         resource.size() != resource_header_bytes + expected_payload_bytes) {
         return Error{ErrorCode::graphics_initialization_failed,
                      "The built-in studio environment byte count is invalid"};
     }
+
     const std::span<const std::byte> payload = resource.subspan(resource_header_bytes);
     if (fnv1a64(payload) != read_u64(resource, payload_checksum_offset)) {
         return Error{ErrorCode::graphics_initialization_failed,
@@ -131,13 +135,15 @@ validated_payload(std::span<const std::byte> resource) noexcept {
     return payload;
 }
 
-[[nodiscard]] std::size_t face_bytes(std::uint32_t extent) noexcept {
+[[nodiscard]] std::size_t face_bytes(std::uint32_t extent) noexcept
+{
     return static_cast<std::size_t>(extent) * extent * rgba16_float_texel_bytes;
 }
 
 void describe_mip(graphics::TextureCubeMipDescription& description,
                   std::span<const std::byte> payload, std::size_t& cursor,
-                  std::uint32_t extent) noexcept {
+                  std::uint32_t extent) noexcept
+{
     description.extent = extent;
     const std::size_t bytes = face_bytes(extent);
     for (std::span<const std::byte>& face : description.faces) {
@@ -146,7 +152,8 @@ void describe_mip(graphics::TextureCubeMipDescription& description,
     }
 }
 
-[[nodiscard]] StudioEnvironmentView describe_environment(std::span<const std::byte> payload) {
+[[nodiscard]] StudioEnvironmentView describe_environment(std::span<const std::byte> payload)
+{
     StudioEnvironmentView result;
     std::size_t cursor = 0;
     describe_mip(result.diffuse_mips.front(), payload, cursor, diffuse_extent);
@@ -160,7 +167,8 @@ void describe_mip(graphics::TextureCubeMipDescription& description,
 
 } // namespace
 
-Result<bool> Renderer::ensure_environment_resources() {
+Result<bool> Renderer::ensure_environment_resources()
+{
     if (environment_ != nullptr) {
         return false;
     }
@@ -173,10 +181,12 @@ Result<bool> Renderer::ensure_environment_resources() {
     if (!resource_result) {
         return resource_result.error();
     }
+
     Result<std::span<const std::byte>> payload_result = validated_payload(resource_result.value());
     if (!payload_result) {
         return payload_result.error();
     }
+
     const StudioEnvironmentView environment = describe_environment(payload_result.value());
 
     const graphics::TextureCubeDescription diffuse_description{

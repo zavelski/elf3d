@@ -1,4 +1,4 @@
-module;
+#include <elf3d/internal/backend_opengl.h>
 
 #include <elf3d/core/assert.h>
 #include <elf3d/graphics.h>
@@ -11,6 +11,7 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <elf3d/internal/graphics.h>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -22,16 +23,13 @@ module;
 #include <utility>
 #include <vector>
 
-module elf.backend.opengl;
-
-import elf.graphics;
-
 namespace elf3d::backend::opengl::device_detail {
 namespace {
 
 constinit const int opengl_resource_token_anchor = 0;
 
-[[nodiscard]] std::string shader_log(GLuint object, bool program) {
+[[nodiscard]] std::string shader_log(GLuint object, bool program)
+{
     GLint length = 0;
     if (program) {
         glGetProgramiv(object, GL_INFO_LOG_LENGTH, &length);
@@ -54,24 +52,29 @@ constinit const int opengl_resource_token_anchor = 0;
 
 } // namespace
 
-[[noreturn]] void fatal_opengl_allocation_failure() noexcept {
+[[noreturn]] void fatal_opengl_allocation_failure() noexcept
+{
     fatal_error("Elf3D OpenGL backend memory allocation failed");
 }
 
-[[noreturn]] void fatal_unexpected_opengl_boundary_exception() noexcept {
+[[noreturn]] void fatal_unexpected_opengl_boundary_exception() noexcept
+{
     fatal_error("Elf3D OpenGL backend encountered an unexpected exception");
 }
 
-std::uintptr_t opengl_resource_token() noexcept {
+std::uintptr_t opengl_resource_token() noexcept
+{
     return reinterpret_cast<std::uintptr_t>(&opengl_resource_token_anchor);
 }
 
-bool is_opengl_texture(const graphics::Texture2D* texture) noexcept {
+bool is_opengl_texture(const graphics::Texture2D* texture) noexcept
+{
     return texture == nullptr || texture->backend_resource_token() == opengl_resource_token();
 }
 
 [[nodiscard]] GpuTimerQueryRing& gpu_timing_ring(std::array<GpuTimerQueryRing, 3>& rings,
-                                                 GpuTimingKind kind) noexcept {
+                                                 GpuTimingKind kind) noexcept
+{
     auto ring = rings.begin();
     switch (kind) {
     case GpuTimingKind::main:
@@ -84,7 +87,8 @@ bool is_opengl_texture(const graphics::Texture2D* texture) noexcept {
     return *ring;
 }
 
-bool GpuTimerQueryRing::begin() noexcept {
+bool GpuTimerQueryRing::begin() noexcept
+{
     poll();
     GLint current_query = 0;
     glGetQueryiv(GL_TIME_ELAPSED, GL_CURRENT_QUERY, &current_query);
@@ -102,6 +106,7 @@ bool GpuTimerQueryRing::begin() noexcept {
         if (queries_[slot] == 0) {
             return false;
         }
+
         glBeginQuery(GL_TIME_ELAPSED, queries_[slot]);
         pending_[slot] = true;
         submission_ids_[slot] = next_submission_id_++;
@@ -112,24 +117,29 @@ bool GpuTimerQueryRing::begin() noexcept {
     return false;
 }
 
-void GpuTimerQueryRing::end() noexcept {
+void GpuTimerQueryRing::end() noexcept
+{
     if (!active_slot_.has_value()) {
         return;
     }
+
     glEndQuery(GL_TIME_ELAPSED);
     active_slot_.reset();
 }
 
-GpuTimingResult GpuTimerQueryRing::latest() noexcept {
+GpuTimingResult GpuTimerQueryRing::latest() noexcept
+{
     poll();
     return latest_;
 }
 
-void GpuTimerQueryRing::release() noexcept {
+void GpuTimerQueryRing::release() noexcept
+{
     if (active_slot_.has_value()) {
         glEndQuery(GL_TIME_ELAPSED);
         active_slot_.reset();
     }
+
     glDeleteQueries(static_cast<GLsizei>(queries_.size()), queries_.data());
     queries_ = {};
     pending_ = {};
@@ -140,7 +150,8 @@ void GpuTimerQueryRing::release() noexcept {
     latest_ = {};
 }
 
-void GpuTimerQueryRing::poll() noexcept {
+void GpuTimerQueryRing::poll() noexcept
+{
     for (std::size_t slot = 0; slot < slot_count; ++slot) {
         if (!pending_[slot] || active_slot_ == slot) {
             continue;
@@ -162,9 +173,12 @@ void GpuTimerQueryRing::poll() noexcept {
 }
 
 OpenGLDeviceState::OpenGLDeviceState(GLint maximum_texture_size) noexcept
-    : owner_thread_(std::this_thread::get_id()), maximum_texture_size_(maximum_texture_size) {}
+    : owner_thread_(std::this_thread::get_id()), maximum_texture_size_(maximum_texture_size)
+{
+}
 
-Result<void> OpenGLDeviceState::validate_operation() const noexcept {
+Result<void> OpenGLDeviceState::validate_operation() const noexcept
+{
     if (!operational_) {
         return Error{ErrorCode::graphics_shutdown, "The OpenGL backend has shut down"};
     }
@@ -177,12 +191,14 @@ Result<void> OpenGLDeviceState::validate_operation() const noexcept {
     return {};
 }
 
-bool OpenGLDeviceState::can_destroy_objects() const noexcept {
+bool OpenGLDeviceState::can_destroy_objects() const noexcept
+{
     return operational_ && std::this_thread::get_id() == owner_thread_ &&
            glGetString(GL_VERSION) != nullptr;
 }
 
-bool OpenGLDeviceState::supports(Extent2D extent) const noexcept {
+bool OpenGLDeviceState::supports(Extent2D extent) const noexcept
+{
     const auto maximum = static_cast<std::uint32_t>(maximum_texture_size_);
     return extent.width <= maximum && extent.height <= maximum &&
            extent.width <= static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max()) &&
@@ -190,12 +206,14 @@ bool OpenGLDeviceState::supports(Extent2D extent) const noexcept {
 }
 
 Result<TextureHandle> OpenGLDeviceState::register_texture(GLuint texture, Extent2D extent,
-                                                          ColorTextureResolver* resolver) {
+                                                          ColorTextureResolver* resolver)
+{
     try {
         std::uint64_t candidate = next_texture_handle_++;
         if (candidate == 0) {
             candidate = next_texture_handle_++;
         }
+
         texture_records_.emplace(candidate, TextureRecord{texture, extent, resolver});
         return detail::TextureHandleAccess::create(candidate);
     } catch (const std::bad_alloc&) {
@@ -205,11 +223,13 @@ Result<TextureHandle> OpenGLDeviceState::register_texture(GLuint texture, Extent
     }
 }
 
-void OpenGLDeviceState::unregister_texture(TextureHandle handle) noexcept {
+void OpenGLDeviceState::unregister_texture(TextureHandle handle) noexcept
+{
     texture_records_.erase(detail::TextureHandleAccess::value(handle));
 }
 
-Result<OpenGLTextureView> OpenGLDeviceState::native_texture_view(TextureHandle handle) const {
+Result<OpenGLTextureView> OpenGLDeviceState::native_texture_view(TextureHandle handle) const
+{
     const Result<void> validation = validate_operation();
     if (!validation) {
         return validation.error();
@@ -234,19 +254,23 @@ Result<OpenGLTextureView> OpenGLDeviceState::native_texture_view(TextureHandle h
                              record->second.extent};
 }
 
-bool OpenGLDeviceState::begin_gpu_timing(GpuTimingKind kind) noexcept {
+bool OpenGLDeviceState::begin_gpu_timing(GpuTimingKind kind) noexcept
+{
     return gpu_timing_ring(gpu_timing_rings_, kind).begin();
 }
 
-void OpenGLDeviceState::end_gpu_timing(GpuTimingKind kind) noexcept {
+void OpenGLDeviceState::end_gpu_timing(GpuTimingKind kind) noexcept
+{
     gpu_timing_ring(gpu_timing_rings_, kind).end();
 }
 
-GpuTimingResult OpenGLDeviceState::latest_gpu_timing(GpuTimingKind kind) noexcept {
+GpuTimingResult OpenGLDeviceState::latest_gpu_timing(GpuTimingKind kind) noexcept
+{
     return gpu_timing_ring(gpu_timing_rings_, kind).latest();
 }
 
-void OpenGLDeviceState::shut_down() noexcept {
+void OpenGLDeviceState::shut_down() noexcept
+{
     if (can_destroy_objects()) {
         for (GpuTimerQueryRing& ring : gpu_timing_rings_) {
             ring.release();
@@ -256,15 +280,19 @@ void OpenGLDeviceState::shut_down() noexcept {
 }
 
 GpuTimingScope::GpuTimingScope(OpenGLDeviceState& state, GpuTimingKind kind) noexcept
-    : state_(state), kind_(kind), active_(state.begin_gpu_timing(kind)) {}
+    : state_(state), kind_(kind), active_(state.begin_gpu_timing(kind))
+{
+}
 
-GpuTimingScope::~GpuTimingScope() {
+GpuTimingScope::~GpuTimingScope()
+{
     if (active_) {
         state_.end_gpu_timing(kind_);
     }
 }
 
-AllocationStateGuard::AllocationStateGuard() noexcept {
+AllocationStateGuard::AllocationStateGuard() noexcept
+{
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer_);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_framebuffer_);
     glGetIntegerv(GL_RENDERBUFFER_BINDING, &renderbuffer_);
@@ -277,7 +305,8 @@ AllocationStateGuard::AllocationStateGuard() noexcept {
     glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &array_buffer_);
 }
 
-AllocationStateGuard::~AllocationStateGuard() {
+AllocationStateGuard::~AllocationStateGuard()
+{
     glActiveTexture(static_cast<GLenum>(active_texture_));
     glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_2d_));
     glBindTexture(GL_TEXTURE_CUBE_MAP, static_cast<GLuint>(texture_cube_));
@@ -290,7 +319,8 @@ AllocationStateGuard::~AllocationStateGuard() {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(read_framebuffer_));
 }
 
-RenderStateGuard::RenderStateGuard() noexcept {
+RenderStateGuard::RenderStateGuard() noexcept
+{
     constexpr std::array<GLenum, 6> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
                                                      GL_TEXTURE3, GL_TEXTURE4, GL_TEXTURE7};
     constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE5, GL_TEXTURE6};
@@ -337,7 +367,8 @@ RenderStateGuard::RenderStateGuard() noexcept {
     glGetDoublev(GL_DEPTH_RANGE, depth_range_);
 }
 
-RenderStateGuard::~RenderStateGuard() {
+RenderStateGuard::~RenderStateGuard()
+{
     constexpr std::array<GLenum, 6> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
                                                      GL_TEXTURE3, GL_TEXTURE4, GL_TEXTURE7};
     constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE5, GL_TEXTURE6};
@@ -383,7 +414,8 @@ RenderStateGuard::~RenderStateGuard() {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(read_framebuffer_));
 }
 
-void RenderStateGuard::set_enabled(GLenum capability, GLboolean enabled) noexcept {
+void RenderStateGuard::set_enabled(GLenum capability, GLboolean enabled) noexcept
+{
     if (enabled == GL_TRUE) {
         glEnable(capability);
     } else {
@@ -391,7 +423,8 @@ void RenderStateGuard::set_enabled(GLenum capability, GLboolean enabled) noexcep
     }
 }
 
-Result<GLuint> compile_shader(GLenum type, std::string_view source) {
+Result<GLuint> compile_shader(GLenum type, std::string_view source)
+{
     if (source.empty() ||
         source.size() > static_cast<std::size_t>(std::numeric_limits<GLint>::max())) {
         return Error{ErrorCode::shader_compilation_failed,
@@ -403,6 +436,7 @@ Result<GLuint> compile_shader(GLenum type, std::string_view source) {
         return Error{ErrorCode::shader_compilation_failed,
                      "OpenGL failed to create a shader object"};
     }
+
     const GLchar* source_pointer = source.data();
     const GLint source_length = static_cast<GLint>(source.size());
     glShaderSource(shader, 1, &source_pointer, &source_length);
@@ -419,11 +453,13 @@ Result<GLuint> compile_shader(GLenum type, std::string_view source) {
     return shader;
 }
 
-Result<GLuint> link_program(GLuint vertex_shader, GLuint fragment_shader) {
+Result<GLuint> link_program(GLuint vertex_shader, GLuint fragment_shader)
+{
     const GLuint program = glCreateProgram();
     if (program == 0) {
         return Error{ErrorCode::shader_linking_failed, "OpenGL failed to create a shader program"};
     }
+
     glAttachShader(program, vertex_shader);
     glAttachShader(program, fragment_shader);
     glLinkProgram(program);
@@ -440,17 +476,20 @@ Result<GLuint> link_program(GLuint vertex_shader, GLuint fragment_shader) {
 }
 
 Result<GLuint> create_program_from_sources(std::string_view vertex_source,
-                                           std::string_view fragment_source) {
+                                           std::string_view fragment_source)
+{
     Result<GLuint> vertex_result = compile_shader(GL_VERTEX_SHADER, vertex_source);
     if (!vertex_result) {
         return vertex_result.error();
     }
+
     const GLuint vertex_shader = vertex_result.value();
     Result<GLuint> fragment_result = compile_shader(GL_FRAGMENT_SHADER, fragment_source);
     if (!fragment_result) {
         glDeleteShader(vertex_shader);
         return fragment_result.error();
     }
+
     const GLuint fragment_shader = fragment_result.value();
     Result<GLuint> program_result = link_program(vertex_shader, fragment_shader);
     glDeleteShader(vertex_shader);
