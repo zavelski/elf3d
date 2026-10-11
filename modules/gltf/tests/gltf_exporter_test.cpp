@@ -226,7 +226,7 @@ create_textures(elf3d::Document& document, const elf3d::image::DecodedImage& dec
 
 [[nodiscard]] elf3d::Result<elf3d::Document> create_document(std::span<const std::byte> jpeg)
 {
-    const auto decoded = elf3d::image::decode_png_or_jpeg(jpeg);
+    const auto decoded = elf3d::image::decode_image(jpeg);
     if (!decoded) {
         return decoded.error();
     }
@@ -537,6 +537,84 @@ create_textures(elf3d::Document& document, const elf3d::image::DecodedImage& dec
            !std::filesystem::exists(unsupported);
 }
 
+[[nodiscard]] bool numeric_report_matches(const elf3d::ModelWriteReport& report, bool clean)
+{
+    const auto count = std::count_if(
+        report.diagnostics.begin(), report.diagnostics.end(),
+        [](const elf3d::ModelWriteDiagnostic& diagnostic) {
+            return diagnostic.code == elf3d::ModelWriteDiagnosticCode::matrix_rotation_cleaned &&
+                   diagnostic.severity == elf3d::ModelWriteDiagnosticSeverity::information;
+        });
+    return count == (clean ? 1 : 0);
+}
+
+[[nodiscard]] bool numeric_export_matches(const std::filesystem::path& path,
+                                          const elf3d::Document& source, bool clean)
+{
+    elf3d::ModelWriteOptions options;
+    options.numeric_policy = clean ? elf3d::ModelNumericWritePolicy::clean_rotation
+                                   : elf3d::ModelNumericWritePolicy::round_trip;
+    const auto written = elf3d::save_document(path.string(), source.view(), options);
+    if (!written) {
+        return false;
+    }
+    if (!numeric_report_matches(written.value(), clean)) {
+        return false;
+    }
+    const auto loaded = elf3d::load_document(path.string());
+    if (!loaded) {
+        return false;
+    }
+    const auto node = loaded.value().document.node_at(0U);
+    if (!node) {
+        return false;
+    }
+    const auto& matrix = node.value().local_matrix.elements;
+    return matrix[0] == (clean ? 0.0F : 1.0e-8F) && matrix[5] == matrix[0] && matrix[12] == 1.0e-8F;
+}
+
+[[nodiscard]] bool invalid_numeric_policy_preserves(const std::filesystem::path& path,
+                                                    const elf3d::Document& document)
+{
+    const auto before = read_bytes(path);
+    elf3d::ModelWriteOptions options;
+    options.numeric_policy = static_cast<elf3d::ModelNumericWritePolicy>(999);
+    const auto written = elf3d::save_document(path.string(), document.view(), options);
+    return before && !written && written.error().code() == elf3d::ErrorCode::invalid_argument &&
+           read_bytes(path) == before;
+}
+
+[[nodiscard]] bool test_numeric_policies(const std::filesystem::path& directory,
+                                         std::span<const std::byte> jpeg)
+{
+    auto created = create_document(jpeg);
+    if (!created) {
+        return false;
+    }
+    elf3d::Float4x4 matrix;
+    matrix.elements = {1.0e-8F, 1, 0, 0, -1, 1.0e-8F, 0, 0, 0, 0, 1, 0, 1.0e-8F, 0, 0, 1};
+    elf3d::NodeId id;
+    {
+        const auto node = created.value().node_at(0U);
+        if (!node) {
+            return false;
+        }
+        id = node.value().id;
+    }
+    if (!created.value().set_node_matrix(id, matrix)) {
+        return false;
+    }
+    const auto preserved = directory / "numeric.gltf";
+    const auto cleaned = directory / "numeric-cleaned.glb";
+    if (!numeric_export_matches(preserved, created.value(), false) ||
+        !numeric_export_matches(cleaned, created.value(), true)) {
+        return false;
+    }
+    const auto unchanged = created.value().node_at(0U);
+    return unchanged && unchanged.value().local_matrix == matrix &&
+           invalid_numeric_policy_preserves(preserved, created.value());
+}
+
 } // namespace
 
 int elf3d_gltf_export_test()
@@ -567,6 +645,9 @@ int elf3d_gltf_export_test()
     }
     if (!test_unsupported_extension(temporary.path(), created.value())) {
         return 8;
+    }
+    if (!test_numeric_policies(temporary.path(), jpeg)) {
+        return 9;
     }
     return 0;
 }

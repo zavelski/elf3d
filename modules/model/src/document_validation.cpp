@@ -144,6 +144,18 @@ class DocumentValidation final {
         }
 
         validate_node_hierarchy(storage, report);
+        validate_camera_properties(storage, report);
+    }
+
+    static void validate_camera_properties(const Document::Storage& storage,
+                                           DocumentValidationReport& report)
+    {
+        for (const auto& node : storage.nodes) {
+            if (const auto valid = storage.validate_camera_properties(node.camera_properties);
+                !valid) {
+                add_error(report, DocumentDiagnosticCode::invalid_asset, valid.error().message());
+            }
+        }
     }
 
     static void validate_mesh_primitives(const Document::Storage& storage,

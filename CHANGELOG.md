@@ -1,6 +1,44 @@
 # Changelog
 
+## 0.11.4
+
+- Add the standalone `elf3d_cmd` application for CPU-only glTF/GLB rotation,
+  validation and export through the Model SDK, with copy/adapt source and the
+  fifth manual Windows solution.
+- Normalize glTF/GLB JSON with shortest binary32 numbers, wrapped arrays,
+  column-major matrix groups and safe identity omission. Cmd cleans bounded
+  orthonormal rotation coefficients and reports the change.
+- Retain supported object metadata during node-matrix edits, material-volume
+  data and surviving required-extension declarations during normalized export.
+- Preserve perspective camera names, authored aspect ratios, infinite far
+  planes and camera metadata; retain material names, support CMYK/YCCK JPEG and
+  uncompressed RGB TIFF textures, and preserve usable authored normal vectors.
+- Include both Viewer and Cmd, their guides and license notices in the Windows
+  x64 package.
+
 ## 0.11.3
+
+- Preserve perspective camera names, authored aspect ratios, infinite far planes,
+  and camera metadata. Retain material names, support CMYK/YCCK JPEG and
+  uncompressed RGB TIFF textures, and repair only unusable authored normals
+  while retaining valid vectors.
+
+- Added `elf3d_cmd`, a public-Model-only console application for rotating and
+  exporting glTF/GLB, with diagnostics, CPU tests, and copy/adapt source.
+- Added the fifth manual solution, `win/cmd/Elf3D-Cmd.slnx`, using selective
+  Model imports. The Windows archive includes both applications and the Cmd guide.
+- Normalize glTF/GLB JSON, including retained metadata, with wrapped arrays,
+  four-group column-major matrices, shortest float tokens, and safe identity
+  omission. Cmd enables bounded orthonormal matrix-basis cleanup with diagnostics.
+- Retain Document-owned extras and opaque extensions during node-matrix edits;
+  preserve authored required-extension declarations for surviving payloads.
+  Add CPU material-volume fields and texture links for normalized export, with
+  validation and metadata/material-copy round-trip tests. Rendering continues
+  to use the core material fallback for volume effects.
+- Decode node/mesh/scene name escapes once, including Unicode surrogate pairs,
+  avoiding double escaping on normalized export.
+- Preserve UTF-8 sidecar URIs and native Unicode filenames during glTF export,
+  including transactional staging and backup names.
 
 - Replaced all first-party C++ Modules with self-contained conventional headers
   and explicit includes while preserving C++20, public APIs, runtime behavior,
@@ -13,7 +51,7 @@
   cycles, private-header access, and CMake ownership. Lexical checks reject
   prohibited module source forms and enabled module build mechanisms.
 - Added independent and repeated header inclusion plus combined compile/link
-  contracts. Updated build guides and automatic regeneration of all four manual
+  contracts. Updated build guides and automatic regeneration of all five manual
   Windows solutions after version or shared build-configuration changes.
 
 ## 0.11.2

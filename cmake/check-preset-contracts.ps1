@@ -207,6 +207,7 @@ $contracts = @(
         Viewer = "ON"
         Benchmark = "ON"
         RequiredTargets = @(
+            "elf3d_cmd",
             "elf3d_model",
             "elf3d",
             "elf3d_imgui",
@@ -224,6 +225,7 @@ $contracts = @(
         Viewer = "ON"
         Benchmark = "ON"
         RequiredTargets = @(
+            "elf3d_cmd",
             "elf3d_model",
             "elf3d",
             "elf3d_imgui",
@@ -241,6 +243,7 @@ $contracts = @(
         Viewer = "OFF"
         Benchmark = "OFF"
         RequiredTargets = @(
+            "elf3d_cmd",
             "elf3d_model",
             "elf3d_foundation_modules",
             "elf3d_image_modules",
@@ -268,6 +271,7 @@ $contracts = @(
         Viewer = "OFF"
         Benchmark = "OFF"
         RequiredTargets = @(
+            "elf3d_cmd",
             "elf3d_model",
             "elf3d_foundation_modules",
             "elf3d_image_modules",
@@ -302,6 +306,7 @@ foreach ($contract in $contracts) {
         $configurePreset.architecture -ne "x64" -or $configurePreset.toolset -ne "v145,host=x64") {
         throw "Configure preset '$($contract.Name)' must use Visual Studio 2026 x64."
     }
+    Assert-CacheValue -Preset $configurePreset -Variable "ELF3D_BUILD_CMD" -Expected "ON"
     Assert-CacheValue -Preset $configurePreset -Variable "BUILD_TESTING" -Expected "ON"
     Assert-CacheValue -Preset $configurePreset -Variable "ELF3D_BUILD_TESTING" -Expected "ON"
     Assert-CacheValue -Preset $configurePreset -Variable "CMAKE_CONFIGURATION_TYPES" `
@@ -372,6 +377,19 @@ try {
         -G 'Visual Studio 18 2026' -A x64 -T v145,host=x64 "-DELF3D_SOURCE_DIR=$repositoryPath"
     if ($LASTEXITCODE -ne 0) { throw 'External application configure failed.' }
     Assert-ExternalApplicationContract -BuildDirectory $externalBuild -RepositoryPath $repositoryPath
+
+    $modelBuild = Join-Path $runRoot 'external-model'
+    & cmake -S (Join-Path $repositoryPath 'examples/external_model') -B $modelBuild `
+        -G 'Visual Studio 18 2026' -A x64 -T v145,host=x64 "-DELF3D_SOURCE_DIR=$repositoryPath"
+    if ($LASTEXITCODE -ne 0) { throw 'External Model application configure failed.' }
+    $modelProjects = @(Read-SolutionProjects (Join-Path $modelBuild 'Elf3DExternalModel.slnx'))
+    $modelDependencyProjects = @(Read-SolutionProjects (Join-Path $modelBuild 'elf3d/Elf3D.slnx'))
+    if ((Get-SolutionStartupProject $modelProjects).Name -ne 'elf3d_external_model' -or
+        @($modelDependencyProjects | Where-Object {
+            $_.Name -in @('elf3d', 'elf3d_app', 'elf3d_viewer', 'elf3d_cmd', 'glfw', 'glad', 'imgui')
+        }).Count -ne 0) {
+        throw 'External Model consumer enabled graphical products or lost its startup project.'
+    }
 
     # A dependency must also honor explicit opt-ins without taking over the parent.
     & cmake -S (Join-Path $repositoryPath 'examples/external_application') -B $externalBuild `

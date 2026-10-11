@@ -63,6 +63,7 @@ All graphical applications, including hidden capture and benchmark tools, use
 
 | Target | Use it when you need |
 | --- | --- |
+| `elf3d_cmd` | A console application rotating and exporting glTF/GLB through the CPU-only Model SDK. |
 | `elf3d_viewer` | A Windows desktop application for opening, inspecting, and exporting models. |
 | `elf3d_app` / `elf3d::app` | The canonical desktop lifecycle with normalized input and queued viewport rendering. |
 | `elf3d` / `elf3d::elf3d` | The shared Runtime SDK: Scene, Viewport, rendering, picking, navigation, and general mechanisms. |
@@ -71,7 +72,7 @@ All graphical applications, including hidden capture and benchmark tools, use
 
 ## Download the viewer
 
-This source version is **0.11.3**. Download a published
+This source version is **0.11.4**. Download a published
 [Windows x64 viewer package](https://github.com/zavelski/elf3d/releases/latest),
 extract it, and run `elf3d_viewer.exe`.
 
@@ -98,9 +99,10 @@ existing build directories when upgrading the toolchain. From the repository roo
 ```
 
 Open and build `win/dependencies/Elf3D-Dependencies.slnx`,
-`win/engine/Elf3D-Engine.slnx`, `win/imgui/Elf3D-ImGui.slnx`, and
-`win/viewer/Elf3D-Viewer.slnx` in that order. Each solution contains both
-Debug and Release; select the same configuration in all four. They contain
+`win/imgui/Elf3D-ImGui.slnx`, `win/engine/Elf3D-Engine.slnx`,
+`win/viewer/Elf3D-Viewer.slnx`, and `win/cmd/Elf3D-Cmd.slnx` in that order.
+Each solution contains both
+Debug and Release; select the same configuration in all five. They contain
 production projects only. In the Viewer solution, press F5 to launch.
 
 The executable is `win/viewer/bin/<Configuration>/elf3d_viewer.exe`, with its
@@ -227,3 +229,18 @@ Elf3D source is available under the [MIT License](LICENSE). Vendored
 dependencies, runtime assets, and README visuals retain their respective
 licenses and notices; see [THIRD_PARTY.md](THIRD_PARTY.md) and the
 [README visual attribution](docs/assets/readme/ATTRIBUTION.md).
+
+## Process models from the console
+
+The Windows archive includes `elf3d_cmd.exe` beside the viewer. Cmd uses the
+CPU-only Model SDK and needs no graphics driver, engine DLL, or viewer assets.
+
+```powershell
+elf3d_cmd --input building.glb --output rotated.glb --rotate 0 90 0
+```
+
+Matrix edits retain owned extras and opaque extensions; the CPU SDK also retains
+material-volume factors and thickness textures for export.
+Read [CMD.md](docs/CMD.md) for diagnostics, metadata fidelity, output sidecars,
+and copying the processing source into an external application. The fifth manual
+solution is `win/cmd/Elf3D-Cmd.slnx`; CPU-only automation uses `windows-model`.

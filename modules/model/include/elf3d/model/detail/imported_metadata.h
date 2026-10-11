@@ -11,8 +11,11 @@ namespace elf3d::model::detail {
 struct ImportedDocumentMetadata {
     ModelJsonMetadata root;
     ModelJsonMetadata asset;
+    std::vector<std::string> required_extensions;
     std::vector<std::pair<DocumentSceneId, ModelJsonMetadata>> scenes;
     std::vector<std::pair<NodeId, ModelJsonMetadata>> nodes;
+    std::vector<std::pair<NodeId, ModelJsonMetadata>> cameras;
+    std::vector<std::pair<NodeId, ModelJsonMetadata>> camera_projections;
     std::vector<std::pair<MeshId, ModelJsonMetadata>> meshes;
     std::vector<std::pair<PrimitiveId, ModelJsonMetadata>> primitives;
     std::vector<std::pair<MaterialId, ModelJsonMetadata>> materials;
@@ -37,6 +40,13 @@ class DocumentMetadataAccess final {
     validate_structural_targets(const Document::Storage& storage,
                                 const ImportedDocumentMetadata& metadata,
                                 std::size_t& total_bytes) noexcept;
+    [[nodiscard]] static Result<void>
+    validate_camera_targets(const Document::Storage& storage,
+                            const ImportedDocumentMetadata& metadata,
+                            std::size_t& total_bytes) noexcept;
+    static void attach_camera_metadata(Document::Storage& storage,
+                                       ImportedDocumentMetadata& metadata,
+                                       bool& any_metadata) noexcept;
     [[nodiscard]] static Result<void>
     validate_resource_targets(const Document::Storage& storage,
                               const ImportedDocumentMetadata& metadata,

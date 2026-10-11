@@ -105,7 +105,7 @@ function Assert-IdeContract {
         [System.StringComparer]::OrdinalIgnoreCase
     )
     foreach ($entry in $projects) {
-        if ($entry.Name -notmatch '^elf3d($|_(model$|.*_modules$|app$|imgui$|viewer$))') {
+        if ($entry.Name -notmatch '^elf3d($|_(model$|.*_modules$|app$|imgui$|viewer$|cmd$))') {
             continue
         }
         [xml]$filters = Get-Content -LiteralPath ($entry.Path + ".filters") -Raw
@@ -132,9 +132,9 @@ function Assert-IdeContract {
 
     # Discovery here checks IDE coverage only; CMake continues to use explicit source lists.
     $roots = if ($Engine) {
-        @('include', 'facade/elf3d', 'apps/viewer', 'modules', 'framework/app', 'integrations')
+        @('include', 'facade/elf3d', 'apps/viewer', 'apps/cmd', 'modules', 'framework/app', 'integrations')
     } else {
-        @('modules/core', 'modules/math', 'modules/model', 'modules/image', 'modules/gltf', 'include/elf3d/core', 'include/elf3d/math')
+        @('modules/core', 'modules/math', 'modules/model', 'modules/image', 'modules/gltf', 'apps/cmd', 'include/elf3d/core', 'include/elf3d/math')
     }
     $expectedHeaders = @(
         foreach ($root in $roots) {
@@ -153,6 +153,8 @@ function Assert-IdeContract {
         }
     }
     if (-not $Engine) {
+        $cmd = Get-SolutionStartupProject $projects
+        if ($cmd.Name -ne 'elf3d_cmd') { throw 'Model solution must select Cmd as startup project.' }
         return
     }
     $viewerProject = Get-SolutionStartupProject $projects
@@ -177,7 +179,7 @@ function Assert-ExternalApplicationContract {
     param([string]$BuildDirectory, [string]$RepositoryPath)
     Assert-GeneratedToolchain $BuildDirectory
     $cache = Get-Content -LiteralPath (Join-Path $BuildDirectory 'CMakeCache.txt') -Raw
-    foreach ($setting in @('BUILD_TESTING:BOOL=ON', 'ELF3D_BUILD_TESTING:BOOL=OFF', 'ELF3D_BUILD_VIEWER:BOOL=OFF')) {
+    foreach ($setting in @('BUILD_TESTING:BOOL=ON', 'ELF3D_BUILD_TESTING:BOOL=OFF', 'ELF3D_BUILD_VIEWER:BOOL=OFF', 'ELF3D_BUILD_CMD:BOOL=OFF')) {
         if ($cache -notmatch "(?m)^$([regex]::Escape($setting))\r?$") {
             throw "External application has an incorrect default: $setting."
         }
@@ -189,7 +191,7 @@ function Assert-ExternalApplicationContract {
     $dependencyProjects = @(Read-SolutionProjects (Join-Path $BuildDirectory 'elf3d/Elf3D.slnx'))
     $clientProject = Get-SolutionStartupProject $projects
     if ($clientProject.Name -ne 'elf3d_external_application' -or
-        @($dependencyProjects | Where-Object { $_.Name -match '^elf3d_.*tests?$|^elf3d_viewer$' }).Count -ne 0) {
+        @($dependencyProjects | Where-Object { $_.Name -match '^elf3d_.*tests?$|^elf3d_(viewer|cmd)$' }).Count -ne 0) {
         throw 'Elf3D changed the parent startup project or added default tests/viewer.'
     }
     [xml]$client = Get-Content -LiteralPath $clientProject.Path -Raw

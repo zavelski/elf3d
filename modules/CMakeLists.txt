@@ -47,6 +47,9 @@ add_library(
     elf3d_model_modules
     OBJECT
         model/src/document.cpp
+        model/src/document_material.cpp
+        model/src/document_camera.cpp
+        model/src/document_image.cpp
         model/src/document_metadata.cpp
         model/src/document_mutation.cpp
         model/src/document_validation.cpp
@@ -100,6 +103,7 @@ add_library(
     elf3d_image_modules
     OBJECT
         image/src/image_decoder.cpp
+        image/src/tiff_decoder.cpp
 )
 add_library(elf3d::image_modules ALIAS elf3d_image_modules)
 elf3d_configure_module_group(elf3d_image_modules image)
@@ -107,6 +111,7 @@ target_sources(
     elf3d_image_modules
     PRIVATE
         image/include/elf3d/internal/image.h
+        image/src/tiff_decoder.h
 )
 target_link_libraries(
     elf3d_image_modules
@@ -129,12 +134,18 @@ add_library(
         gltf/src/exporter.cpp
         gltf/src/exporter_image.cpp
         gltf/src/exporter_json.cpp
+        gltf/src/exporter_camera.cpp
         gltf/src/exporter_json_material.cpp
         gltf/src/exporter_json_format.cpp
+        gltf/src/json_document.cpp
+        gltf/src/json_normalize.cpp
+        gltf/src/json_document.h
         gltf/src/exporter_json_writer.cpp
         gltf/src/exporter_output.cpp
         gltf/src/importer_encoding.cpp
         gltf/src/importer_assets.cpp
+        gltf/src/importer_camera.cpp
+        gltf/src/importer_json_strings.cpp
         gltf/src/importer_document.cpp
         gltf/src/importer_geometry.cpp
         gltf/src/importer_geometry_build.cpp

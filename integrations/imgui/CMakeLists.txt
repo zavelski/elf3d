@@ -25,8 +25,8 @@ set_target_properties(
 
 elf3d_enable_warnings(elf3d_imgui)
 elf3d_group_sources(elf3d_imgui)
-if(ELF3D_BUILD_COMPONENT STREQUAL "imgui")
-    elf3d_check_prerequisites(elf3d_imgui elf3d glfw)
+if(ELF3D_BUILD_COMPONENT STREQUAL "viewer")
+    elf3d_check_prerequisites(elf3d_imgui elf3d elf3d_third_party_imgui glfw)
 endif()
 
 elf3d_enable_pch(elf3d_imgui integration)

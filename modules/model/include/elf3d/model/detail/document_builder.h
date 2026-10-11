@@ -35,6 +35,8 @@ class DocumentBuilder final {
     [[nodiscard]] Result<void> set_node_matrix(NodeId node, const Float4x4& matrix);
     [[nodiscard]] Result<void>
     set_node_perspective_camera(NodeId node, const PerspectiveCameraDescription& description);
+    [[nodiscard]] Result<void>
+    set_node_camera_properties(NodeId node, const ModelCameraPropertiesDescription& description);
     [[nodiscard]] Result<Document> finish();
 
   private:

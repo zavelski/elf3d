@@ -71,8 +71,13 @@ class PngImage final {
 
 Result<EncodedImageOutput> encoded_image(const ImageView& image)
 {
+    if (image.source_mime_type == ModelImageMimeType::exr) {
+        return EncodedImageOutput{
+            std::vector<std::byte>{image.source_bytes.begin(), image.source_bytes.end()},
+            ModelImageMimeType::exr, false};
+    }
     if (image.source_mime_type != ModelImageMimeType::none) {
-        const Result<image::DecodedImage> decoded = image::decode_png_or_jpeg(image.source_bytes);
+        const Result<image::DecodedImage> decoded = image::decode_image(image.source_bytes);
         if (decoded && decoded.value().width == image.width &&
             decoded.value().height == image.height &&
             decoded.value().pixels.size() == image.pixels.size() &&

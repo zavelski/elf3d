@@ -12,14 +12,17 @@ $tools = Resolve-Elf3DCMakeTools
 $installation = Get-Elf3DVisualStudio -VersionRange '[18.0,19.0)'
 Write-Host "Visual Studio: $installation"
 Write-Host "CMake: $($tools.CMake) ($($tools.Version))"
-foreach ($component in @('dependencies', 'engine', 'imgui', 'viewer')) {
+foreach ($component in @('dependencies', 'imgui', 'engine', 'viewer', 'cmd')) {
     & $tools.CMake --preset "win-$component" -S $repository -B (Join-Path $root $component) `
         "-DELF3D_COMPONENT_ROOT=$root" "-DCMAKE_GENERATOR_INSTANCE:INTERNAL=$installation"
     if ($LASTEXITCODE -ne 0) { throw "Configuration failed: $component (exit $LASTEXITCODE)." }
 }
 Write-Host "`nBuild in order, with the same Debug|x64 or Release|x64 configuration:"
-foreach ($name in @('Dependencies', 'Engine', 'ImGui', 'Viewer')) {
+foreach ($name in @('Dependencies', 'ImGui', 'Engine', 'Viewer', 'Cmd')) {
     Write-Host (Join-Path $root "$($name.ToLowerInvariant())/Elf3D-$name.slnx")
 }
+Write-Host 'Engine and ImGui may be built in either order after Dependencies; Viewer requires both; Cmd requires only Model artifacts from Engine and Dependencies.'
 Write-Host "Viewer: $(Join-Path $root 'viewer/bin/Debug/elf3d_viewer.exe')"
 Write-Host "Viewer: $(Join-Path $root 'viewer/bin/Release/elf3d_viewer.exe')"
+Write-Host "Cmd: $(Join-Path $root 'cmd/bin/Debug/elf3d_cmd.exe')"
+Write-Host "Cmd: $(Join-Path $root 'cmd/bin/Release/elf3d_cmd.exe')"

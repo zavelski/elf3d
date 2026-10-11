@@ -35,7 +35,7 @@ or newer:
 .\cmake\configure-win.ps1
 ```
 
-This discovers the active VS 2026 toolchain and generates all four solutions,
+This discovers the active VS 2026 toolchain and generates all five solutions,
 including both configurations, without compiling or launching Visual Studio.
 Repeat this command after changing the project version or shared build
 configuration so all components have matching import metadata. Reload open
@@ -48,9 +48,10 @@ order, selecting the **same** `Debug | x64` or `Release | x64` in each:
 | Order | Solution | Production projects |
 | --- | --- | ---: |
 | 1 | `win/dependencies/Elf3D-Dependencies.slnx` | 7 |
-| 2 | `win/engine/Elf3D-Engine.slnx` | 11 |
-| 3 | `win/imgui/Elf3D-ImGui.slnx` | 2 |
-| 4 | `win/viewer/Elf3D-Viewer.slnx` | 2 |
+| 2 | `win/imgui/Elf3D-ImGui.slnx` | 1 |
+| 3 | `win/engine/Elf3D-Engine.slnx` | 11 |
+| 4 | `win/viewer/Elf3D-Viewer.slnx` | 3 |
+| 5 | `win/cmd/Elf3D-Cmd.slnx` | 1 |
 
 There is one project set per component. Switch between Debug and Release in
 VS; a second configure tree is unnecessary. `ALL_BUILD` and `ZERO_CHECK` are
@@ -60,13 +61,17 @@ No solution filter is needed.
 
 Dependencies contains zlib, PNG, JPEG, cgltf, MikkTSpace, GLAD, and GLFW. GLM is
 header-only. Engine contains `elf3d`, `elf3d_model`, and the existing nine
-internal module-group projects (18 C++20 modules). ImGui contains Dear ImGui
-and `elf3d_imgui`. Viewer contains `elf3d_app` and `elf3d_viewer`.
+internal module-group projects (18 architectural components). ImGui contains only Dear
+ImGui and its GLFW/OpenGL backends. Viewer contains `elf3d_imgui`, `elf3d_app`,
+and `elf3d_viewer`. Cmd contains only `elf3d_cmd`.
 
-Dear ImGui is independent of Engine. Our `elf3d_imgui` integration uses Elf3D
+After Dependencies, Engine and ImGui may be configured and built in either
+order; ImGui requires no Engine metadata or binaries. Viewer imports both and
+builds its own `elf3d_imgui` integration before its framework and application
+consumers. The integration retains its architectural boundary and uses Elf3D
 results/errors, mathematical values, diagnostics, and the private native texture
-presentation bridge, so it depends on Engine. Engine does not depend on ImGui
-or GLFW. `elf3d_model` remains independent of graphics.
+presentation bridge, so its library still depends on Engine. Engine does not
+depend on ImGui or GLFW. `elf3d_model` remains independent of graphics.
 
 Each component builds only its own sources. It imports upstream libraries from
 this manual workspace. **Rebuild Solution in Viewer does not rebuild Engine,
@@ -78,6 +83,11 @@ Debug never falls back to Release.
 
 Outputs are `bin/Debug`, `bin/Release`, `lib/Debug`, and `lib/Release` inside each
 component. Objects and module artifacts remain local and configuration-specific.
+The manual integration archives are `win/viewer/lib/Debug/elf3d_imgui.lib` and
+`win/viewer/lib/Release/elf3d_imgui.lib`. Regeneration preserves old outputs in
+`win/imgui`; current projects and imports do not consume those old integration
+archives.
+
 The runnable viewer paths are:
 
 ```text
@@ -105,13 +115,14 @@ each producer's `local/` directory. It uses native configuration-aware CMake
 imported targets, including separate DLL/import-library paths, shared public
 usage requirements and static-link closures. Engine OBJECT targets and internal headers
 artifacts do not cross this boundary. Metadata rejects incompatible source
-roots, component roots, architectures, or toolchain identities. It is a local
-build mechanism, not an installed binary SDK or package-registry workflow.
+roots, component roots, composition contracts, architectures, or toolchain
+identities. It is a local build mechanism, not an installed binary SDK or
+package-registry workflow.
 
 When upgrading the active Visual Studio toolchain, preserve personal settings,
-recreate all four component directories, rerun preparation, and rebuild in
+recreate all five component directories, rerun preparation, and rebuild in
 order. Old compiler/module caches must not be reused. Nested vendored CMake
-solutions are implementation artifacts; the four paths above are the manual
+solutions are implementation artifacts; the five paths above are the manual
 entry points.
 
 ## Automated Builds
@@ -150,11 +161,11 @@ The four build/test preset names remain unchanged. Only configure preset names
 and their build-directory mappings changed. The common hidden preset owns the
 VS generator, platform, toolset, and two configurations. `ELF3D_BUILD_COMPONENT`
 is a private selector: `all` (normal source integration), `dependencies`,
-`engine`, `imgui`, or `viewer`. Component modes are top-level workflows and
+`engine`, `imgui`, or `viewer`, plus `cmd`. Component modes are top-level workflows and
 select their source targets before testing infrastructure is instantiated.
 Normal `add_subdirectory` integration remains source-built.
 
-Configure/IDE contracts, including all four component compositions:
+Configure/IDE contracts, including all five component compositions:
 
 ```powershell
 .\cmake\check-preset-contracts.ps1
@@ -273,6 +284,32 @@ include directory. Other platforms keep PCH disabled.
 
 Use `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` in a separate configure tree to
 validate without PCH. Do not edit generated Visual Studio project files. After
-shared configuration changes, regenerate all four manual solutions with
+shared configuration changes, regenerate all five manual solutions with
 `pwsh -NoProfile -File .\cmake\configure-win.ps1`; preserve existing manual
 binaries and IDE settings and validate builds under `out`.
+
+## Console Model application
+
+`ELF3D_BUILD_CMD` builds the CPU-only `elf3d_cmd` application and defaults to
+`PROJECT_IS_TOP_LEVEL`; both automated profiles explicitly enable it. External
+source consumers default it to OFF. The model-only profile selects Cmd as its
+startup project; the full profile selects Viewer.
+
+The fifth manual solution is `win/cmd/Elf3D-Cmd.slnx`, generated by the same
+preparation command as the other four. Dependencies and Engine supply its CPU
+archives in the matching configuration; building the `elf3d_model` target is
+sufficient. Cmd imports no engine DLL, ImGui, GLFW, or OpenGL targets. It builds
+only its own source and writes `win/cmd/bin/<Configuration>/elf3d_cmd.exe`.
+Clean/Rebuild leaves upstream outputs untouched. F5 without arguments prints
+usage; configure debugger arguments for processing. See [CMD.md](CMD.md).
+
+For an independent public-only source consumer:
+
+```powershell
+cmake -S examples/external_model -B out/build/external-model -G "Visual Studio 18 2026" -A x64 -T v145,host=x64 -DELF3D_SOURCE_DIR="$PWD"
+cmake --build out/build/external-model --config Debug --parallel 4
+ctest --test-dir out/build/external-model -C Debug --output-on-failure
+```
+
+The Windows runtime archive includes both applications and `docs/CMD.md`.
+Only Viewer needs the engine DLL, assets, and graphics driver.

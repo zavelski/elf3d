@@ -62,6 +62,19 @@
       }
     },
     {
+      "name": "win-cmd",
+      "inherits": "windows-manual",
+      "displayName": "Windows manual Cmd",
+      "binaryDir": "${sourceDir}/win/cmd",
+      "cacheVariables": {
+        "ELF3D_BUILD_COMPONENT": "cmd",
+        "ELF3D_BUILD_CMD": "ON",
+        "ELF3D_BUILD_ENGINE": "OFF",
+        "ELF3D_BUILD_APP": "OFF",
+        "ELF3D_BUILD_VIEWER": "OFF"
+      }
+    },
+    {
       "name": "windows-full",
       "displayName": "Windows full (Debug and Release)",
       "binaryDir": "${sourceDir}/out/build/windows-full",
@@ -72,7 +85,8 @@
         "ELF3D_BUILD_ENGINE": "ON",
         "ELF3D_BUILD_VIEWER": "ON",
         "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "ON",
-        "ELF3D_BUILD_COMPONENT": "all"
+        "ELF3D_BUILD_COMPONENT": "all",
+        "ELF3D_BUILD_CMD": "ON"
       },
       "inherits": "windows-base"
     },
@@ -87,7 +101,8 @@
         "ELF3D_BUILD_ENGINE": "OFF",
         "ELF3D_BUILD_VIEWER": "OFF",
         "ELF3D_BUILD_PERFORMANCE_BENCHMARK": "OFF",
-        "ELF3D_BUILD_COMPONENT": "all"
+        "ELF3D_BUILD_COMPONENT": "all",
+        "ELF3D_BUILD_CMD": "ON"
       },
       "inherits": "windows-base"
     }

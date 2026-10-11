@@ -191,6 +191,8 @@ void clear_preserved_metadata(ExportData& result) noexcept
     }
     for (NodeView& node : result.nodes) {
         node.metadata = {};
+        node.camera_properties.metadata = {};
+        node.camera_properties.projection_metadata = {};
     }
     for (MeshView& mesh : result.meshes) {
         mesh.metadata = {};
@@ -220,6 +222,7 @@ void clear_preserved_metadata(ExportData& result) noexcept
     ExportData result;
     result.root_metadata = document.root_metadata();
     result.asset_metadata = document.asset_metadata();
+    result.required_extensions = document.required_extensions();
     result.default_scene = document.default_scene();
     if (const Result<void> views = collect_document_views(result, document); !views) {
         return views.error();
@@ -233,11 +236,23 @@ void clear_preserved_metadata(ExportData& result) noexcept
 
 [[nodiscard]] std::string_view image_mime_text(ModelImageMimeType mime_type) noexcept
 {
+    if (mime_type == ModelImageMimeType::tiff) {
+        return "image/tiff";
+    }
+    if (mime_type == ModelImageMimeType::exr) {
+        return "image/exr";
+    }
     return mime_type == ModelImageMimeType::jpeg ? "image/jpeg" : "image/png";
 }
 
 [[nodiscard]] std::string_view image_extension(ModelImageMimeType mime_type) noexcept
 {
+    if (mime_type == ModelImageMimeType::tiff) {
+        return ".tiff";
+    }
+    if (mime_type == ModelImageMimeType::exr) {
+        return ".exr";
+    }
     return mime_type == ModelImageMimeType::jpeg ? ".jpg" : ".png";
 }
 
@@ -541,9 +556,17 @@ void append_uint32(std::vector<std::byte>& output, std::uint32_t value)
 
 [[nodiscard]] ModelWriteReport
 build_write_report(std::span<const EncodedImageOutput> encoded_images,
-                   bool preserved_metadata_dropped)
+                   bool preserved_metadata_dropped, std::size_t cleaned_matrices)
 {
     ModelWriteReport report;
+    if (cleaned_matrices != 0U) {
+        report.diagnostics.push_back(ModelWriteDiagnostic{
+            ModelWriteDiagnosticSeverity::information, ModelWriteDiagnosticCategory::output,
+            ModelWriteDiagnosticCode::matrix_rotation_cleaned,
+            "Orthonormal matrix bases were cleaned within a 1e-7 absolute tolerance; translation "
+            "was unchanged",
+            std::to_string(cleaned_matrices) + " matrices"});
+    }
     for (std::size_t index = 0; index < encoded_images.size(); ++index) {
         if (!encoded_images[index].reencoded) {
             continue;
@@ -578,6 +601,11 @@ build_write_report(std::span<const EncodedImageOutput> encoded_images,
         return collected.error();
     }
     ExportPackage package;
+    if (options.numeric_policy != ModelNumericWritePolicy::round_trip &&
+        options.numeric_policy != ModelNumericWritePolicy::clean_rotation) {
+        return Error{ErrorCode::invalid_argument, "Invalid model numeric write policy"};
+    }
+    package.numeric_policy = options.numeric_policy;
     package.document = std::move(collected).value();
     package.glb = extension == ".glb";
     package.embedded = options.image_policy == ModelImageWritePolicy::embedded ||
@@ -634,7 +662,13 @@ build_write_report(std::span<const EncodedImageOutput> encoded_images,
 
 void append_package_uris(ExportPackage& package, const OutputPath& path)
 {
-    const std::string stem = path.stem().string();
+    const auto utf8 = path.stem().u8string();
+    std::string stem;
+    stem.reserve(utf8.size());
+    for (const char8_t character : utf8) {
+        // URI bytes are UTF-8, independent of the host's narrow filename encoding.
+        stem.push_back(std::bit_cast<char>(character));
+    }
     package.buffer_uri = stem + ".bin";
     for (std::size_t index = 0; index < package.encoded_images.size(); ++index) {
         package.image_uris.push_back(
@@ -669,7 +703,11 @@ build_output_artifacts(const OutputPath& path, ExportPackage& package, const std
     std::vector<exporter_output::OutputFile> artifacts;
     if (!package.embedded) {
         for (std::size_t index = 0; index < package.encoded_images.size(); ++index) {
-            artifacts.emplace_back(path.parent_path() / package.image_uris[index],
+            const auto image_path = file_path::from_utf8(package.image_uris[index]);
+            if (!image_path) {
+                return image_path.error();
+            }
+            artifacts.emplace_back(path.parent_path() / image_path.value(),
                                    std::move(package.encoded_images[index].bytes));
         }
     }
@@ -682,7 +720,11 @@ build_output_artifacts(const OutputPath& path, ExportPackage& package, const std
         return artifacts;
     }
     if (!package.binary.bytes().empty()) {
-        artifacts.emplace_back(path.parent_path() / package.buffer_uri, package.binary.bytes());
+        const auto buffer_path = file_path::from_utf8(package.buffer_uri);
+        if (!buffer_path) {
+            return buffer_path.error();
+        }
+        artifacts.emplace_back(path.parent_path() / buffer_path.value(), package.binary.bytes());
     }
     artifacts.emplace_back(path, bytes_from_text(json));
     return artifacts;
@@ -713,7 +755,8 @@ build_output_artifacts(const OutputPath& path, ExportPackage& package, const std
         return published.error();
     }
 
-    return build_write_report(package.encoded_images, package.document.preserved_metadata_dropped);
+    return build_write_report(package.encoded_images, package.document.preserved_metadata_dropped,
+                              package.cleaned_matrices);
 }
 
 } // namespace

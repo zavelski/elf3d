@@ -3,7 +3,7 @@
 ## Preset Contracts
 
 After changing CMake options, presets, or product composition, validate all
-automated profile mappings and the four manual component contracts:
+automated profile mappings and the five manual component contracts:
 
 ```powershell
 .\cmake\check-preset-contracts.ps1
@@ -149,7 +149,7 @@ The smoke model and its license are stored in
 
 ## Visual Studio Debugging Routes
 
-Use the four manual solutions described in
+Use the five manual solutions described in
 [BUILDING.md](BUILDING.md#manual-visual-studio-solutions), with `Debug | x64`.
 Build Dependencies, Engine, ImGui, then Viewer. Start F5 from the Viewer
 solution. Its deployed DLL and PDB are in `win/viewer/bin/Debug`.
@@ -160,9 +160,9 @@ and **Watch** while paused.
 
 | Route | Breakpoints and what to inspect |
 | --- | --- |
-| Startup | `apps/viewer/src/main.cpp` (`WinMain`) РІвЂ вЂ™ `run_viewer_entry` in `viewer_runtime.cpp` РІвЂ вЂ™ `elf3d::run_application` in `framework/app/src/application.cpp` РІвЂ вЂ™ `detail::EngineAccess::create` in `facade/elf3d/src/engine.cpp` РІвЂ вЂ™ `ViewerApplication::start`. Inspect application options, window/context creation results, and the owned Engine/Scene/Viewport. |
+| Startup | `apps/viewer/src/main.cpp` (`WinMain`) Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ `run_viewer_entry` in `viewer_runtime.cpp` Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ `elf3d::run_application` in `framework/app/src/application.cpp` Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ `detail::EngineAccess::create` in `facade/elf3d/src/engine.cpp` Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ `ViewerApplication::start`. Inspect application options, window/context creation results, and the owned Engine/Scene/Viewport. |
 | Frame | `ViewerApplication::update` and `build_ui` in `viewer_runtime.cpp`, then `Renderer::render` in `modules/renderer/src/renderer.cpp`. Inspect frame input, viewport extent, camera, render request, and returned statistics. Disable frequently hit frame breakpoints after studying one frame. |
-| Model loading | Start with the absolute fixture argument or open the model from the viewer. Follow `load_model_scene` in `apps/viewer/src/viewer_assets.cpp` РІвЂ вЂ™ `Engine::load_scene` in `facade/elf3d/src/engine.cpp` РІвЂ вЂ™ `gltf::load_document` in `modules/gltf/src/importer_document.cpp`. Inspect the source path, `Result`, load report, and replacement Scene; the previous scene is retained on a failed load. |
+| Model loading | Start with the absolute fixture argument or open the model from the viewer. Follow `load_model_scene` in `apps/viewer/src/viewer_assets.cpp` Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ `Engine::load_scene` in `facade/elf3d/src/engine.cpp` Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ `gltf::load_document` in `modules/gltf/src/importer_document.cpp`. Inspect the source path, `Result`, load report, and replacement Scene; the previous scene is retained on a failed load. |
 | Shutdown | Close the window and stop in `ViewerApplication::stop` in `viewer_runtime.cpp`, `Scene::~Scene` in `facade/elf3d/src/scene.cpp`, and `Engine::~Engine` in `facade/elf3d/src/engine.cpp`. Verify application-owned UI/Viewport/Scene release before the framework releases Engine, graphics context, and window. |
 
 For hidden or unresolved breakpoints, pause and open **Debug > Windows >
@@ -191,3 +191,53 @@ one UI/presentation frame, requests exit on the next update, and checks that
 graphics context/version during initialization before application startup;
 other failures remain errors. CI performs this independent build in its
 existing Windows full Debug job.
+
+## Console processing tests
+
+`elf3d.cmd_arguments`, `elf3d.cmd_rotation`, and `elf3d.cmd_round_trip` run in
+both full and model-only profiles with no graphics prerequisite or skip code.
+They cover CLI failures, numeric limits, X/Y/Z order, positive/negative/fractional
+degrees, the world-geometry center, complete-turn no-ops, shared roots across multiple scenes,
+hierarchy/cameras, preserved mesh data, metadata retention under rotation, all four container
+round trips, Unicode paths, file aliases, failed-output preservation, and a
+standalone executable copy. The test verifier reloads outputs through the public
+Model API. Fixtures are generated; no private corpus is used.
+
+The component contract checks the fifth Cmd solution, matching imports,
+startup/output settings, public-only include paths, Clean/Rebuild isolation,
+missing Debug archives, and a build/run using only CPU archives without the
+Engine DLL or ImGui artifacts. `examples/external_model` copies the rotation
+source into its own build and links only `elf3d::model`. Package validation runs
+the same CLI scenarios against an extracted ZIP from a different working
+directory. All checks remain separate from manual Viewer/F5 validation.
+
+Normalized JSON is covered by `elf3d.model_gltf_json_format` in both full and
+Model-only suites: nested metadata, width, column-major matrices, opaque large
+numbers, identity omission/UV safeguards, binary32 round trips, matrix cleanup,
+and malformed/deep JSON. `elf3d.model_gltf_export` exercises numeric policies
+through the real public save/load API, diagnostics, unchanged source matrices,
+and destination preservation after an invalid policy. No graphics context is
+required for these tests.
+
+`elf3d.model_gltf_metadata` verifies every supported metadata attachment scope,
+opaque vendor light-table/material links (also on material fallback copies),
+Unicode strings and exact large JSON integers, matrix edits through both output
+containers, and conservative invalidation after structural/geometry edits.
+It also checks typed volume texture/mapping and factors, default infinite
+distance, invalid factors/mappings, foreign texture IDs, and surviving authored
+required-extension declarations. These are CPU checks; they do not validate
+vendor lighting or volume rendering.
+
+Camera preservation fixtures extend the existing `elf3d.model_gltf_metadata`
+case. They cover camera/projection metadata, names, authored aspect ratio,
+infinite far planes, shared cameras, remapped environment-image references,
+encoded-only EXR, unknown vendor members, and all glTF/GLB container directions.
+Invalid camera properties and environment indices are rejected. Image tests cover
+Adobe and non-Adobe CMYK JPEG conversion; mixed valid/invalid normal fixtures
+verify that repairing invalid vectors retains valid authored directions.
+
+Image tests generate little-endian and big-endian RGB TIFF with 8-bit/16-bit
+channels and multiple strips. They reject truncated directories and pixels,
+invalid/overflowing strip offsets, duplicate layout tags, unsupported compression,
+and excessive dimensions. Metadata tests exercise TIFF byte preservation and
+external sidecars across all four glTF/GLB round trips.

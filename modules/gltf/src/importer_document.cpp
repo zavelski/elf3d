@@ -89,8 +89,7 @@ void configure_parser_options(DocumentLoadState& state) noexcept
                      "The source contents do not match the file extension"};
     }
     state.repaired_signed_buffer_fields = repair_signed_glb_buffer_layout(*state.data);
-    decode_image_json_strings(*state.data);
-    return {};
+    return decode_document_json_strings(*state.data);
 }
 
 [[nodiscard]] Error initial_validation_error(cgltf_result result)
@@ -448,14 +447,9 @@ void prepare_imported_ids(DocumentConstructionState& state)
                        ModelLoadDiagnosticCode::camera_fallback,
                        "Infinite-far perspective camera was bounded to 1e9 world units", context);
     }
-    if (node.camera->data.perspective.has_aspect_ratio) {
-        add_diagnostic(state.diagnostics, ModelLoadDiagnosticCategory::camera,
-                       ModelLoadDiagnosticCode::camera_fallback,
-                       "Authored camera aspect ratio is not stored; the active viewport aspect "
-                       "ratio is used",
-                       context);
-    }
-    return {};
+    ImportState import_state{state.data,         state.gltf_path, state.options, state.builder,
+                             state.imported_ids, std::nullopt,    std::nullopt,  state.diagnostics};
+    return attach_camera_properties(import_state, *node.camera, node_id);
 }
 
 [[nodiscard]] Result<void> attach_imported_camera(DocumentConstructionState& state,

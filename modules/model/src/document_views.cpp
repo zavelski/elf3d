@@ -29,6 +29,11 @@ ModelJsonMetadataView DocumentView::asset_metadata() const noexcept
     return document_ != nullptr ? document_->asset_metadata() : ModelJsonMetadataView{};
 }
 
+std::span<const std::string> DocumentView::required_extensions() const noexcept
+{
+    return document_ != nullptr ? document_->required_extensions() : std::span<const std::string>{};
+}
+
 bool DocumentView::preserved_metadata_stale() const noexcept
 {
     return document_ != nullptr && document_->preserved_metadata_stale();
@@ -294,6 +299,13 @@ Result<Document> DocumentBuilder::finish()
         return Error{ErrorCode::invalid_argument, "Document validation failed"};
     }
     return std::move(document_);
+}
+
+Result<void>
+DocumentBuilder::set_node_camera_properties(NodeId node_id,
+                                            const ModelCameraPropertiesDescription& description)
+{
+    return document_.set_node_camera_properties(node_id, description);
 }
 
 } // namespace elf3d::model::detail

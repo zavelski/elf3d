@@ -71,7 +71,7 @@ if(WIN32)
 endif()
 
 if(ELF3D_BUILD_COMPONENT STREQUAL "viewer")
-    elf3d_check_prerequisites(elf3d_viewer elf3d elf3d_imgui elf3d_third_party_imgui glfw elf3d_third_party_glad)
+    elf3d_check_prerequisites(elf3d_viewer elf3d elf3d_third_party_imgui glfw elf3d_third_party_glad)
     include("${PROJECT_SOURCE_DIR}/cmake/viewer-runtime.cmake")
 else()
     add_custom_command(

@@ -85,11 +85,14 @@ add_executable(
     elf3d_import_tests
         import_test_driver.cpp
         ${PROJECT_SOURCE_DIR}/modules/image/tests/image_decoder_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/image/tests/tiff_decoder_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_exporter_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_importer_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_container_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_tangent_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_metadata_round_trip_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_camera_round_trip_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_json_format_test.cpp
 )
 elf3d_configure_group_test(elf3d_import_tests)
 target_compile_definitions(
@@ -117,6 +120,7 @@ add_test(NAME elf3d.model_gltf_export COMMAND elf3d_import_tests --case model_gl
 add_test(NAME elf3d.model_gltf_import COMMAND elf3d_import_tests --case model_gltf_import)
 add_test(NAME elf3d.model_gltf_tangent COMMAND elf3d_import_tests --case model_gltf_tangent)
 add_test(NAME elf3d.model_gltf_metadata COMMAND elf3d_import_tests --case gltf_metadata)
+add_test(NAME elf3d.model_gltf_json_format COMMAND elf3d_import_tests --case gltf_json_format)
 
 add_executable(
     elf3d_model_tests

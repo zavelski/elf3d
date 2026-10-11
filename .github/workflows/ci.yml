@@ -111,6 +111,16 @@ jobs:
       - name: Test
         run: ctest --preset windows-model-debug --output-on-failure
 
+      - name: Configure external Model application
+        run: >-
+          cmake -S examples/external_model -B out/build/external-model
+          -G "Visual Studio 18 2026" -A x64 -T v145,host=x64
+          "-DELF3D_SOURCE_DIR=$env:GITHUB_WORKSPACE"
+      - name: Build external Model application
+        run: cmake --build out/build/external-model --config Debug --parallel 4
+      - name: Test external Model application
+        run: ctest --test-dir out/build/external-model -C Debug --output-on-failure
+
   windows-release:
     name: Windows Release profiles
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

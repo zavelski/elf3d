@@ -49,9 +49,9 @@ struct OutputArtifact {
 available_sibling_path(const std::filesystem::path& final_path, std::string_view purpose)
 {
     for (std::uint32_t index = 0; index != 1024U; ++index) {
-        const std::filesystem::path candidate =
-            final_path.parent_path() / (final_path.filename().string() + ".elf3d-" +
-                                        std::string{purpose} + "-" + std::to_string(index));
+        auto sibling_name = final_path.filename();
+        sibling_name += ".elf3d-" + std::string{purpose} + "-" + std::to_string(index);
+        const std::filesystem::path candidate = final_path.parent_path() / sibling_name;
         std::error_code error;
         const bool exists = std::filesystem::exists(candidate, error);
         if (error) {

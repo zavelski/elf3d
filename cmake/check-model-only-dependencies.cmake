@@ -17,7 +17,7 @@ if(NOT EXISTS "${target_directories_path}")
 endif()
 
 file(READ "${cache_path}" cache_contents)
-foreach(option ELF3D_BUILD_ENGINE ELF3D_BUILD_VIEWER)
+foreach(option ELF3D_BUILD_ENGINE ELF3D_BUILD_APP ELF3D_BUILD_VIEWER)
     if(NOT cache_contents MATCHES "(^|\n)${option}:BOOL=OFF(\r?\n|$)")
         message(FATAL_ERROR "${option} must be OFF in a model-only configuration")
     endif()
@@ -43,6 +43,9 @@ set(required_targets
     elf3d_import_tests
     elf3d_model_tests
 )
+if(cache_contents MATCHES "(^|\n)ELF3D_BUILD_CMD:BOOL=ON(\r?\n|$)")
+    list(APPEND required_targets elf3d_cmd elf3d_cmd_tests)
+endif()
 foreach(target IN LISTS required_targets)
     string(FIND "${target_directories}" "/${target}.dir" target_position)
     if(target_position EQUAL -1)
@@ -61,6 +64,7 @@ set(forbidden_targets
     elf3d_third_party_imgui
     elf3d
     elf3d_imgui
+    elf3d_app
     elf3d_viewer
     glfw
     elf3d_public_api_test

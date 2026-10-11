@@ -64,6 +64,7 @@ template <typename Id> struct IdIndex {
 struct ExportData {
     ModelJsonMetadataView root_metadata;
     ModelJsonMetadataView asset_metadata;
+    std::span<const std::string> required_extensions;
     std::vector<DocumentSceneView> scenes;
     std::optional<DocumentSceneId> default_scene;
     std::vector<NodeView> nodes;
@@ -248,9 +249,12 @@ struct ExportPackage {
     std::string buffer_uri;
     bool glb = false;
     bool embedded = false;
+    ModelNumericWritePolicy numeric_policy = ModelNumericWritePolicy::round_trip;
+    std::size_t cleaned_matrices = 0;
 };
 
 [[nodiscard]] Result<EncodedImageOutput> encoded_image(const ImageView& image);
-[[nodiscard]] Result<std::string> build_json(const ExportPackage& package);
+[[nodiscard]] Result<std::string> build_json(ExportPackage& package);
+[[nodiscard]] Result<void> append_cameras(std::string& output, const ExportData& document);
 
 } // namespace elf3d::gltf::exporter_detail

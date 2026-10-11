@@ -28,9 +28,6 @@ template <typename Id>
 
 [[nodiscard]] Result<void> append_materials(std::string& output, const ExportData& document);
 
-inline constexpr char preserved_json_begin = '\x1e';
-inline constexpr char preserved_json_end = '\x1f';
-
 void append_string(std::string& output, std::string_view value);
 [[nodiscard]] bool begin_extension_member(std::string& output, bool& first,
                                           std::vector<std::string_view>& emitted,
@@ -50,7 +47,13 @@ void append_float(std::string& output, float value);
 void append_float2(std::string& output, Float2 value);
 void append_float3(std::string& output, Float3 value);
 void append_float4(std::string& output, Color4 value);
-[[nodiscard]] std::string format_json(std::string_view source);
+struct FormattedJson {
+    std::string text;
+    std::size_t cleaned_matrices = 0;
+};
+
+[[nodiscard]] Result<FormattedJson> format_json(std::string_view source,
+                                                ModelNumericWritePolicy numeric_policy);
 [[nodiscard]] std::uint32_t wrap_value(TextureWrap value) noexcept;
 [[nodiscard]] std::uint32_t filter_value(TextureFilter value) noexcept;
 [[nodiscard]] bool has_nondefault_transform(TextureMapping mapping) noexcept;

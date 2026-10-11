@@ -14,7 +14,12 @@
 
 namespace elf3d::model::detail {
 
+[[nodiscard]] bool finite(float value) noexcept;
+[[nodiscard]] bool finite(Float2 value) noexcept;
+[[nodiscard]] bool finite(Float3 value) noexcept;
+[[nodiscard]] bool finite(Color4 value) noexcept;
 [[nodiscard]] bool finite(const Float4x4& value) noexcept;
+[[nodiscard]] bool valid_alpha(AlphaMode mode) noexcept;
 [[nodiscard]] bool valid_wrap(TextureWrap wrap) noexcept;
 [[nodiscard]] bool valid_filter(TextureFilter filter) noexcept;
 [[nodiscard]] bool valid_mag_filter(TextureFilter filter) noexcept;
@@ -57,6 +62,9 @@ class Document::Storage final {
         std::optional<MeshId> mesh;
         std::optional<PerspectiveCameraDescription> perspective_camera;
         ModelJsonMetadata metadata;
+        ModelCameraPropertiesDescription camera_properties;
+        ModelJsonMetadata camera_metadata;
+        ModelJsonMetadata camera_projection_metadata;
     };
 
     struct MeshRecord {
@@ -79,6 +87,7 @@ class Document::Storage final {
     struct MaterialRecord {
         MaterialId id;
         ModelMaterialDescription description;
+        std::string name;
         ModelJsonMetadata metadata;
     };
 
@@ -322,7 +331,9 @@ class Document::Storage final {
                valid_texture_or_empty(description.metallic_roughness_texture) &&
                valid_texture_or_empty(description.normal_texture) &&
                valid_texture_or_empty(description.occlusion_texture) &&
-               valid_texture_or_empty(description.emissive_texture);
+               valid_texture_or_empty(description.emissive_texture) &&
+               (!description.volume ||
+                valid_texture_or_empty(description.volume->thickness_texture));
     }
 
     [[nodiscard]] Result<void> reject_parent_cycle(NodeId child_id, NodeId parent_id) const noexcept
@@ -406,6 +417,7 @@ class Document::Storage final {
 
     ModelJsonMetadata root_metadata;
     ModelJsonMetadata asset_metadata;
+    std::vector<std::string> required_extensions;
     std::vector<SceneRecord> scenes;
     std::optional<DocumentSceneId> default_scene;
     std::vector<NodeRecord> nodes;
@@ -417,6 +429,9 @@ class Document::Storage final {
     std::vector<SamplerRecord> samplers;
     bool has_preserved_metadata = false;
     bool preserved_metadata_stale = false;
+
+    [[nodiscard]] Result<void>
+    validate_camera_properties(const ModelCameraPropertiesDescription& description) const noexcept;
 
   private:
     std::uint64_t owner_token_ = 0;

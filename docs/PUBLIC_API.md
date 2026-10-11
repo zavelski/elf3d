@@ -221,9 +221,10 @@ Memory exhaustion is fatal by default and is not reported as a recoverable
 Imported images retain optional original PNG/JPEG bytes and MIME; export reuses
 them while they still decode exactly to the current pixels and otherwise
 reports PNG re-encoding. Bounded raw glTF `extras` and unknown extensions are
-available as read-only metadata views. Any successful Document mutation marks
-that complete preserved set stale, so validation warns and export omits it
-rather than risking invalid unknown references. The attachment bridge is
+available as read-only metadata views. Node-matrix edits retain these owned
+values unchanged. Structural/resource edits mark the complete preserved set
+stale, so validation warns and export omits it. Unknown source indices and spatial
+semantics are not generally remapped or transformed. The attachment bridge is
 private to the importer/model implementation; the public Document API has no
 raw-metadata setter. Image placement uses
 `ModelImageWritePolicy::automatic`, `external`, or `embedded`.
@@ -262,3 +263,83 @@ application integration code.
 The standalone [`external_application`](../examples/external_application/main.cpp)
 also queues one frame, reads its display pixels and statistics in the next
 update, and exits without rendering another frame.
+
+## Console Model SDK example
+
+[`elf3d_cmd`](CMD.md) demonstrates `load_document`, direct `Document` mutation,
+`validate_document`, and `save_document` through public headers and `elf3d::model`.
+Its rotation source is application-owned, suitable for copying and adapting.
+[`external_model`](../examples/external_model) builds copied source independently
+with graphical products disabled. The operation uses existing Document mutation APIs.
+
+`ModelWriteOptions::numeric_policy` defaults to
+`ModelNumericWritePolicy::round_trip`, using shortest binary32 decimal tokens.
+`clean_rotation` additionally cleans near-integer orthonormal matrix-basis
+coefficients within `1e-7`, reports `matrix_rotation_cleaned`, and never changes
+the source Document. Translation, scaled/sheared bases, geometry, and opaque
+metadata numbers are excluded. Both policies share the normalized JSON layout;
+see [GLTF.md](GLTF.md) for formatting, bounds, and fidelity limits.
+
+## CPU volume and required-extension retention
+
+`ModelMaterialDescription::volume` optionally owns `ModelVolumeDescription`:
+nonnegative finite `thickness_factor`, an owner-scoped `thickness_texture` and
+its mapping, `attenuation_color` in [0, 1], and an optional positive finite
+`attenuation_distance`. Absence of the distance represents infinite attenuation
+(the glTF default). The thickness texture follows the existing UV0/UV1 and
+missing-UV fallback contract. Import and normalized export retain these values;
+the renderer uses the core material fallback without volume effects. Required
+`KHR_materials_volume` remains unsupported by the runtime import contract.
+
+`Document::required_extensions()` and its `DocumentView` counterpart borrow
+read-only names owned by the Document. They have the same lifetime/invalidation
+contract as metadata views. Export retains authored required declarations only
+for surviving emitted payloads; normalized-away identity extensions and
+quantization no longer used by the generated geometry are not declared.
+Unsupported required extensions still fail import.
+
+Opaque root extension tables and material links
+remain attached to their Document owners during matrix edits, including material
+copies created by the importer for texture fallbacks. This is JSON retention,
+not vendor-specific lighting support or a promise to remap arbitrary references
+into source node, mesh, texture, image, accessor, or material tables. Metadata
+on unsupported scopes and unsupported known cgltf extensions remains subject to
+import diagnostics. Empty metadata and exact no-op transforms may be omitted.
+
+## Camera and image preservation
+
+Perspective camera names, optional authored aspect ratios, and absent/infinite
+far planes are represented by `ModelCameraPropertiesDescription` and exported
+with their original projection semantics. The runtime perspective description
+still supplies a finite far plane for rendering. Camera and perspective-object
+`extras`, and camera unknown extensions, belong to their attached Document nodes;
+shared source cameras can be emitted as equivalent per-node camera records.
+`NodeView::camera_properties` borrows its name and metadata from the Document;
+`set_node_camera_properties` validates image ownership and finite values.
+
+Material names are retained, including names of imported fallback copies. CMYK
+and YCCK JPEG textures decode into RGBA8 using Adobe-marker inversion where
+present; their original JPEG streams remain eligible for byte-preserving export.
+This conversion does not add ICC color management. When some authored normals
+are unusable, only those vectors are repaired; valid authored directions remain.
+Opaque spatial metadata is not automatically transformed or arbitrary indices
+remapped.
+
+TIFF image streams are also retained as `ModelImageMimeType::tiff`. The image
+boundary decodes single-directory, uncompressed, top-left, interleaved unsigned
+RGB TIFF with uniform 8-bit or 16-bit channels, in either byte order and with
+validated strip offsets and sizes. Existing RGBA8 storage uses the high byte of
+16-bit samples; the original TIFF stream, including all sample precision and
+embedded tags, is exported byte-for-byte while pixels remain unchanged. Changed
+pixels fall back to PNG. TIFF compression, tiled layouts, other photometric
+interpretations, non-default orientation, and multiple directories are rejected
+with a diagnostic; this is not general TIFF support or ICC color management.
+TIFF and EXR MIME types are corpus-specific additions beyond core glTF's PNG/JPEG
+image formats, and consumers must support them to display those resources.
+The TIFF layout follows [Adobe's TIFF specifications](https://www.adobe.com/support/downloads/dng/dng_sdk.html).
+
+`ModelMaterialDescription::name` is an input string view copied into Document
+storage by `create_material`. Returned material descriptions borrow that owned
+name; lookups perform no string allocation. Copy the name into an owned string
+when an independent material value must outlive the Document, and discard
+borrowed views before mutation or Document destruction.

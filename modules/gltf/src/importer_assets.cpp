@@ -152,9 +152,17 @@ namespace elf3d::gltf::importer_detail {
     return encoded_buffer_view(source);
 }
 
-[[nodiscard]] Result<ImageId> image_for(const cgltf_data& data, const cgltf_image* source,
-                                        const std::filesystem::path& gltf_path,
-                                        DocumentBuilder& builder, ImageImportState& images)
+[[nodiscard]] Result<image::DecodedImage> decode_imported_image(const EncodedImage& encoded)
+{
+    if (encoded.mime == ModelImageMimeType::exr) {
+        return image::DecodedImage{};
+    }
+    return image::decode_image(encoded.bytes);
+}
+
+Result<ImageId> image_for(const cgltf_data& data, const cgltf_image* source,
+                          const std::filesystem::path& gltf_path, DocumentBuilder& builder,
+                          ImageImportState& images)
 {
     if (source == nullptr || source < data.images || source >= data.images + data.images_count) {
         return Error{ErrorCode::invalid_image_handle,
@@ -177,7 +185,7 @@ namespace elf3d::gltf::importer_detail {
                      "Imported scene images exceed the 512 MiB encoded-image limit"};
     }
 
-    Result<image::DecodedImage> decoded = image::decode_png_or_jpeg(encoded.value().bytes);
+    Result<image::DecodedImage> decoded = decode_imported_image(encoded.value());
     if (!decoded) {
         return decoded.error();
     }

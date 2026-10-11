@@ -20,6 +20,7 @@ struct DecodedImage {
     std::vector<std::byte> pixels;
 };
 
-[[nodiscard]] Result<DecodedImage> decode_png_or_jpeg(std::span<const std::byte> encoded) noexcept;
+[[nodiscard]] bool has_tiff_signature(std::span<const std::byte> encoded) noexcept;
+[[nodiscard]] Result<DecodedImage> decode_image(std::span<const std::byte> encoded) noexcept;
 
 } // namespace elf3d::image

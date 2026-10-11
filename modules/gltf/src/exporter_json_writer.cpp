@@ -23,9 +23,7 @@ namespace {
 
 void append_preserved_json(std::string& output, std::string_view value)
 {
-    output.push_back(preserved_json_begin);
     output.append(value);
-    output.push_back(preserved_json_end);
 }
 
 } // namespace
@@ -156,10 +154,13 @@ void append_unsigned(std::string& output, std::uint32_t value)
 
 void append_float(std::string& output, float value)
 {
+    if (value == 0.0F) {
+        output.push_back('0');
+        return;
+    }
     std::array<char, 64> buffer{};
-    const std::to_chars_result result =
-        std::to_chars(buffer.data(), buffer.data() + buffer.size(), value,
-                      std::chars_format::general, std::numeric_limits<float>::max_digits10);
+    const std::to_chars_result result = std::to_chars(buffer.data(), buffer.data() + buffer.size(),
+                                                      value, std::chars_format::general);
     ELF3D_ASSERT(result.ec == std::errc{});
     output.append(buffer.data(), static_cast<std::size_t>(result.ptr - buffer.data()));
 }
@@ -239,6 +240,12 @@ bool has_nondefault_transform(TextureMapping mapping) noexcept
 
 std::string_view image_mime_text(ModelImageMimeType mime) noexcept
 {
+    if (mime == ModelImageMimeType::tiff) {
+        return "image/tiff";
+    }
+    if (mime == ModelImageMimeType::exr) {
+        return "image/exr";
+    }
     return mime == ModelImageMimeType::jpeg ? "image/jpeg" : "image/png";
 }
 

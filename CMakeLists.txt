@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 4.4.3)
 include(cmake/windows-toolchain.cmake)
 
 set(ELF3D_BUILD_COMPONENT "all" CACHE STRING "Private checkout build composition")
-set_property(CACHE ELF3D_BUILD_COMPONENT PROPERTY STRINGS all dependencies engine imgui viewer)
-if(NOT ELF3D_BUILD_COMPONENT MATCHES "^(all|dependencies|engine|imgui|viewer)$")
+set_property(CACHE ELF3D_BUILD_COMPONENT PROPERTY STRINGS all dependencies engine imgui viewer cmd)
+if(NOT ELF3D_BUILD_COMPONENT MATCHES "^(all|dependencies|engine|imgui|viewer|cmd)$")
     message(FATAL_ERROR "Unsupported ELF3D_BUILD_COMPONENT: ${ELF3D_BUILD_COMPONENT}")
 endif()
 set(elf3d_project_name Elf3D)
@@ -23,7 +23,7 @@ endif()
 
 project(
     ${elf3d_project_name}
-    VERSION 0.11.3
+    VERSION 0.11.4
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )
@@ -52,6 +52,7 @@ endforeach()
 include(cmake/compiler_options.cmake)
 include(cmake/precompiled-headers.cmake)
 include(cmake/ide.cmake)
+option(ELF3D_BUILD_CMD "Build the standalone CPU model console application" ${PROJECT_IS_TOP_LEVEL})
 if(NOT ELF3D_BUILD_COMPONENT STREQUAL "all")
     include(cmake/components.cmake)
     return()
@@ -116,6 +117,13 @@ if(ELF3D_BUILD_VIEWER)
     add_subdirectory(apps/viewer)
     if(PROJECT_IS_TOP_LEVEL)
         set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT elf3d_viewer)
+    endif()
+endif()
+
+if(ELF3D_BUILD_CMD)
+    add_subdirectory(apps/cmd)
+    if(PROJECT_IS_TOP_LEVEL AND NOT ELF3D_BUILD_VIEWER)
+        set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT elf3d_cmd)
     endif()
 endif()
 

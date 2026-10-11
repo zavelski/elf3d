@@ -33,6 +33,7 @@ struct PrimitiveBuildState {
     const cgltf_accessor* position_accessor = nullptr;
     std::size_t vertex_count = 0;
     TexcoordAvailability available_texcoords{};
+    std::vector<std::size_t> unusable_normals;
 };
 
 enum class NormalImportOutcome : std::uint8_t {
@@ -266,14 +267,32 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state)
                 return Error{ErrorCode::invalid_accessor,
                              state.context + " contains an unusable NORMAL value"};
             }
-            return NormalImportOutcome::unusable;
+            state.unusable_normals.push_back(index);
+            continue;
         }
 
         const float inverse_length = 1.0F / std::sqrt(length_squared);
         state.data.normals[index] =
             Float3{normal.x * inverse_length, normal.y * inverse_length, normal.z * inverse_length};
     }
-    return NormalImportOutcome::authored;
+    return state.unusable_normals.empty() ? NormalImportOutcome::authored
+                                          : NormalImportOutcome::unusable;
+}
+
+void generate_or_repair_normals(PrimitiveBuildState& state, NormalImportOutcome outcome,
+                                std::uint64_t& degenerate_count, std::uint64_t& fallback_count)
+{
+    if (outcome == NormalImportOutcome::missing) {
+        generate_normals(state.data.positions, state.data.normals, state.indices, degenerate_count,
+                         fallback_count);
+        return;
+    }
+    std::vector<Float3> generated;
+    generate_normals(state.data.positions, generated, state.indices, degenerate_count,
+                     fallback_count);
+    for (const auto index : state.unusable_normals) {
+        state.data.normals[index] = generated[index];
+    }
 }
 
 [[nodiscard]] Result<void> generate_normal_fallback(PrimitiveBuildState& state,
@@ -289,11 +308,11 @@ void diagnose_additional_texcoords(PrimitiveBuildState& state)
 
     std::uint64_t degenerate_count = 0;
     std::uint64_t fallback_count = 0;
-    generate_normals(state.data.positions, state.data.normals, state.indices, degenerate_count,
-                     fallback_count);
-    const std::string prefix = outcome == NormalImportOutcome::unusable
-                                   ? "Ignored unusable authored normals and generated replacements"
-                                   : "Generated missing vertex normals";
+    generate_or_repair_normals(state, outcome, degenerate_count, fallback_count);
+    const std::string prefix =
+        outcome == NormalImportOutcome::unusable
+            ? "Repaired unusable authored normals; valid authored normals were retained"
+            : "Generated missing vertex normals";
     if (degenerate_count != 0 || fallback_count != 0) {
         add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::geometry,
                        ModelLoadDiagnosticCode::degenerate_geometry,

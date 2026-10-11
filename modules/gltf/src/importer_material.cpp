@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <elf3d/core/diagnostics.h>
 #include <elf3d/internal/math.h>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -171,6 +172,7 @@ struct MaterialBuildState {
 void apply_material_factors(MaterialBuildState& state)
 {
     const cgltf_material& source = state.source;
+    state.description.name = source.name != nullptr ? source.name : "";
     state.description.emissive_factor = {source.emissive_factor[0], source.emissive_factor[1],
                                          source.emissive_factor[2]};
     if (source.has_emissive_strength) {
@@ -226,6 +228,33 @@ void apply_material_factors(MaterialBuildState& state)
         state.description.emissive_texture = texture.value().texture;
         state.description.emissive_texture_mapping = texture.value().mapping;
     }
+    return {};
+}
+
+[[nodiscard]] Result<void> apply_volume(MaterialBuildState& state)
+{
+    if (!state.source.has_volume) {
+        return {};
+    }
+    const cgltf_volume& source = state.source.volume;
+    ModelVolumeDescription volume;
+    volume.thickness_factor = source.thickness_factor;
+    volume.attenuation_color = {source.attenuation_color[0], source.attenuation_color[1],
+                                source.attenuation_color[2]};
+    // cgltf uses FLT_MAX for the unspecified (+Infinity) glTF distance.
+    if (source.attenuation_distance != std::numeric_limits<float>::max()) {
+        volume.attenuation_distance = source.attenuation_distance;
+    }
+    if (source.thickness_texture.texture != nullptr) {
+        const Result<ImportedTextureView> texture = import_material_texture(
+            state, source.thickness_texture, "Volume thickness", " volume thickness texture");
+        if (!texture) {
+            return texture.error();
+        }
+        volume.thickness_texture = texture.value().texture;
+        volume.thickness_texture_mapping = texture.value().mapping;
+    }
+    state.description.volume = volume;
     return {};
 }
 
@@ -298,6 +327,29 @@ extension_material_factors_are_finite(const ModelMaterialDescription& descriptio
            (material.name != nullptr ? std::string{material.name} : std::to_string(index));
 }
 
+[[nodiscard]] Result<MaterialId> build_material(MaterialBuildState& state)
+{
+    if (const Result<void> primary = apply_primary_material(state); !primary) {
+        return primary.error();
+    }
+
+    apply_material_factors(state);
+    if (const Result<void> textures = apply_auxiliary_textures(state); !textures) {
+        return textures.error();
+    }
+    if (const Result<void> alpha = apply_alpha_mode(state); !alpha) {
+        return alpha.error();
+    }
+    if (const Result<void> volume = apply_volume(state); !volume) {
+        return volume.error();
+    }
+    if (!material_factors_are_finite(state.description)) {
+        return Error{ErrorCode::scene_import_failed,
+                     state.context + " contains a non-finite material factor"};
+    }
+    return store_material(state);
+}
+
 [[nodiscard]] Result<MaterialId> material_for(ImportState& state, const cgltf_material* material,
                                               const TexcoordAvailability& available_texcoords)
 {
@@ -324,22 +376,7 @@ extension_material_factors_are_finite(const ModelMaterialDescription& descriptio
     }
     MaterialBuildState build{state,   *material, available_texcoords,       index,
                              context, {},        primitive_specific.value()};
-    if (const Result<void> primary = apply_primary_material(build); !primary) {
-        return primary.error();
-    }
-
-    apply_material_factors(build);
-    if (const Result<void> textures = apply_auxiliary_textures(build); !textures) {
-        return textures.error();
-    }
-    if (const Result<void> alpha = apply_alpha_mode(build); !alpha) {
-        return alpha.error();
-    }
-    if (!material_factors_are_finite(build.description)) {
-        return Error{ErrorCode::scene_import_failed,
-                     context + " contains a non-finite material factor"};
-    }
-    return store_material(build);
+    return build_material(build);
 }
 
 } // namespace elf3d::gltf::importer_detail

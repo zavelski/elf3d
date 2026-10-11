@@ -1,5 +1,7 @@
 #include <elf3d/internal/image.h>
 
+#include "tiff_decoder.h"
+
 #include <elf3d/core/assert.h>
 #include <elf3d/core/error.h>
 
@@ -159,6 +161,7 @@ struct JpegContext final {
     DecodedImage image;
     std::vector<JSAMPLE> scanline;
     bool decoder_created = false;
+    bool cmyk = false;
 
     ~JpegContext()
     {
@@ -192,6 +195,32 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index)
     }
 }
 
+[[nodiscard]] std::byte cmyk_channel(JSAMPLE component, JSAMPLE black, bool inverted) noexcept
+{
+    const unsigned color = inverted ? component : 255U - component;
+    const unsigned key = inverted ? black : 255U - black;
+    // Both factors are bytes, so their product plus rounding fits unsigned.
+    return static_cast<std::byte>((color * key + 127U) / 255U);
+}
+
+void copy_cmyk_scanline(JpegContext& context, std::size_t row_index)
+{
+    const std::size_t destination_row =
+        row_index * static_cast<std::size_t>(context.image.width) * 4U;
+    const bool inverted = context.decoder.saw_Adobe_marker != 0;
+    for (std::size_t column = 0; column < context.image.width; ++column) {
+        const std::size_t source = column * 4U;
+        const std::size_t destination = destination_row + column * 4U;
+        const auto black = context.scanline[source + 3U];
+        context.image.pixels[destination] = cmyk_channel(context.scanline[source], black, inverted);
+        context.image.pixels[destination + 1U] =
+            cmyk_channel(context.scanline[source + 1U], black, inverted);
+        context.image.pixels[destination + 2U] =
+            cmyk_channel(context.scanline[source + 2U], black, inverted);
+        context.image.pixels[destination + 3U] = std::byte{0xff};
+    }
+}
+
 [[nodiscard]] Result<void> decode_jpeg_scanlines(JpegContext& context)
 {
     while (context.decoder.output_scanline < context.decoder.output_height) {
@@ -199,7 +228,12 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index)
         if (jpeg_read_scanlines(&context.decoder, &row, 1) != 1) {
             return Error{ErrorCode::image_decode_failed, "JPEG scanline decoding did not complete"};
         }
-        copy_jpeg_scanline(context, static_cast<std::size_t>(context.decoder.output_scanline - 1));
+        const auto row_index = static_cast<std::size_t>(context.decoder.output_scanline - 1U);
+        if (context.cmyk) {
+            copy_cmyk_scanline(context, row_index);
+        } else {
+            copy_jpeg_scanline(context, row_index);
+        }
     }
     return {};
 }
@@ -226,11 +260,14 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index)
         return decoded_size.error();
     }
 
-    context.decoder.out_color_space = JCS_RGB;
+    context.cmyk = context.decoder.jpeg_color_space == JCS_CMYK ||
+                   context.decoder.jpeg_color_space == JCS_YCCK;
+    context.decoder.out_color_space = context.cmyk ? JCS_CMYK : JCS_RGB;
     context.image.width = context.decoder.image_width;
     context.image.height = context.decoder.image_height;
     context.image.pixels.resize(decoded_size.value());
-    context.scanline.resize(static_cast<std::size_t>(context.image.width) * 3);
+    context.scanline.resize(static_cast<std::size_t>(context.image.width) *
+                            (context.cmyk ? 4U : 3U));
     return {};
 }
 
@@ -239,9 +276,9 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index)
     if (jpeg_start_decompress(&context.decoder) == FALSE ||
         context.decoder.output_width != context.image.width ||
         context.decoder.output_height != context.image.height ||
-        context.decoder.output_components != 3) {
+        context.decoder.output_components != (context.cmyk ? 4 : 3)) {
         return Error{ErrorCode::image_decode_failed,
-                     "JPEG decoder did not produce the requested RGB output"};
+                     "JPEG decoder did not produce the requested RGB or CMYK output"};
     }
     return {};
 }
@@ -296,7 +333,7 @@ void copy_jpeg_scanline(JpegContext& context, std::size_t row_index)
 
 } // namespace
 
-Result<DecodedImage> decode_png_or_jpeg(std::span<const std::byte> encoded) noexcept
+Result<DecodedImage> decode_image(std::span<const std::byte> encoded) noexcept
 {
     if (encoded.empty()) {
         return Error{ErrorCode::image_decode_failed, "Image decoding requires encoded bytes"};
@@ -313,8 +350,11 @@ Result<DecodedImage> decode_png_or_jpeg(std::span<const std::byte> encoded) noex
         if (has_jpeg_signature(encoded)) {
             return decode_jpeg(encoded);
         }
+        if (has_tiff_signature(encoded)) {
+            return decode_tiff(encoded);
+        }
         return Error{ErrorCode::image_decode_failed,
-                     "Encoded image is not a supported PNG or JPEG stream"};
+                     "Encoded image is not a supported PNG, JPEG, or TIFF stream"};
     } catch (const std::bad_alloc&) {
         fatal_image_allocation_failure();
     } catch (...) {

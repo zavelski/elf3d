@@ -88,123 +88,6 @@ valid_perspective_camera(const PerspectiveCameraDescription& description) noexce
            description.far_plane > description.near_plane;
 }
 
-[[nodiscard]] bool valid_mapping(TextureMapping mapping) noexcept
-{
-    return mapping.texcoord_set < maximum_texture_coordinate_sets &&
-           finite(mapping.transform.offset) && finite(mapping.transform.scale) &&
-           finite(mapping.transform.rotation_radians);
-}
-
-[[nodiscard]] bool
-valid_material_color_factors(const ModelMaterialDescription& description) noexcept
-{
-    return finite(description.base_color) && finite(description.emissive_factor) &&
-           finite(description.specular_color_factor);
-}
-
-[[nodiscard]] bool
-valid_material_scalar_factors(const ModelMaterialDescription& description) noexcept
-{
-    return finite(description.metallic_factor) && finite(description.roughness_factor) &&
-           finite(description.alpha_cutoff) && finite(description.emissive_strength) &&
-           finite(description.normal_scale) && finite(description.occlusion_strength) &&
-           finite(description.ior) && finite(description.specular_factor);
-}
-
-[[nodiscard]] bool valid_material_factors(const ModelMaterialDescription& description) noexcept
-{
-    return valid_material_color_factors(description) &&
-           valid_material_scalar_factors(description) && valid_alpha(description.alpha_mode);
-}
-
-[[nodiscard]] bool valid_material_mappings(const ModelMaterialDescription& description) noexcept
-{
-    return valid_mapping(description.base_color_texture_mapping) &&
-           valid_mapping(description.metallic_roughness_texture_mapping) &&
-           valid_mapping(description.normal_texture_mapping) &&
-           valid_mapping(description.occlusion_texture_mapping) &&
-           valid_mapping(description.emissive_texture_mapping);
-}
-
-inline constexpr std::size_t model_maximum_image_bytes = 256ULL * 1024ULL * 1024ULL;
-inline constexpr std::size_t model_maximum_source_image_bytes = 64ULL * 1024ULL * 1024ULL;
-
-[[nodiscard]] bool png_source_bytes_match(std::span<const std::byte> bytes) noexcept
-{
-    constexpr std::array<std::uint8_t, 8> signature{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
-    if (bytes.size() < signature.size()) {
-        return false;
-    }
-    for (std::size_t index = 0; index < signature.size(); ++index) {
-        if (std::to_integer<std::uint8_t>(bytes[index]) != signature[index]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-[[nodiscard]] bool jpeg_source_bytes_match(std::span<const std::byte> bytes) noexcept
-{
-    return bytes.size() >= 3U && std::to_integer<std::uint8_t>(bytes[0]) == 0xffU &&
-           std::to_integer<std::uint8_t>(bytes[1]) == 0xd8U &&
-           std::to_integer<std::uint8_t>(bytes[2]) == 0xffU;
-}
-
-[[nodiscard]] bool source_bytes_match(ModelImageMimeType mime,
-                                      std::span<const std::byte> bytes) noexcept
-{
-    if (mime == ModelImageMimeType::none) {
-        return bytes.empty();
-    }
-    if (bytes.empty() || bytes.size() > model_maximum_source_image_bytes) {
-        return false;
-    }
-    if (mime == ModelImageMimeType::png) {
-        return png_source_bytes_match(bytes);
-    }
-    return mime == ModelImageMimeType::jpeg && jpeg_source_bytes_match(bytes);
-}
-
-[[nodiscard]] Result<std::size_t> expected_image_bytes(std::uint32_t image_width,
-                                                       std::uint32_t image_height,
-                                                       PixelFormat format) noexcept
-{
-    if (image_width == 0 || image_height == 0) {
-        return Error{ErrorCode::zero_image_dimensions, "Images require nonzero dimensions"};
-    }
-    if (format != PixelFormat::rgba8_unorm) {
-        return Error{ErrorCode::unsupported_texture_format,
-                     "Document images currently support only RGBA8 UNORM pixels"};
-    }
-
-    const std::size_t width = image_width;
-    const std::size_t height = image_height;
-
-    if (width > model_maximum_image_bytes / 4 || height > model_maximum_image_bytes / (width * 4)) {
-        return Error{ErrorCode::decoded_image_size_overflow,
-                     "Image dimensions overflow the decoded byte limit"};
-    }
-    return width * height * 4U;
-}
-
-[[nodiscard]] Result<void>
-validate_image_description(const ModelImageDescription& description) noexcept
-{
-    const Result<std::size_t> expected_bytes =
-        expected_image_bytes(description.width, description.height, description.format);
-    if (!expected_bytes) {
-        return expected_bytes.error();
-    }
-    if (description.pixels.size() != expected_bytes.value()) {
-        return Error{ErrorCode::invalid_argument, "Image pixels must be tightly packed RGBA8 rows"};
-    }
-    if (!source_bytes_match(description.source_mime_type, description.source_bytes)) {
-        return Error{ErrorCode::invalid_argument,
-                     "Image source bytes must be an optional matching PNG or JPEG stream"};
-    }
-    return {};
-}
-
 [[nodiscard]] Bounds3 merge(Bounds3 left, Bounds3 right) noexcept
 {
     return Bounds3{
@@ -504,6 +387,12 @@ ModelJsonMetadataView Document::asset_metadata() const noexcept
     return storage_ != nullptr ? metadata_view(storage_->asset_metadata) : ModelJsonMetadataView{};
 }
 
+std::span<const std::string> Document::required_extensions() const noexcept
+{
+    return storage_ != nullptr ? std::span<const std::string>{storage_->required_extensions}
+                               : std::span<const std::string>{};
+}
+
 bool Document::preserved_metadata_stale() const noexcept
 {
     return storage_ != nullptr && storage_->preserved_metadata_stale;
@@ -572,7 +461,13 @@ Result<NodeView> Document::node_at(std::size_t index) const noexcept
                     record.local_matrix,
                     record.mesh,
                     record.perspective_camera,
-                    metadata_view(record.metadata)};
+                    metadata_view(record.metadata),
+                    ModelCameraPropertiesView{record.camera_properties.name,
+                                              record.camera_properties.aspect_ratio,
+                                              record.camera_properties.infinite_far_plane,
+                                              record.camera_properties.image_based_lighting,
+                                              metadata_view(record.camera_metadata),
+                                              metadata_view(record.camera_projection_metadata)}};
 }
 
 Result<MeshView> Document::mesh_at(std::size_t index) const noexcept
@@ -603,7 +498,9 @@ Result<MaterialView> Document::material_at(std::size_t index) const noexcept
                      "The document material index is outside the document"};
     }
     const Storage::MaterialRecord& record = storage_->materials[index];
-    return MaterialView{record.id, record.description, metadata_view(record.metadata)};
+    auto description = record.description;
+    description.name = record.name;
+    return MaterialView{record.id, description, metadata_view(record.metadata)};
 }
 
 Result<ImageView> Document::image_at(std::size_t index) const noexcept
@@ -663,14 +560,21 @@ Result<NodeView> Document::node(NodeId node_id) const noexcept
     if (!record) {
         return record.error();
     }
-    return NodeView{record.value()->id,
-                    record.value()->name,
-                    record.value()->parent,
-                    record.value()->children,
-                    record.value()->local_matrix,
-                    record.value()->mesh,
-                    record.value()->perspective_camera,
-                    metadata_view(record.value()->metadata)};
+    return NodeView{
+        record.value()->id,
+        record.value()->name,
+        record.value()->parent,
+        record.value()->children,
+        record.value()->local_matrix,
+        record.value()->mesh,
+        record.value()->perspective_camera,
+        metadata_view(record.value()->metadata),
+        ModelCameraPropertiesView{record.value()->camera_properties.name,
+                                  record.value()->camera_properties.aspect_ratio,
+                                  record.value()->camera_properties.infinite_far_plane,
+                                  record.value()->camera_properties.image_based_lighting,
+                                  metadata_view(record.value()->camera_metadata),
+                                  metadata_view(record.value()->camera_projection_metadata)}};
 }
 
 Result<MeshView> Document::mesh(MeshId mesh_id) const noexcept
@@ -712,8 +616,9 @@ Result<MaterialView> Document::material(MaterialId material_id) const noexcept
     if (!record) {
         return record.error();
     }
-    return MaterialView{record.value()->id, record.value()->description,
-                        metadata_view(record.value()->metadata)};
+    auto description = record.value()->description;
+    description.name = record.value()->name;
+    return MaterialView{record.value()->id, description, metadata_view(record.value()->metadata)};
 }
 
 Result<ImageView> Document::image(ImageId image_id) const noexcept

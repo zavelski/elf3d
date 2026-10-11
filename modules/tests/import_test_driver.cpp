@@ -2,10 +2,13 @@
 #include <string_view>
 
 int elf3d_image_decode_test();
+int elf3d_tiff_decode_test();
 int elf3d_gltf_import_test();
 int elf3d_gltf_tangent_test();
 int elf3d_gltf_export_test();
 int elf3d_gltf_metadata_round_trip_test();
+int elf3d_gltf_camera_round_trip_test();
+int elf3d_gltf_json_format_test();
 
 namespace {
 
@@ -23,7 +26,8 @@ int main(int argument_count, char** arguments)
 {
     const std::string_view test_case = selected_case(argument_count, arguments);
     if (test_case == "image_decode") {
-        return elf3d_image_decode_test();
+        const int decoded = elf3d_image_decode_test();
+        return decoded != 0 ? decoded : elf3d_tiff_decode_test();
     }
     if (test_case == "model_gltf_import") {
         return elf3d_gltf_import_test();
@@ -35,7 +39,11 @@ int main(int argument_count, char** arguments)
         return elf3d_gltf_export_test();
     }
     if (test_case == "gltf_metadata") {
-        return elf3d_gltf_metadata_round_trip_test();
+        const int metadata = elf3d_gltf_metadata_round_trip_test();
+        return metadata != 0 ? metadata : elf3d_gltf_camera_round_trip_test();
+    }
+    if (test_case == "gltf_json_format") {
+        return elf3d_gltf_json_format_test();
     }
 
     std::cerr << "Unknown import test case: " << test_case << '\n';

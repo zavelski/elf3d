@@ -94,7 +94,9 @@ Result<MaterialId> Document::create_material(const ModelMaterialDescription& des
 
         const MaterialId id = model::detail::DocumentHandleAccess::create_material(
             storage_->token(), static_cast<std::uint64_t>(storage_->materials.size() + 1U));
-        storage_->materials.push_back(Storage::MaterialRecord{id, description});
+        storage_->materials.push_back(
+            Storage::MaterialRecord{id, description, std::string{description.name}});
+        storage_->materials.back().description.name = {};
         storage_->note_mutation();
         return id;
     });
@@ -162,6 +164,11 @@ Result<TextureId> Document::create_texture(const ModelTextureDescription& descri
         if (!storage_->sampler(description.sampler)) {
             return Error{ErrorCode::invalid_sampler_id,
                          "Texture sampler must belong to the same document"};
+        }
+        if (storage_->image(description.image).value()->source_mime_type ==
+            ModelImageMimeType::exr) {
+            return Error{ErrorCode::unsupported_texture_format,
+                         "Encoded-only EXR environment images cannot be material textures"};
         }
 
         const TextureId id = model::detail::DocumentHandleAccess::create_texture(
@@ -400,7 +407,8 @@ Result<void> Document::set_node_matrix(NodeId node_id, const Float4x4& matrix) n
     }
 
     node_record.value()->local_matrix = matrix;
-    storage_->note_mutation();
+    // Matrix edits preserve object identity and all metadata attachment/index tables.
+    // Opaque application data stays unchanged; its spatial semantics are not interpreted.
     return {};
 }
 
@@ -425,6 +433,7 @@ Document::set_node_perspective_camera(NodeId node_id,
     }
 
     node_record.value()->perspective_camera = description;
+    node_record.value()->camera_properties = {};
     storage_->note_mutation();
     return {};
 }
@@ -442,6 +451,7 @@ Result<void> Document::clear_node_perspective_camera(NodeId node_id) noexcept
         return {};
     }
     node_record.value()->perspective_camera.reset();
+    node_record.value()->camera_properties = {};
     storage_->note_mutation();
     return {};
 }

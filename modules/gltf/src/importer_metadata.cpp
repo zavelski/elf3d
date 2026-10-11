@@ -13,6 +13,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -220,21 +221,6 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
     return false;
 }
 
-[[nodiscard]] bool has_camera_metadata(const cgltf_data& data) noexcept
-{
-    for (cgltf_size index = 0; index < data.cameras_count; ++index) {
-        const cgltf_camera& camera = data.cameras[index];
-        const cgltf_extras& projection_extras = camera.type == cgltf_camera_type_perspective
-                                                    ? camera.data.perspective.extras
-                                                    : camera.data.orthographic.extras;
-        if (source_has_metadata(camera.extras, camera.extensions_count) ||
-            source_has_metadata(projection_extras, 0)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 [[nodiscard]] bool has_animation_metadata(const cgltf_data& data) noexcept
 {
     for (cgltf_size index = 0; index < data.animations_count; ++index) {
@@ -298,13 +284,13 @@ copy_legacy_extras(const cgltf_data& source, const cgltf_extras& extras, Metadat
 void diagnose_unsupported_scope_metadata(const cgltf_data& data,
                                          std::vector<ModelLoadDiagnostic>& diagnostics)
 {
-    if (!has_buffer_metadata(data) && !has_camera_metadata(data) && !has_animation_metadata(data) &&
+    if (!has_buffer_metadata(data) && !has_animation_metadata(data) &&
         !has_auxiliary_object_metadata(data) && !has_mapping_metadata(data)) {
         return;
     }
     add_metadata_not_preserved(
         diagnostics, "glTF auxiliary scopes",
-        "buffers, buffer views, accessors, cameras, skins, and animations have no stable "
+        "buffers, buffer views, accessors, skins, and animations have no stable "
         "one-to-one Document metadata identity");
 }
 
@@ -323,6 +309,13 @@ void store_preserved_metadata(Container& destination, Id id, ModelJsonMetadata m
 
 void copy_root_metadata(const cgltf_data& data, MetadataCopyState& state)
 {
+    for (cgltf_size index = 0; index < data.extensions_required_count; ++index) {
+        const std::string name{data.extensions_required[index]};
+        auto& required = state.imported.required_extensions;
+        if (std::find(required.begin(), required.end(), name) == required.end()) {
+            required.push_back(name);
+        }
+    }
     state.imported.root =
         copy_metadata(data.extras, extension_span(data.data_extensions, data.data_extensions_count),
                       state.budget, state.diagnostics(), "document root");
@@ -360,6 +353,59 @@ void copy_node_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
             copy_metadata(source.extras, extension_span(source.extensions, source.extensions_count),
                           state.budget, state.diagnostics(), "node " + std::to_string(index));
         store_preserved_metadata(state.imported.nodes, *ids.nodes[index], std::move(metadata));
+    }
+}
+
+[[nodiscard]] bool camera_has_metadata(const cgltf_camera& camera) noexcept
+{
+    if (source_has_metadata(camera.extras, camera.extensions_count)) {
+        return true;
+    }
+    if (camera.type == cgltf_camera_type_perspective) {
+        return source_has_metadata(camera.data.perspective.extras, 0U);
+    }
+    return camera.type == cgltf_camera_type_orthographic &&
+           source_has_metadata(camera.data.orthographic.extras, 0U);
+}
+
+void diagnose_unrepresented_camera_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
+                                            MetadataCopyState& state)
+{
+    std::unordered_set<const cgltf_camera*> represented;
+    for (cgltf_size index = 0; index < data.nodes_count; ++index) {
+        const auto* camera = data.nodes[index].camera;
+        if (camera != nullptr && ids.nodes[index] &&
+            camera->type == cgltf_camera_type_perspective) {
+            represented.insert(camera);
+        }
+    }
+    for (cgltf_size index = 0; index < data.cameras_count; ++index) {
+        const auto& camera = data.cameras[index];
+        if (!represented.contains(&camera) && camera_has_metadata(camera)) {
+            add_metadata_not_preserved(state.diagnostics(), "camera " + std::to_string(index),
+                                       "the camera has no supported Document attachment");
+        }
+    }
+}
+
+void copy_camera_metadata(const cgltf_data& data, const ImportedMetadataIds& ids,
+                          MetadataCopyState& state)
+{
+    for (cgltf_size index = 0; index < data.nodes_count; ++index) {
+        const auto* camera = data.nodes[index].camera;
+        if (camera == nullptr || !ids.nodes[index] ||
+            camera->type != cgltf_camera_type_perspective) {
+            continue;
+        }
+        const std::string context = "camera on node " + std::to_string(index);
+        auto metadata = copy_metadata(camera->extras,
+                                      extension_span(camera->extensions, camera->extensions_count),
+                                      state.budget, state.diagnostics(), context);
+        store_preserved_metadata(state.imported.cameras, *ids.nodes[index], std::move(metadata));
+        auto projection = copy_metadata(camera->data.perspective.extras, {}, state.budget,
+                                        state.diagnostics(), context + " perspective");
+        store_preserved_metadata(state.imported.camera_projections, *ids.nodes[index],
+                                 std::move(projection));
     }
 }
 
@@ -478,6 +524,8 @@ Result<void> attach_imported_metadata(const cgltf_data& data, const ImportedMeta
     copy_root_metadata(data, state);
     copy_scene_metadata(data, ids, state);
     copy_node_metadata(data, ids, state);
+    copy_camera_metadata(data, ids, state);
+    diagnose_unrepresented_camera_metadata(data, ids, state);
     copy_mesh_metadata(data, ids, state);
     copy_material_metadata(data, ids, state);
     copy_indexed_metadata(

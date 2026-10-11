@@ -18,6 +18,7 @@ struct GeneratedExtensions {
     bool ior = false;
     bool specular = false;
     bool emissive_strength = false;
+    bool volume = false;
 };
 
 [[nodiscard]] bool uses_texture_transform(const ModelMaterialDescription& material) noexcept
@@ -26,7 +27,9 @@ struct GeneratedExtensions {
            has_nondefault_transform(material.metallic_roughness_texture_mapping) ||
            has_nondefault_transform(material.normal_texture_mapping) ||
            has_nondefault_transform(material.occlusion_texture_mapping) ||
-           has_nondefault_transform(material.emissive_texture_mapping);
+           has_nondefault_transform(material.emissive_texture_mapping) ||
+           (material.volume &&
+            has_nondefault_transform(material.volume->thickness_texture_mapping));
 }
 
 void update_generated_extensions(GeneratedExtensions& extensions,
@@ -34,6 +37,7 @@ void update_generated_extensions(GeneratedExtensions& extensions,
 {
     extensions.texture_transform = extensions.texture_transform || uses_texture_transform(material);
     extensions.unlit = extensions.unlit || material.unlit;
+    extensions.volume = extensions.volume || material.volume.has_value();
     extensions.ior = extensions.ior || material.ior != 1.5F;
     extensions.specular = extensions.specular || material.specular_factor != 1.0F ||
                           material.specular_color_factor != Float3{1.0F, 1.0F, 1.0F};
@@ -63,6 +67,9 @@ void add_generated_extensions(std::vector<std::string_view>& destination,
     if (generated.emissive_strength) {
         add_extension_used(destination, "KHR_materials_emissive_strength");
     }
+    if (generated.volume) {
+        add_extension_used(destination, "KHR_materials_volume");
+    }
 }
 
 void add_object_extensions(std::vector<std::string_view>& destination, const ExportData& document)
@@ -72,6 +79,7 @@ void add_object_extensions(std::vector<std::string_view>& destination, const Exp
     }
     for (const NodeView& value : document.nodes) {
         add_preserved_extensions_used(destination, value.metadata);
+        add_preserved_extensions_used(destination, value.camera_properties.metadata);
     }
     for (const MeshView& value : document.meshes) {
         add_preserved_extensions_used(destination, value.metadata);
@@ -93,6 +101,24 @@ void add_object_extensions(std::vector<std::string_view>& destination, const Exp
     }
 }
 
+void append_extension_names(std::string& output, std::string_view key,
+                            std::span<const std::string_view> names)
+{
+    if (names.empty()) {
+        return;
+    }
+    output.push_back(',');
+    append_string(output, key);
+    output.append(":[");
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        if (index != 0U) {
+            output.push_back(',');
+        }
+        append_string(output, names[index]);
+    }
+    output.push_back(']');
+}
+
 void append_extensions_used(std::string& output, const ExportData& document)
 {
     std::vector<std::string_view> extensions;
@@ -100,18 +126,14 @@ void append_extensions_used(std::string& output, const ExportData& document)
     add_preserved_extensions_used(extensions, document.root_metadata);
     add_preserved_extensions_used(extensions, document.asset_metadata);
     add_object_extensions(extensions, document);
-    if (extensions.empty()) {
-        return;
-    }
-
-    output.append(",\"extensionsUsed\":[");
-    for (std::size_t index = 0; index < extensions.size(); ++index) {
-        if (index != 0U) {
-            output.push_back(',');
+    append_extension_names(output, "extensionsUsed", extensions);
+    std::vector<std::string_view> required;
+    for (const std::string& name : document.required_extensions) {
+        if (std::find(extensions.begin(), extensions.end(), name) != extensions.end()) {
+            required.push_back(name);
         }
-        append_string(output, extensions[index]);
     }
-    output.push_back(']');
+    append_extension_names(output, "extensionsRequired", required);
 }
 
 [[nodiscard]] Result<std::optional<std::uint32_t>> default_scene_index(const ExportData& document)
@@ -311,37 +333,6 @@ void append_node_matrix(std::string& output, const NodeView& node)
     return {};
 }
 
-void append_cameras(std::string& output, const ExportData& document)
-{
-    const bool has_cameras =
-        std::any_of(document.nodes.begin(), document.nodes.end(),
-                    [](const NodeView& node) { return node.perspective_camera.has_value(); });
-    if (!has_cameras) {
-        return;
-    }
-
-    output.append(",\"cameras\":[");
-    bool first = true;
-    for (const NodeView& node : document.nodes) {
-        if (!node.perspective_camera) {
-            continue;
-        }
-        if (!first) {
-            output.push_back(',');
-        }
-        first = false;
-        const PerspectiveCameraDescription& camera = *node.perspective_camera;
-        output.append("{\"type\":\"perspective\",\"perspective\":{\"yfov\":");
-        append_float(output, camera.vertical_field_of_view_radians);
-        output.append(",\"znear\":");
-        append_float(output, camera.near_plane);
-        output.append(",\"zfar\":");
-        append_float(output, camera.far_plane);
-        output.append("}}");
-    }
-    output.push_back(']');
-}
-
 void append_primitive_attributes(std::string& output, const PrimitiveOutput& primitive)
 {
     output.append("{\"attributes\":{\"POSITION\":");
@@ -465,6 +456,11 @@ void append_primitive_attributes(std::string& output, const PrimitiveOutput& pri
         }
         output.append("{\"uri\":");
         append_string(output, package.image_uris[index]);
+        if (package.document.images[index].source_mime_type == ModelImageMimeType::exr ||
+            package.document.images[index].source_mime_type == ModelImageMimeType::tiff) {
+            output.append(",\"mimeType\":");
+            append_string(output, image_mime_text(package.image_mime_types[index]));
+        }
     }
 
     append_preserved_metadata(output, package.document.images[index].metadata);
@@ -595,7 +591,9 @@ void append_accessors(std::string& output, const std::vector<Accessor>& accessor
         return nodes.error();
     }
 
-    append_cameras(output, package.document);
+    if (const auto cameras = append_cameras(output, package.document); !cameras) {
+        return cameras.error();
+    }
     return append_meshes(output, package);
 }
 
@@ -612,7 +610,7 @@ void append_accessors(std::string& output, const std::vector<Accessor>& accessor
 
 } // namespace
 
-Result<std::string> build_json(const ExportPackage& package)
+Result<std::string> build_json(ExportPackage& package)
 {
     std::string output{"{\"asset\":{\"version\":\"2.0\",\"generator\":\"Elf3D\""};
     append_preserved_metadata(output, package.document.asset_metadata);
@@ -630,7 +628,12 @@ Result<std::string> build_json(const ExportPackage& package)
     append_accessors(output, package.accessors);
     append_preserved_metadata(output, package.document.root_metadata);
     output.push_back('}');
-    return format_json(output);
+    auto formatted = format_json(output, package.numeric_policy);
+    if (!formatted) {
+        return formatted.error();
+    }
+    package.cleaned_matrices = formatted.value().cleaned_matrices;
+    return std::move(formatted.value().text);
 }
 
 } // namespace elf3d::gltf::exporter_detail

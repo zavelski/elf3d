@@ -198,8 +198,14 @@ common_material_uses_unavailable_texcoord(const cgltf_material& material,
     if (!unavailable || unavailable.value()) {
         return unavailable;
     }
-    return texture_slot_uses_unavailable_texcoord(material.emissive_texture, "emissive texture",
-                                                  available_texcoords, context);
+    unavailable = texture_slot_uses_unavailable_texcoord(
+        material.emissive_texture, "emissive texture", available_texcoords, context);
+    if (!unavailable || unavailable.value() || !material.has_volume) {
+        return unavailable;
+    }
+    return texture_slot_uses_unavailable_texcoord(material.volume.thickness_texture,
+                                                  "volume thickness texture", available_texcoords,
+                                                  context);
 }
 
 [[nodiscard]] Result<bool>

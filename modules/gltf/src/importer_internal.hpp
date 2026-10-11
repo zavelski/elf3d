@@ -197,8 +197,13 @@ void bounded_deallocate(void* user, void* data) noexcept;
 [[nodiscard]] Result<void> validate_resource_limits(const cgltf_data& data);
 [[nodiscard]] Result<void> validate_required_extensions(const cgltf_data& data);
 [[nodiscard]] Result<void> validate_buffer_uris(const cgltf_data& data);
-void decode_image_json_strings(cgltf_data& data) noexcept;
+[[nodiscard]] Result<void> decode_document_json_strings(cgltf_data& data);
 [[nodiscard]] Result<ModelImageMimeType> mime_from_text(std::string_view mime);
+[[nodiscard]] Result<ImageId> image_for(const cgltf_data& data, const cgltf_image* source,
+                                        const std::filesystem::path& gltf_path,
+                                        DocumentBuilder& builder, ImageImportState& images);
+[[nodiscard]] Result<void> attach_camera_properties(ImportState& state, const cgltf_camera& camera,
+                                                    NodeId node);
 [[nodiscard]] Result<ModelImageMimeType> mime_from_extension(const std::filesystem::path& path);
 [[nodiscard]] bool encoded_matches(ModelImageMimeType mime,
                                    std::span<const std::byte> bytes) noexcept;

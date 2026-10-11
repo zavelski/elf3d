@@ -22,6 +22,9 @@ enum class ModelImageMimeType {
     none,
     png,
     jpeg,
+    // Encoded-only environment resource: no decoded pixels or dimensions.
+    exr,
+    tiff,
 };
 
 struct ModelImageDescription {
@@ -29,7 +32,7 @@ struct ModelImageDescription {
     std::uint32_t height = 0;
     PixelFormat format = PixelFormat::rgba8_unorm;
     std::span<const std::byte> pixels;
-    // Optional original PNG/JPEG stream corresponding to the decoded pixels.
+    // Optional original PNG/JPEG/TIFF stream, or encoded-only EXR with zero dimensions.
     ModelImageMimeType source_mime_type = ModelImageMimeType::none;
     std::span<const std::byte> source_bytes;
 };
@@ -53,11 +56,49 @@ struct ModelJsonMetadataView {
     std::span<const ModelJsonExtension> extensions;
 };
 
+struct ModelCameraImageBasedLightingDescription {
+    ImageId image;
+    Float3 rotation;
+    Float2 scale{1.0F, 1.0F};
+
+    bool operator==(const ModelCameraImageBasedLightingDescription&) const = default;
+};
+
+struct ModelCameraPropertiesDescription {
+    std::string name;
+    std::optional<float> aspect_ratio;
+    bool infinite_far_plane = false;
+    // Equirectangular environment description; angles retain authored units.
+    std::optional<ModelCameraImageBasedLightingDescription> image_based_lighting;
+
+    bool operator==(const ModelCameraPropertiesDescription&) const = default;
+};
+
+struct ModelCameraPropertiesView {
+    std::string_view name;
+    std::optional<float> aspect_ratio;
+    bool infinite_far_plane = false;
+    std::optional<ModelCameraImageBasedLightingDescription> image_based_lighting;
+    ModelJsonMetadataView metadata;
+    ModelJsonMetadataView projection_metadata;
+};
+
 struct ModelTextureDescription {
     ImageId image;
     SamplerId sampler;
 
     bool operator==(const ModelTextureDescription&) const = default;
+};
+
+struct ModelVolumeDescription {
+    float thickness_factor = 0.0F;
+    TextureId thickness_texture;
+    TextureMapping thickness_texture_mapping;
+    // Absence represents the glTF default of infinite attenuation distance.
+    std::optional<float> attenuation_distance;
+    Float3 attenuation_color{1.0F, 1.0F, 1.0F};
+
+    bool operator==(const ModelVolumeDescription&) const = default;
 };
 
 struct ModelMaterialDescription {
@@ -86,6 +127,9 @@ struct ModelMaterialDescription {
     TextureMapping normal_texture_mapping;
     TextureMapping occlusion_texture_mapping;
     TextureMapping emissive_texture_mapping;
+    std::optional<ModelVolumeDescription> volume;
+    // Copied into Document storage by create_material; borrowed in returned views.
+    std::string_view name;
 
     bool operator==(const ModelMaterialDescription&) const = default;
 };
@@ -171,6 +215,7 @@ struct NodeView {
     std::optional<MeshId> mesh;
     std::optional<PerspectiveCameraDescription> perspective_camera;
     ModelJsonMetadataView metadata;
+    ModelCameraPropertiesView camera_properties;
 };
 
 struct DocumentSceneView {
@@ -236,9 +281,16 @@ enum class ModelImageWritePolicy {
     embedded,
 };
 
+enum class ModelNumericWritePolicy {
+    round_trip,
+    clean_rotation,
+};
+
 struct ModelWriteOptions {
     // Automatic writes sidecars for .gltf and buffer-view images for .glb.
     ModelImageWritePolicy image_policy = ModelImageWritePolicy::automatic;
+    // Clean only orthonormal matrix bases within a 1e-7 absolute tolerance.
+    ModelNumericWritePolicy numeric_policy = ModelNumericWritePolicy::round_trip;
 };
 
 enum class ModelWriteDiagnosticSeverity {
@@ -256,6 +308,7 @@ enum class ModelWriteDiagnosticCategory {
 enum class ModelWriteDiagnosticCode {
     image_reencoded_as_png,
     preserved_metadata_dropped_after_mutation,
+    matrix_rotation_cleaned,
 };
 
 struct ModelWriteDiagnostic {
@@ -336,6 +389,7 @@ class Document final {
     [[nodiscard]] std::optional<DocumentSceneId> default_scene() const noexcept;
     [[nodiscard]] ModelJsonMetadataView root_metadata() const noexcept;
     [[nodiscard]] ModelJsonMetadataView asset_metadata() const noexcept;
+    [[nodiscard]] std::span<const std::string> required_extensions() const noexcept;
     [[nodiscard]] bool preserved_metadata_stale() const noexcept;
     [[nodiscard]] std::size_t scene_count() const noexcept;
     [[nodiscard]] std::size_t node_count() const noexcept;
@@ -388,6 +442,9 @@ class Document final {
     [[nodiscard]] Result<void>
     set_node_perspective_camera(NodeId node,
                                 const PerspectiveCameraDescription& description) noexcept;
+    [[nodiscard]] Result<void>
+    set_node_camera_properties(NodeId node,
+                               const ModelCameraPropertiesDescription& description) noexcept;
     [[nodiscard]] Result<void> clear_node_perspective_camera(NodeId node) noexcept;
     [[nodiscard]] Result<void> replace_primitive(PrimitiveId primitive,
                                                  const PrimitiveDataView& data) noexcept;
@@ -412,6 +469,7 @@ class DocumentView final {
     [[nodiscard]] std::optional<DocumentSceneId> default_scene() const noexcept;
     [[nodiscard]] ModelJsonMetadataView root_metadata() const noexcept;
     [[nodiscard]] ModelJsonMetadataView asset_metadata() const noexcept;
+    [[nodiscard]] std::span<const std::string> required_extensions() const noexcept;
     [[nodiscard]] bool preserved_metadata_stale() const noexcept;
     [[nodiscard]] std::size_t scene_count() const noexcept;
     [[nodiscard]] std::size_t node_count() const noexcept;

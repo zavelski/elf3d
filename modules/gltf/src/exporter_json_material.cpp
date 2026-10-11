@@ -18,6 +18,7 @@ struct MaterialTextures {
     std::optional<std::uint32_t> normal;
     std::optional<std::uint32_t> occlusion;
     std::optional<std::uint32_t> emissive;
+    std::optional<std::uint32_t> thickness;
 };
 
 [[nodiscard]] Result<std::optional<std::uint32_t>> material_texture(const ExportData& document,
@@ -47,12 +48,14 @@ collect_material_textures(const ExportData& document, const ModelMaterialDescrip
         material_texture(document, material.occlusion_texture);
     const Result<std::optional<std::uint32_t>> emissive =
         material_texture(document, material.emissive_texture);
+    const Result<std::optional<std::uint32_t>> thickness = material_texture(
+        document, material.volume ? material.volume->thickness_texture : TextureId{});
 
-    if (!base || !metallic || !normal || !occlusion || !emissive) {
+    if (!base || !metallic || !normal || !occlusion || !emissive || !thickness) {
         return Error{ErrorCode::invalid_argument, "Material texture is not in this document"};
     }
-    return MaterialTextures{base.value(), metallic.value(), normal.value(), occlusion.value(),
-                            emissive.value()};
+    return MaterialTextures{base.value(),      metallic.value(), normal.value(),
+                            occlusion.value(), emissive.value(), thickness.value()};
 }
 
 void append_material_pbr(std::string& output, const ModelMaterialDescription& material,
@@ -98,6 +101,10 @@ void append_material_texture_slots(std::string& output, const ModelMaterialDescr
 
 void append_material_properties(std::string& output, const ModelMaterialDescription& material)
 {
+    if (!material.name.empty()) {
+        output.append(",\"name\":");
+        append_string(output, material.name);
+    }
     output.append(",\"emissiveFactor\":");
     append_float3(output, material.emissive_factor);
     if (material.alpha_mode != AlphaMode::opaque) {
@@ -153,13 +160,38 @@ void append_specular_extension(std::string& output, bool& first,
     output.push_back('}');
 }
 
+void append_volume_extension(std::string& output, bool& first,
+                             std::vector<std::string_view>& emitted,
+                             const ModelVolumeDescription& volume,
+                             std::optional<std::uint32_t> thickness)
+{
+    if (!begin_extension_member(output, first, emitted, "KHR_materials_volume")) {
+        return;
+    }
+    output.append("{\"thicknessFactor\":");
+    append_float(output, volume.thickness_factor);
+    if (thickness) {
+        output.append(",\"thicknessTexture\":");
+        append_texture_info(output, *thickness, volume.thickness_texture_mapping);
+    }
+    if (volume.attenuation_distance) {
+        output.append(",\"attenuationDistance\":");
+        append_float(output, *volume.attenuation_distance);
+    }
+    if (volume.attenuation_color != Float3{1.0F, 1.0F, 1.0F}) {
+        output.append(",\"attenuationColor\":");
+        append_float3(output, volume.attenuation_color);
+    }
+    output.push_back('}');
+}
+
 void append_material_extensions(std::string& output, const ModelMaterialDescription& material,
-                                ModelJsonMetadataView metadata)
+                                ModelJsonMetadataView metadata, const MaterialTextures& textures)
 {
     const bool required = material.unlit || material.ior != 1.5F ||
                           material.emissive_strength != 1.0F || material.specular_factor != 1.0F ||
                           material.specular_color_factor != Float3{1.0F, 1.0F, 1.0F} ||
-                          !metadata.extensions.empty();
+                          material.volume.has_value() || !metadata.extensions.empty();
     if (!required) {
         return;
     }
@@ -170,6 +202,9 @@ void append_material_extensions(std::string& output, const ModelMaterialDescript
     emitted.reserve(metadata.extensions.size() + 4U);
     append_standard_material_extensions(output, first, emitted, material);
     append_specular_extension(output, first, emitted, material);
+    if (material.volume) {
+        append_volume_extension(output, first, emitted, *material.volume, textures.thickness);
+    }
     append_preserved_extension_members(output, first, emitted, metadata.extensions);
     output.push_back('}');
 }
@@ -186,7 +221,7 @@ void append_material_extensions(std::string& output, const ModelMaterialDescript
     append_material_pbr(output, material, textures.value());
     append_material_texture_slots(output, material, textures.value());
     append_material_properties(output, material);
-    append_material_extensions(output, material, view.metadata);
+    append_material_extensions(output, material, view.metadata, textures.value());
     append_preserved_extras(output, view.metadata);
     output.push_back('}');
     return {};

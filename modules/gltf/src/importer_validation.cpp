@@ -205,12 +205,21 @@ void add_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
     return supported_required_extension(extension) || extension == "KHR_materials_specular";
 }
 
+[[nodiscard]] std::string material_extension_behavior(std::string_view extension)
+{
+    return extension == "KHR_materials_volume"
+               ? "is retained in the Model SDK for export; rendering uses the core material "
+                 "fallback without volume effects"
+               : "is unsupported; the core metallic-roughness material fallback was used";
+}
+
 void add_optional_extension_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
                                        std::string_view extension)
 {
     ModelLoadDiagnosticCategory category = ModelLoadDiagnosticCategory::extension;
     ModelLoadDiagnosticCode code = ModelLoadDiagnosticCode::unsupported_optional_extension;
-    std::string behavior = "is unsupported and was ignored";
+    std::string behavior = "has no runtime implementation; bounded opaque metadata on supported "
+                           "Document objects is retained for export";
     if (extension == "KHR_lights_punctual") {
         category = ModelLoadDiagnosticCategory::light;
         code = ModelLoadDiagnosticCode::ignored_lights;
@@ -229,7 +238,7 @@ void add_optional_extension_diagnostic(std::vector<ModelLoadDiagnostic>& diagnos
     } else if (extension.starts_with("KHR_materials_")) {
         category = ModelLoadDiagnosticCategory::material;
         code = ModelLoadDiagnosticCode::material_fallback;
-        behavior = "is unsupported; the core metallic-roughness material fallback was used";
+        behavior = material_extension_behavior(extension);
     } else if (extension == "KHR_draco_mesh_compression" ||
                extension == "EXT_meshopt_compression") {
         category = ModelLoadDiagnosticCategory::geometry;
@@ -647,21 +656,15 @@ struct ResourceTotals {
     if (mime == "image/jpeg" || mime == "image/jpg") {
         return ModelImageMimeType::jpeg;
     }
-    return Error{ErrorCode::unsupported_image_mime_type,
-                 "Supported glTF image MIME types are image/png and image/jpeg"};
-}
-
-void decode_image_json_strings(cgltf_data& data) noexcept
-{
-    for (cgltf_size index = 0; index < data.images_count; ++index) {
-        cgltf_image& source = data.images[index];
-        if (source.mime_type != nullptr) {
-            cgltf_decode_string(source.mime_type);
-        }
-        if (source.uri != nullptr) {
-            cgltf_decode_string(source.uri);
-        }
+    if (mime == "image/tiff") {
+        return ModelImageMimeType::tiff;
     }
+    if (mime == "image/exr") {
+        return ModelImageMimeType::exr;
+    }
+    return Error{ErrorCode::unsupported_image_mime_type,
+                 "Supported image MIME types are image/png, image/jpeg, image/tiff, and "
+                 "encoded-only image/exr"};
 }
 
 [[nodiscard]] Result<ModelImageMimeType> mime_from_extension(const std::filesystem::path& path)
@@ -673,13 +676,32 @@ void decode_image_json_strings(cgltf_data& data) noexcept
     if (extension == ".jpg" || extension == ".jpeg") {
         return ModelImageMimeType::jpeg;
     }
+    if (extension == ".tif" || extension == ".tiff") {
+        return ModelImageMimeType::tiff;
+    }
+    if (extension == ".exr") {
+        return ModelImageMimeType::exr;
+    }
     return Error{ErrorCode::unsupported_image_extension,
-                 "Supported external image extensions are .png, .jpg, and .jpeg"};
+                 "Supported external image extensions are .png, .jpg, .jpeg, .tif, .tiff, and "
+                 "encoded-only .exr"};
+}
+
+[[nodiscard]] bool exr_signature_matches(std::span<const std::byte> bytes) noexcept
+{
+    return bytes.size() >= 8U && bytes[0] == std::byte{0x76} && bytes[1] == std::byte{0x2f} &&
+           bytes[2] == std::byte{0x31} && bytes[3] == std::byte{0x01};
 }
 
 [[nodiscard]] bool encoded_matches(ModelImageMimeType mime,
                                    std::span<const std::byte> bytes) noexcept
 {
+    if (mime == ModelImageMimeType::tiff) {
+        return image::has_tiff_signature(bytes);
+    }
+    if (mime == ModelImageMimeType::exr) {
+        return exr_signature_matches(bytes);
+    }
     if (mime == ModelImageMimeType::png) {
         constexpr std::uint8_t signature[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
         if (bytes.size() < std::size(signature)) {
