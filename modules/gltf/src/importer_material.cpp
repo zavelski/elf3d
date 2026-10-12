@@ -185,14 +185,6 @@ void apply_material_factors(MaterialBuildState& state)
         state.description.specular_color_factor = {source.specular.specular_color_factor[0],
                                                    source.specular.specular_color_factor[1],
                                                    source.specular.specular_color_factor[2]};
-        if (source.specular.specular_texture.texture != nullptr ||
-            source.specular.specular_color_texture.texture != nullptr) {
-            add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::material,
-                           ModelLoadDiagnosticCode::material_fallback,
-                           "KHR_materials_specular factors are rendered, but its optional "
-                           "textures are ignored",
-                           state.context);
-        }
     }
 }
 
@@ -229,6 +221,100 @@ void apply_material_factors(MaterialBuildState& state)
         state.description.emissive_texture_mapping = texture.value().mapping;
     }
     return {};
+}
+
+[[nodiscard]] Result<void> bind_optical_texture(MaterialBuildState& state,
+                                                const cgltf_texture_view& view, TextureId& id,
+                                                TextureMapping& mapping, std::string_view name)
+{
+    if (!view.texture)
+        return {};
+    auto imported = import_material_texture(state, view, name, name);
+    if (!imported)
+        return imported.error();
+    id = imported.value().texture;
+    mapping = imported.value().mapping;
+    return {};
+}
+[[nodiscard]] Result<void> apply_specular_material(MaterialBuildState& state)
+{
+    const auto& source = state.source;
+    if (!source.has_specular)
+        return {};
+    auto& target = state.description;
+
+    auto strength =
+        bind_optical_texture(state, source.specular.specular_texture, target.specular_texture,
+                             target.specular_texture_mapping, " specular texture");
+    if (!strength)
+        return strength.error();
+    auto color = bind_optical_texture(
+        state, source.specular.specular_color_texture, target.specular_color_texture,
+        target.specular_color_texture_mapping, " specular color texture");
+    if (!color)
+        return color.error();
+
+    return {};
+}
+
+[[nodiscard]] Result<void> apply_transmission_material(MaterialBuildState& state)
+{
+    const auto& source = state.source;
+    if (!source.has_transmission)
+        return {};
+    auto& target = state.description;
+
+    target.transmission = ModelTransmissionDescription{};
+    target.transmission->factor = source.transmission.transmission_factor;
+    auto texture = bind_optical_texture(
+        state, source.transmission.transmission_texture, target.transmission->texture,
+        target.transmission->texture_mapping, " transmission texture");
+    if (!texture)
+        return texture.error();
+
+    return {};
+}
+
+[[nodiscard]] Result<void> apply_clearcoat_material(MaterialBuildState& state)
+{
+    const auto& source = state.source;
+    if (!source.has_clearcoat)
+        return {};
+    auto& target = state.description;
+
+    target.clearcoat = ModelClearcoatDescription{};
+    auto& coat = *target.clearcoat;
+    coat.factor = source.clearcoat.clearcoat_factor;
+    coat.roughness_factor = source.clearcoat.clearcoat_roughness_factor;
+    if (source.clearcoat.clearcoat_normal_texture.texture)
+        coat.normal_scale = source.clearcoat.clearcoat_normal_texture.scale;
+    auto factor = bind_optical_texture(state, source.clearcoat.clearcoat_texture, coat.texture,
+                                       coat.texture_mapping, " clearcoat texture");
+    if (!factor)
+        return factor.error();
+    auto roughness = bind_optical_texture(state, source.clearcoat.clearcoat_roughness_texture,
+                                          coat.roughness_texture, coat.roughness_texture_mapping,
+                                          " clearcoat roughness texture");
+    if (!roughness)
+        return roughness.error();
+    auto normal =
+        bind_optical_texture(state, source.clearcoat.clearcoat_normal_texture, coat.normal_texture,
+                             coat.normal_texture_mapping, " clearcoat normal texture");
+    if (!normal)
+        return normal.error();
+
+    return {};
+}
+
+[[nodiscard]] Result<void> apply_optical_material(MaterialBuildState& state)
+{
+    const auto specular = apply_specular_material(state);
+    if (!specular)
+        return specular.error();
+    const auto transmission = apply_transmission_material(state);
+    if (!transmission)
+        return transmission.error();
+    return apply_clearcoat_material(state);
 }
 
 [[nodiscard]] Result<void> apply_volume(MaterialBuildState& state)
@@ -334,6 +420,8 @@ extension_material_factors_are_finite(const ModelMaterialDescription& descriptio
     }
 
     apply_material_factors(state);
+    if (const auto optics = apply_optical_material(state); !optics)
+        return optics.error();
     if (const Result<void> textures = apply_auxiliary_textures(state); !textures) {
         return textures.error();
     }

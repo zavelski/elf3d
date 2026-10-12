@@ -169,7 +169,7 @@ render_request(elf3d::EntityId camera, elf3d::ViewportRenderOptions options = {}
 [[nodiscard]] bool has_expected_material_shader_source(const FakeDeviceState& device)
 {
     return device.fragment_shader_source.find("mapped_uv") != std::string::npos &&
-           device.fragment_shader_source.find("mapped_surface_normal") != std::string::npos &&
+           device.fragment_shader_source.find("mapped_normal") != std::string::npos &&
            device.fragment_shader_source.find("u_normal_texture") != std::string::npos &&
            device.fragment_shader_source.find("u_alpha_mode") != std::string::npos &&
            device.fragment_shader_source.find("u_emissive_texture") != std::string::npos;

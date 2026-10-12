@@ -8,6 +8,7 @@
 #include <elf3d/core/result.h>
 #include <elf3d/internal/assets.h>
 #include <elf3d/internal/math.h>
+#include <elf3d/internal/scene_runtime.h>
 #include <elf3d/math/value_types.h>
 #include <elf3d/model.h>
 #include <elf3d/picking.h>
@@ -23,108 +24,6 @@ namespace elf3d::scene {
 struct ModelComponent {
     std::vector<ModelPrimitiveBinding> primitives;
     std::vector<PrimitiveId> document_primitives;
-};
-enum class RuntimeAlphaMode : std::uint8_t { opaque, mask, blend };
-enum class RuntimeTextureWrap : std::uint8_t { repeat, mirrored_repeat, clamp_to_edge };
-enum class RuntimeTextureFilter : std::uint8_t {
-    nearest,
-    linear,
-    nearest_mipmap_nearest,
-    linear_mipmap_nearest,
-    nearest_mipmap_linear,
-    linear_mipmap_linear,
-};
-enum class RuntimeMaterialTextureSlot : std::uint8_t {
-    base_color,
-    metallic_roughness,
-    normal,
-    occlusion,
-    emissive,
-};
-enum class RuntimeVertexLayout : std::uint8_t { position_normal, textured, full, tangent };
-struct RuntimeTextureTransform {
-    Float2 offset;
-    Float2 scale{1.0F, 1.0F};
-    float rotation_radians = 0.0F;
-    bool operator==(const RuntimeTextureTransform&) const = default;
-};
-struct RuntimeTextureMapping {
-    std::uint32_t texcoord_set = 0;
-    RuntimeTextureTransform transform;
-    bool operator==(const RuntimeTextureMapping&) const = default;
-};
-struct RuntimeSamplerDescription {
-    RuntimeTextureWrap wrap_u = RuntimeTextureWrap::repeat;
-    RuntimeTextureWrap wrap_v = RuntimeTextureWrap::repeat;
-    RuntimeTextureFilter min_filter = RuntimeTextureFilter::linear;
-    RuntimeTextureFilter mag_filter = RuntimeTextureFilter::linear;
-    bool operator==(const RuntimeSamplerDescription&) const = default;
-};
-struct RuntimeMaterialView {
-    Color4 base_color{1.0F, 1.0F, 1.0F, 1.0F};
-    bool double_sided = false;
-    float metallic_factor = 1.0F;
-    float roughness_factor = 1.0F;
-    bool unlit = false;
-    RuntimeAlphaMode alpha_mode = RuntimeAlphaMode::opaque;
-    float alpha_cutoff = 0.5F;
-    Float3 emissive_factor;
-    float normal_scale = 1.0F;
-    float occlusion_strength = 1.0F;
-    float ior = 1.5F;
-    float specular_factor = 1.0F;
-    Float3 specular_color_factor{1.0F, 1.0F, 1.0F};
-    RuntimeTextureMapping base_color_texture_mapping;
-    RuntimeTextureMapping metallic_roughness_texture_mapping;
-    RuntimeTextureMapping normal_texture_mapping;
-    RuntimeTextureMapping occlusion_texture_mapping;
-    RuntimeTextureMapping emissive_texture_mapping;
-    bool has_base_color_texture = false;
-    bool has_metallic_roughness_texture = false;
-    bool has_normal_texture = false;
-    bool has_occlusion_texture = false;
-    bool has_emissive_texture = false;
-    [[nodiscard]] bool has_texture(RuntimeMaterialTextureSlot slot) const noexcept;
-};
-struct RuntimeTextureView {
-    std::uint64_t texture_identity = 0;
-    std::uint64_t image_identity = 0;
-    bool document_image = false;
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::span<const std::byte> pixels;
-    RuntimeSamplerDescription sampler;
-};
-class RuntimePrimitiveView final {
-  public:
-    MeshHandle mesh;
-    PrimitiveId document_primitive;
-    std::uint64_t material_identity = 0;
-    Bounds3 bounds;
-    RuntimeMaterialView material_view;
-    [[nodiscard]] std::size_t vertex_count() const noexcept;
-    [[nodiscard]] std::span<const std::uint32_t> indices() const noexcept;
-    [[nodiscard]] Float3 position(std::size_t index) const noexcept;
-    [[nodiscard]] Float3 normal(std::size_t index) const noexcept;
-    [[nodiscard]] Float2 texcoord0(std::size_t index) const noexcept;
-    [[nodiscard]] Float2 texcoord1(std::size_t index) const noexcept;
-    [[nodiscard]] Color4 color(std::size_t index) const noexcept;
-    [[nodiscard]] Float4 tangent(std::size_t index) const noexcept;
-    [[nodiscard]] RuntimeVertexLayout vertex_layout() const noexcept;
-
-  private:
-    friend class Storage;
-    std::span<const VertexPositionNormalTexCoord> compatibility_vertices_;
-    std::span<const Float3> document_positions_;
-    std::span<const Float3> document_normals_;
-    std::span<const Float2> document_texcoord0_;
-    std::span<const Float2> document_texcoord1_;
-    std::span<const Color4> document_colors_;
-    std::span<const Float4> document_tangents_;
-    std::span<const std::uint32_t> indices_;
-    std::array<TextureAssetHandle, 5> compatibility_textures_;
-    std::array<TextureId, 5> document_textures_;
-    RuntimeVertexLayout vertex_layout_ = RuntimeVertexLayout::position_normal;
 };
 struct EntityRecord {
     EntityId id;
@@ -233,7 +132,9 @@ class Storage final {
 
   private:
     [[nodiscard]] Result<EntityRecord*> mutable_entity(EntityId entity) noexcept;
-    [[nodiscard]] Result<MeshHandle> document_mesh_handle(PrimitiveId primitive);
+    [[nodiscard]] Result<void> prepare_document_groups(const PrimitiveView& view,
+                                                       std::vector<std::size_t>& groups);
+    [[nodiscard]] Result<std::vector<MeshHandle>> document_mesh_handles(PrimitiveId primitive);
     [[nodiscard]] bool is_document_mesh_handle(MeshHandle mesh) const noexcept;
     [[nodiscard]] Result<Bounds3> document_mesh_bounds(MeshHandle mesh) const noexcept;
     [[nodiscard]] std::optional<Bounds3> entity_world_bounds(const EntityRecord& entity) const;
@@ -262,7 +163,14 @@ class Storage final {
     SceneId id_;
     assets::Storage assets_;
     std::unique_ptr<Document> document_;
-    std::vector<std::optional<PrimitiveId>> document_mesh_primitives_;
+    struct DocumentRuntimePrimitive {
+        PrimitiveId source;
+        MaterialId material;
+        Bounds3 bounds;
+        std::optional<PrimitiveData> data;
+    };
+    std::vector<DocumentRuntimePrimitive> document_mesh_primitives_;
+    std::vector<std::vector<std::size_t>> document_primitive_groups_;
     std::vector<std::optional<EntityRecord>> entities_;
     std::uint64_t revision_ = 0;
     std::uint64_t render_content_revision_ = 0;

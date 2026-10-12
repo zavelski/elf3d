@@ -5,6 +5,8 @@ int elf3d_renderer_test();
 int elf3d_renderer_layout_test();
 int elf3d_renderer_frustum_test();
 int elf3d_renderer_document_test();
+int elf3d_renderer_optical_test();
+int elf3d_scene_tangent_test();
 int elf3d_display_transform_test();
 int elf3d_viewport_lifetime_test();
 
@@ -23,6 +25,10 @@ namespace {
 int main(int argument_count, char** arguments)
 {
     const std::string_view test_case = selected_case(argument_count, arguments);
+    if (test_case == "scene_tangents")
+        return elf3d_scene_tangent_test();
+    if (test_case == "renderer_optical")
+        return elf3d_renderer_optical_test();
     if (test_case == "renderer") {
         return elf3d_renderer_test();
     }

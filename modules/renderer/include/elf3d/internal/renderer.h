@@ -28,7 +28,8 @@ struct RenderItem {
     bool orientation_reversed = false;
     std::uint64_t material_identity = 0;
     AlphaMode alpha_mode = AlphaMode::opaque;
-    float camera_distance_squared = 0.0F;
+    float camera_depth = 0.0F;
+    bool transmission_active = false;
 };
 
 struct RenderList {
@@ -191,7 +192,7 @@ class Renderer final {
 
     [[nodiscard]] Result<void> draw_render_items(const scene::Storage& scene,
                                                  graphics::RenderTarget& target, RenderPass& pass);
-    [[nodiscard]] Result<bool> ensure_pipeline_resources();
+    [[nodiscard]] Result<bool> ensure_pipeline_resources(bool extended_materials);
     [[nodiscard]] Result<bool> ensure_environment_resources();
     [[nodiscard]] Result<bool> prepare_environment(const RenderRequest& request);
     [[nodiscard]] Result<RenderStatistics>
@@ -202,8 +203,7 @@ class Renderer final {
                                                    std::vector<PreparedDraw>& prepared);
     [[nodiscard]] Result<void> prepare_render_item_textures(const scene::Storage& scene,
                                                             const RenderItem& item,
-                                                            const DrawPacket& packet,
-                                                            RenderPass& pass,
+                                                            DrawPacket& packet, RenderPass& pass,
                                                             PreparedDraw& prepared);
     void configure_draw_description(const DrawPacket& packet, const RenderItem& item,
                                     const RenderPass& pass, PreparedDraw& prepared) const;
@@ -212,6 +212,9 @@ class Renderer final {
     [[nodiscard]] Result<std::size_t> cached_draw_packet_index(const scene::Storage& scene,
                                                                const RenderItem& item,
                                                                RenderStatistics& statistics);
+    [[nodiscard]] DrawPacket& mutable_draw_packet(const scene::Storage& scene,
+                                                  const RenderItem& item,
+                                                  std::size_t packet_index) noexcept;
     [[nodiscard]] const DrawPacket& draw_packet(const scene::Storage& scene, const RenderItem& item,
                                                 std::size_t packet_index) const noexcept;
     void synchronize_draw_packet_cache(const scene::Storage& scene);
@@ -244,6 +247,7 @@ class Renderer final {
     std::uint64_t engine_token_ = 0;
     std::unique_ptr<StudioEnvironmentSource> environment_source_;
     std::unique_ptr<graphics::GraphicsPipeline> pipeline_;
+    std::unique_ptr<graphics::GraphicsPipeline> core_pipeline_;
     std::unique_ptr<CacheState> cache_;
     std::unique_ptr<EnvironmentResources> environment_;
 };

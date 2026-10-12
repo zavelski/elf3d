@@ -280,16 +280,40 @@ the source Document. Translation, scaled/sheared bases, geometry, and opaque
 metadata numbers are excluded. Both policies share the normalized JSON layout;
 see [GLTF.md](GLTF.md) for formatting, bounds, and fidelity limits.
 
-## CPU volume and required-extension retention
+## Extended material descriptions
+
+`ModelMaterialDescription` uses owner-scoped `TextureId` values. The scene
+convenience `MaterialDescription` uses `TextureAssetHandle` values owned by the
+same Scene. Both expose optional transmission, volume, and clearcoat descriptions,
+plus specular-strength and specular-color texture bindings and independent
+`TextureMapping` values. Absence of an optical description preserves ordinary PBR.
+
+Transmission/clearcoat default to zero; clearcoat normal scale defaults to one.
+The twelve slots follow `MaterialTextureSlot` order. All slots support UV0/UV1
+and transforms within the existing image-format policies. Strength uses alpha,
+specular color uses sRGB RGB, transmission/clearcoat use linear red, and thickness/
+clearcoat roughness use linear green. Extension slots use ordinary texture bindings.
+IOR defaults to 1.5; zero is the defined infinite-IOR compatibility case.
+
+`RenderStatistics::transmission_scene_copies` counts scene-color copies in the
+current geometry render. `estimated_resident_transmission_bytes` reports the
+current viewport's allocated RGBA16F mip chain, including when a later ordinary
+scene reuses that viewport. Public structure layouts changed; rebuild consumers.
+Existing fields and their neutral aggregate-initialization order are retained.
+
+## Optical materials and required-extension retention
 
 `ModelMaterialDescription::volume` optionally owns `ModelVolumeDescription`:
 nonnegative finite `thickness_factor`, an owner-scoped `thickness_texture` and
 its mapping, `attenuation_color` in [0, 1], and an optional positive finite
 `attenuation_distance`. Absence of the distance represents infinite attenuation
 (the glTF default). The thickness texture follows the existing UV0/UV1 and
-missing-UV fallback contract. Import and normalized export retain these values;
-the renderer uses the core material fallback without volume effects. Required
-`KHR_materials_volume` remains unsupported by the runtime import contract.
+missing-UV fallback contract. Import and normalized export retain these values.
+Standard rendering evaluates Beer-Lambert attenuation through a local parallel
+slab using the complete instance transform; thickness remains in mesh units and
+attenuation distance in world units. Required `KHR_materials_volume` is accepted
+within this documented rendering approximation. Zero thickness remains a thin
+surface, and an absent attenuation distance disables absorption.
 
 `Document::required_extensions()` and its `DocumentView` counterpart borrow
 read-only names owned by the Document. They have the same lifetime/invalidation

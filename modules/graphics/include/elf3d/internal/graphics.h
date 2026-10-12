@@ -57,7 +57,7 @@ enum class TextureFilterMode {
 class StaticMesh;
 class Texture2D;
 class TextureCube;
-inline constexpr std::size_t material_texture_count = 5;
+inline constexpr std::size_t material_texture_count = material_texture_slot_count;
 struct Texture2DDescription {
     Extent2D extent;
     TextureFormat format = TextureFormat::rgba8_unorm;
@@ -109,10 +109,20 @@ struct DrawIndexedDescription {
     float normal_scale = 1.0F;
     float ior = 1.5F;
     float specular_factor = 1.0F;
+    float transmission_factor = 0.0F;
+    float thickness_factor = 0.0F;
+    float attenuation_distance = 0.0F; // Zero means infinite distance.
+    Float3 attenuation_color{1.0F, 1.0F, 1.0F};
+    float clearcoat_factor = 0.0F;
+    float clearcoat_roughness_factor = 0.0F;
+    float clearcoat_normal_scale = 1.0F;
+    bool clearcoat_uses_tangent_basis = false;
+    bool optical_queue = false;
+    Texture2D* transmission_scene = nullptr;
     Float3 specular_color_factor{1.0F, 1.0F, 1.0F};
     Color4 highlight_color{1.0F, 0.55F, 0.05F, 1.0F};
     float highlight_strength = 0.0F;
-    // Temporary observers ordered as base color, metallic-roughness, normal, occlusion, emissive.
+    // Temporary observers in MaterialTextureSlot order.
     std::span<Texture2D* const> textures;
     std::span<TextureCube* const> environment_cubemaps;
     std::span<Texture2D* const> environment_luts;
@@ -232,6 +242,10 @@ class RenderTarget {
     [[nodiscard]] virtual Result<void> clear(Color4 color) noexcept = 0;
     virtual void set_display_transform(const DisplayTransform& transform) noexcept = 0;
     [[nodiscard]] virtual Result<void> read_color_pixels(std::span<std::uint8_t> pixels) = 0;
+    // Viewport-owned linear HDR snapshot; preparation is lazy and copy generates mips once.
+    [[nodiscard]] virtual Result<Texture2D*> prepare_transmission_scene() noexcept = 0;
+    [[nodiscard]] virtual Result<void> capture_transmission_scene() noexcept = 0;
+    [[nodiscard]] virtual std::uint64_t transmission_scene_bytes() const noexcept = 0;
     [[nodiscard]] virtual TextureHandle color_texture() const noexcept = 0;
     [[nodiscard]] virtual bool is_valid() const noexcept = 0;
     [[nodiscard]] virtual std::uintptr_t backend_resource_token() const noexcept = 0;
@@ -298,7 +312,8 @@ class Device {
     [[nodiscard]] virtual Result<void>
     draw_indexed_batch(RenderTarget& target, GraphicsPipeline& pipeline,
                        std::span<StaticMesh* const> meshes,
-                       std::span<const DrawIndexedDescription> descriptions) noexcept = 0;
+                       std::span<const DrawIndexedDescription> descriptions,
+                       std::optional<std::size_t> capture_scene_before = std::nullopt) noexcept = 0;
     [[nodiscard]] virtual Result<void>
     draw_overlay(RenderTarget& target, const DrawOverlayDescription& description) noexcept = 0;
     [[nodiscard]] virtual Result<void>

@@ -131,7 +131,25 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
                             glGetUniformLocation(program, "u_clipping_retain_positive_half_space"),
                             glGetUniformLocation(program, "u_clipping_box_count"),
                             glGetUniformLocation(program, "u_clipping_box_minimums[0]"),
-                            glGetUniformLocation(program, "u_clipping_box_maximums[0]")};
+                            glGetUniformLocation(program, "u_clipping_box_maximums[0]"),
+                            glGetUniformLocation(program, "u_transmission_factor"),
+                            glGetUniformLocation(program, "u_thickness_factor"),
+                            glGetUniformLocation(program, "u_attenuation_distance"),
+                            glGetUniformLocation(program, "u_attenuation_color"),
+                            glGetUniformLocation(program, "u_clearcoat_factor"),
+                            glGetUniformLocation(program, "u_clearcoat_roughness_factor"),
+                            glGetUniformLocation(program, "u_clearcoat_normal_scale"),
+                            glGetUniformLocation(program, "u_clearcoat_uses_tangent_basis"),
+                            glGetUniformLocation(program, "u_has_extension_textures[0]"),
+                            glGetUniformLocation(program, "u_specular_texture"),
+                            glGetUniformLocation(program, "u_specular_color_texture"),
+                            glGetUniformLocation(program, "u_transmission_texture"),
+                            glGetUniformLocation(program, "u_thickness_texture"),
+                            glGetUniformLocation(program, "u_clearcoat_texture"),
+                            glGetUniformLocation(program, "u_clearcoat_roughness_texture"),
+                            glGetUniformLocation(program, "u_clearcoat_normal_texture"),
+                            glGetUniformLocation(program, "u_transmission_scene"),
+                            glGetUniformLocation(program, "u_has_transmission_scene")};
 }
 
 [[nodiscard]] bool transform_locations_valid(const UniformLocations& locations) noexcept
@@ -160,6 +178,33 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
 {
     return direct_lighting_locations_valid(locations) &&
            indirect_lighting_locations_valid(locations);
+}
+
+[[nodiscard]] bool optical_locations_valid(const UniformLocations& value) noexcept
+{
+    const std::array<GLint, 18> locations{value.transmission_factor,
+                                          value.thickness_factor,
+                                          value.attenuation_distance,
+                                          value.attenuation_color,
+                                          value.clearcoat_factor,
+                                          value.clearcoat_roughness_factor,
+                                          value.clearcoat_normal_scale,
+                                          value.clearcoat_uses_tangent_basis,
+                                          value.has_extension_textures,
+                                          value.specular_texture,
+                                          value.specular_color_texture,
+                                          value.transmission_texture,
+                                          value.thickness_texture,
+                                          value.clearcoat_texture,
+                                          value.clearcoat_roughness_texture,
+                                          value.clearcoat_normal_texture,
+                                          value.transmission_scene,
+                                          value.has_transmission_scene};
+    const bool complete = std::all_of(locations.begin(), locations.end(),
+                                      [](GLint location) { return location >= 0; });
+    const bool core = std::all_of(locations.begin(), locations.end(),
+                                  [](GLint location) { return location < 0; });
+    return complete || core;
 }
 
 [[nodiscard]] bool surface_locations_valid(const UniformLocations& locations) noexcept
@@ -203,11 +248,15 @@ create_graphics_program(const graphics::GraphicsPipelineDescription& description
 
 void configure_texture_sampler_uniforms(GLuint program, const UniformLocations& uniforms) noexcept
 {
-    const std::array<GLint, 8> locations{
-        uniforms.base_color_texture,   uniforms.metallic_roughness_texture,
-        uniforms.normal_texture,       uniforms.occlusion_texture,
-        uniforms.emissive_texture,     uniforms.diffuse_environment,
-        uniforms.specular_environment, uniforms.environment_brdf_lut,
+    const std::array<GLint, 16> locations{
+        uniforms.base_color_texture,       uniforms.metallic_roughness_texture,
+        uniforms.normal_texture,           uniforms.occlusion_texture,
+        uniforms.emissive_texture,         uniforms.diffuse_environment,
+        uniforms.specular_environment,     uniforms.environment_brdf_lut,
+        uniforms.specular_texture,         uniforms.specular_color_texture,
+        uniforms.transmission_texture,     uniforms.thickness_texture,
+        uniforms.clearcoat_texture,        uniforms.clearcoat_roughness_texture,
+        uniforms.clearcoat_normal_texture, uniforms.transmission_scene,
     };
     for (std::size_t index = 0; index < locations.size(); ++index) {
         glProgramUniform1i(program, locations[index], static_cast<GLint>(index));
@@ -220,7 +269,8 @@ bool UniformLocations::valid() const noexcept
 {
     return transform_locations_valid(*this) && lighting_locations_valid(*this) &&
            surface_locations_valid(*this) && texture_unit_locations_valid(*this) &&
-           texture_parameter_locations_valid(*this) && clipping_locations_valid(*this);
+           texture_parameter_locations_valid(*this) && clipping_locations_valid(*this) &&
+           optical_locations_valid(*this);
 }
 
 Result<std::unique_ptr<graphics::GraphicsPipeline>>

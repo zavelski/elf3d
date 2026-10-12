@@ -150,6 +150,7 @@ class RenderStateGuard final {
   private:
     static void set_enabled(GLenum capability, GLboolean enabled) noexcept;
 
+    void capture_sampler_binding(std::size_t unit) noexcept;
     GLint draw_framebuffer_ = 0;
     GLint read_framebuffer_ = 0;
     GLint viewport_[4]{};
@@ -171,7 +172,8 @@ class RenderStateGuard final {
     GLint vertex_array_ = 0;
     GLint array_buffer_ = 0;
     GLint active_texture_ = GL_TEXTURE0;
-    std::array<GLint, 6> texture_2d_units_{};
+    std::array<GLint, 14> texture_2d_units_{};
+    std::array<GLint, 16> samplers_{};
     std::array<GLint, 2> texture_cube_units_{};
     GLint depth_function_ = GL_LESS;
     GLint blend_source_rgb_ = GL_ONE;
@@ -243,6 +245,24 @@ struct UniformLocations {
     GLint clipping_box_count = -1;
     GLint clipping_box_minimums = -1;
     GLint clipping_box_maximums = -1;
+    GLint transmission_factor = -1;
+    GLint thickness_factor = -1;
+    GLint attenuation_distance = -1;
+    GLint attenuation_color = -1;
+    GLint clearcoat_factor = -1;
+    GLint clearcoat_roughness_factor = -1;
+    GLint clearcoat_normal_scale = -1;
+    GLint clearcoat_uses_tangent_basis = -1;
+    GLint has_extension_textures = -1;
+    GLint specular_texture = -1;
+    GLint specular_color_texture = -1;
+    GLint transmission_texture = -1;
+    GLint thickness_texture = -1;
+    GLint clearcoat_texture = -1;
+    GLint clearcoat_roughness_texture = -1;
+    GLint clearcoat_normal_texture = -1;
+    GLint transmission_scene = -1;
+    GLint has_transmission_scene = -1;
 
     [[nodiscard]] bool valid() const noexcept;
 };

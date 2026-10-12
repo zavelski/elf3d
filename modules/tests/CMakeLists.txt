@@ -93,6 +93,7 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_metadata_round_trip_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_camera_round_trip_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_json_format_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/gltf/tests/gltf_optical_material_test.cpp
 )
 elf3d_configure_group_test(elf3d_import_tests)
 target_compile_definitions(
@@ -121,6 +122,7 @@ add_test(NAME elf3d.model_gltf_import COMMAND elf3d_import_tests --case model_gl
 add_test(NAME elf3d.model_gltf_tangent COMMAND elf3d_import_tests --case model_gltf_tangent)
 add_test(NAME elf3d.model_gltf_metadata COMMAND elf3d_import_tests --case gltf_metadata)
 add_test(NAME elf3d.model_gltf_json_format COMMAND elf3d_import_tests --case gltf_json_format)
+add_test(NAME elf3d.model_gltf_optical_material COMMAND elf3d_import_tests --case optical_material)
 
 add_executable(
     elf3d_model_tests
@@ -194,6 +196,8 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_layout_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_frustum_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_document_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/renderer/tests/renderer_optical_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/scene/tests/tangent_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/renderer/tests/display_transform_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/viewport/tests/offscreen_viewport_test.cpp
         ${PROJECT_SOURCE_DIR}/modules/viewport/tests/viewport_navigation_test.cpp
@@ -212,6 +216,8 @@ add_test(NAME elf3d.renderer COMMAND elf3d_view_tests --case renderer)
 add_test(NAME elf3d.renderer_layout COMMAND elf3d_view_tests --case renderer_layout)
 add_test(NAME elf3d.renderer_frustum COMMAND elf3d_view_tests --case renderer_frustum)
 add_test(NAME elf3d.renderer_document COMMAND elf3d_view_tests --case renderer_document)
+add_test(NAME elf3d.renderer_optical COMMAND elf3d_view_tests --case renderer_optical)
+add_test(NAME elf3d.scene_tangents COMMAND elf3d_view_tests --case scene_tangents)
 add_test(NAME elf3d.display_transform COMMAND elf3d_view_tests --case display_transform)
 add_test(NAME elf3d.viewport_lifetime COMMAND elf3d_view_tests --case viewport_lifetime)
 

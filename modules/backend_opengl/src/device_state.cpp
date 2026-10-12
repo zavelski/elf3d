@@ -321,8 +321,10 @@ AllocationStateGuard::~AllocationStateGuard()
 
 RenderStateGuard::RenderStateGuard() noexcept
 {
-    constexpr std::array<GLenum, 6> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
-                                                     GL_TEXTURE3, GL_TEXTURE4, GL_TEXTURE7};
+    constexpr std::array<GLenum, 14> texture_2d_units{
+        GL_TEXTURE0,  GL_TEXTURE1,  GL_TEXTURE2,  GL_TEXTURE3,  GL_TEXTURE4,
+        GL_TEXTURE7,  GL_TEXTURE8,  GL_TEXTURE9,  GL_TEXTURE10, GL_TEXTURE11,
+        GL_TEXTURE12, GL_TEXTURE13, GL_TEXTURE14, GL_TEXTURE15};
     constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE5, GL_TEXTURE6};
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer_);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_framebuffer_);
@@ -348,10 +350,12 @@ RenderStateGuard::RenderStateGuard() noexcept
     for (std::size_t index = 0; index < texture_2d_units_.size(); ++index) {
         glActiveTexture(texture_2d_units[index]);
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture_2d_units_[index]);
+        capture_sampler_binding(texture_2d_units[index] - GL_TEXTURE0);
     }
     for (std::size_t index = 0; index < texture_cube_units_.size(); ++index) {
         glActiveTexture(texture_cube_units[index]);
         glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &texture_cube_units_[index]);
+        capture_sampler_binding(texture_cube_units[index] - GL_TEXTURE0);
     }
     glActiveTexture(static_cast<GLenum>(active_texture_));
     glGetIntegerv(GL_DEPTH_FUNC, &depth_function_);
@@ -367,10 +371,20 @@ RenderStateGuard::RenderStateGuard() noexcept
     glGetDoublev(GL_DEPTH_RANGE, depth_range_);
 }
 
+void RenderStateGuard::capture_sampler_binding(std::size_t unit) noexcept
+{
+    // Query the already active unit together with its texture binding.
+    glGetIntegerv(GL_SAMPLER_BINDING, &samplers_[unit]);
+    if (samplers_[unit] != 0)
+        glBindSampler(static_cast<GLuint>(unit), 0);
+}
+
 RenderStateGuard::~RenderStateGuard()
 {
-    constexpr std::array<GLenum, 6> texture_2d_units{GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
-                                                     GL_TEXTURE3, GL_TEXTURE4, GL_TEXTURE7};
+    constexpr std::array<GLenum, 14> texture_2d_units{
+        GL_TEXTURE0,  GL_TEXTURE1,  GL_TEXTURE2,  GL_TEXTURE3,  GL_TEXTURE4,
+        GL_TEXTURE7,  GL_TEXTURE8,  GL_TEXTURE9,  GL_TEXTURE10, GL_TEXTURE11,
+        GL_TEXTURE12, GL_TEXTURE13, GL_TEXTURE14, GL_TEXTURE15};
     constexpr std::array<GLenum, 2> texture_cube_units{GL_TEXTURE5, GL_TEXTURE6};
     set_enabled(GL_SCISSOR_TEST, scissor_enabled_);
     set_enabled(GL_FRAMEBUFFER_SRGB, framebuffer_srgb_enabled_);
@@ -408,6 +422,10 @@ RenderStateGuard::~RenderStateGuard()
     for (std::size_t index = 0; index < texture_cube_units_.size(); ++index) {
         glActiveTexture(texture_cube_units[index]);
         glBindTexture(GL_TEXTURE_CUBE_MAP, static_cast<GLuint>(texture_cube_units_[index]));
+    }
+    for (std::size_t index = 0; index < samplers_.size(); ++index) {
+        if (samplers_[index] != 0)
+            glBindSampler(static_cast<GLuint>(index), static_cast<GLuint>(samplers_[index]));
     }
     glActiveTexture(static_cast<GLenum>(active_texture_));
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(draw_framebuffer_));

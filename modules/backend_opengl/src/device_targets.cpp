@@ -7,6 +7,7 @@
 #include "device_display_shaders.hpp"
 #include "device_internal.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -21,6 +22,10 @@
 #include <vector>
 
 namespace elf3d::backend::opengl::device_detail {
+[[nodiscard]] Result<std::unique_ptr<graphics::Texture2D>>
+create_texture_2d(std::shared_ptr<OpenGLDeviceState> state,
+                  const graphics::Texture2DDescription& description) noexcept;
+[[nodiscard]] Result<GLuint> texture_object(const graphics::Texture2D* texture) noexcept;
 [[nodiscard]] Result<void> read_display_pixels(GLuint texture, Extent2D extent,
                                                std::span<std::uint8_t> pixels) noexcept;
 namespace {
@@ -275,6 +280,15 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         }
 
         const RenderTargetObjects objects = objects_result.value();
+        std::unique_ptr<graphics::Texture2D> replacement_snapshot;
+        if (transmission_scene_) {
+            auto snapshot = allocate_transmission_scene(extent);
+            if (!snapshot) {
+                delete_render_target_objects(objects);
+                return snapshot.error();
+            }
+            replacement_snapshot = std::move(snapshot).value();
+        }
 
         Result<TextureHandle> handle_result =
             state_->register_texture(objects.display_texture, extent, this);
@@ -284,6 +298,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         }
 
         release();
+        transmission_scene_ = std::move(replacement_snapshot);
         framebuffer_ = objects.framebuffer;
         linear_color_texture_ = objects.linear_color_texture;
         display_framebuffer_ = objects.display_framebuffer;
@@ -322,6 +337,57 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
         }
     }
 
+    [[nodiscard]] Result<graphics::Texture2D*> prepare_transmission_scene() noexcept override
+    {
+        const auto validation = state_->validate_operation();
+        if (!validation)
+            return validation.error();
+        if (!is_valid())
+            return Error{ErrorCode::texture_unavailable, "Transmission requires a valid viewport"};
+        if (!transmission_scene_) {
+            auto snapshot = allocate_transmission_scene(extent_);
+            if (!snapshot)
+                return snapshot.error();
+            transmission_scene_ = std::move(snapshot).value();
+        }
+        return transmission_scene_.get();
+    }
+    [[nodiscard]] Result<void> capture_transmission_scene() noexcept override
+    {
+        const auto validation = state_->validate_operation();
+        if (!validation)
+            return validation.error();
+        if (!is_valid() || !transmission_scene_)
+            return Error{ErrorCode::texture_unavailable, "Transmission snapshot was not prepared"};
+        auto texture = texture_object(transmission_scene_.get());
+        if (!texture)
+            return texture.error();
+        RenderStateGuard guard;
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_);
+        glActiveTexture(GL_TEXTURE15);
+        glBindTexture(GL_TEXTURE_2D, texture.value());
+        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, static_cast<GLsizei>(extent_.width),
+                            static_cast<GLsizei>(extent_.height));
+        glGenerateMipmap(GL_TEXTURE_2D);
+        if (glGetError() != GL_NO_ERROR)
+            return Error{ErrorCode::gpu_texture_upload_failed,
+                         "OpenGL transmission snapshot copy failed"};
+        return {};
+    }
+    [[nodiscard]] std::uint64_t transmission_scene_bytes() const noexcept override
+    {
+        if (!transmission_scene_)
+            return 0;
+        std::uint64_t bytes = 0;
+        auto width = extent_.width, height = extent_.height;
+        while (true) {
+            bytes += static_cast<std::uint64_t>(width) * height * 8U;
+            if (width == 1 && height == 1)
+                return bytes;
+            width = std::max(width / 2U, 1U);
+            height = std::max(height / 2U, 1U);
+        }
+    }
     [[nodiscard]] TextureHandle color_texture() const noexcept override
     {
         return color_texture_handle_;
@@ -424,6 +490,16 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
     }
 
   private:
+    [[nodiscard]] Result<std::unique_ptr<graphics::Texture2D>>
+    allocate_transmission_scene(Extent2D extent) noexcept
+    {
+        graphics::Texture2DDescription description;
+        description.extent = extent;
+        description.format = graphics::TextureFormat::rgba16_float;
+        description.wrap_u = description.wrap_v = graphics::TextureAddressMode::clamp_to_edge;
+        description.min_filter = graphics::TextureFilterMode::linear_mipmap_linear;
+        return create_texture_2d(state_, description);
+    }
     [[nodiscard]] Result<void> ensure_display_resolve_resources()
     {
         if (resolve_program_ != 0 && resolve_vertex_array_ != 0 && resolve_texture_uniform_ >= 0 &&
@@ -471,6 +547,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
                                          display_texture_, depth_renderbuffer_);
         }
 
+        transmission_scene_.reset();
         framebuffer_ = 0;
         linear_color_texture_ = 0;
         display_framebuffer_ = 0;
@@ -493,6 +570,7 @@ class OpenGLRenderTarget final : public graphics::RenderTarget, public ColorText
     GLint resolve_exposure_uniform_ = -1;
     GLint resolve_tone_mapping_uniform_ = -1;
     TextureHandle color_texture_handle_;
+    std::unique_ptr<graphics::Texture2D> transmission_scene_;
     DisplayTransform display_transform_;
     bool display_stale_ = false;
 };

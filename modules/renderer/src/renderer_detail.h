@@ -11,6 +11,7 @@ namespace elf3d::renderer {
 runtime_address_mode(scene::RuntimeTextureWrap wrap) noexcept;
 [[nodiscard]] graphics::TextureFilterMode
 runtime_filter_mode(scene::RuntimeTextureFilter filter) noexcept;
+[[nodiscard]] AlphaMode runtime_alpha_mode(scene::RuntimeAlphaMode mode) noexcept;
 [[nodiscard]] MaterialDescription
 runtime_material_description(const scene::RuntimeMaterialView& source) noexcept;
 struct RuntimeVertexBuffer {

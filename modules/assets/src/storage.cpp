@@ -1,6 +1,7 @@
 #include <elf3d/internal/assets.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <elf3d/internal/math.h>
 #include <limits>
@@ -73,49 +74,100 @@ MaterialDescription sanitized_material(const MaterialDescription& description) n
     result.emissive_factor.y = std::max(description.emissive_factor.y, 0.0F);
     result.emissive_factor.z = std::max(description.emissive_factor.z, 0.0F);
     result.occlusion_strength = std::clamp(description.occlusion_strength, 0.0F, 1.0F);
-    result.ior = std::max(description.ior, 1.0F);
+    result.ior = description.ior == 0.0F ? 0.0F : std::max(description.ior, 1.0F);
     result.specular_factor = std::clamp(description.specular_factor, 0.0F, 1.0F);
-    result.specular_color_factor.x = std::clamp(description.specular_color_factor.x, 0.0F, 1.0F);
-    result.specular_color_factor.y = std::clamp(description.specular_color_factor.y, 0.0F, 1.0F);
-    result.specular_color_factor.z = std::clamp(description.specular_color_factor.z, 0.0F, 1.0F);
+    result.specular_color_factor.x = std::max(description.specular_color_factor.x, 0.0F);
+    result.specular_color_factor.y = std::max(description.specular_color_factor.y, 0.0F);
+    result.specular_color_factor.z = std::max(description.specular_color_factor.z, 0.0F);
     return result;
 }
 
 bool has_valid_texture_handles(const MaterialDescription& description,
                                const Storage& storage) noexcept
 {
-    const auto valid_texture = [&storage](TextureAssetHandle texture) {
-        return !texture.is_valid() || static_cast<bool>(storage.texture(texture));
-    };
-    return valid_texture(description.base_color_texture) &&
-           valid_texture(description.metallic_roughness_texture) &&
-           valid_texture(description.normal_texture) &&
-           valid_texture(description.occlusion_texture) &&
-           valid_texture(description.emissive_texture);
+    const std::array<TextureAssetHandle, material_texture_slot_count> textures{
+        description.base_color_texture,
+        description.metallic_roughness_texture,
+        description.normal_texture,
+        description.occlusion_texture,
+        description.emissive_texture,
+        description.specular_texture,
+        description.specular_color_texture,
+        description.transmission ? description.transmission->texture : TextureAssetHandle{},
+        description.volume ? description.volume->thickness_texture : TextureAssetHandle{},
+        description.clearcoat ? description.clearcoat->texture : TextureAssetHandle{},
+        description.clearcoat ? description.clearcoat->roughness_texture : TextureAssetHandle{},
+        description.clearcoat ? description.clearcoat->normal_texture : TextureAssetHandle{}};
+    for (const auto texture : textures) {
+        if (texture.is_valid() && !storage.texture(texture))
+            return false;
+    }
+    return true;
 }
 
 bool has_valid_texture_mappings(const MaterialDescription& description) noexcept
 {
-    return finite_mapping(description.base_color_texture_mapping) &&
-           finite_mapping(description.metallic_roughness_texture_mapping) &&
-           finite_mapping(description.normal_texture_mapping) &&
-           finite_mapping(description.occlusion_texture_mapping) &&
-           finite_mapping(description.emissive_texture_mapping);
+    const std::array<TextureMapping, material_texture_slot_count> mappings{
+        description.base_color_texture_mapping,
+        description.metallic_roughness_texture_mapping,
+        description.normal_texture_mapping,
+        description.occlusion_texture_mapping,
+        description.emissive_texture_mapping,
+        description.specular_texture_mapping,
+        description.specular_color_texture_mapping,
+        description.transmission ? description.transmission->texture_mapping : TextureMapping{},
+        description.volume ? description.volume->thickness_texture_mapping : TextureMapping{},
+        description.clearcoat ? description.clearcoat->texture_mapping : TextureMapping{},
+        description.clearcoat ? description.clearcoat->roughness_texture_mapping : TextureMapping{},
+        description.clearcoat ? description.clearcoat->normal_texture_mapping : TextureMapping{}};
+    return std::all_of(mappings.begin(), mappings.end(), finite_mapping);
+}
+
+bool valid_transmission(const TransmissionDescription& value) noexcept
+{
+    return std::isfinite(value.factor) && value.factor >= 0 && value.factor <= 1;
+}
+bool valid_clearcoat(const ClearcoatDescription& value) noexcept
+{
+    return std::isfinite(value.factor) && value.factor >= 0 && value.factor <= 1 &&
+           std::isfinite(value.roughness_factor) && value.roughness_factor >= 0 &&
+           value.roughness_factor <= 1 && std::isfinite(value.normal_scale);
+}
+bool valid_volume(const VolumeDescription& value) noexcept
+{
+    return std::isfinite(value.thickness_factor) && value.thickness_factor >= 0 &&
+           (!value.attenuation_distance ||
+            (std::isfinite(*value.attenuation_distance) && *value.attenuation_distance > 0));
+}
+bool valid_optical_factors(const MaterialDescription& value) noexcept
+{
+    return (!value.transmission || valid_transmission(*value.transmission)) &&
+           (!value.clearcoat || valid_clearcoat(*value.clearcoat)) &&
+           (!value.volume || valid_volume(*value.volume));
 }
 
 bool has_valid_material_scalars(const MaterialDescription& description) noexcept
 {
-    return valid_alpha_mode(description.alpha_mode) && std::isfinite(description.alpha_cutoff) &&
-           std::isfinite(description.metallic_factor) &&
-           std::isfinite(description.roughness_factor) && std::isfinite(description.normal_scale) &&
-           std::isfinite(description.occlusion_strength) && std::isfinite(description.ior) &&
-           std::isfinite(description.specular_factor);
+    const std::array<float, 7> values{description.alpha_cutoff,       description.metallic_factor,
+                                      description.roughness_factor,   description.normal_scale,
+                                      description.occlusion_strength, description.ior,
+                                      description.specular_factor};
+    return valid_alpha_mode(description.alpha_mode) && valid_optical_factors(description) &&
+           std::all_of(values.begin(), values.end(),
+                       [](float value) { return std::isfinite(value); });
 }
 
 bool has_valid_material_colors(const MaterialDescription& description) noexcept
 {
     return math::is_finite(description.emissive_factor) &&
-           math::is_finite(description.specular_color_factor);
+           math::is_finite(description.specular_color_factor) &&
+           (!description.volume || (math::is_finite(description.volume->attenuation_color) &&
+                                    description.volume->attenuation_color.x >= 0 &&
+                                    description.volume->attenuation_color.x <= 1 &&
+                                    description.volume->attenuation_color.y >= 0 &&
+                                    description.volume->attenuation_color.y <= 1 &&
+                                    description.volume->attenuation_color.z >= 0 &&
+                                    description.volume->attenuation_color.z <= 1));
 }
 
 Result<void> validate_material(const MaterialDescription& description,

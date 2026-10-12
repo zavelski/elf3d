@@ -319,6 +319,19 @@ void configure_mesh_attributes(graphics::VertexLayout layout, std::size_t vertex
     return format == graphics::TextureFormat::rgba16_float ? 8U : 4U;
 }
 
+[[nodiscard]] bool valid_texture_pixels(const graphics::Texture2DDescription& description) noexcept
+{
+    const std::size_t width = description.extent.width;
+    const std::size_t height = description.extent.height;
+    const std::size_t bytes_per_pixel = texture_bytes_per_pixel(description.format);
+    if (width > std::numeric_limits<std::size_t>::max() / bytes_per_pixel ||
+        height > std::numeric_limits<std::size_t>::max() / (width * bytes_per_pixel))
+        return false;
+    if (description.pixels.empty() && description.format == graphics::TextureFormat::rgba16_float)
+        return true;
+    return description.pixels.size() == width * height * bytes_per_pixel;
+}
+
 [[nodiscard]] Result<void>
 validate_texture_description(const graphics::Texture2DDescription& description,
                              const OpenGLDeviceState& state) noexcept
@@ -329,12 +342,7 @@ validate_texture_description(const graphics::Texture2DDescription& description,
                      "Texture dimensions are zero or exceed OpenGL limits"};
     }
 
-    const std::size_t width = description.extent.width;
-    const std::size_t height = description.extent.height;
-    const std::size_t bytes_per_pixel = texture_bytes_per_pixel(description.format);
-    if (width > std::numeric_limits<std::size_t>::max() / bytes_per_pixel ||
-        height > std::numeric_limits<std::size_t>::max() / (width * bytes_per_pixel) ||
-        description.pixels.size() != width * height * bytes_per_pixel) {
+    if (!valid_texture_pixels(description)) {
         return Error{ErrorCode::gpu_texture_upload_failed,
                      "Texture upload does not contain tightly packed pixels"};
     }
@@ -367,7 +375,8 @@ void upload_texture(GLuint texture, const graphics::Texture2DDescription& descri
                  static_cast<GLsizei>(description.extent.height), 0, GL_RGBA, type,
                  description.pixels.data());
     if (uses_mipmaps(description.min_filter)) {
-        glGenerateMipmap(GL_TEXTURE_2D);
+        if (!description.pixels.empty())
+            glGenerateMipmap(GL_TEXTURE_2D);
     }
 }
 

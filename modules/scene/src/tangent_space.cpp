@@ -1,10 +1,8 @@
-#include <elf3d/internal/gltf.h>
+#include "tangent_space.h"
 
 #include <elf3d/core/error.h>
 #include <elf3d/core/result.h>
 #include <elf3d/model.h>
-
-#include "importer_internal.hpp"
 
 #include <mikktspace.h>
 
@@ -14,13 +12,16 @@
 #include <cstdint>
 #include <elf3d/core/diagnostics.h>
 #include <limits>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-namespace elf3d::gltf::importer_detail {
+namespace elf3d::scene::tangent_detail {
 namespace {
+
+constexpr std::size_t maximum_tangent_vertices = 50000000U;
 
 struct TangentGenerationState final {
     PrimitiveData& data;
@@ -179,11 +180,11 @@ void reserve_vertex_attributes(PrimitiveData& data, std::size_t count)
             result.indices.push_back(existing->second);
             continue;
         }
-        if (result.positions.size() >= maximum_imported_vertices ||
+        if (result.positions.size() >= maximum_tangent_vertices ||
             result.positions.size() >=
                 static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
             return Error{ErrorCode::resource_limit_exceeded,
-                         "MikkTSpace vertex splitting exceeds the imported vertex limit"};
+                         "MikkTSpace vertex splitting exceeds the runtime vertex limit"};
         }
 
         const std::uint32_t destination = static_cast<std::uint32_t>(result.positions.size());
@@ -200,22 +201,35 @@ void reserve_vertex_attributes(PrimitiveData& data, std::size_t count)
     return true;
 }
 
+[[nodiscard]] PrimitiveData copy_geometry(const PrimitiveDataView& source)
+{
+    PrimitiveData result;
+    result.positions.assign(source.positions.begin(), source.positions.end());
+    result.normals.assign(source.normals.begin(), source.normals.end());
+    result.texcoord0.assign(source.texcoord0.begin(), source.texcoord0.end());
+    result.texcoord1.assign(source.texcoord1.begin(), source.texcoord1.end());
+    result.colors.assign(source.colors.begin(), source.colors.end());
+    result.indices.assign(source.indices.begin(), source.indices.end());
+    return result;
+}
+
 } // namespace
 
-Result<bool> generate_mikktspace_tangents(PrimitiveData& data, std::uint32_t texcoord_set)
+Result<std::optional<PrimitiveData>> prepare_tangent_geometry(const PrimitiveDataView& source,
+                                                              std::uint32_t texcoord_set)
 {
-    if (data.indices.empty() || data.indices.size() % 3U != 0U || data.normals.empty() ||
-        data.indices.size() / 3U > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-        return false;
+    if (source.indices.empty() || source.indices.size() % 3U != 0U || source.normals.empty() ||
+        source.indices.size() / 3U > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        return std::optional<PrimitiveData>{};
     }
 
-    const std::span<const Float2> texcoords = texcoord_set == 1U
-                                                  ? std::span<const Float2>{data.texcoord1}
-                                                  : std::span<const Float2>{data.texcoord0};
-    if (texcoords.size() != data.positions.size()) {
-        return false;
+    const std::span<const Float2> texcoords =
+        texcoord_set == 1U ? source.texcoord1 : source.texcoord0;
+    if (texcoords.size() != source.positions.size()) {
+        return std::optional<PrimitiveData>{};
     }
 
+    PrimitiveData data = copy_geometry(source);
     TangentGenerationState state{data, texcoords, std::vector<Float4>(data.indices.size())};
     SMikkTSpaceInterface interface{};
     interface.m_getNumFaces = face_count;
@@ -226,9 +240,14 @@ Result<bool> generate_mikktspace_tangents(PrimitiveData& data, std::uint32_t tex
     interface.m_setTSpaceBasic = write_tangent;
     SMikkTSpaceContext context{&interface, &state};
     if (genTangSpaceDefault(&context) == 0) {
-        return false;
+        return std::optional<PrimitiveData>{};
     }
-    return split_tangent_vertices(data, std::move(state.corner_tangents));
+    const auto split = split_tangent_vertices(data, std::move(state.corner_tangents));
+    if (!split)
+        return split.error();
+    if (!split.value())
+        return std::optional<PrimitiveData>{};
+    return std::optional<PrimitiveData>{std::move(data)};
 }
 
-} // namespace elf3d::gltf::importer_detail
+} // namespace elf3d::scene::tangent_detail

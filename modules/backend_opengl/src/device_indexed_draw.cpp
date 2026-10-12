@@ -38,6 +38,7 @@ struct IndexedDrawResources {
     PipelineView pipeline;
     MeshView mesh;
     std::array<GLuint, graphics::material_texture_count> textures{};
+    GLuint transmission_scene = 0;
 };
 
 struct EnvironmentDrawResources final {
@@ -57,6 +58,7 @@ struct IndexedBatchStateCache {
     GLuint vertex_array{0};
     bool textures_valid{false};
     std::array<GLuint, graphics::material_texture_count> textures{};
+    GLuint transmission_scene = 0;
 };
 
 [[nodiscard]] Result<IndexedDrawResources>
@@ -66,7 +68,7 @@ indexed_draw_resources(graphics::RenderTarget& target, graphics::GraphicsPipelin
 {
     if (description.textures.size() != graphics::material_texture_count) {
         return Error{ErrorCode::invalid_argument,
-                     "Indexed drawing requires five ordered material texture observers"};
+                     "Indexed drawing requires twelve ordered material texture observers"};
     }
 
     Result<RenderTargetView> target_result = render_target_view(target);
@@ -93,6 +95,10 @@ indexed_draw_resources(graphics::RenderTarget& target, graphics::GraphicsPipelin
         }
         resources.textures[index] = texture_result.value();
     }
+    const auto snapshot = texture_object(description.transmission_scene);
+    if (!snapshot)
+        return snapshot.error();
+    resources.transmission_scene = snapshot.value();
     return resources;
 }
 
@@ -145,38 +151,106 @@ void upload_indexed_frame_uniforms(const PipelineView& pipeline,
     }
 }
 
+void upload_base_material_uniforms(const UniformLocations& uniforms,
+                                   const graphics::DrawIndexedDescription& description,
+                                   const graphics::DrawIndexedDescription* previous) noexcept
+{
+    if (!previous || previous->base_color != description.base_color)
+        glUniform4f(uniforms.base_color, description.base_color.red, description.base_color.green,
+                    description.base_color.blue, description.base_color.alpha);
+    if (!previous || previous->metallic_factor != description.metallic_factor)
+        glUniform1f(uniforms.metallic_factor, description.metallic_factor);
+    if (!previous || previous->roughness_factor != description.roughness_factor)
+        glUniform1f(uniforms.roughness_factor, description.roughness_factor);
+    if (!previous || previous->emissive_factor != description.emissive_factor)
+        glUniform3f(uniforms.emissive_factor, description.emissive_factor.x,
+                    description.emissive_factor.y, description.emissive_factor.z);
+}
+
+void upload_surface_material_uniforms(const UniformLocations& uniforms,
+                                      const graphics::DrawIndexedDescription& description,
+                                      const graphics::DrawIndexedDescription* previous) noexcept
+{
+    if (!previous || previous->occlusion_strength != description.occlusion_strength)
+        glUniform1f(uniforms.occlusion_strength, description.occlusion_strength);
+    if (!previous || previous->normal_scale != description.normal_scale)
+        glUniform1f(uniforms.normal_scale, description.normal_scale);
+}
+
+void upload_specular_material_uniforms(const UniformLocations& uniforms,
+                                       const graphics::DrawIndexedDescription& description,
+                                       const graphics::DrawIndexedDescription* previous) noexcept
+{
+    if (!previous || previous->ior != description.ior)
+        glUniform1f(uniforms.ior, description.ior);
+    if (!previous || previous->specular_factor != description.specular_factor)
+        glUniform1f(uniforms.specular_factor, description.specular_factor);
+    if (!previous || previous->specular_color_factor != description.specular_color_factor)
+        glUniform3f(uniforms.specular_color_factor, description.specular_color_factor.x,
+                    description.specular_color_factor.y, description.specular_color_factor.z);
+}
+
+void upload_volume_material_uniforms(const UniformLocations& uniforms,
+                                     const graphics::DrawIndexedDescription& description,
+                                     const graphics::DrawIndexedDescription* previous) noexcept
+{
+    if (!previous || previous->transmission_factor != description.transmission_factor)
+        glUniform1f(uniforms.transmission_factor, description.transmission_factor);
+    if (!previous || previous->thickness_factor != description.thickness_factor)
+        glUniform1f(uniforms.thickness_factor, description.thickness_factor);
+    if (!previous || previous->attenuation_distance != description.attenuation_distance)
+        glUniform1f(uniforms.attenuation_distance, description.attenuation_distance);
+    if (!previous || previous->attenuation_color != description.attenuation_color)
+        glUniform3f(uniforms.attenuation_color, description.attenuation_color.x,
+                    description.attenuation_color.y, description.attenuation_color.z);
+}
+
+void upload_clearcoat_material_uniforms(const UniformLocations& uniforms,
+                                        const graphics::DrawIndexedDescription& description,
+                                        const graphics::DrawIndexedDescription* previous) noexcept
+{
+    if (!previous || previous->clearcoat_factor != description.clearcoat_factor)
+        glUniform1f(uniforms.clearcoat_factor, description.clearcoat_factor);
+    if (!previous || previous->clearcoat_roughness_factor != description.clearcoat_roughness_factor)
+        glUniform1f(uniforms.clearcoat_roughness_factor, description.clearcoat_roughness_factor);
+    if (!previous || previous->clearcoat_normal_scale != description.clearcoat_normal_scale)
+        glUniform1f(uniforms.clearcoat_normal_scale, description.clearcoat_normal_scale);
+    if (!previous ||
+        previous->clearcoat_uses_tangent_basis != description.clearcoat_uses_tangent_basis)
+        glUniform1i(uniforms.clearcoat_uses_tangent_basis,
+                    description.clearcoat_uses_tangent_basis ? 1 : 0);
+}
+
+void upload_coverage_material_uniforms(const UniformLocations& uniforms,
+                                       const graphics::DrawIndexedDescription& description,
+                                       const graphics::DrawIndexedDescription* previous) noexcept
+{
+    if (!previous || previous->alpha_mode != description.alpha_mode)
+        glUniform1i(uniforms.alpha_mode, static_cast<GLint>(description.alpha_mode));
+    if (!previous || previous->alpha_cutoff != description.alpha_cutoff)
+        glUniform1f(uniforms.alpha_cutoff, description.alpha_cutoff);
+    if (!previous || previous->unlit != description.unlit)
+        glUniform1i(uniforms.unlit, description.unlit ? 1 : 0);
+}
 void upload_indexed_item_uniforms(const UniformLocations& uniforms,
                                   const graphics::DrawIndexedDescription& description,
-                                  const IndexedDrawResources& resources) noexcept
+                                  const IndexedDrawResources& resources,
+                                  const graphics::DrawIndexedDescription* previous) noexcept
 {
     glUniformMatrix4fv(uniforms.model, 1, GL_FALSE, description.model_matrix.data());
     glUniformMatrix3fv(uniforms.normal, 1, GL_FALSE, description.normal_matrix.data());
     glUniform1i(uniforms.vertex_layout, static_cast<GLint>(resources.mesh.vertex_layout));
     glUniform1f(uniforms.orientation_sign, description.front_face_clockwise ? -1.0F : 1.0F);
-    glUniform4f(uniforms.base_color, description.base_color.red, description.base_color.green,
-                description.base_color.blue, description.base_color.alpha);
-    glUniform1f(uniforms.metallic_factor, description.metallic_factor);
-    glUniform1f(uniforms.roughness_factor, description.roughness_factor);
-    glUniform3f(uniforms.emissive_factor, description.emissive_factor.x,
-                description.emissive_factor.y, description.emissive_factor.z);
-    glUniform1f(uniforms.occlusion_strength, description.occlusion_strength);
-    glUniform1f(uniforms.normal_scale, description.normal_scale);
-    glUniform1f(uniforms.ior, description.ior);
-    glUniform1f(uniforms.specular_factor, description.specular_factor);
-    glUniform3f(uniforms.specular_color_factor, description.specular_color_factor.x,
-                description.specular_color_factor.y, description.specular_color_factor.z);
     glUniform4f(uniforms.highlight_color, description.highlight_color.red,
                 description.highlight_color.green, description.highlight_color.blue,
                 description.highlight_color.alpha);
     glUniform1f(uniforms.highlight_strength, description.highlight_strength);
-    glUniform1i(uniforms.has_base_color_texture, resources.textures[0] != 0 ? 1 : 0);
-    glUniform1i(uniforms.has_metallic_roughness_texture, resources.textures[1] != 0 ? 1 : 0);
-    glUniform1i(uniforms.has_normal_texture, resources.textures[2] != 0 ? 1 : 0);
-    glUniform1i(uniforms.has_occlusion_texture, resources.textures[3] != 0 ? 1 : 0);
-    glUniform1i(uniforms.has_emissive_texture, resources.textures[4] != 0 ? 1 : 0);
-    glUniform1i(uniforms.alpha_mode, static_cast<GLint>(description.alpha_mode));
-    glUniform1f(uniforms.alpha_cutoff, description.alpha_cutoff);
-    glUniform1i(uniforms.unlit, description.unlit ? 1 : 0);
+    upload_base_material_uniforms(uniforms, description, previous);
+    upload_surface_material_uniforms(uniforms, description, previous);
+    upload_specular_material_uniforms(uniforms, description, previous);
+    upload_volume_material_uniforms(uniforms, description, previous);
+    upload_clearcoat_material_uniforms(uniforms, description, previous);
+    upload_coverage_material_uniforms(uniforms, description, previous);
 }
 
 void upload_texture_mapping_uniforms(const UniformLocations& uniforms,
@@ -195,14 +269,11 @@ void upload_texture_mapping_uniforms(const UniformLocations& uniforms,
         texture_scales[index * 2 + 1] = mapping.transform.scale.y;
         texture_rotations[index] = mapping.transform.rotation_radians;
     }
-    glUniform1iv(uniforms.texture_texcoord_sets, static_cast<GLsizei>(texcoord_sets.size()),
-                 texcoord_sets.data());
-    glUniform2fv(uniforms.texture_offsets,
-                 static_cast<GLsizei>(description.texture_mappings.size()), texture_offsets.data());
-    glUniform2fv(uniforms.texture_scales, static_cast<GLsizei>(description.texture_mappings.size()),
-                 texture_scales.data());
-    glUniform1fv(uniforms.texture_rotations, static_cast<GLsizei>(texture_rotations.size()),
-                 texture_rotations.data());
+    const GLsizei material_count = uniforms.transmission_factor >= 0 ? 12 : 5;
+    glUniform1iv(uniforms.texture_texcoord_sets, material_count, texcoord_sets.data());
+    glUniform2fv(uniforms.texture_offsets, material_count, texture_offsets.data());
+    glUniform2fv(uniforms.texture_scales, material_count, texture_scales.data());
+    glUniform1fv(uniforms.texture_rotations, material_count, texture_rotations.data());
 }
 
 void upload_indexed_clipping_uniforms(const UniformLocations& uniforms,
@@ -323,34 +394,65 @@ void configure_indexed_item_state(const IndexedDrawResources& resources,
                                   const graphics::DrawIndexedDescription& description,
                                   IndexedBatchStateCache& cache) noexcept
 {
-    configure_indexed_blending(description.alpha_mode == AlphaMode::blend, cache);
+    configure_indexed_blending(
+        description.optical_queue || description.alpha_mode == AlphaMode::blend, cache);
     configure_indexed_culling(!description.double_sided, cache);
     configure_indexed_front_face(description.front_face_clockwise, cache);
     configure_indexed_vertex_array(resources.mesh.vertex_array, cache);
 }
 
+void bind_extension_textures(const IndexedDrawResources& resources, IndexedBatchStateCache& cache,
+                             bool extension_changed) noexcept
+{
+    const auto& uniforms = resources.pipeline.uniforms;
+    if (extension_changed) {
+        std::array<GLint, 7> present{};
+        for (std::size_t i = 0; i < present.size(); ++i)
+            present[i] = resources.textures[i + 5] != 0 ? 1 : 0;
+        glUniform1iv(uniforms.has_extension_textures, 7, present.data());
+    }
+    if (!cache.textures_valid || cache.transmission_scene != resources.transmission_scene) {
+        glActiveTexture(GL_TEXTURE15);
+        glBindTexture(GL_TEXTURE_2D, resources.transmission_scene);
+        glUniform1i(uniforms.has_transmission_scene, resources.transmission_scene != 0 ? 1 : 0);
+        cache.transmission_scene = resources.transmission_scene;
+    }
+    cache.textures_valid = true;
+}
 void bind_material_textures(const IndexedDrawResources& resources,
                             IndexedBatchStateCache& cache) noexcept
 {
     constexpr std::array<GLenum, graphics::material_texture_count> texture_units{
-        GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2, GL_TEXTURE3, GL_TEXTURE4};
+        GL_TEXTURE0, GL_TEXTURE1,  GL_TEXTURE2,  GL_TEXTURE3,  GL_TEXTURE4,  GL_TEXTURE8,
+        GL_TEXTURE9, GL_TEXTURE10, GL_TEXTURE11, GL_TEXTURE12, GL_TEXTURE13, GL_TEXTURE14};
+    const auto& uniforms = resources.pipeline.uniforms;
+    const std::array<GLint, 5> presence_locations{
+        uniforms.has_base_color_texture, uniforms.has_metallic_roughness_texture,
+        uniforms.has_normal_texture, uniforms.has_occlusion_texture, uniforms.has_emissive_texture};
+    bool extension_changed = !cache.textures_valid;
     for (std::size_t index = 0; index < resources.textures.size(); ++index) {
         if (!cache.textures_valid || cache.textures[index] != resources.textures[index]) {
             glActiveTexture(texture_units[index]);
             glBindTexture(GL_TEXTURE_2D, resources.textures[index]);
             cache.textures[index] = resources.textures[index];
+            if (index < presence_locations.size())
+                glUniform1i(presence_locations[index], resources.textures[index] != 0 ? 1 : 0);
+            else
+                extension_changed = true;
         }
     }
-    cache.textures_valid = true;
+    bind_extension_textures(resources, cache, extension_changed);
 }
 
 void submit_indexed_draw(const IndexedDrawResources& resources,
                          const graphics::DrawIndexedDescription& description,
-                         IndexedBatchStateCache& cache) noexcept
+                         IndexedBatchStateCache& cache,
+                         const graphics::DrawIndexedDescription* previous) noexcept
 {
     configure_indexed_item_state(resources, description, cache);
-    upload_indexed_item_uniforms(resources.pipeline.uniforms, description, resources);
-    upload_texture_mapping_uniforms(resources.pipeline.uniforms, description);
+    upload_indexed_item_uniforms(resources.pipeline.uniforms, description, resources, previous);
+    if (!previous || previous->texture_mappings != description.texture_mappings)
+        upload_texture_mapping_uniforms(resources.pipeline.uniforms, description);
     bind_material_textures(resources, cache);
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(resources.mesh.index_count), GL_UNSIGNED_INT,
                    nullptr);
@@ -363,7 +465,7 @@ batch_item_resources(const RenderTargetView& target, const PipelineView& pipelin
 {
     if (mesh == nullptr || description.textures.size() != graphics::material_texture_count) {
         return Error{ErrorCode::invalid_argument,
-                     "Indexed draw batches require a mesh and five ordered textures per item"};
+                     "Indexed draw batches require a mesh and twelve ordered textures per item"};
     }
 
     Result<MeshView> mesh_result = mesh_view(*mesh);
@@ -378,24 +480,51 @@ batch_item_resources(const RenderTargetView& target, const PipelineView& pipelin
         }
         resources.textures[index] = texture_result.value();
     }
+    const auto snapshot = texture_object(description.transmission_scene);
+    if (!snapshot)
+        return snapshot.error();
+    resources.transmission_scene = snapshot.value();
     return resources;
 }
 
-[[nodiscard]] Result<void>
-submit_indexed_batch_items(const RenderTargetView& target, const PipelineView& pipeline,
-                           std::span<graphics::StaticMesh* const> meshes,
-                           std::span<const graphics::DrawIndexedDescription> descriptions,
-                           IndexedBatchStateCache& cache) noexcept
+[[nodiscard]] Result<void> submit_indexed_batch_items(
+    const IndexedDrawResources& batch, std::span<graphics::StaticMesh* const> meshes,
+    std::span<const graphics::DrawIndexedDescription> descriptions,
+    graphics::RenderTarget& render_target, std::optional<std::size_t> capture_scene_before) noexcept
 {
+    IndexedBatchStateCache cache;
+    const graphics::DrawIndexedDescription* previous = nullptr;
+
     for (std::size_t index = 0; index < meshes.size(); ++index) {
+        if (capture_scene_before && index == *capture_scene_before) {
+            auto copied = render_target.capture_transmission_scene();
+            if (!copied)
+                return copied.error();
+        }
         Result<IndexedDrawResources> resources =
-            batch_item_resources(target, pipeline, meshes[index], descriptions[index]);
+            batch_item_resources(batch.target, batch.pipeline, meshes[index], descriptions[index]);
         if (!resources) {
             return resources.error();
         }
         if (resources.value().mesh.index_count != 0) {
-            submit_indexed_draw(resources.value(), descriptions[index], cache);
+            submit_indexed_draw(resources.value(), descriptions[index], cache, previous);
+            previous = &descriptions[index];
         }
+    }
+    return {};
+}
+
+[[nodiscard]] Result<void>
+validate_batch_counts(std::size_t mesh_count, std::size_t description_count,
+                      std::optional<std::size_t> capture_scene_before) noexcept
+{
+    if (mesh_count != description_count) {
+        return Error{ErrorCode::invalid_argument,
+                     "Indexed draw batch meshes and descriptions must have equal counts"};
+    }
+    if (capture_scene_before && *capture_scene_before >= mesh_count) {
+        return Error{ErrorCode::invalid_argument,
+                     "Transmission capture index is outside the draw batch"};
     }
     return {};
 }
@@ -428,7 +557,7 @@ Result<void> draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipe
     upload_indexed_clipping_uniforms(resources.pipeline.uniforms, description);
     bind_environment_textures(environment.value());
     IndexedBatchStateCache cache;
-    submit_indexed_draw(resources, description, cache);
+    submit_indexed_draw(resources, description, cache, nullptr);
 
     if (glGetError() != GL_NO_ERROR) {
         return Error{ErrorCode::draw_submission_failed,
@@ -439,10 +568,11 @@ Result<void> draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipe
     return {};
 }
 
-Result<void>
-draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
-                   std::span<graphics::StaticMesh* const> meshes,
-                   std::span<const graphics::DrawIndexedDescription> descriptions) noexcept
+Result<void> draw_indexed_batch(graphics::RenderTarget& target,
+                                graphics::GraphicsPipeline& pipeline,
+                                std::span<graphics::StaticMesh* const> meshes,
+                                std::span<const graphics::DrawIndexedDescription> descriptions,
+                                std::optional<std::size_t> capture_scene_before) noexcept
 {
     Result<RenderTargetView> target_result = render_target_view(target);
     if (!target_result) {
@@ -453,10 +583,10 @@ draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& p
     if (!pipeline_result) {
         return pipeline_result.error();
     }
-    if (meshes.size() != descriptions.size()) {
-        return Error{ErrorCode::invalid_argument,
-                     "Indexed draw batch meshes and descriptions must have equal counts"};
-    }
+    const auto validation =
+        validate_batch_counts(meshes.size(), descriptions.size(), capture_scene_before);
+    if (!validation)
+        return validation.error();
     if (!target_result.value().valid || meshes.empty()) {
         return {};
     }
@@ -472,9 +602,8 @@ draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& p
     upload_indexed_frame_uniforms(pipeline_result.value(), descriptions.front());
     upload_indexed_clipping_uniforms(pipeline_result.value().uniforms, descriptions.front());
     bind_environment_textures(environment.value());
-    IndexedBatchStateCache cache;
-    const Result<void> submitted = submit_indexed_batch_items(
-        target_result.value(), pipeline_result.value(), meshes, descriptions, cache);
+    const Result<void> submitted = submit_indexed_batch_items(batch_resources, meshes, descriptions,
+                                                              target, capture_scene_before);
     if (!submitted) {
         return submitted.error();
     }

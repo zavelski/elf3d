@@ -17,6 +17,9 @@
 #include <string_view>
 #include <vector>
 
+bool verify_material_shader_numerics();
+bool verify_transmission_rendering(elf3d::Engine& engine);
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 int run_scene_allocation_failure(elf3d::Engine& engine, elf3d::Scene& scene, elf3d::EntityId entity,
                                  std::string_view scenario);
@@ -62,8 +65,9 @@ struct ForeignGlState {
     GLint program = 0;
     GLint vertex_array = 0;
     GLint active_texture = 0;
-    std::array<GLint, 8> textures_2d{};
-    std::array<GLint, 8> textures_cube{};
+    std::array<GLint, 16> textures_2d{};
+    std::array<GLint, 16> textures_cube{};
+    std::array<GLint, 16> samplers{};
     GLboolean blend = GL_FALSE;
     GLboolean depth_test = GL_FALSE;
     GLboolean cull_face = GL_FALSE;
@@ -79,15 +83,17 @@ class ForeignGlObjects final {
     {
         glUseProgram(0);
         glBindVertexArray(0);
-        for (std::size_t index = 0; index < 8; ++index) {
+        for (std::size_t index = 0; index < 16; ++index) {
             glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
             glBindTexture(GL_TEXTURE_2D, 0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+            glBindSampler(static_cast<GLuint>(index), 0);
         }
         glActiveTexture(GL_TEXTURE0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteTextures(1, &texture_2d);
         glDeleteTextures(1, &texture_cube);
+        glDeleteSamplers(16, samplers.data());
         glDeleteVertexArrays(1, &vertex_array);
         glDeleteFramebuffers(1, &framebuffer);
         glDeleteProgram(program);
@@ -101,6 +107,7 @@ class ForeignGlObjects final {
     GLuint texture_2d = 0;
     GLuint texture_cube = 0;
     GLuint program = 0;
+    std::array<GLuint, 16> samplers{};
 
     ForeignGlObjects() = default;
 };
@@ -161,6 +168,7 @@ class ForeignGlObjects final {
         glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &state.textures_2d[index]);
         glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &state.textures_cube[index]);
+        glGetIntegeri_v(GL_SAMPLER_BINDING, static_cast<GLuint>(index), &state.samplers[index]);
     }
     glActiveTexture(static_cast<GLenum>(state.active_texture));
     state.blend = glIsEnabled(GL_BLEND);
@@ -177,9 +185,11 @@ class ForeignGlObjects final {
     glGenVertexArrays(1, &objects.vertex_array);
     glGenTextures(1, &objects.texture_2d);
     glGenTextures(1, &objects.texture_cube);
+    glGenSamplers(16, objects.samplers.data());
+    glSamplerParameteri(objects.samplers.front(), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     objects.program = create_foreign_program();
     if (objects.framebuffer == 0 || objects.vertex_array == 0 || objects.texture_2d == 0 ||
-        objects.texture_cube == 0 || objects.program == 0) {
+        objects.texture_cube == 0 || objects.program == 0 || objects.samplers.front() == 0) {
         return false;
     }
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, objects.framebuffer);
@@ -187,10 +197,11 @@ class ForeignGlObjects final {
     glViewport(3, 4, 17, 19);
     glUseProgram(objects.program);
     glBindVertexArray(objects.vertex_array);
-    for (std::size_t index = 0; index < 8; ++index) {
+    for (std::size_t index = 0; index < 16; ++index) {
         glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(index));
         glBindTexture(GL_TEXTURE_2D, objects.texture_2d);
         glBindTexture(GL_TEXTURE_CUBE_MAP, objects.texture_cube);
+        glBindSampler(static_cast<GLuint>(index), objects.samplers[index]);
     }
     glActiveTexture(GL_TEXTURE2);
     glEnable(GL_BLEND);
@@ -299,6 +310,8 @@ class ForeignGlObjects final {
     }
 
     const ForeignGlState expected = capture_foreign_state();
+    if (!verify_transmission_rendering(engine) || capture_foreign_state() != expected)
+        return fail(25, "Transmission did not preserve foreign OpenGL state");
 
     const elf3d::Result<void> render = fixture.viewport->render(*fixture.scene, fixture.camera);
     if (!render || capture_foreign_state() != expected) {
@@ -653,6 +666,8 @@ class SmokeApplication final : public elf3d::Application {
         if (gladLoadGL(load_opengl_procedure) == 0) {
             return error("GLAD test table failed");
         }
+        if (!verify_material_shader_numerics())
+            return error("Numerical material GPU probe failed");
         if (prepare_smoke_fixture(context.engine(), fixture_) != 0) {
             return error("Fixture preparation failed");
         }
@@ -663,6 +678,8 @@ class SmokeApplication final : public elf3d::Application {
             return error("Allocation failure probe returned unexpectedly");
         }
 #endif
+        if (verify_late_dependent_destruction() != 0)
+            return error("Late dependent destruction failed");
         fixture_.viewport->set_clear_color({0, 0, 0, 1});
         return {};
     }
@@ -714,7 +731,7 @@ class SmokeApplication final : public elf3d::Application {
                verify_foreign_timer_query_preserved(fixture_) == 0 &&
                verify_tangent_space_normal_mapping(engine) == 0 &&
                verify_lazy_display_invalidation(engine, fixture_) == 0 &&
-               verify_readback_contract(engine) == 0 && verify_late_dependent_destruction() == 0;
+               verify_readback_contract(engine) == 0;
     }
     static elf3d::Error error(std::string_view message) noexcept
     {

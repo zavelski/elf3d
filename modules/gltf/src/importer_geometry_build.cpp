@@ -336,15 +336,13 @@ void generate_or_repair_normals(PrimitiveBuildState& state, NormalImportOutcome 
     return generate_normal_fallback(state, outcome.value());
 }
 
-[[nodiscard]] Result<void> generate_missing_tangents(PrimitiveBuildState& state)
+[[nodiscard]] Result<void> diagnose_missing_normal_uv(PrimitiveBuildState& state)
 {
-    if (!state.data.tangents.empty() || state.source.material == nullptr ||
-        state.source.material->unlit != 0 ||
-        state.source.material->normal_texture.texture == nullptr) {
+    if (state.source.material == nullptr || state.source.material->unlit ||
+        state.source.material->normal_texture.texture == nullptr)
         return {};
-    }
 
-    Result<TextureMapping> mapping =
+    const auto mapping =
         texture_mapping(state.source.material->normal_texture, state.context + " normal texture");
     if (!mapping) {
         return mapping.error();
@@ -358,17 +356,6 @@ void generate_or_repair_normals(PrimitiveBuildState& state, NormalImportOutcome 
         return {};
     }
 
-    Result<bool> generated = generate_mikktspace_tangents(state.data, mapping.value().texcoord_set);
-    if (!generated) {
-        return generated.error();
-    }
-    if (!generated.value()) {
-        add_diagnostic(state.import_state.diagnostics, ModelLoadDiagnosticCategory::geometry,
-                       ModelLoadDiagnosticCode::normal_map_fallback,
-                       "Could not generate a usable MikkTSpace tangent basis; the normal texture "
-                       "is preserved but geometric normals will be used",
-                       state.context);
-    }
     return {};
 }
 
@@ -382,12 +369,12 @@ void generate_or_repair_normals(PrimitiveBuildState& state, NormalImportOutcome 
         add_diagnostic(
             state.import_state.diagnostics, ModelLoadDiagnosticCategory::geometry,
             ModelLoadDiagnosticCode::normal_map_fallback,
-            "Ignored unusable authored tangents; MikkTSpace replacements are generated when "
-            "the material requires tangent-space normal mapping",
+            "Ignored unusable authored tangents; runtime preparation can generate replacements "
+            "when the material requires tangent-space normal mapping",
             state.context);
     }
     state.data.indices = state.indices;
-    return generate_missing_tangents(state);
+    return diagnose_missing_normal_uv(state);
 }
 
 [[nodiscard]] Result<void> account_converted_vertices(PrimitiveBuildState& state)
@@ -396,7 +383,7 @@ void generate_or_repair_normals(PrimitiveBuildState& state, NormalImportOutcome 
                      static_cast<std::uint64_t>(state.data.positions.size()),
                      maximum_imported_vertices)) {
         return Error{ErrorCode::resource_limit_exceeded,
-                     "MikkTSpace vertex splitting exceeds the document vertex limit"};
+                     "Converted geometry exceeds the document vertex limit"};
     }
     return {};
 }
@@ -459,6 +446,7 @@ void generate_or_repair_normals(PrimitiveBuildState& state, NormalImportOutcome 
     if (const Result<void> normals = import_normals(state); !normals) {
         return normals.error();
     }
+    state.data.indices = state.indices;
     if (const Result<void> tangents = import_tangents(state); !tangents) {
         return tangents.error();
     }

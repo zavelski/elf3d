@@ -4,7 +4,9 @@
 #include <elf3d/core/assert.h>
 #include <elf3d/model.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <elf3d/internal/assets.h>
 #include <memory>
@@ -14,19 +16,39 @@
 #include <vector>
 
 namespace elf3d::scene {
+[[nodiscard]] RuntimeMaterialView runtime_material(const MaterialDescription& source) noexcept;
+[[nodiscard]] RuntimeMaterialView runtime_material(const ModelMaterialDescription& source) noexcept;
+
 namespace {
 
-[[nodiscard]] RuntimeAlphaMode runtime_alpha_mode(AlphaMode mode) noexcept
+[[nodiscard]] std::array<TextureId, material_texture_slot_count>
+document_texture_ids(const ModelMaterialDescription& material) noexcept
 {
-    switch (mode) {
-    case AlphaMode::opaque:
-        return RuntimeAlphaMode::opaque;
-    case AlphaMode::mask:
-        return RuntimeAlphaMode::mask;
-    case AlphaMode::blend:
-        return RuntimeAlphaMode::blend;
-    }
-    return RuntimeAlphaMode::opaque;
+    return {
+        material.base_color_texture,
+        material.metallic_roughness_texture,
+        material.normal_texture,
+        material.occlusion_texture,
+        material.emissive_texture,
+        material.specular_texture,
+        material.specular_color_texture,
+        material.transmission ? material.transmission->texture : TextureId{},
+        material.volume ? material.volume->thickness_texture : TextureId{},
+        material.clearcoat ? material.clearcoat->texture : TextureId{},
+        material.clearcoat ? material.clearcoat->roughness_texture : TextureId{},
+        material.clearcoat ? material.clearcoat->normal_texture : TextureId{},
+    };
+}
+
+[[nodiscard]] RuntimeVertexLayout document_vertex_layout(const PrimitiveDataView& data)
+{
+    if (!data.tangents.empty())
+        return RuntimeVertexLayout::tangent;
+    if (!data.texcoord1.empty() || !data.colors.empty())
+        return RuntimeVertexLayout::full;
+    if (!data.texcoord0.empty())
+        return RuntimeVertexLayout::textured;
+    return RuntimeVertexLayout::position_normal;
 }
 
 [[nodiscard]] RuntimeTextureWrap runtime_texture_wrap(TextureWrap wrap) noexcept
@@ -59,76 +81,6 @@ namespace {
         return RuntimeTextureFilter::linear_mipmap_linear;
     }
     return RuntimeTextureFilter::linear;
-}
-
-[[nodiscard]] RuntimeTextureMapping runtime_texture_mapping(TextureMapping mapping) noexcept
-{
-    return RuntimeTextureMapping{mapping.texcoord_set,
-                                 RuntimeTextureTransform{mapping.transform.offset,
-                                                         mapping.transform.scale,
-                                                         mapping.transform.rotation_radians}};
-}
-
-[[nodiscard]] RuntimeMaterialView runtime_material(MaterialDescription source) noexcept
-{
-    RuntimeMaterialView result;
-    result.base_color = source.base_color;
-    result.double_sided = source.double_sided;
-    result.metallic_factor = source.metallic_factor;
-    result.roughness_factor = source.roughness_factor;
-    result.unlit = source.unlit;
-    result.alpha_mode = runtime_alpha_mode(source.alpha_mode);
-    result.alpha_cutoff = source.alpha_cutoff;
-    result.emissive_factor = source.emissive_factor;
-    result.normal_scale = source.normal_scale;
-    result.occlusion_strength = source.occlusion_strength;
-    result.ior = source.ior;
-    result.specular_factor = source.specular_factor;
-    result.specular_color_factor = source.specular_color_factor;
-    result.base_color_texture_mapping = runtime_texture_mapping(source.base_color_texture_mapping);
-    result.metallic_roughness_texture_mapping =
-        runtime_texture_mapping(source.metallic_roughness_texture_mapping);
-    result.normal_texture_mapping = runtime_texture_mapping(source.normal_texture_mapping);
-    result.occlusion_texture_mapping = runtime_texture_mapping(source.occlusion_texture_mapping);
-    result.emissive_texture_mapping = runtime_texture_mapping(source.emissive_texture_mapping);
-    result.has_base_color_texture = source.base_color_texture.is_valid();
-    result.has_metallic_roughness_texture = source.metallic_roughness_texture.is_valid();
-    result.has_normal_texture = source.normal_texture.is_valid();
-    result.has_occlusion_texture = source.occlusion_texture.is_valid();
-    result.has_emissive_texture = source.emissive_texture.is_valid();
-    return result;
-}
-
-[[nodiscard]] RuntimeMaterialView runtime_material(ModelMaterialDescription source) noexcept
-{
-    RuntimeMaterialView result;
-    result.base_color = source.base_color;
-    result.double_sided = source.double_sided;
-    result.metallic_factor = source.metallic_factor;
-    result.roughness_factor = source.roughness_factor;
-    result.unlit = source.unlit;
-    result.alpha_mode = runtime_alpha_mode(source.alpha_mode);
-    result.alpha_cutoff = source.alpha_cutoff;
-    result.emissive_factor = {source.emissive_factor.x * source.emissive_strength,
-                              source.emissive_factor.y * source.emissive_strength,
-                              source.emissive_factor.z * source.emissive_strength};
-    result.normal_scale = source.normal_scale;
-    result.occlusion_strength = source.occlusion_strength;
-    result.ior = source.ior;
-    result.specular_factor = source.specular_factor;
-    result.specular_color_factor = source.specular_color_factor;
-    result.base_color_texture_mapping = runtime_texture_mapping(source.base_color_texture_mapping);
-    result.metallic_roughness_texture_mapping =
-        runtime_texture_mapping(source.metallic_roughness_texture_mapping);
-    result.normal_texture_mapping = runtime_texture_mapping(source.normal_texture_mapping);
-    result.occlusion_texture_mapping = runtime_texture_mapping(source.occlusion_texture_mapping);
-    result.emissive_texture_mapping = runtime_texture_mapping(source.emissive_texture_mapping);
-    result.has_base_color_texture = source.base_color_texture.is_valid();
-    result.has_metallic_roughness_texture = source.metallic_roughness_texture.is_valid();
-    result.has_normal_texture = source.normal_texture.is_valid();
-    result.has_occlusion_texture = source.occlusion_texture.is_valid();
-    result.has_emissive_texture = source.emissive_texture.is_valid();
-    return result;
 }
 
 [[nodiscard]] RuntimeSamplerDescription runtime_sampler(SamplerDescription sampler) noexcept
@@ -347,21 +299,27 @@ RuntimeVertexLayout RuntimePrimitiveView::vertex_layout() const noexcept
     return vertex_layout_;
 }
 
+bool RuntimePrimitiveView::has_tangent_basis() const noexcept
+{
+    return !document_tangents_.empty();
+}
+
 bool RuntimeMaterialView::has_texture(RuntimeMaterialTextureSlot slot) const noexcept
 {
-    switch (slot) {
-    case RuntimeMaterialTextureSlot::base_color:
-        return has_base_color_texture;
-    case RuntimeMaterialTextureSlot::metallic_roughness:
-        return has_metallic_roughness_texture;
-    case RuntimeMaterialTextureSlot::normal:
-        return has_normal_texture;
-    case RuntimeMaterialTextureSlot::occlusion:
-        return has_occlusion_texture;
-    case RuntimeMaterialTextureSlot::emissive:
-        return has_emissive_texture;
-    }
-    return false;
+    const std::array<bool, material_texture_slot_count> present{has_base_color_texture,
+                                                                has_metallic_roughness_texture,
+                                                                has_normal_texture,
+                                                                has_occlusion_texture,
+                                                                has_emissive_texture,
+                                                                has_specular_texture,
+                                                                has_specular_color_texture,
+                                                                has_transmission_texture,
+                                                                has_thickness_texture,
+                                                                has_clearcoat_texture,
+                                                                has_clearcoat_roughness_texture,
+                                                                has_clearcoat_normal_texture};
+    const auto index = static_cast<std::size_t>(slot);
+    return index < present.size() && present[index];
 }
 
 Result<RuntimePrimitiveView>
@@ -378,38 +336,33 @@ Storage::document_runtime_primitive(const ModelPrimitiveBinding& binding,
         return primitive_result.error();
     }
 
-    const Result<MaterialView> material_result =
-        document_->material(primitive_result.value().material);
+    const std::uint64_t geometry = binding.mesh.debug_value() & ~(std::uint64_t{1} << 63U);
+    if (geometry >= document_mesh_primitives_.size()) {
+        return Error{ErrorCode::invalid_mesh_handle, "The prepared document mesh is stale"};
+    }
+    const auto& prepared = document_mesh_primitives_[static_cast<std::size_t>(geometry)];
+    const PrimitiveDataView data =
+        prepared.data ? prepared.data->view() : primitive_result.value().data;
+    const Result<MaterialView> material_result = document_->material(prepared.material);
     if (!material_result) {
         return material_result.error();
     }
     RuntimePrimitiveView result;
     result.mesh = binding.mesh;
     result.document_primitive = document_primitive;
-    result.material_identity = primitive_result.value().material.debug_value() << 1U;
-    result.bounds = primitive_result.value().bounds;
+    result.geometry_identity = geometry;
+    result.material_identity = prepared.material.debug_value() << 1U;
+    result.bounds = prepared.bounds;
     result.material_view = runtime_material(material_result.value().description);
-    result.document_positions_ = primitive_result.value().data.positions;
-    result.document_normals_ = primitive_result.value().data.normals;
-    result.document_texcoord0_ = primitive_result.value().data.texcoord0;
-    result.document_texcoord1_ = primitive_result.value().data.texcoord1;
-    result.document_colors_ = primitive_result.value().data.colors;
-    result.document_tangents_ = primitive_result.value().data.tangents;
-    if (!result.document_tangents_.empty()) {
-        result.vertex_layout_ = RuntimeVertexLayout::tangent;
-    } else if (!result.document_texcoord1_.empty() || !result.document_colors_.empty()) {
-        result.vertex_layout_ = RuntimeVertexLayout::full;
-    } else if (!result.document_texcoord0_.empty()) {
-        result.vertex_layout_ = RuntimeVertexLayout::textured;
-    }
-    result.indices_ = primitive_result.value().data.indices;
-    result.document_textures_ = {
-        material_result.value().description.base_color_texture,
-        material_result.value().description.metallic_roughness_texture,
-        material_result.value().description.normal_texture,
-        material_result.value().description.occlusion_texture,
-        material_result.value().description.emissive_texture,
-    };
+    result.document_positions_ = data.positions;
+    result.document_normals_ = data.normals;
+    result.document_texcoord0_ = data.texcoord0;
+    result.document_texcoord1_ = data.texcoord1;
+    result.document_colors_ = data.colors;
+    result.document_tangents_ = data.tangents;
+    result.vertex_layout_ = document_vertex_layout(data);
+    result.indices_ = data.indices;
+    result.document_textures_ = document_texture_ids(material_result.value().description);
     return result;
 }
 
@@ -441,6 +394,23 @@ Storage::compatibility_runtime_primitive(const ModelPrimitiveBinding& binding) c
         material_result.value()->description.normal_texture,
         material_result.value()->description.occlusion_texture,
         material_result.value()->description.emissive_texture,
+        material_result.value()->description.specular_texture,
+        material_result.value()->description.specular_color_texture,
+        material_result.value()->description.transmission
+            ? material_result.value()->description.transmission->texture
+            : TextureAssetHandle{},
+        material_result.value()->description.volume
+            ? material_result.value()->description.volume->thickness_texture
+            : TextureAssetHandle{},
+        material_result.value()->description.clearcoat
+            ? material_result.value()->description.clearcoat->texture
+            : TextureAssetHandle{},
+        material_result.value()->description.clearcoat
+            ? material_result.value()->description.clearcoat->roughness_texture
+            : TextureAssetHandle{},
+        material_result.value()->description.clearcoat
+            ? material_result.value()->description.clearcoat->normal_texture
+            : TextureAssetHandle{},
     };
     return result;
 }

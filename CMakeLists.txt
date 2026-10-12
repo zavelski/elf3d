@@ -23,7 +23,7 @@ endif()
 
 project(
     ${elf3d_project_name}
-    VERSION 0.11.4
+    VERSION 0.11.5
     DESCRIPTION "Embeddable C++20 3D visualization engine"
     LANGUAGES C CXX
 )

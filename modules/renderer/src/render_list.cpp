@@ -34,7 +34,6 @@ struct RenderEntityContext final {
     Float4x4 model;
     math::Matrix3x3 normals;
     bool orientation_reversed = false;
-    Float3 camera_position;
 };
 
 struct RenderListBuildContext final {
@@ -42,6 +41,7 @@ struct RenderListBuildContext final {
     clipping::ClippingFilter clipping;
     Frustum frustum;
     Float3 camera_position;
+    Float4x4 view;
     bool frustum_culling_required = true;
 };
 
@@ -157,14 +157,36 @@ make_camera_frame(const scene::Storage& scene_storage, EntityId camera,
     return false;
 }
 
-[[nodiscard]] float camera_distance_squared(const RenderEntityContext& context) noexcept
+struct PrimitiveVisibility {
+    bool visible = true;
+    float camera_depth = 0.0F;
+};
+[[nodiscard]] PrimitiveVisibility evaluate_primitive_bounds(const RenderListBuildContext& build,
+                                                            Bounds3 bounds, bool optical,
+                                                            RenderList& list)
 {
-    const Float3 model_origin{context.model.elements[12], context.model.elements[13],
-                              context.model.elements[14]};
-    const float delta_x = model_origin.x - context.camera_position.x;
-    const float delta_y = model_origin.y - context.camera_position.y;
-    const float delta_z = model_origin.z - context.camera_position.z;
-    return delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
+    float camera_depth = 0.0F;
+    if (optical) {
+        const auto& b = bounds;
+        const Float3 center{(b.minimum.x + b.maximum.x) * 0.5F, (b.minimum.y + b.maximum.y) * 0.5F,
+                            (b.minimum.z + b.maximum.z) * 0.5F};
+        const auto& v = build.view.elements;
+        camera_depth = -(v[2] * center.x + v[6] * center.y + v[10] * center.z + v[14]);
+    }
+    if (build.frustum_culling_required && bounds_outside_frustum(bounds, build.frustum)) {
+        ++list.frustum_culled_primitives;
+        return PrimitiveVisibility{false, camera_depth};
+    }
+    if (primitive_is_clipped(bounds, build.clipping, list)) {
+        return PrimitiveVisibility{false, camera_depth};
+    }
+    return {true, camera_depth};
+}
+
+[[nodiscard]] bool has_optical_transmission(const scene::RuntimeMaterialView& material) noexcept
+{
+    return !material.unlit && material.transmission_factor > 0 &&
+           (material.metallic_factor < 1 || material.has_metallic_roughness_texture);
 }
 
 [[nodiscard]] Result<void> append_primitive(const RenderListBuildContext& build,
@@ -178,27 +200,28 @@ make_camera_frame(const scene::Storage& scene_storage, EntityId camera,
     if (!primitive) {
         return primitive.error();
     }
-    if (build.frustum_culling_required || build.clipping.has_clipping()) {
+    const auto& material = primitive.value().material_view;
+    const bool transmission = has_optical_transmission(material);
+    const bool optical = material.alpha_mode == scene::RuntimeAlphaMode::blend || transmission;
+    float camera_depth = 0.0F;
+    if (build.frustum_culling_required || build.clipping.has_clipping() || optical) {
         const Result<Bounds3> world_bounds =
             scene.primitive_world_bounds(context.entity, primitive_index);
         if (!world_bounds) {
             return world_bounds.error();
         }
-        if (build.frustum_culling_required &&
-            bounds_outside_frustum(world_bounds.value(), build.frustum)) {
-            ++list.frustum_culled_primitives;
+        const auto visibility =
+            evaluate_primitive_bounds(build, world_bounds.value(), optical, list);
+        if (!visibility.visible)
             return {};
-        }
-        if (primitive_is_clipped(world_bounds.value(), build.clipping, list)) {
-            return {};
-        }
+        camera_depth = visibility.camera_depth;
     }
 
-    list.items.push_back(RenderItem{
-        context.entity, primitive.value().mesh, primitive_index, context.model, context.normals,
-        context.orientation_reversed, primitive.value().material_identity,
-        runtime_material_description(primitive.value().material_view).alpha_mode,
-        camera_distance_squared(context)});
+    list.items.push_back(RenderItem{context.entity, primitive.value().mesh, primitive_index,
+                                    context.model, context.normals, context.orientation_reversed,
+                                    primitive.value().material_identity,
+                                    runtime_alpha_mode(primitive.value().material_view.alpha_mode),
+                                    camera_depth, transmission});
     return {};
 }
 
@@ -222,7 +245,7 @@ make_camera_frame(const scene::Storage& scene_storage, EntityId camera,
     }
 
     const RenderEntityContext context{record.id, model.value(), normals.value(),
-                                      orientation.value(), build.camera_position};
+                                      orientation.value()};
     for (std::uint32_t primitive_index = 0; primitive_index < record.model->primitives.size();
          ++primitive_index) {
         Result<void> appended = append_primitive(build, scene, context, primitive_index, list);
@@ -235,12 +258,16 @@ make_camera_frame(const scene::Storage& scene_storage, EntityId camera,
 
 [[nodiscard]] bool is_opaque_item(const RenderItem& item) noexcept
 {
-    return item.alpha_mode != AlphaMode::blend;
+    return item.alpha_mode != AlphaMode::blend && !item.transmission_active;
 }
 
 [[nodiscard]] bool blended_item_precedes(const RenderItem& left, const RenderItem& right) noexcept
 {
-    return left.camera_distance_squared > right.camera_distance_squared;
+    if (left.camera_depth != right.camera_depth)
+        return left.camera_depth > right.camera_depth;
+    if (left.entity != right.entity)
+        return left.entity.debug_value() < right.entity.debug_value();
+    return left.primitive_index < right.primitive_index;
 }
 
 void order_render_items(RenderList& list)
@@ -314,8 +341,9 @@ Result<RenderList> build_render_list(const scene::Storage& scene_storage, Entity
     const Frustum frustum = make_frustum(camera_frame.value());
     const bool frustum_culling_required =
         requires_primitive_frustum_culling(scene_storage, frustum);
-    const RenderListBuildContext build{visibility, clipping_filter, frustum,
-                                       list.camera_world_position, frustum_culling_required};
+    const RenderListBuildContext build{visibility,       clipping_filter,
+                                       frustum,          list.camera_world_position,
+                                       list.view_matrix, frustum_culling_required};
     for (const std::optional<scene::EntityRecord>& record : scene_storage.entities()) {
         if (!record_is_renderable(scene_storage, visibility, record)) {
             continue;

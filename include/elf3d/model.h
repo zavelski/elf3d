@@ -101,6 +101,26 @@ struct ModelVolumeDescription {
     bool operator==(const ModelVolumeDescription&) const = default;
 };
 
+struct ModelTransmissionDescription {
+    float factor = 0.0F;
+    TextureId texture;
+    TextureMapping texture_mapping;
+    bool operator==(const ModelTransmissionDescription&) const = default;
+};
+
+struct ModelClearcoatDescription {
+    float factor = 0.0F;
+    float roughness_factor = 0.0F;
+    TextureId texture;
+    TextureId roughness_texture;
+    TextureId normal_texture;
+    float normal_scale = 1.0F;
+    TextureMapping texture_mapping;
+    TextureMapping roughness_texture_mapping;
+    TextureMapping normal_texture_mapping;
+    bool operator==(const ModelClearcoatDescription&) const = default;
+};
+
 struct ModelMaterialDescription {
     Color4 base_color{1.0F, 1.0F, 1.0F, 1.0F};
     bool double_sided = false;
@@ -130,6 +150,13 @@ struct ModelMaterialDescription {
     std::optional<ModelVolumeDescription> volume;
     // Copied into Document storage by create_material; borrowed in returned views.
     std::string_view name;
+
+    TextureId specular_texture;
+    TextureId specular_color_texture;
+    TextureMapping specular_texture_mapping;
+    TextureMapping specular_color_texture_mapping;
+    std::optional<ModelTransmissionDescription> transmission;
+    std::optional<ModelClearcoatDescription> clearcoat;
 
     bool operator==(const ModelMaterialDescription&) const = default;
 };

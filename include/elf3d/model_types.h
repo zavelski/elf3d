@@ -7,6 +7,23 @@
 
 namespace elf3d {
 
+// Shared slot order for canonical/runtime material transport and graphics bindings.
+enum class MaterialTextureSlot : std::uint8_t {
+    base_color,
+    metallic_roughness,
+    normal,
+    occlusion,
+    emissive,
+    specular,
+    specular_color,
+    transmission,
+    thickness,
+    clearcoat,
+    clearcoat_roughness,
+    clearcoat_normal,
+};
+inline constexpr std::size_t material_texture_slot_count = 12;
+
 inline constexpr std::uint32_t maximum_texture_coordinate_sets = 2;
 
 enum class AlphaMode {

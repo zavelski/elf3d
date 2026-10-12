@@ -105,7 +105,9 @@ The viewer displays:
 - tangent-space normal textures, including scale, UV selection, and texture transform;
 - double-sided and unlit materials;
 - texture-coordinate selection and `KHR_texture_transform`;
-- emissive strength, IOR, specular factors, and supported quantized attributes.
+- emissive strength, IOR, specular factors and strength/color textures;
+- transmission, transform-aware volume absorption, and clearcoat with independent normal mapping;
+- supported quantized attributes.
 
 Core metallic-roughness materials receive built-in high-contrast studio
 image-based lighting, including diffuse irradiance and roughness-dependent
@@ -131,16 +133,19 @@ unchanged.
 When reporting a model problem, prefer a small self-contained reproduction that
 you are allowed to share.
 
-## CPU volume and required-extension retention
+## Optical materials and required-extension retention
 
 `ModelMaterialDescription::volume` optionally owns `ModelVolumeDescription`:
 nonnegative finite `thickness_factor`, an owner-scoped `thickness_texture` and
 its mapping, `attenuation_color` in [0, 1], and an optional positive finite
 `attenuation_distance`. Absence of the distance represents infinite attenuation
 (the glTF default). The thickness texture follows the existing UV0/UV1 and
-missing-UV fallback contract. Import and normalized export retain these values;
-the renderer uses the core material fallback without volume effects. Required
-`KHR_materials_volume` remains unsupported by the runtime import contract.
+missing-UV fallback contract. Import and normalized export retain these values.
+Standard rendering evaluates Beer–Lambert attenuation through a local parallel
+slab using the complete instance transform; thickness remains in mesh units and
+attenuation distance in world units. Required `KHR_materials_volume` is accepted
+within this documented rendering approximation. Zero thickness remains a thin
+surface, and an absent attenuation distance disables absorption.
 
 `Document::required_extensions()` and its `DocumentView` counterpart borrow
 read-only names owned by the Document. They have the same lifetime/invalidation

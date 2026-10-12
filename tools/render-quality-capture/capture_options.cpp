@@ -125,6 +125,21 @@ template <typename Value>
                                         Options& options)
 {
     const auto number = float_value(value);
+    if (name == "--background") {
+        std::array<float, 4> components{};
+        std::size_t begin = 0;
+        for (std::size_t i = 0; i < components.size(); ++i) {
+            const auto end = value.find(',', begin);
+            const auto component = float_value(value.substr(begin, end - begin));
+            if (!component || *component < 0 || *component > 1 ||
+                ((i == 3) != (end == std::string_view::npos)))
+                return false;
+            components[i] = *component;
+            begin = end == std::string_view::npos ? value.size() : end + 1;
+        }
+        options.background = {components[0], components[1], components[2], components[3]};
+        return true;
+    }
     if (name == "--matrix") {
         options.camera_matrix = matrix_value(value);
         return options.camera_matrix.has_value();
@@ -169,7 +184,13 @@ template <typename Value>
     if (!number) {
         return false;
     }
-    if (name == "--ambient") {
+    if (name == "--fov" && *number > 0 && *number < 3.14159265F) {
+        options.vertical_fov = *number;
+    } else if (name == "--near" && *number > 0) {
+        options.near_plane = *number;
+    } else if (name == "--far" && *number > 0) {
+        options.far_plane = *number;
+    } else if (name == "--ambient") {
         options.lighting.ambient_intensity = *number;
     } else if (name == "--directional") {
         options.lighting.diffuse_intensity = *number;
@@ -215,6 +236,8 @@ void print_usage()
                  "--extent <width>x<height> "
                  "--camera authored-first|authored-opposite|fit-front|fit-back|matrix "
                  "[--matrix <16-column-major-values>] --output <png> --metadata <json> "
+                 "[--fov <radians>] [--near <distance>] [--far <distance>] "
+                 "[--background <r,g,b,a>] "
                  "[--shading standard|unlit] [--ambient <value>] [--directional <value>] "
                  "[--environment <value>] [--rotation <radians>] [--exposure <ev>] "
                  "[--tone pbr-neutral|none] [--validate-material true|false]\n";

@@ -193,7 +193,7 @@ void append_values(std::vector<std::byte>& output, std::initializer_list<float> 
                : 2;
 }
 
-[[nodiscard]] int test_generated_tangent(const TemporaryDirectory& temporary)
+[[nodiscard]] int test_missing_tangent_preservation(const TemporaryDirectory& temporary)
 {
     constexpr std::string_view json = R"json({
       "asset":{"version":"2.0"},"buffers":[{"uri":"generated.bin","byteLength":96}],
@@ -212,13 +212,14 @@ void append_values(std::vector<std::byte>& output, std::initializer_list<float> 
     const auto primitive = loaded ? loaded.value().document.primitive_at(0U)
                                   : elf3d::Result<elf3d::PrimitiveView>{elf3d::Error{
                                         elf3d::ErrorCode::invalid_argument, "load failed"}};
-    return primitive && usable_tangents(primitive.value().data) &&
+    return primitive && primitive.value().data.tangents.empty() &&
+                   primitive.value().data.positions.size() == 3U &&
                    !has_fallback(loaded.value().report)
                ? 0
                : 2;
 }
 
-[[nodiscard]] int test_uv1_tangent(const TemporaryDirectory& temporary)
+[[nodiscard]] int test_uv1_preservation(const TemporaryDirectory& temporary)
 {
     constexpr std::string_view json = R"json({
       "asset":{"version":"2.0"},"buffers":[{"uri":"uv1.bin","byteLength":120}],
@@ -237,22 +238,31 @@ void append_values(std::vector<std::byte>& output, std::initializer_list<float> 
     const auto primitive = loaded ? loaded.value().document.primitive_at(0U)
                                   : elf3d::Result<elf3d::PrimitiveView>{elf3d::Error{
                                         elf3d::ErrorCode::invalid_argument, "load failed"}};
-    return primitive && usable_tangents(primitive.value().data) &&
-                   std::abs(primitive.value().data.tangents[0].y) >= 0.9F
+    return primitive && primitive.value().data.tangents.empty() &&
+                   primitive.value().data.positions.size() == 3U &&
+                   loaded.value()
+                           .document.material(primitive.value().material)
+                           .value()
+                           .description.normal_texture_mapping.texcoord_set == 1U
                ? 0
                : 2;
 }
 
-[[nodiscard]] bool has_both_handedness_signs(std::span<const elf3d::Float4> tangents)
+[[nodiscard]] bool canonical_round_trip(const std::filesystem::path& directory,
+                                        const elf3d::Document& document)
 {
-    const bool negative = std::any_of(tangents.begin(), tangents.end(),
-                                      [](elf3d::Float4 tangent) { return tangent.w < 0.0F; });
-    const bool positive = std::any_of(tangents.begin(), tangents.end(),
-                                      [](elf3d::Float4 tangent) { return tangent.w > 0.0F; });
-    return negative && positive;
+    const auto path = directory / "unsplit.glb";
+    if (!elf3d::save_document(path.string(), document.view()))
+        return false;
+    const auto restored = elf3d::load_document(path.string());
+    if (!restored)
+        return false;
+    const auto primitive = restored.value().document.primitive_at(0).value().data;
+    return primitive.positions.size() == 4U && primitive.indices.size() == 6U &&
+           primitive.tangents.empty();
 }
 
-[[nodiscard]] int test_mirrored_seam(const TemporaryDirectory& temporary)
+[[nodiscard]] int test_unsplit_mirrored_seam(const TemporaryDirectory& temporary)
 {
     constexpr std::string_view json = R"json({
       "asset":{"version":"2.0"},"buffers":[{"uri":"seam.bin","byteLength":140}],
@@ -271,9 +281,9 @@ void append_values(std::vector<std::byte>& output, std::initializer_list<float> 
     const auto primitive = loaded ? loaded.value().document.primitive_at(0U)
                                   : elf3d::Result<elf3d::PrimitiveView>{elf3d::Error{
                                         elf3d::ErrorCode::invalid_argument, "load failed"}};
-    return primitive && primitive.value().data.positions.size() > 4U &&
-                   usable_tangents(primitive.value().data) &&
-                   has_both_handedness_signs(primitive.value().data.tangents)
+    return primitive && primitive.value().data.positions.size() == 4U &&
+                   primitive.value().data.tangents.empty() &&
+                   canonical_round_trip(temporary.path(), loaded.value().document)
                ? 0
                : 2;
 }
@@ -332,7 +342,7 @@ void append_values(std::vector<std::byte>& output, std::initializer_list<float> 
            has_fallback(loaded.value().report);
 }
 
-[[nodiscard]] int test_unusable_authored_tangent_regeneration(const TemporaryDirectory& temporary)
+[[nodiscard]] int test_unusable_authored_tangent_preservation(const TemporaryDirectory& temporary)
 {
     const auto path = temporary.path() / "authored_tangent.gltf";
     if (!write_bytes(temporary.path() / "authored_tangent.bin",
@@ -345,7 +355,8 @@ void append_values(std::vector<std::byte>& output, std::initializer_list<float> 
     const auto primitive = loaded ? loaded.value().document.primitive_at(0U)
                                   : elf3d::Result<elf3d::PrimitiveView>{elf3d::Error{
                                         elf3d::ErrorCode::invalid_argument, "load failed"}};
-    return primitive && usable_tangents(primitive.value().data) &&
+    return primitive && primitive.value().data.tangents.empty() &&
+                   primitive.value().data.positions.size() == 3U &&
                    has_fallback(loaded.value().report)
                ? 0
                : 2;
@@ -395,9 +406,9 @@ int elf3d_gltf_tangent_test()
         return 1;
     }
     constexpr std::array<TangentTest, 7> tests{
-        {test_authored_tangent, test_generated_tangent, test_uv1_tangent, test_mirrored_seam,
-         test_missing_uv_fallback, test_unusable_authored_tangent_regeneration,
-         test_invalid_authored_tangents}};
+        {test_authored_tangent, test_missing_tangent_preservation, test_uv1_preservation,
+         test_unsplit_mirrored_seam, test_missing_uv_fallback,
+         test_unusable_authored_tangent_preservation, test_invalid_authored_tangents}};
     for (std::size_t index = 0; index < tests.size(); ++index) {
         if (const int result = tests[index](temporary); result != 0) {
             return 10 + static_cast<int>(index) * 10 + result;

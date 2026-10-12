@@ -75,7 +75,11 @@ if(ELF3D_BUILD_ENGINE)
             interaction/src/viewport_interaction.cpp
             assets/src/storage.cpp
             clipping/src/filter.cpp
+            scene/src/document_geometry.cpp
+            scene/src/tangent_space.cpp
+            scene/src/tangent_space.h
             scene/src/runtime_adapter.cpp
+            scene/src/runtime_material.cpp
             scene/src/spatial.cpp
             scene/src/storage.cpp
             scene/src/surface_anchor.cpp
@@ -90,12 +94,15 @@ if(ELF3D_BUILD_ENGINE)
             assets/include/elf3d/internal/assets.h
             clipping/include/elf3d/internal/clipping.h
             scene/include/elf3d/internal/scene.h
+            scene/include/elf3d/internal/scene_runtime.h
     )
     target_link_libraries(
         elf3d_domain_modules
         PUBLIC
             elf3d_foundation_modules
             elf3d_model_modules
+        PRIVATE
+            elf3d_third_party_mikktspace
     )
 endif()
 
@@ -153,7 +160,6 @@ add_library(
         gltf/src/importer_material.cpp
         gltf/src/importer_metadata.cpp
         gltf/src/importer_texture.cpp
-        gltf/src/tangent_space.cpp
         gltf/src/importer_validation.cpp
         gltf/src/importer.cpp
 )
@@ -309,6 +315,8 @@ add_library(
         renderer/src/main_shader_source.cpp
         renderer/src/model_rendering.cpp
         renderer/src/render_list.cpp
+        renderer/src/renderer_cache.hpp
+        renderer/src/renderer_texture_cache.cpp
         renderer/src/renderer.cpp
         renderer/src/renderer_detail.h
         renderer/src/studio_environment.cpp

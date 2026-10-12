@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.11.5
+
+- Render optical transmission independently of alpha coverage, with roughness
+  filtering, refraction, tint and transform-aware volume absorption.
+- Add clearcoat layering and complete specular strength/color texture support,
+  including independent UV mappings and clearcoat normal textures.
+- Correct smooth GGX highlights, dielectric specular clamp order and IOR-zero
+  compatibility while retaining the HDR studio environment and display profile.
+- Order blended primitives by camera depth at their actual geometry bounds.
+- Preserve the new material factors, texture references and mappings through
+  typed glTF/GLB round trips and expose transmission copy/memory statistics.
+- Extend rendering captures with explicit projection/background settings and
+  benchmark reports with transmission resource counters. Public material
+  structure changes require rebuilding C++ consumers.
+
 ## 0.11.4
 
 - Add the standalone `elf3d_cmd` application for CPU-only glTF/GLB rotation,

@@ -55,6 +55,19 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
         display_transform = transform;
     }
 
+    [[nodiscard]] elf3d::Result<elf3d::graphics::Texture2D*>
+    prepare_transmission_scene() noexcept override
+    {
+        return elf3d::Error{elf3d::ErrorCode::texture_unavailable, "Fake snapshot unavailable"};
+    }
+    [[nodiscard]] elf3d::Result<void> capture_transmission_scene() noexcept override
+    {
+        return {};
+    }
+    [[nodiscard]] std::uint64_t transmission_scene_bytes() const noexcept override
+    {
+        return 0;
+    }
     [[nodiscard]] elf3d::TextureHandle color_texture() const noexcept override
     {
         return texture_handle_;
@@ -300,13 +313,19 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<void> draw_indexed_batch(
         elf3d::graphics::RenderTarget& target, elf3d::graphics::GraphicsPipeline& pipeline,
         std::span<elf3d::graphics::StaticMesh* const> meshes,
-        std::span<const elf3d::graphics::DrawIndexedDescription> descriptions) noexcept override
+        std::span<const elf3d::graphics::DrawIndexedDescription> descriptions,
+        std::optional<std::size_t> capture_scene_before = std::nullopt) noexcept override
     {
         if (meshes.size() != descriptions.size()) {
             return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                 "Fake batch arrays must have equal counts"};
         }
         for (std::size_t index = 0; index < meshes.size(); ++index) {
+            if (capture_scene_before && index == *capture_scene_before) {
+                auto copied = target.capture_transmission_scene();
+                if (!copied)
+                    return copied.error();
+            }
             if (meshes[index] == nullptr) {
                 return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                     "Fake batch item requires a mesh"};

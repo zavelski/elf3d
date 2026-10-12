@@ -243,8 +243,6 @@ material_uses_unavailable_texcoord(const cgltf_material& material,
 void generate_normals(std::span<const Float3> positions, std::vector<Float3>& normals,
                       std::span<const std::uint32_t> indices, std::uint64_t& degenerate_count,
                       std::uint64_t& fallback_count);
-[[nodiscard]] Result<bool> generate_mikktspace_tangents(PrimitiveData& data,
-                                                        std::uint32_t texcoord_set);
 [[nodiscard]] Result<MaterialId> material_for(ImportState& state, const cgltf_material* material,
                                               const TexcoordAvailability& available_texcoords);
 [[nodiscard]] Result<ImportedMesh> import_mesh(ImportState& state, const cgltf_mesh& mesh,

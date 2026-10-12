@@ -19,6 +19,19 @@ namespace elf3d::renderer::tests {
 
 constexpr std::uintptr_t fake_resource_token = 1;
 
+class FakeSnapshot final : public elf3d::graphics::Texture2D {
+  public:
+    [[nodiscard]] elf3d::Extent2D extent() const noexcept override
+    {
+        return extent_value;
+    }
+    [[nodiscard]] std::uintptr_t backend_resource_token() const noexcept override
+    {
+        return fake_resource_token;
+    }
+    elf3d::Extent2D extent_value;
+};
+
 class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
   public:
     [[nodiscard]] elf3d::Extent2D extent() const noexcept override
@@ -44,6 +57,35 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
     {
         display_transform = transform;
     }
+    [[nodiscard]] elf3d::Result<elf3d::graphics::Texture2D*>
+    prepare_transmission_scene() noexcept override
+    {
+        if (fail_snapshot)
+            return elf3d::Error{elf3d::ErrorCode::gpu_texture_creation_failed,
+                                "Injected snapshot failure"};
+        snapshot.extent_value = extent_value;
+        snapshot_prepared = true;
+        return &snapshot;
+    }
+    [[nodiscard]] elf3d::Result<void> capture_transmission_scene() noexcept override
+    {
+        ++snapshot_copies;
+        return {};
+    }
+    [[nodiscard]] std::uint64_t transmission_scene_bytes() const noexcept override
+    {
+        if (!snapshot_prepared)
+            return 0;
+        std::uint64_t bytes = 0;
+        auto width = extent_value.width, height = extent_value.height;
+        while (true) {
+            bytes += static_cast<std::uint64_t>(width) * height * 8U;
+            if (width == 1 && height == 1)
+                return bytes;
+            width = std::max(width / 2U, 1U);
+            height = std::max(height / 2U, 1U);
+        }
+    }
     [[nodiscard]] elf3d::TextureHandle color_texture() const noexcept override
     {
         return {};
@@ -59,6 +101,10 @@ class FakeRenderTarget final : public elf3d::graphics::RenderTarget {
 
     elf3d::Extent2D extent_value{640, 360};
     int clear_count = 0;
+    FakeSnapshot snapshot;
+    bool snapshot_prepared = false;
+    bool fail_snapshot = false;
+    unsigned snapshot_copies = 0;
     elf3d::DisplayTransform display_transform;
 };
 
@@ -348,7 +394,8 @@ class FakeDevice final : public elf3d::graphics::Device {
     [[nodiscard]] elf3d::Result<void> draw_indexed_batch(
         elf3d::graphics::RenderTarget& target, elf3d::graphics::GraphicsPipeline& pipeline,
         std::span<elf3d::graphics::StaticMesh* const> meshes,
-        std::span<const elf3d::graphics::DrawIndexedDescription> descriptions) noexcept override
+        std::span<const elf3d::graphics::DrawIndexedDescription> descriptions,
+        std::optional<std::size_t> capture_scene_before = std::nullopt) noexcept override
     {
         ++state_.indexed_batch_count;
         if (meshes.size() != descriptions.size()) {
@@ -356,6 +403,11 @@ class FakeDevice final : public elf3d::graphics::Device {
                                 "Fake batch arrays must have equal counts"};
         }
         for (std::size_t index = 0; index < meshes.size(); ++index) {
+            if (capture_scene_before && index == *capture_scene_before) {
+                auto copied = target.capture_transmission_scene();
+                if (!copied)
+                    return copied.error();
+            }
             if (meshes[index] == nullptr) {
                 return elf3d::Error{elf3d::ErrorCode::invalid_argument,
                                     "Fake batch item requires a mesh"};

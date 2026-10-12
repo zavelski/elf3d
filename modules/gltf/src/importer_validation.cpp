@@ -194,23 +194,27 @@ void add_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
 
 [[nodiscard]] bool supported_required_extension(std::string_view extension) noexcept
 {
-    return extension == "KHR_texture_transform" || extension == "KHR_materials_unlit" ||
-           extension == "KHR_materials_emissive_strength" || extension == "KHR_materials_ior" ||
-           extension == "KHR_materials_pbrSpecularGlossiness" ||
-           extension == "KHR_mesh_quantization";
+    constexpr std::array<std::string_view, 10> supported{"KHR_texture_transform",
+                                                         "KHR_materials_unlit",
+                                                         "KHR_materials_emissive_strength",
+                                                         "KHR_materials_ior",
+                                                         "KHR_materials_pbrSpecularGlossiness",
+                                                         "KHR_mesh_quantization",
+                                                         "KHR_materials_specular",
+                                                         "KHR_materials_transmission",
+                                                         "KHR_materials_volume",
+                                                         "KHR_materials_clearcoat"};
+    return std::find(supported.begin(), supported.end(), extension) != supported.end();
 }
 
 [[nodiscard]] bool extension_has_full_support(std::string_view extension) noexcept
 {
-    return supported_required_extension(extension) || extension == "KHR_materials_specular";
+    return supported_required_extension(extension);
 }
 
-[[nodiscard]] std::string material_extension_behavior(std::string_view extension)
+[[nodiscard]] std::string material_extension_behavior(std::string_view)
 {
-    return extension == "KHR_materials_volume"
-               ? "is retained in the Model SDK for export; rendering uses the core material "
-                 "fallback without volume effects"
-               : "is unsupported; the core metallic-roughness material fallback was used";
+    return "is unsupported; the core metallic-roughness material fallback was used";
 }
 
 void add_optional_extension_diagnostic(std::vector<ModelLoadDiagnostic>& diagnostics,
@@ -228,10 +232,6 @@ void add_optional_extension_diagnostic(std::vector<ModelLoadDiagnostic>& diagnos
         category = ModelLoadDiagnosticCategory::geometry;
         code = ModelLoadDiagnosticCode::ignored_instancing;
         behavior = "is unsupported; ordinary node/mesh data was loaded without GPU instances";
-    } else if (extension == "KHR_materials_specular") {
-        category = ModelLoadDiagnosticCategory::material;
-        code = ModelLoadDiagnosticCode::material_fallback;
-        behavior = "factors are rendered, but extension textures use the documented fallback";
     } else if (extension == "KHR_materials_variants") {
         category = ModelLoadDiagnosticCategory::material;
         behavior = "is unsupported; each primitive's default material was used";
@@ -610,21 +610,6 @@ struct ResourceTotals {
         const std::string_view name = extension != nullptr ? extension : "<unnamed>";
         if (supported_required_extension(name)) {
             continue;
-        }
-        if (name == "KHR_materials_specular") {
-            bool uses_specular_textures = false;
-            for (cgltf_size material_index = 0; material_index < data.materials_count;
-                 ++material_index) {
-                const cgltf_material& material = data.materials[material_index];
-                uses_specular_textures =
-                    uses_specular_textures ||
-                    (material.has_specular &&
-                     (material.specular.specular_texture.texture != nullptr ||
-                      material.specular.specular_color_texture.texture != nullptr));
-            }
-            if (!uses_specular_textures) {
-                continue;
-            }
         }
         return Error{ErrorCode::unsupported_required_extension,
                      "Unsupported required glTF extension: " + std::string{name}};

@@ -84,10 +84,20 @@ if(TARGET elf3d_app)
         elf3d_opengl_render_smoke_test
         opengl_render_smoke_test.cpp
         scene_allocation_failure.cpp
+        material_shader_numeric_test.cpp
+        transmission_render_test.cpp
+        ${PROJECT_SOURCE_DIR}/modules/renderer/src/main_shader_source.cpp
     )
 
     target_compile_features(elf3d_opengl_render_smoke_test PRIVATE cxx_std_20)
     target_include_directories(elf3d_opengl_render_smoke_test PRIVATE ${PROJECT_SOURCE_DIR}/facade/elf3d/src)
+    target_include_directories(elf3d_opengl_render_smoke_test PRIVATE
+        ${PROJECT_SOURCE_DIR}/modules/renderer/include
+        ${PROJECT_SOURCE_DIR}/modules/scene/include
+        ${PROJECT_SOURCE_DIR}/modules/assets/include
+        ${PROJECT_SOURCE_DIR}/modules/math/include
+        ${PROJECT_SOURCE_DIR}/modules/graphics/include
+        ${PROJECT_SOURCE_DIR}/modules/clipping/include)
     target_compile_definitions(
         elf3d_opengl_render_smoke_test
         PRIVATE ELF3D_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"

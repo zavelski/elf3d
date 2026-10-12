@@ -183,6 +183,20 @@ metallic_roughness_uses_unavailable_texcoord(const cgltf_pbr_metallic_roughness&
         pbr.metallic_roughness_texture, "metallic-roughness texture", available_texcoords, context);
 }
 
+[[nodiscard]] std::array<const cgltf_texture_view*, 7>
+extension_texture_views(const cgltf_material& material) noexcept
+{
+    const std::array<const cgltf_texture_view*, 7> views{
+        material.has_specular ? &material.specular.specular_texture : nullptr,
+        material.has_specular ? &material.specular.specular_color_texture : nullptr,
+        material.has_transmission ? &material.transmission.transmission_texture : nullptr,
+        material.has_volume ? &material.volume.thickness_texture : nullptr,
+        material.has_clearcoat ? &material.clearcoat.clearcoat_texture : nullptr,
+        material.has_clearcoat ? &material.clearcoat.clearcoat_roughness_texture : nullptr,
+        material.has_clearcoat ? &material.clearcoat.clearcoat_normal_texture : nullptr};
+    return views;
+}
+
 [[nodiscard]] Result<bool>
 common_material_uses_unavailable_texcoord(const cgltf_material& material,
                                           const TexcoordAvailability& available_texcoords,
@@ -200,12 +214,26 @@ common_material_uses_unavailable_texcoord(const cgltf_material& material,
     }
     unavailable = texture_slot_uses_unavailable_texcoord(
         material.emissive_texture, "emissive texture", available_texcoords, context);
-    if (!unavailable || unavailable.value() || !material.has_volume) {
+    if (!unavailable || unavailable.value())
         return unavailable;
+    return false;
+}
+
+[[nodiscard]] Result<bool>
+extension_material_uses_unavailable_texcoord(const cgltf_material& material,
+                                             const TexcoordAvailability& available_texcoords,
+                                             std::string_view context)
+{
+    const auto extensions = extension_texture_views(material);
+    for (const auto* view : extensions) {
+        if (!view)
+            continue;
+        auto unavailable = texture_slot_uses_unavailable_texcoord(*view, "extension texture",
+                                                                  available_texcoords, context);
+        if (!unavailable || unavailable.value())
+            return unavailable;
     }
-    return texture_slot_uses_unavailable_texcoord(material.volume.thickness_texture,
-                                                  "volume thickness texture", available_texcoords,
-                                                  context);
+    return false;
 }
 
 [[nodiscard]] Result<bool>
@@ -225,7 +253,10 @@ material_uses_unavailable_texcoord(const cgltf_material& material,
     if (!unavailable || unavailable.value()) {
         return unavailable;
     }
-    return common_material_uses_unavailable_texcoord(material, available_texcoords, context);
+    unavailable = common_material_uses_unavailable_texcoord(material, available_texcoords, context);
+    if (!unavailable || unavailable.value())
+        return unavailable;
+    return extension_material_uses_unavailable_texcoord(material, available_texcoords, context);
 }
 
 [[nodiscard]] Result<ImportedTextureView> import_texture_view(ImportState& state,

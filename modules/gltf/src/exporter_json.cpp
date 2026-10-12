@@ -8,6 +8,7 @@
 #include "exporter_json_internal.hpp"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 namespace elf3d::gltf::exporter_detail {
 namespace {
@@ -19,30 +20,41 @@ struct GeneratedExtensions {
     bool specular = false;
     bool emissive_strength = false;
     bool volume = false;
+    bool transmission = false;
+    bool clearcoat = false;
 };
 
 [[nodiscard]] bool uses_texture_transform(const ModelMaterialDescription& material) noexcept
 {
-    return has_nondefault_transform(material.base_color_texture_mapping) ||
-           has_nondefault_transform(material.metallic_roughness_texture_mapping) ||
-           has_nondefault_transform(material.normal_texture_mapping) ||
-           has_nondefault_transform(material.occlusion_texture_mapping) ||
-           has_nondefault_transform(material.emissive_texture_mapping) ||
-           (material.volume &&
-            has_nondefault_transform(material.volume->thickness_texture_mapping));
+    const std::array<TextureMapping, material_texture_slot_count> mappings{
+        material.base_color_texture_mapping,
+        material.metallic_roughness_texture_mapping,
+        material.normal_texture_mapping,
+        material.occlusion_texture_mapping,
+        material.emissive_texture_mapping,
+        material.specular_texture_mapping,
+        material.specular_color_texture_mapping,
+        material.transmission ? material.transmission->texture_mapping : TextureMapping{},
+        material.volume ? material.volume->thickness_texture_mapping : TextureMapping{},
+        material.clearcoat ? material.clearcoat->texture_mapping : TextureMapping{},
+        material.clearcoat ? material.clearcoat->roughness_texture_mapping : TextureMapping{},
+        material.clearcoat ? material.clearcoat->normal_texture_mapping : TextureMapping{}};
+    return std::any_of(mappings.begin(), mappings.end(), has_nondefault_transform);
 }
 
 void update_generated_extensions(GeneratedExtensions& extensions,
                                  const ModelMaterialDescription& material) noexcept
 {
-    extensions.texture_transform = extensions.texture_transform || uses_texture_transform(material);
-    extensions.unlit = extensions.unlit || material.unlit;
-    extensions.volume = extensions.volume || material.volume.has_value();
-    extensions.ior = extensions.ior || material.ior != 1.5F;
-    extensions.specular = extensions.specular || material.specular_factor != 1.0F ||
-                          material.specular_color_factor != Float3{1.0F, 1.0F, 1.0F};
-    extensions.emissive_strength =
-        extensions.emissive_strength || material.emissive_strength != 1.0F;
+    extensions.texture_transform |= uses_texture_transform(material);
+    extensions.unlit |= material.unlit;
+    extensions.volume |= material.volume.has_value();
+    extensions.transmission |= material.transmission.has_value();
+    extensions.clearcoat |= material.clearcoat.has_value();
+    extensions.specular |=
+        material.specular_texture.is_valid() || material.specular_color_texture.is_valid() ||
+        material.specular_factor != 1.0F || material.specular_color_factor != Float3{1, 1, 1};
+    extensions.ior |= material.ior != 1.5F;
+    extensions.emissive_strength |= material.emissive_strength != 1.0F;
 }
 
 void add_generated_extensions(std::vector<std::string_view>& destination,
@@ -67,6 +79,10 @@ void add_generated_extensions(std::vector<std::string_view>& destination,
     if (generated.emissive_strength) {
         add_extension_used(destination, "KHR_materials_emissive_strength");
     }
+    if (generated.transmission)
+        add_extension_used(destination, "KHR_materials_transmission");
+    if (generated.clearcoat)
+        add_extension_used(destination, "KHR_materials_clearcoat");
     if (generated.volume) {
         add_extension_used(destination, "KHR_materials_volume");
     }

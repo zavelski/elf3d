@@ -327,13 +327,23 @@ class Document::Storage final {
     [[nodiscard]] bool
     valid_material_textures(const ModelMaterialDescription& description) const noexcept
     {
-        return valid_texture_or_empty(description.base_color_texture) &&
-               valid_texture_or_empty(description.metallic_roughness_texture) &&
-               valid_texture_or_empty(description.normal_texture) &&
-               valid_texture_or_empty(description.occlusion_texture) &&
-               valid_texture_or_empty(description.emissive_texture) &&
-               (!description.volume ||
-                valid_texture_or_empty(description.volume->thickness_texture));
+        const std::array<TextureId, material_texture_slot_count> slots{
+            description.base_color_texture,
+            description.metallic_roughness_texture,
+            description.normal_texture,
+            description.occlusion_texture,
+            description.emissive_texture,
+            description.specular_texture,
+            description.specular_color_texture,
+            description.transmission ? description.transmission->texture : TextureId{},
+            description.volume ? description.volume->thickness_texture : TextureId{},
+            description.clearcoat ? description.clearcoat->texture : TextureId{},
+            description.clearcoat ? description.clearcoat->roughness_texture : TextureId{},
+            description.clearcoat ? description.clearcoat->normal_texture : TextureId{}};
+        for (const auto texture : slots)
+            if (!valid_texture_or_empty(texture))
+                return false;
+        return true;
     }
 
     [[nodiscard]] Result<void> reject_parent_cycle(NodeId child_id, NodeId parent_id) const noexcept

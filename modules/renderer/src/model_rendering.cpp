@@ -44,6 +44,15 @@ namespace {
     return TextureFilter::linear;
 }
 
+[[nodiscard]] TextureMapping runtime_texture_mapping(scene::RuntimeTextureMapping mapping) noexcept
+{
+    return TextureMapping{mapping.texcoord_set,
+                          TextureTransform{mapping.transform.offset, mapping.transform.scale,
+                                           mapping.transform.rotation_radians}};
+}
+
+} // namespace
+
 [[nodiscard]] AlphaMode runtime_alpha_mode(scene::RuntimeAlphaMode mode) noexcept
 {
     switch (mode) {
@@ -56,15 +65,6 @@ namespace {
     }
     return AlphaMode::opaque;
 }
-
-[[nodiscard]] TextureMapping runtime_texture_mapping(scene::RuntimeTextureMapping mapping) noexcept
-{
-    return TextureMapping{mapping.texcoord_set,
-                          TextureTransform{mapping.transform.offset, mapping.transform.scale,
-                                           mapping.transform.rotation_radians}};
-}
-
-} // namespace
 
 graphics::TextureAddressMode runtime_address_mode(scene::RuntimeTextureWrap wrap) noexcept
 {
@@ -120,6 +120,35 @@ MaterialDescription runtime_material_description(const scene::RuntimeMaterialVie
     target.normal_texture_mapping = runtime_texture_mapping(source.normal_texture_mapping);
     target.occlusion_texture_mapping = runtime_texture_mapping(source.occlusion_texture_mapping);
     target.emissive_texture_mapping = runtime_texture_mapping(source.emissive_texture_mapping);
+    target.specular_texture_mapping = runtime_texture_mapping(source.specular_texture_mapping);
+    target.specular_color_texture_mapping =
+        runtime_texture_mapping(source.specular_color_texture_mapping);
+    if (source.transmission_factor > 0) {
+        target.transmission = TransmissionDescription{};
+        target.transmission->factor = source.transmission_factor;
+        target.transmission->texture_mapping =
+            runtime_texture_mapping(source.transmission_texture_mapping);
+    }
+    if (source.transmission_factor > 0 && source.thickness_factor > 0) {
+        target.volume = VolumeDescription{};
+        target.volume->thickness_factor = source.thickness_factor;
+        target.volume->attenuation_distance = source.attenuation_distance;
+        target.volume->attenuation_color = source.attenuation_color;
+        target.volume->thickness_texture_mapping =
+            runtime_texture_mapping(source.thickness_texture_mapping);
+    }
+    if (source.clearcoat_factor > 0) {
+        target.clearcoat = ClearcoatDescription{};
+        target.clearcoat->factor = source.clearcoat_factor;
+        target.clearcoat->roughness_factor = source.clearcoat_roughness_factor;
+        target.clearcoat->normal_scale = source.clearcoat_normal_scale;
+        target.clearcoat->texture_mapping =
+            runtime_texture_mapping(source.clearcoat_texture_mapping);
+        target.clearcoat->roughness_texture_mapping =
+            runtime_texture_mapping(source.clearcoat_roughness_texture_mapping);
+        target.clearcoat->normal_texture_mapping =
+            runtime_texture_mapping(source.clearcoat_normal_texture_mapping);
+    }
     return target;
 }
 

@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace elf3d {
@@ -231,6 +232,35 @@ struct TextureDescription {
     bool operator==(const TextureDescription&) const = default;
 };
 
+struct TransmissionDescription {
+    float factor = 0.0F;
+    TextureAssetHandle texture;
+    TextureMapping texture_mapping;
+    bool operator==(const TransmissionDescription&) const = default;
+};
+
+struct ClearcoatDescription {
+    float factor = 0.0F;
+    float roughness_factor = 0.0F;
+    TextureAssetHandle texture;
+    TextureAssetHandle roughness_texture;
+    TextureAssetHandle normal_texture;
+    float normal_scale = 1.0F;
+    TextureMapping texture_mapping;
+    TextureMapping roughness_texture_mapping;
+    TextureMapping normal_texture_mapping;
+    bool operator==(const ClearcoatDescription&) const = default;
+};
+
+struct VolumeDescription {
+    float thickness_factor = 0.0F;
+    TextureAssetHandle thickness_texture;
+    TextureMapping thickness_texture_mapping;
+    std::optional<float> attenuation_distance;
+    Float3 attenuation_color{1.0F, 1.0F, 1.0F};
+    bool operator==(const VolumeDescription&) const = default;
+};
+
 struct MaterialDescription {
     Color4 base_color{1.0F, 1.0F, 1.0F, 1.0F};
     bool double_sided = false;
@@ -256,6 +286,14 @@ struct MaterialDescription {
     TextureMapping occlusion_texture_mapping;
     TextureAssetHandle emissive_texture;
     TextureMapping emissive_texture_mapping;
+
+    TextureAssetHandle specular_texture;
+    TextureAssetHandle specular_color_texture;
+    TextureMapping specular_texture_mapping;
+    TextureMapping specular_color_texture_mapping;
+    std::optional<TransmissionDescription> transmission;
+    std::optional<ClearcoatDescription> clearcoat;
+    std::optional<VolumeDescription> volume;
 
     bool operator==(const MaterialDescription&) const = default;
 };

@@ -94,6 +94,8 @@ Result<void> Storage::set_document(Document&& document)
 {
     auto replacement = std::make_unique<Document>(std::move(document));
     document_mesh_primitives_.clear();
+    document_mesh_primitives_.emplace_back();
+    document_primitive_groups_.clear();
     document_ = std::move(replacement);
     invalidate_all_model_bounds();
     increment_revision();
@@ -474,12 +476,14 @@ Storage::set_model_document_primitives(EntityId entity_id,
     model.primitives.reserve(document_primitives.size());
     model.document_primitives.reserve(document_primitives.size());
     for (const PrimitiveId primitive : document_primitives) {
-        const Result<MeshHandle> mesh = document_mesh_handle(primitive);
-        if (!mesh) {
-            return mesh.error();
+        const auto meshes = document_mesh_handles(primitive);
+        if (!meshes) {
+            return meshes.error();
         }
-        model.primitives.push_back(ModelPrimitiveBinding{mesh.value(), MaterialHandle{}});
-        model.document_primitives.push_back(primitive);
+        for (const MeshHandle mesh : meshes.value()) {
+            model.primitives.push_back(ModelPrimitiveBinding{mesh, MaterialHandle{}});
+            model.document_primitives.push_back(primitive);
+        }
     }
 
     record.value()->model = std::move(model);
@@ -489,33 +493,6 @@ Storage::set_model_document_primitives(EntityId entity_id,
     increment_hierarchy_revision();
     increment_model_spatial_revision();
     return {};
-}
-
-Result<MeshHandle> Storage::document_mesh_handle(PrimitiveId primitive)
-{
-    if (document_ == nullptr) {
-        return Error{ErrorCode::invalid_argument,
-                     "A document mesh handle requires a scene document"};
-    }
-
-    const Result<PrimitiveView> view = document_->primitive(primitive);
-    if (!view) {
-        return view.error();
-    }
-
-    const std::uint64_t value = primitive.debug_value();
-    if (value == 0 || value >= document_mesh_handle_marker ||
-        value > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max() - 1U)) {
-        return Error{ErrorCode::invalid_mesh_handle,
-                     "The document primitive cannot receive a runtime mesh handle"};
-    }
-
-    const std::size_t index = static_cast<std::size_t>(value);
-    if (index >= document_mesh_primitives_.size()) {
-        document_mesh_primitives_.resize(index + 1U);
-    }
-    document_mesh_primitives_[index] = primitive;
-    return detail::SceneHandleAccess::create_mesh(id_, document_mesh_handle_marker | value);
 }
 
 bool Storage::is_document_mesh_handle(MeshHandle mesh) const noexcept
@@ -539,16 +516,11 @@ Result<Bounds3> Storage::document_mesh_bounds(MeshHandle mesh) const noexcept
     }
 
     const std::size_t index = static_cast<std::size_t>(value);
-    if (index >= document_mesh_primitives_.size() ||
-        !document_mesh_primitives_[index].has_value()) {
+    if (index >= document_mesh_primitives_.size()) {
         return Error{ErrorCode::invalid_mesh_handle, "The document mesh handle is stale"};
     }
 
-    const Result<PrimitiveView> primitive = document_->primitive(*document_mesh_primitives_[index]);
-    if (!primitive) {
-        return primitive.error();
-    }
-    return primitive.value().bounds;
+    return document_mesh_primitives_[index].bounds;
 }
 
 Result<RuntimePrimitiveView>

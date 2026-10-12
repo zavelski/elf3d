@@ -341,6 +341,7 @@ void write_report_header(std::ofstream& stream)
               "visible_primitives,culled_primitives,buffer_uploads,buffer_uploaded_bytes,"
               "draw_packet_rebuilds,"
               "resident_geometry_bytes,resident_texture_bytes,resident_environment_bytes,"
+              "transmission_scene_copies,resident_transmission_bytes,"
               "environment_preparations,cpu_list_ms,cpu_resources_ms,"
               "cpu_gl_ms,cpu_render_total_ms,gpu_main_available,gpu_main_ms,"
               "gpu_resolve_available,gpu_resolve_ms,pick_draw_calls,"
@@ -356,7 +357,7 @@ void write_frame_report(std::ofstream& stream, const FrameReport& report)
 {
     const ContextDiagnostics& context = report.environment.context;
     const FrameResult& frame = report.frame;
-    stream << "2,framework_frame," << report.options.scenario_name << ',' << report.index << ','
+    stream << "3,framework_frame," << report.options.scenario_name << ',' << report.index << ','
            << report.load_milliseconds << ',' << frame.milliseconds << ','
            << frame.render.draw_calls << ',' << frame.render.triangles << ','
            << frame.render.candidate_primitives << ',' << frame.render.visible_primitives << ','
@@ -366,6 +367,8 @@ void write_frame_report(std::ofstream& stream, const FrameReport& report)
            << frame.render.estimated_resident_geometry_bytes << ','
            << frame.render.estimated_resident_texture_bytes << ','
            << frame.render.estimated_resident_environment_bytes << ','
+           << frame.render.transmission_scene_copies << ','
+           << frame.render.estimated_resident_transmission_bytes << ','
            << frame.render.environment_preparations << ','
            << frame.render.cpu_render_list_milliseconds << ','
            << frame.render.cpu_resource_preparation_milliseconds << ','

@@ -273,6 +273,16 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
         return projection.error();
     }
     capture.projection = projection.value();
+    if (options.vertical_fov)
+        capture.projection.vertical_field_of_view_radians = *options.vertical_fov;
+    if (options.near_plane)
+        capture.projection.near_plane = *options.near_plane;
+    if (options.far_plane)
+        capture.projection.far_plane = *options.far_plane;
+    const auto projected =
+        capture.scene->set_perspective_camera_description(capture.camera, capture.projection);
+    if (!projected)
+        return projected.error();
     if (options.camera_mode == CameraMode::authored_opposite) {
         elf3d::OrbitNavigationSettings settings;
         settings.focus_depth_anchor_enabled = false;
@@ -379,6 +389,43 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
     return result;
 }
 
+[[nodiscard]] bool append_rendered_object(std::ofstream& stream, const elf3d::Scene& scene,
+                                          const elf3d::SceneHierarchyItem& item,
+                                          std::string_view name)
+{
+    const auto matrix = scene.local_matrix(item.entity);
+    if (!matrix)
+        return false;
+    stream << "{\"entity\":" << item.entity.debug_value()
+           << ",\"parent\":" << (item.parent ? item.parent->debug_value() : 0) << ",\"name\":\""
+           << json_escape(name) << "\",\"has_model\":" << (item.has_model ? "true" : "false")
+           << ",\"local_matrix\":[";
+    for (std::size_t j = 0; j < 16; ++j)
+        stream << (j == 0 ? "" : ",") << matrix.value().elements[j];
+    stream << "]}";
+    return true;
+}
+
+[[nodiscard]] bool append_rendered_objects(std::ofstream& stream, const elf3d::Scene& scene)
+{
+    const auto snapshot = scene.hierarchy_snapshot();
+    if (!snapshot)
+        return false;
+    stream << ",\n  \"rendered_objects\": [";
+    for (std::size_t i = 0; i < snapshot.value().size(); ++i) {
+        const auto item = snapshot.value().item_at(i);
+        const auto name = snapshot.value().name_at(i);
+        if (!item || !name)
+            return false;
+        if (i != 0)
+            stream << ",";
+        if (!append_rendered_object(stream, scene, item.value(), name.value()))
+            return false;
+    }
+    stream << "]";
+    return true;
+}
+
 [[nodiscard]] bool write_metadata(const Options& options, const CaptureScene& capture,
                                   const elf3d::GraphicsContextSnapshot& graphics)
 {
@@ -393,7 +440,8 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
         return false;
     }
 
-    stream << std::fixed << std::setprecision(6) << "{\n  \"schema\": 1,\n  \"model_alias\": \""
+    const auto stats = capture.viewport->render_statistics();
+    stream << std::fixed << std::setprecision(9) << "{\n  \"schema\": 1,\n  \"model_alias\": \""
            << json_escape(capture.model_alias) << "\",\n  \"sha256\": \"" << capture.model_hash
            << "\",\n  \"camera_mode\": \"" << options.camera_name
            << "\",\n  \"camera_matrix_column_major\": [";
@@ -406,8 +454,8 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
            << ", \"far\": " << capture.projection.far_plane
            << "},\n  \"viewport\": {\"width\": " << options.extent.width
            << ", \"height\": " << options.extent.height << ", \"clear_color\": ["
-           << default_viewer_clear_color.red << ", " << default_viewer_clear_color.green << ", "
-           << default_viewer_clear_color.blue << ", " << default_viewer_clear_color.alpha
+           << options.background.red << ", " << options.background.green << ", "
+           << options.background.blue << ", " << options.background.alpha
            << "]},\n  \"lighting\": {"
            << "\"direction\": [" << options.lighting.direction.x << ", "
            << options.lighting.direction.y << ", " << options.lighting.direction.z << "], "
@@ -425,7 +473,17 @@ fitted_camera_matrix(const elf3d::Bounds3& bounds, const elf3d::Extent2D extent,
            << "\",\n  \"renderer\": {\"vendor\": \"" << json_escape(graphics.vendor_name)
            << "\", \"device\": \"" << json_escape(graphics.device_name) << "\", \"opengl\": \""
            << json_escape(graphics.api_version) << "\"},\n  \"build_revision\": \""
-           << ELF3D_CAPTURE_BUILD_REVISION << "\"\n}\n";
+           << ELF3D_CAPTURE_BUILD_REVISION
+           << "\",\n  \"render_statistics\": {\"draw_calls\": " << stats.draw_calls
+           << ", \"triangles\": " << stats.triangles
+           << ", \"texture_uploads\": " << stats.gpu_texture_uploads
+           << ", \"transmission_scene_copies\": " << stats.transmission_scene_copies
+           << ", \"resident_transmission_bytes\": " << stats.estimated_resident_transmission_bytes
+           << ", \"resident_geometry_bytes\": " << stats.estimated_resident_geometry_bytes
+           << ", \"resident_texture_bytes\": " << stats.estimated_resident_texture_bytes << "}";
+    if (!append_rendered_objects(stream, *capture.scene))
+        return false;
+    stream << "\n}\n";
     return static_cast<bool>(stream);
 }
 
@@ -445,7 +503,7 @@ class CaptureApplication final : public elf3d::Application {
             scene_ = std::move(created).value();
             // Snapshot strings are borrowed only for this run_application call.
             graphics_ = context.graphics_context();
-            scene_.viewport->set_clear_color(default_viewer_clear_color);
+            scene_.viewport->set_clear_color(options_.background);
             scene_.viewport->set_basic_lighting(options_.lighting);
             scene_.viewport->set_environment_lighting(options_.environment);
             scene_.viewport->set_display_transform(options_.display);

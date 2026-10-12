@@ -93,6 +93,10 @@ struct RenderStatistics {
     bool gpu_main_pass_timing_available = false;
     bool gpu_resolve_timing_available = false;
 
+    // Current render work and viewport-owned RGBA16F mip-chain residency.
+    std::uint64_t transmission_scene_copies = 0;
+    std::uint64_t estimated_resident_transmission_bytes = 0;
+
     bool operator==(const RenderStatistics&) const = default;
 };
 

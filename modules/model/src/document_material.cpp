@@ -40,21 +40,45 @@ valid_material_scalar_factors(const ModelMaterialDescription& description) noexc
            in_unit_range(volume.attenuation_color.z);
 }
 
+[[nodiscard]] bool valid_transmission_factors(const ModelTransmissionDescription& value) noexcept
+{
+    return finite(value.factor) && value.factor >= 0 && value.factor <= 1;
+}
+[[nodiscard]] bool valid_clearcoat_factors(const ModelClearcoatDescription& value) noexcept
+{
+    return finite(value.factor) && value.factor >= 0 && value.factor <= 1 &&
+           finite(value.roughness_factor) && value.roughness_factor >= 0 &&
+           value.roughness_factor <= 1 && finite(value.normal_scale);
+}
+
 [[nodiscard]] bool valid_material_factors(const ModelMaterialDescription& description) noexcept
 {
     return valid_material_color_factors(description) &&
            valid_material_scalar_factors(description) && valid_alpha(description.alpha_mode) &&
-           (!description.volume || valid_volume_factors(*description.volume));
+           (!description.volume || valid_volume_factors(*description.volume)) &&
+           (!description.transmission || valid_transmission_factors(*description.transmission)) &&
+           (!description.clearcoat || valid_clearcoat_factors(*description.clearcoat));
 }
 
 [[nodiscard]] bool valid_material_mappings(const ModelMaterialDescription& description) noexcept
 {
-    return valid_mapping(description.base_color_texture_mapping) &&
-           valid_mapping(description.metallic_roughness_texture_mapping) &&
-           valid_mapping(description.normal_texture_mapping) &&
-           valid_mapping(description.occlusion_texture_mapping) &&
-           valid_mapping(description.emissive_texture_mapping) &&
-           (!description.volume || valid_mapping(description.volume->thickness_texture_mapping));
+    const std::array<TextureMapping, material_texture_slot_count> mappings{
+        description.base_color_texture_mapping,
+        description.metallic_roughness_texture_mapping,
+        description.normal_texture_mapping,
+        description.occlusion_texture_mapping,
+        description.emissive_texture_mapping,
+        description.specular_texture_mapping,
+        description.specular_color_texture_mapping,
+        description.transmission ? description.transmission->texture_mapping : TextureMapping{},
+        description.volume ? description.volume->thickness_texture_mapping : TextureMapping{},
+        description.clearcoat ? description.clearcoat->texture_mapping : TextureMapping{},
+        description.clearcoat ? description.clearcoat->roughness_texture_mapping : TextureMapping{},
+        description.clearcoat ? description.clearcoat->normal_texture_mapping : TextureMapping{}};
+    for (const auto mapping : mappings)
+        if (!valid_mapping(mapping))
+            return false;
+    return true;
 }
 
 } // namespace elf3d::model::detail

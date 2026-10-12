@@ -23,6 +23,10 @@ struct Options final {
     CameraMode camera_mode = CameraMode::authored_first;
     std::string camera_name;
     std::optional<elf3d::Float4x4> camera_matrix;
+    std::optional<float> vertical_fov;
+    std::optional<float> near_plane;
+    std::optional<float> far_plane;
+    Color4 background{213.0F / 255.0F, 227.0F / 255.0F, 240.0F / 255.0F, 1.0F};
     std::filesystem::path output;
     std::filesystem::path metadata;
     elf3d::RenderShadingMode shading = elf3d::RenderShadingMode::standard;

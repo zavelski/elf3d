@@ -226,7 +226,7 @@ containers, and conservative invalidation after structural/geometry edits.
 It also checks typed volume texture/mapping and factors, default infinite
 distance, invalid factors/mappings, foreign texture IDs, and surviving authored
 required-extension declarations. These are CPU checks; they do not validate
-vendor lighting or volume rendering.
+vendor lighting. Optical rendering has separate GPU and pixel checks.
 
 Camera preservation fixtures extend the existing `elf3d.model_gltf_metadata`
 case. They cover camera/projection metadata, names, authored aspect ratio,
@@ -241,3 +241,25 @@ channels and multiple strips. They reject truncated directories and pixels,
 invalid/overflowing strip offsets, duplicate layout tags, unsupported compression,
 and excessive dimensions. Metadata tests exercise TIFF byte preservation and
 external sidecars across all four glTF/GLB round trips.
+
+
+The material upgrade adds `elf3d.model_gltf_optical_material` (glTF/GLB factors,
+references, mappings, metadata, required extensions and UV fallback) and
+`elf3d.renderer_optical` (bounds-depth sorting, twelve slots, optical classification,
+snapshot scheduling, inactive paths and failure recovery). `elf3d.opengl_render_smoke`
+includes a scaled absorption regression through the actual matrix binding,
+independent double-precision references compared to floating-point GPU
+readback and real transmission pixels, viewport resize/release, scene replacement,
+independent viewport storage, and foreign OpenGL state restoration on all sixteen
+texture units. These hidden-context tests do not certify manual viewer operation.
+Rendering comparisons and performance reports stay under ignored
+`out/render-quality`; they are not a default corpus dependency.
+
+The BRDF/optical arithmetic gate is `1e-5 + 1e-3 * abs(reference)` with
+float-quantized GPU inputs. Linear texture and alpha channels retain that gate.
+Native sRGB texture conversion is checked separately against the IEC piecewise
+transfer with a 0.002 absolute sampler tolerance: Radeon 780M returned 0.957031
+for byte 250 versus the double-precision value 0.955973. This is an explicit
+hardware sampler precision allowance, not a relaxed BRDF/optical arithmetic gate.
+Khronos leaves exact sampler conversion precision to implementations in
+[EXT_texture_sRGB, issue 13](https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_sRGB.txt).

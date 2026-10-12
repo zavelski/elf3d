@@ -9,6 +9,7 @@ int elf3d_gltf_export_test();
 int elf3d_gltf_metadata_round_trip_test();
 int elf3d_gltf_camera_round_trip_test();
 int elf3d_gltf_json_format_test();
+int elf3d_gltf_optical_material_test();
 
 namespace {
 
@@ -25,6 +26,8 @@ namespace {
 int main(int argument_count, char** arguments)
 {
     const std::string_view test_case = selected_case(argument_count, arguments);
+    if (test_case == "optical_material")
+        return elf3d_gltf_optical_material_test();
     if (test_case == "image_decode") {
         const int decoded = elf3d_image_decode_test();
         return decoded != 0 ? decoded : elf3d_tiff_decode_test();

@@ -47,7 +47,8 @@ draw_indexed(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipelin
 [[nodiscard]] Result<void>
 draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
                    std::span<graphics::StaticMesh* const> meshes,
-                   std::span<const graphics::DrawIndexedDescription> descriptions) noexcept;
+                   std::span<const graphics::DrawIndexedDescription> descriptions,
+                   std::optional<std::size_t> capture_scene_before) noexcept;
 [[nodiscard]] Result<void>
 draw_overlay(OverlayResources& resources, graphics::RenderTarget& target,
              const graphics::DrawOverlayDescription& description) noexcept;
@@ -191,10 +192,11 @@ class OpenGLDevice final : public graphics::Device {
         return device_detail::draw_indexed(target, pipeline, mesh, description);
     }
 
-    [[nodiscard]] Result<void> draw_indexed_batch(
-        graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
-        std::span<graphics::StaticMesh* const> meshes,
-        std::span<const graphics::DrawIndexedDescription> descriptions) noexcept override
+    [[nodiscard]] Result<void>
+    draw_indexed_batch(graphics::RenderTarget& target, graphics::GraphicsPipeline& pipeline,
+                       std::span<graphics::StaticMesh* const> meshes,
+                       std::span<const graphics::DrawIndexedDescription> descriptions,
+                       std::optional<std::size_t> capture_scene_before) noexcept override
     {
         const Result<void> validation = state_->validate_operation();
         if (!validation) {
@@ -202,7 +204,8 @@ class OpenGLDevice final : public graphics::Device {
         }
 
         const GpuTimingScope timing{*state_, GpuTimingKind::main};
-        return device_detail::draw_indexed_batch(target, pipeline, meshes, descriptions);
+        return device_detail::draw_indexed_batch(target, pipeline, meshes, descriptions,
+                                                 capture_scene_before);
     }
 
     [[nodiscard]] Result<void>
@@ -308,6 +311,11 @@ Result<std::unique_ptr<graphics::Device>> create_device(const DeviceOptions& opt
                          "Elf3D requires an OpenGL core-profile context"};
         }
 
+        GLint fragment_texture_units = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &fragment_texture_units);
+        if (fragment_texture_units < 16)
+            return Error{ErrorCode::graphics_initialization_failed,
+                         "Standard rendering requires sixteen fragment texture units"};
         GLint maximum_texture_size = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum_texture_size);
         if (maximum_texture_size <= 0) {
