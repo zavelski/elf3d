@@ -21,6 +21,11 @@ without PCH, then links two combined units to check ODR. `-RequireGraphics`
 rejects unavailable graphics contexts; otherwise such tests report a skip.
 A skipped graphics check does not validate rendering. Real graphics need OpenGL 4.1.
 
+The `elf3d.graphics_service` benchmark returns skip code 77 when graphics
+initialization, context availability or the supported graphics version prevents
+startup. Other benchmark errors remain failures. `-RequireGraphics` rejects
+this skip, as it does for the other graphics scenarios.
+
 Reports keep the latest success and failure per profile/configuration under
 `out/reports/tests`. Product DLLs are loaded from x64; test-only providers stay
 with tests. VS test projects are in `win/Elf3D-Tests.slnx`; developer tools,

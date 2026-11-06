@@ -71,7 +71,7 @@ All graphical applications, including hidden capture and benchmark tools, use
 
 ## Download the viewer
 
-This source version is **0.13.0**. Download a published
+This source version is **0.13.1**. Download a published
 [Windows x64 viewer package](https://github.com/zavelski/elf3d/releases/latest),
 extract it, and run `elf3d_viewer.exe`.
 

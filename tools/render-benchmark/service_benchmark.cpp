@@ -301,6 +301,12 @@ int run_service_benchmark(int count, char** values)
         const auto result = run_application(configuration, application);
         if (!result) {
             std::cerr << result.error().message() << '\n';
+            const auto code = result.error().code();
+            if (code == ErrorCode::graphics_initialization_failed ||
+                code == ErrorCode::graphics_context_unavailable ||
+                code == ErrorCode::unsupported_graphics_version) {
+                return 77;
+            }
             return 7;
         }
         return result.value();

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1
+
+- Report the graphics-service benchmark as skipped when OpenGL 4.1 initialization,
+  context availability or graphics-version support prevents startup. Other
+  benchmark errors remain failures, and `-RequireGraphics` continues to reject
+  unavailable graphics.
+
 ## 0.13.0
 
 - Add explicit CPU Scene preparation and retirement owners. Applications can
