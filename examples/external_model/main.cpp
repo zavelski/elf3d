@@ -5,12 +5,35 @@
 
 #include <exception>
 #include <iostream>
+#include <utility>
+
+namespace {
+bool verify_metadata_construction()
+{
+    elf3d::Document document;
+    const auto scene = document.create_scene("Constructed");
+    if (!scene) {
+        return false;
+    }
+    elf3d::ModelDocumentMetadata metadata;
+    metadata.root.extras_json = R"({"source":"external Model SDK application"})";
+    metadata.scenes.push_back({scene.value(), {R"({"purpose":"verified reconstruction"})", {}}});
+    if (!document.attach_verified_metadata(std::move(metadata))) {
+        return false;
+    }
+    return document.root_metadata().extras_json.has_value() &&
+           !elf3d::validate_document(document.view()).has_errors();
+}
+} // namespace
 
 int main(int count, char** arguments)
 {
     try {
         if (count != 3) {
             return 2;
+        }
+        if (!verify_metadata_construction()) {
+            return 1;
         }
         auto loaded = elf3d::load_document(arguments[1]);
         if (!loaded) {

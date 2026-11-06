@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="projects/elf3d_render_benchmark.vcxproj" Id="4af9f5fd-1e19-3927-aedf-0afcbb4caff1" />
+  <Project Path="projects/elf3d_render_quality_capture.vcxproj" Id="bc154150-3f56-36b3-ad89-78a12354ed87" />
+  <Project Path="projects/elf3d_studio_environment_baker.vcxproj" Id="145a1f39-c928-3bea-ab0e-eb773f2c6fdb" />
+</Solution>

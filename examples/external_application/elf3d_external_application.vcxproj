@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectName>elf3d_external_application</ProjectName>
+    <Elf3DOutputKind>Test</Elf3DOutputKind>
+    <Elf3DSourceRoot Condition="'$(Elf3DSourceRoot)'==''">$(MSBuildThisFileDirectory)..\..\</Elf3DSourceRoot>
+    <Elf3DComponent>App</Elf3DComponent>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <Elf3DWorkRoot Condition="'$(Elf3DWorkRoot)'==''">$(Elf3DSourceRoot)out\</Elf3DWorkRoot>
+    <Elf3DSuffix Condition="'$(Configuration)'=='Debug'">D</Elf3DSuffix>
+    <IntDir>$(Elf3DWorkRoot)obj\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+    <OutDir>$(Elf3DWorkRoot)tests\$(Configuration)\</OutDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions Condition="'$(Configuration)'=='Release'">NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ProgramDataBaseFileName>$(IntDir)compiler.pdb</ProgramDataBaseFileName>
+      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link><ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary><GenerateDebugInformation>true</GenerateDebugInformation><ProgramDataBaseFile>$(IntDir)$(TargetName).pdb</ProgramDataBaseFile></Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(Elf3DSourceRoot)win\Elf3D.props" />
+  <PropertyGroup><TargetName>elf3d_external_application$(Elf3DSuffix)</TargetName></PropertyGroup>
+  <ItemGroup><ClCompile Include="main.cpp" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

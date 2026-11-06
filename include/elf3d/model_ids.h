@@ -9,6 +9,21 @@ namespace model::detail {
 class DocumentHandleAccess;
 class DocumentMetadataAccess;
 class DocumentValidation;
+
+// Opaque, process-local identity. The domain distinguishes simultaneously loaded
+// copies of the source-integrated Model SDK; the sequence prevents storage reuse
+// from reviving a stale ID. The creating module must remain loaded while IDs live.
+struct DocumentOwnerToken final {
+    std::uintptr_t domain = 0;
+    std::uint64_t sequence = 0;
+
+    [[nodiscard]] constexpr bool is_valid() const noexcept
+    {
+        return domain != 0 && sequence != 0;
+    }
+
+    bool operator==(const DocumentOwnerToken&) const = default;
+};
 } // namespace model::detail
 
 class DocumentSceneId final {
@@ -17,7 +32,7 @@ class DocumentSceneId final {
 
     [[nodiscard]] constexpr bool is_valid() const noexcept
     {
-        return document_token_ != 0 && value_ != 0;
+        return document_token_.is_valid() && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
@@ -30,12 +45,13 @@ class DocumentSceneId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr DocumentSceneId(std::uint64_t document_token, std::uint64_t value) noexcept
+    constexpr DocumentSceneId(model::detail::DocumentOwnerToken document_token,
+                              std::uint64_t value) noexcept
         : document_token_(document_token), value_(value)
     {
     }
 
-    std::uint64_t document_token_ = 0;
+    model::detail::DocumentOwnerToken document_token_;
     std::uint64_t value_ = 0;
 };
 
@@ -45,7 +61,7 @@ class NodeId final {
 
     [[nodiscard]] constexpr bool is_valid() const noexcept
     {
-        return document_token_ != 0 && value_ != 0;
+        return document_token_.is_valid() && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
@@ -58,12 +74,12 @@ class NodeId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr NodeId(std::uint64_t document_token, std::uint64_t value) noexcept
+    constexpr NodeId(model::detail::DocumentOwnerToken document_token, std::uint64_t value) noexcept
         : document_token_(document_token), value_(value)
     {
     }
 
-    std::uint64_t document_token_ = 0;
+    model::detail::DocumentOwnerToken document_token_;
     std::uint64_t value_ = 0;
 };
 
@@ -73,7 +89,7 @@ class MeshId final {
 
     [[nodiscard]] constexpr bool is_valid() const noexcept
     {
-        return document_token_ != 0 && value_ != 0;
+        return document_token_.is_valid() && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
@@ -86,12 +102,12 @@ class MeshId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr MeshId(std::uint64_t document_token, std::uint64_t value) noexcept
+    constexpr MeshId(model::detail::DocumentOwnerToken document_token, std::uint64_t value) noexcept
         : document_token_(document_token), value_(value)
     {
     }
 
-    std::uint64_t document_token_ = 0;
+    model::detail::DocumentOwnerToken document_token_;
     std::uint64_t value_ = 0;
 };
 
@@ -101,7 +117,7 @@ class PrimitiveId final {
 
     [[nodiscard]] constexpr bool is_valid() const noexcept
     {
-        return document_token_ != 0 && value_ != 0;
+        return document_token_.is_valid() && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
@@ -114,12 +130,13 @@ class PrimitiveId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr PrimitiveId(std::uint64_t document_token, std::uint64_t value) noexcept
+    constexpr PrimitiveId(model::detail::DocumentOwnerToken document_token,
+                          std::uint64_t value) noexcept
         : document_token_(document_token), value_(value)
     {
     }
 
-    std::uint64_t document_token_ = 0;
+    model::detail::DocumentOwnerToken document_token_;
     std::uint64_t value_ = 0;
 };
 
@@ -129,7 +146,7 @@ class MaterialId final {
 
     [[nodiscard]] constexpr bool is_valid() const noexcept
     {
-        return document_token_ != 0 && value_ != 0;
+        return document_token_.is_valid() && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
@@ -142,12 +159,13 @@ class MaterialId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr MaterialId(std::uint64_t document_token, std::uint64_t value) noexcept
+    constexpr MaterialId(model::detail::DocumentOwnerToken document_token,
+                         std::uint64_t value) noexcept
         : document_token_(document_token), value_(value)
     {
     }
 
-    std::uint64_t document_token_ = 0;
+    model::detail::DocumentOwnerToken document_token_;
     std::uint64_t value_ = 0;
 };
 
@@ -157,7 +175,7 @@ class ImageId final {
 
     [[nodiscard]] constexpr bool is_valid() const noexcept
     {
-        return document_token_ != 0 && value_ != 0;
+        return document_token_.is_valid() && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
@@ -170,12 +188,13 @@ class ImageId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr ImageId(std::uint64_t document_token, std::uint64_t value) noexcept
+    constexpr ImageId(model::detail::DocumentOwnerToken document_token,
+                      std::uint64_t value) noexcept
         : document_token_(document_token), value_(value)
     {
     }
 
-    std::uint64_t document_token_ = 0;
+    model::detail::DocumentOwnerToken document_token_;
     std::uint64_t value_ = 0;
 };
 
@@ -185,7 +204,7 @@ class TextureId final {
 
     [[nodiscard]] constexpr bool is_valid() const noexcept
     {
-        return document_token_ != 0 && value_ != 0;
+        return document_token_.is_valid() && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
@@ -198,12 +217,13 @@ class TextureId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr TextureId(std::uint64_t document_token, std::uint64_t value) noexcept
+    constexpr TextureId(model::detail::DocumentOwnerToken document_token,
+                        std::uint64_t value) noexcept
         : document_token_(document_token), value_(value)
     {
     }
 
-    std::uint64_t document_token_ = 0;
+    model::detail::DocumentOwnerToken document_token_;
     std::uint64_t value_ = 0;
 };
 
@@ -213,7 +233,7 @@ class SamplerId final {
 
     [[nodiscard]] constexpr bool is_valid() const noexcept
     {
-        return document_token_ != 0 && value_ != 0;
+        return document_token_.is_valid() && value_ != 0;
     }
 
     [[nodiscard]] constexpr std::uint64_t debug_value() const noexcept
@@ -226,12 +246,13 @@ class SamplerId final {
   private:
     friend class model::detail::DocumentHandleAccess;
 
-    constexpr SamplerId(std::uint64_t document_token, std::uint64_t value) noexcept
+    constexpr SamplerId(model::detail::DocumentOwnerToken document_token,
+                        std::uint64_t value) noexcept
         : document_token_(document_token), value_(value)
     {
     }
 
-    std::uint64_t document_token_ = 0;
+    model::detail::DocumentOwnerToken document_token_;
     std::uint64_t value_ = 0;
 };
 

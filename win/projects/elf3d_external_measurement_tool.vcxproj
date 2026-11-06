@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{2263C42B-C5DA-39D5-86F6-0AB4B68B9C69}</ProjectGuid>
+    <ProjectName>elf3d_external_measurement_tool</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Test</Elf3DOutputKind>
+    <Elf3DPart>Tests</Elf3DPart>
+    <Elf3DModelTarget>false</Elf3DModelTarget>
+    <Elf3DThirdParty>false</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_external_measurement_tool$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\tests\copy_adapt\measurement_tool.cpp">
+      <ObjectFileName>$(IntDir)tests_copy_adapt_measurement_tool.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\tests\copy_adapt\measurement_tool.hpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d$(Elf3DSuffix).lib">
+      <Part>Engine</Part>
+      <Producer>elf3d</Producer>
+    </Elf3DPrerequisite>
+  </ItemGroup>
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

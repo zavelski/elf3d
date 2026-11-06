@@ -1,0 +1,6 @@
+<Solution>
+  <Configurations><Platform Name="x64" /></Configurations>
+  <Project Path="projects/elf3d_imgui.vcxproj" Id="0d87b3b9-9835-399c-8fe9-e2254fc135b0" />
+  <Project Path="projects/elf3d_app.vcxproj" Id="c94ab015-bdcc-3c38-b295-b2551e05244c" />
+  <Project Path="projects/elf3d_viewer.vcxproj" DefaultStartup="true" Id="2a08b620-dd67-3ec4-b403-cdd809b634b8" />
+</Solution>

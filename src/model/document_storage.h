@@ -1,0 +1,522 @@
+#ifndef ELF3D_MODEL_DETAIL_DOCUMENT_STORAGE_H
+#define ELF3D_MODEL_DETAIL_DOCUMENT_STORAGE_H
+
+#include <elf3d/model.h>
+#include <model/document_handle_access.h>
+#include <model/image_payload.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace elf3d::model::detail {
+
+[[nodiscard]] bool finite(float value) noexcept;
+[[nodiscard]] bool finite(Float2 value) noexcept;
+[[nodiscard]] bool finite(Float3 value) noexcept;
+[[nodiscard]] bool finite(Color4 value) noexcept;
+[[nodiscard]] bool finite(const Float4x4& value) noexcept;
+[[nodiscard]] bool valid_alpha(AlphaMode mode) noexcept;
+[[nodiscard]] bool valid_wrap(TextureWrap wrap) noexcept;
+[[nodiscard]] bool valid_filter(TextureFilter filter) noexcept;
+[[nodiscard]] bool valid_mag_filter(TextureFilter filter) noexcept;
+[[nodiscard]] bool
+valid_perspective_camera(const PerspectiveCameraDescription& description) noexcept;
+[[nodiscard]] bool valid_material_factors(const ModelMaterialDescription& description) noexcept;
+[[nodiscard]] bool valid_material_mappings(const ModelMaterialDescription& description) noexcept;
+[[nodiscard]] Result<void>
+validate_image_description(const ModelImageDescription& description) noexcept;
+[[nodiscard]] Result<std::size_t> expected_image_bytes(std::uint32_t width, std::uint32_t height,
+                                                       PixelFormat format) noexcept;
+[[nodiscard]] bool source_bytes_match(ModelImageMimeType mime,
+                                      std::span<const std::byte> bytes) noexcept;
+[[nodiscard]] Bounds3 merge(Bounds3 left, Bounds3 right) noexcept;
+[[nodiscard]] Result<Bounds3> primitive_bounds(const PrimitiveDataView& data) noexcept;
+[[nodiscard]] Result<void> validate_normals(std::span<const Float3> values) noexcept;
+[[nodiscard]] Result<void> validate_tangents(std::span<const Float4> values) noexcept;
+[[nodiscard]] Result<void> validate_texcoords(std::span<const Float2> values,
+                                              std::string_view semantic) noexcept;
+[[nodiscard]] Result<void> validate_colors(std::span<const Color4> values) noexcept;
+[[nodiscard]] Result<void> validate_indices(std::span<const std::uint32_t> values,
+                                            std::size_t vertex_count) noexcept;
+[[nodiscard]] Result<void> validate_primitive_data(const PrimitiveDataView& data) noexcept;
+[[nodiscard]] PrimitiveData copy_primitive_data(const PrimitiveDataView& view);
+[[nodiscard]] ModelJsonMetadataView metadata_view(const ModelJsonMetadata& metadata) noexcept;
+[[nodiscard]] bool has_metadata(const ModelJsonMetadata& metadata) noexcept;
+[[nodiscard]] bool valid_metadata(const ModelJsonMetadata& metadata,
+                                  std::size_t& total_bytes) noexcept;
+
+} // namespace elf3d::model::detail
+
+namespace elf3d {
+
+class Document::Storage final {
+  public:
+    Storage() noexcept;
+
+    // Used only on a fresh owner after source validation.
+    void clone_contents_from(const Storage& source, model::detail::ImageCopyPolicy images);
+
+    struct SceneRecord {
+        DocumentSceneId id;
+        std::string name;
+        std::vector<NodeId> roots;
+        ModelJsonMetadata metadata;
+    };
+
+    struct NodeRecord {
+        NodeId id;
+        std::string name;
+        std::optional<NodeId> parent;
+        std::vector<NodeId> children;
+        Float4x4 local_matrix;
+        std::optional<MeshId> mesh;
+        std::optional<PerspectiveCameraDescription> perspective_camera;
+        ModelJsonMetadata metadata;
+        ModelCameraPropertiesDescription camera_properties;
+        ModelJsonMetadata camera_metadata;
+        ModelJsonMetadata camera_projection_metadata;
+    };
+
+    struct MeshRecord {
+        MeshId id;
+        std::string name;
+        std::vector<PrimitiveId> primitives;
+        std::optional<Bounds3> bounds;
+        ModelJsonMetadata metadata;
+    };
+
+    struct PrimitiveRecord {
+        PrimitiveId id;
+        MeshId mesh;
+        MaterialId material;
+        Bounds3 bounds;
+        PrimitiveData data;
+        ModelJsonMetadata metadata;
+    };
+
+    struct MaterialRecord {
+        MaterialId id;
+        ModelMaterialDescription description;
+        std::string name;
+        ModelJsonMetadata metadata;
+    };
+
+    struct ImageRecord {
+        ImageId id;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        PixelFormat format = PixelFormat::rgba8_unorm;
+        model::detail::ImagePayload payload;
+        ModelImageMimeType source_mime_type = ModelImageMimeType::none;
+        ModelJsonMetadata metadata;
+    };
+
+    struct TextureRecord {
+        TextureId id;
+        ModelTextureDescription description;
+        ModelJsonMetadata metadata;
+    };
+
+    struct SamplerRecord {
+        SamplerId id;
+        SamplerDescription description;
+        ModelJsonMetadata metadata;
+    };
+
+    [[nodiscard]] model::detail::DocumentOwnerToken token() const noexcept;
+
+    [[nodiscard]] bool owns(DocumentSceneId id) const noexcept
+    {
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
+    }
+
+    [[nodiscard]] bool owns(NodeId id) const noexcept
+    {
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
+    }
+
+    [[nodiscard]] bool owns(MeshId id) const noexcept
+    {
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
+    }
+
+    [[nodiscard]] bool owns(PrimitiveId id) const noexcept
+    {
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
+    }
+
+    [[nodiscard]] bool owns(MaterialId id) const noexcept
+    {
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
+    }
+
+    [[nodiscard]] bool owns(ImageId id) const noexcept
+    {
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
+    }
+
+    [[nodiscard]] bool owns(TextureId id) const noexcept
+    {
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
+    }
+
+    [[nodiscard]] bool owns(SamplerId id) const noexcept
+    {
+        return id.is_valid() && model::detail::DocumentHandleAccess::document_token(id) == token();
+    }
+
+    [[nodiscard]] Result<SceneRecord*> mutable_scene(DocumentSceneId id) noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_document_scene_id,
+                         "The scene identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= scenes.size()) {
+            return Error{ErrorCode::invalid_document_scene_id, "The scene identifier is stale"};
+        }
+        return &scenes[index];
+    }
+
+    [[nodiscard]] Result<const SceneRecord*> scene(DocumentSceneId id) const noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_document_scene_id,
+                         "The scene identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= scenes.size()) {
+            return Error{ErrorCode::invalid_document_scene_id, "The scene identifier is stale"};
+        }
+        return &scenes[index];
+    }
+
+    [[nodiscard]] Result<NodeRecord*> mutable_node(NodeId id) noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_node_id,
+                         "The node identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= nodes.size()) {
+            return Error{ErrorCode::invalid_node_id, "The node identifier is stale"};
+        }
+        return &nodes[index];
+    }
+
+    [[nodiscard]] Result<const NodeRecord*> node(NodeId id) const noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_node_id,
+                         "The node identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= nodes.size()) {
+            return Error{ErrorCode::invalid_node_id, "The node identifier is stale"};
+        }
+        return &nodes[index];
+    }
+
+    [[nodiscard]] Result<MeshRecord*> mutable_mesh(MeshId id) noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_mesh_id,
+                         "The mesh identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= meshes.size()) {
+            return Error{ErrorCode::invalid_mesh_id, "The mesh identifier is stale"};
+        }
+        return &meshes[index];
+    }
+
+    [[nodiscard]] Result<const MeshRecord*> mesh(MeshId id) const noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_mesh_id,
+                         "The mesh identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= meshes.size()) {
+            return Error{ErrorCode::invalid_mesh_id, "The mesh identifier is stale"};
+        }
+        return &meshes[index];
+    }
+
+    [[nodiscard]] Result<PrimitiveRecord*> mutable_primitive(PrimitiveId id) noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_primitive_id,
+                         "The primitive identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= primitives.size()) {
+            return Error{ErrorCode::invalid_primitive_id, "The primitive identifier is stale"};
+        }
+        return &primitives[index];
+    }
+
+    [[nodiscard]] Result<const PrimitiveRecord*> primitive(PrimitiveId id) const noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_primitive_id,
+                         "The primitive identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= primitives.size()) {
+            return Error{ErrorCode::invalid_primitive_id, "The primitive identifier is stale"};
+        }
+        return &primitives[index];
+    }
+
+    [[nodiscard]] Result<const MaterialRecord*> material(MaterialId id) const noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_material_id,
+                         "The material identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= materials.size()) {
+            return Error{ErrorCode::invalid_material_id, "The material identifier is stale"};
+        }
+        return &materials[index];
+    }
+
+    [[nodiscard]] Result<const ImageRecord*> image(ImageId id) const noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_image_id,
+                         "The image identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= images.size()) {
+            return Error{ErrorCode::invalid_image_id, "The image identifier is stale"};
+        }
+        return &images[index];
+    }
+
+    [[nodiscard]] Result<const TextureRecord*> texture(TextureId id) const noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_texture_id,
+                         "The texture identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= textures.size()) {
+            return Error{ErrorCode::invalid_texture_id, "The texture identifier is stale"};
+        }
+        return &textures[index];
+    }
+
+    [[nodiscard]] Result<const SamplerRecord*> sampler(SamplerId id) const noexcept
+    {
+        if (!owns(id)) {
+            return Error{ErrorCode::invalid_sampler_id,
+                         "The sampler identifier does not belong to this document"};
+        }
+        const std::size_t index =
+            static_cast<std::size_t>(model::detail::DocumentHandleAccess::value(id) - 1);
+        if (index >= samplers.size()) {
+            return Error{ErrorCode::invalid_sampler_id, "The sampler identifier is stale"};
+        }
+        return &samplers[index];
+    }
+
+    [[nodiscard]] bool
+    valid_material_textures(const ModelMaterialDescription& description) const noexcept
+    {
+        const std::array<TextureId, material_texture_slot_count> slots{
+            description.base_color_texture,
+            description.metallic_roughness_texture,
+            description.normal_texture,
+            description.occlusion_texture,
+            description.emissive_texture,
+            description.specular_texture,
+            description.specular_color_texture,
+            description.transmission ? description.transmission->texture : TextureId{},
+            description.volume ? description.volume->thickness_texture : TextureId{},
+            description.clearcoat ? description.clearcoat->texture : TextureId{},
+            description.clearcoat ? description.clearcoat->roughness_texture : TextureId{},
+            description.clearcoat ? description.clearcoat->normal_texture : TextureId{}};
+        for (const auto texture : slots)
+            if (!valid_texture_or_empty(texture))
+                return false;
+        return true;
+    }
+
+    [[nodiscard]] Result<void> reject_parent_cycle(NodeId child_id, NodeId parent_id) const noexcept
+    {
+        std::optional<NodeId> ancestor = parent_id;
+        while (ancestor.has_value()) {
+            if (*ancestor == child_id) {
+                return Error{ErrorCode::hierarchy_cycle,
+                             "The parent assignment would create a document node cycle"};
+            }
+
+            const Result<const NodeRecord*> ancestor_record = node(*ancestor);
+            if (!ancestor_record) {
+                return ancestor_record.error();
+            }
+            ancestor = ancestor_record.value()->parent;
+        }
+        return {};
+    }
+
+    void detach_from_existing_parent(NodeRecord& child, NodeId child_id) noexcept
+    {
+        if (!child.parent.has_value()) {
+            return;
+        }
+
+        Result<NodeRecord*> old_parent = mutable_node(*child.parent);
+        if (!old_parent) {
+            return;
+        }
+        auto& siblings = old_parent.value()->children;
+        siblings.erase(std::remove(siblings.begin(), siblings.end(), child_id), siblings.end());
+    }
+
+    void remove_scene_root_entries(NodeId node_id) noexcept
+    {
+        for (SceneRecord& scene_record : scenes) {
+            scene_record.roots.erase(
+                std::remove(scene_record.roots.begin(), scene_record.roots.end(), node_id),
+                scene_record.roots.end());
+        }
+    }
+
+    void update_mesh_bounds(MeshRecord& mesh) noexcept
+    {
+        mesh.bounds.reset();
+
+        for (const PrimitiveId primitive_id : mesh.primitives) {
+            const Result<const PrimitiveRecord*> primitive_result = primitive(primitive_id);
+            if (!primitive_result) {
+                continue;
+            }
+            mesh.bounds = mesh.bounds.has_value()
+                              ? model::detail::merge(*mesh.bounds, primitive_result.value()->bounds)
+                              : primitive_result.value()->bounds;
+        }
+    }
+
+    [[nodiscard]] DocumentStatistics statistics() const noexcept
+    {
+        DocumentStatistics result;
+        result.scenes = static_cast<std::uint64_t>(scenes.size());
+        result.nodes = static_cast<std::uint64_t>(nodes.size());
+        result.meshes = static_cast<std::uint64_t>(meshes.size());
+        result.primitives = static_cast<std::uint64_t>(primitives.size());
+        result.materials = static_cast<std::uint64_t>(materials.size());
+        result.images = static_cast<std::uint64_t>(images.size());
+        result.textures = static_cast<std::uint64_t>(textures.size());
+        result.samplers = static_cast<std::uint64_t>(samplers.size());
+        accumulate_node_statistics(result);
+        accumulate_primitive_statistics(result);
+        accumulate_image_statistics(result);
+        accumulate_material_statistics(result);
+        return result;
+    }
+
+    void note_mutation() noexcept
+    {
+        advance_revision();
+        preserved_metadata_stale = preserved_metadata_stale || has_preserved_metadata;
+    }
+
+    void advance_revision() noexcept;
+    std::uint64_t revision = 1;
+    mutable std::uint64_t validation_revision = 0;
+    mutable DocumentValidationReport validation_report;
+
+    ModelJsonMetadata root_metadata;
+    ModelJsonMetadata asset_metadata;
+    std::vector<std::string> required_extensions;
+    std::vector<SceneRecord> scenes;
+    std::optional<DocumentSceneId> default_scene;
+    std::vector<NodeRecord> nodes;
+    std::vector<MeshRecord> meshes;
+    std::vector<PrimitiveRecord> primitives;
+    std::vector<MaterialRecord> materials;
+    std::vector<ImageRecord> images;
+    std::vector<TextureRecord> textures;
+    std::vector<SamplerRecord> samplers;
+    bool has_preserved_metadata = false;
+    bool preserved_metadata_stale = false;
+
+    [[nodiscard]] Result<void>
+    validate_camera_properties(const ModelCameraPropertiesDescription& description) const noexcept;
+
+  private:
+    model::detail::DocumentOwnerToken owner_token_;
+
+    void remap_cloned_hierarchy() noexcept;
+    void remap_cloned_assets() noexcept;
+
+    void accumulate_node_statistics(DocumentStatistics& statistics) const noexcept
+    {
+        for (const NodeRecord& node : nodes) {
+            if (node.perspective_camera.has_value()) {
+                ++statistics.perspective_cameras;
+            }
+        }
+    }
+
+    void accumulate_primitive_statistics(DocumentStatistics& statistics) const noexcept
+    {
+        for (const PrimitiveRecord& primitive : primitives) {
+            statistics.vertices += static_cast<std::uint64_t>(primitive.data.positions.size());
+            statistics.indices += static_cast<std::uint64_t>(primitive.data.indices.size());
+            statistics.triangles += static_cast<std::uint64_t>(primitive.data.indices.size() / 3);
+        }
+    }
+
+    void accumulate_image_statistics(DocumentStatistics& statistics) const noexcept
+    {
+        for (const ImageRecord& image : images) {
+            statistics.decoded_image_bytes +=
+                static_cast<std::uint64_t>(image.payload.pixels().size());
+        }
+    }
+
+    void accumulate_material_statistics(DocumentStatistics& statistics) const noexcept
+    {
+        for (const MaterialRecord& material : materials) {
+            statistics.materials_with_base_color_textures +=
+                material.description.base_color_texture.is_valid() ? 1U : 0U;
+            statistics.materials_with_metallic_roughness_textures +=
+                material.description.metallic_roughness_texture.is_valid() ? 1U : 0U;
+            statistics.materials_with_normal_textures +=
+                material.description.normal_texture.is_valid() ? 1U : 0U;
+            statistics.materials_with_occlusion_textures +=
+                material.description.occlusion_texture.is_valid() ? 1U : 0U;
+            statistics.materials_with_emissive_textures +=
+                material.description.emissive_texture.is_valid() ? 1U : 0U;
+        }
+    }
+
+    [[nodiscard]] bool valid_texture_or_empty(TextureId texture_id) const noexcept
+    {
+        return !texture_id.is_valid() || static_cast<bool>(texture(texture_id));
+    }
+};
+
+} // namespace elf3d
+
+#endif

@@ -1,0 +1,2 @@
+#include "resource_ids.h"
+ELF3D_STUDIO_ENVIRONMENT_RESOURCE_ID RCDATA "studio_environment_v3.ibl"

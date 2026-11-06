@@ -1,0 +1,185 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{B3255EF8-4810-3949-972B-79BE72972444}</ProjectGuid>
+    <ProjectName>elf3d</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Engine</Elf3DPart>
+    <Elf3DModelTarget>false</Elf3DModelTarget>
+    <Elf3DThirdParty>false</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;$(Elf3DRoot)src\engine;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;ELF3D_BUILDING_LIBRARY;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "$(Elf3DRoot)third_party/mikktspace"</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+      <AdditionalOptions>/WHOLEARCHIVE:"$(Elf3DProductRoot)elf3d_model$(Elf3DSuffix).lib" /WHOLEARCHIVE:"$(Elf3DProductRoot)elf3d_runtime$(Elf3DSuffix).lib" %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectReference Include="elf3d_model.vcxproj">
+      <Project>{F151F146-F1CE-3DB8-94F6-033CE27F8454}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="elf3d_runtime.vcxproj">
+      <Project>{3DA2D2BB-7B21-567B-BBF4-184D01690607}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\engine\engine.cpp">
+      <ObjectFileName>$(IntDir)src_engine_engine.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\engine\scene_cpu_retirement.cpp"><ObjectFileName>$(IntDir)src_engine_scene_cpu_retirement.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\engine\prepared_scene_document.cpp"><ObjectFileName>$(IntDir)src_engine_prepared_scene_document.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\engine\prepared_scene_document.h" />
+    <ClInclude Include="..\..\src\engine\scene_load_report.h" />
+    <ClInclude Include="..\..\src\engine\scene_cpu_retirement.h" />
+    <ClCompile Include="..\..\src\engine\scene_hierarchy_snapshot.cpp"><ObjectFileName>$(IntDir)src_engine_scene_hierarchy_snapshot.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\engine\scene_hierarchy_builder.cpp"><ObjectFileName>$(IntDir)src_engine_scene_hierarchy_builder.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\engine\scene_hierarchy_snapshot.h" />
+    <ClCompile Include="..\..\src\engine\scene.cpp">
+      <ObjectFileName>$(IntDir)src_engine_scene.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\engine\viewport_primitive_visibility.cpp"><ObjectFileName>$(IntDir)src_engine_viewport_primitive_visibility.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\engine\viewport.cpp">
+      <ObjectFileName>$(IntDir)src_engine_viewport.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\engine\viewport_navigation.cpp">
+      <ObjectFileName>$(IntDir)src_engine_viewport_navigation.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\engine\studio_environment_resource_windows.cpp">
+      <ObjectFileName>$(IntDir)src_engine_studio_environment_resource_windows.obj</ObjectFileName>
+    </ClCompile>
+    <ResourceCompile Include="..\..\src\engine\elf3d_resources.rc" />
+    <ClInclude Include="..\..\src\engine\engine_access.h" />
+    <ClInclude Include="..\..\src\engine\viewport_impl.h" />
+    <ClInclude Include="..\..\include\elf3d\assets.h" />
+    <ClInclude Include="..\..\include\elf3d\clipping.h" />
+    <ClInclude Include="..\..\include\elf3d\core\api.h" />
+    <ClInclude Include="..\..\include\elf3d\core\assert.h" />
+    <ClInclude Include="..\..\include\elf3d\core\diagnostics.h" />
+    <ClInclude Include="..\..\include\elf3d\core\error.h" />
+    <ClInclude Include="..\..\include\elf3d\core\result.h" />
+    <ClInclude Include="..\..\include\elf3d\elf3d.h" />
+    <ClInclude Include="..\..\include\elf3d\graphics.h" />
+    <ClInclude Include="..\..\include\elf3d\math\value_types.h" />
+    <ClInclude Include="..\..\include\elf3d\model.h" />
+    <ClInclude Include="..\..\include\elf3d\model_ids.h" />
+    <ClInclude Include="..\..\include\elf3d\model_types.h" />
+    <ClInclude Include="..\..\include\elf3d\navigation.h" />
+    <ClInclude Include="..\..\include\elf3d\picking.h" />
+    <ClInclude Include="..\..\include\elf3d\projection.h" />
+    <ClInclude Include="..\..\include\elf3d\rendering.h" />
+    <ClInclude Include="..\..\include\elf3d\graphics_preparation.h" />
+    <ClInclude Include="..\..\include\elf3d\graphics_retirement.h" />
+    <ClInclude Include="..\..\src\engine\graphics_retirement.h" />
+    <ClCompile Include="..\..\src\engine\graphics_retirement.cpp"><ObjectFileName>$(IntDir)src_engine_graphics_retirement.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\include\elf3d\scene.h" />
+    <ClInclude Include="..\..\include\elf3d\scene_load.h" />
+    <ClInclude Include="..\..\include\elf3d\selection.h" />
+    <ClInclude Include="..\..\include\elf3d\surface_anchor.h" />
+    <ClInclude Include="..\..\include\elf3d\viewport.h" />
+    <ClInclude Include="..\..\src\engine\resource_ids.h" />
+    <ClInclude Include="..\..\src\engine\studio_environment_resource.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_model$(Elf3DSuffix).lib">
+      <Part>Engine</Part>
+      <Producer>elf3d_model</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_runtime$(Elf3DSuffix).lib">
+      <Part>Engine</Part>
+      <Producer>elf3d_runtime</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_cgltf$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_cgltf</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_glad$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_glad</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_jpeg$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_jpeg</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_mikktspace$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_mikktspace</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_png$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_png</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_zlib$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_zlib</Producer>
+    </Elf3DPrerequisite>
+  </ItemGroup>
+  <ItemGroup>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_model$(Elf3DSuffix).lib">
+      <Producer>elf3d_model</Producer>
+      <Part>Engine</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_runtime$(Elf3DSuffix).lib">
+      <Producer>elf3d_runtime</Producer>
+      <Part>Engine</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_cgltf$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_cgltf</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_glad$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_glad</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_jpeg$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_jpeg</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_mikktspace$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_mikktspace</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_png$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_png</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_zlib$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_zlib</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+  </ItemGroup>
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

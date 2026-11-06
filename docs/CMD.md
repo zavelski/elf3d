@@ -96,28 +96,25 @@ The Windows release archive contains `elf3d_cmd.exe` alongside the viewer.
 Both require the matching Microsoft Visual C++ x64 Redistributable. Only the
 viewer requires an OpenGL driver and its companion DLL/assets.
 
-For manual development, run `cmake/configure-win.ps1`, then build Dependencies
-and the Engine `elf3d_model` target in the same configuration. Open
-`win/cmd/Elf3D-Cmd.slnx`, build, and select `elf3d_cmd` as the startup project.
-Outputs are under `win/cmd/bin/<Configuration>`. F5 without arguments prints
-usage; set your own processing arguments in the debugger when needed.
-Cmd Clean/Rebuild affects only its own outputs. The `windows-model` profile
-builds and tests the application without configuring the graphics stack.
+For manual development, build CPU Dependencies and Engine's `elf3d_model`
+project in the same configuration, then open `win/Elf3D-Cmd.slnx`.
+Outputs are `x64/elf3d_cmd.exe` (Release) and `x64/elf3d_cmdD.exe` (Debug).
+F5 without arguments prints usage. Cmd Clean/Rebuild affects its own outputs.
+`tools/build.ps1 -Scope Model` builds CPU dependencies, Model and Cmd without
+requiring graphics; `tools/test.ps1 -Profile Model -Build` validates them.
 
-The application sources in `apps/cmd` show the complete pipeline. Copy
+The application sources in `src/cmd` show the complete pipeline. Copy
 `rotate_document.h` and `.cpp` into your application's source tree to adapt
 the operation. No private headers or native graphics types are involved.
 The function can leave earlier roots changed on failure; discard that document
 instead of saving it. Borrowed views must not outlive or span document mutation.
 
-```cmake
-set(ELF3D_BUILD_ENGINE OFF CACHE BOOL "" FORCE)
-set(ELF3D_BUILD_APP OFF CACHE BOOL "" FORCE)
-set(ELF3D_BUILD_VIEWER OFF CACHE BOOL "" FORCE)
-set(ELF3D_BUILD_CMD OFF CACHE BOOL "" FORCE)
-set(ELF3D_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-add_subdirectory(path/to/elf3d elf3d-build EXCLUDE_FROM_ALL)
-target_link_libraries(my_processor PRIVATE elf3d::model)
+```xml
+<PropertyGroup>
+  <Elf3DSourceRoot>$(MSBuildThisFileDirectory)..\elf3d\</Elf3DSourceRoot>
+  <Elf3DComponent>Model</Elf3DComponent>
+</PropertyGroup>
+<Import Project="$(Elf3DSourceRoot)win\Elf3D.props" />
 ```
 
 The static Model SDK supplies C++20, public headers, and its CPU link closure;

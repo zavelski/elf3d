@@ -1,0 +1,564 @@
+#include <elf3d/assets.h>
+#include <elf3d/core/result.h>
+#include <elf3d/navigation.h>
+#include <elf3d/scene.h>
+
+#include <array>
+#include <assets/assets.h>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <math/math.h>
+#include <navigation/navigation.h>
+#include <optional>
+#include <scene/scene.h>
+
+#include "orbit_navigation_test_support.h"
+
+using namespace elf3d::navigation::test_support;
+
+namespace {
+
+struct KeyboardTestContext : NavigationTestContext {
+    KeyboardTestContext() : NavigationTestContext(2)
+    {
+    }
+
+    float scaled_wheel_step = 0.0F;
+};
+
+inline constexpr float expected_keyboard_to_wheel_scale = 0.025F;
+inline constexpr float expected_keyboard_pan_width_divisor = 1600.0F;
+
+[[nodiscard]] bool has_pan_result(const KeyboardTestContext& context,
+                                  const elf3d::NavigationSnapshot& after,
+                                  const elf3d::NavigationSnapshot& before,
+                                  elf3d::Float3 forward_before)
+{
+    return !nearly_equal(after.pivot, before.pivot) &&
+           nearly_equal(after.distance, before.distance) &&
+           nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera),
+                        forward_before);
+}
+
+[[nodiscard]] int verify_drag_pan(KeyboardTestContext& context)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 11;
+    }
+
+    const elf3d::NavigationSnapshot before = context.navigation.snapshot();
+    const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.pan_modifier_down = true;
+    static_cast<void>(update_navigation(context, input));
+    input.pointer_delta_pixels = {80.0F, 40.0F};
+    if (!update_navigation(context, input)) {
+        return 12;
+    }
+    if (!has_pan_result(context, context.navigation.snapshot(), before, forward)) {
+        return 13;
+    }
+    input.orbit_down = false;
+    input.pan_modifier_down = false;
+    input.pointer_delta_pixels = {};
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
+
+[[nodiscard]] int verify_drag_zoom(KeyboardTestContext& context)
+{
+    const float distance_before = context.navigation.snapshot().distance;
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.zoom_modifier_down = true;
+    static_cast<void>(update_navigation(context, input));
+    input.pointer_delta_pixels = {0.0F, -80.0F};
+    if (!update_navigation(context, input) ||
+        context.navigation.snapshot().distance >= distance_before) {
+        return 32;
+    }
+    input.orbit_down = false;
+    input.zoom_modifier_down = false;
+    input.pointer_delta_pixels = {};
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
+
+[[nodiscard]] bool has_expected_wheel_zoom(float before, float after_in, float after_out,
+                                           float current)
+{
+    return after_in < before && after_out > after_in && nearly_equal(current, after_out);
+}
+
+[[nodiscard]] int verify_wheel_zoom(KeyboardTestContext& context)
+{
+    const float before = context.navigation.snapshot().distance;
+    elf3d::NavigationInput input = hovered_input();
+    input.wheel_delta = 1.0F;
+    if (!update_navigation(context, input)) {
+        return 14;
+    }
+
+    const float after_in = context.navigation.snapshot().distance;
+    input.wheel_delta = -1.0F;
+    static_cast<void>(update_navigation(context, input));
+    const float after_out = context.navigation.snapshot().distance;
+    input.pointer_hovered = false;
+    input.wheel_delta = 20.0F;
+    static_cast<void>(update_navigation(context, input));
+    if (!has_expected_wheel_zoom(before, after_in, after_out,
+                                 context.navigation.snapshot().distance)) {
+        return 15;
+    }
+    input = hovered_input();
+    input.region_focused = false;
+    input.wheel_delta = 1.0F;
+    const float before_hover_wheel = context.navigation.snapshot().distance;
+    if (!update_navigation(context, input) ||
+        context.navigation.snapshot().distance >= before_hover_wheel) {
+        return 33;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_scaled_wheel(KeyboardTestContext& context)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 68;
+    }
+
+    const float before = context.navigation.snapshot().distance;
+    elf3d::NavigationInput input = hovered_input();
+    input.wheel_delta = 1.0F;
+    if (!update_navigation(context, input)) {
+        return 69;
+    }
+    context.scaled_wheel_step = before - context.navigation.snapshot().distance;
+    const float full_step =
+        before * (1.0F - std::exp(-context.navigation.settings().zoom_sensitivity));
+    if (!nearly_equal(context.scaled_wheel_step, full_step * 0.5F)) {
+        return 70;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool
+has_keyboard_start(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
+                   const KeyboardTestContext& context)
+{
+    return update && update.value().orbit_start_position_pixels.has_value() &&
+           !context.navigation.has_screen_anchor();
+}
+
+[[nodiscard]] bool has_expected_keyboard_forward(const KeyboardTestContext& context,
+                                                 const elf3d::NavigationSnapshot& before,
+                                                 elf3d::Float3 position_before,
+                                                 elf3d::Float3 forward_before)
+{
+    const elf3d::NavigationSnapshot after = context.navigation.snapshot();
+    const float step = before.distance - after.distance;
+    const elf3d::Float3 offset =
+        subtract(camera_position(context.fixture.scene, context.fixture.camera), position_before);
+    return nearly_equal(after.pivot, before.pivot) &&
+           nearly_equal(step, context.scaled_wheel_step * expected_keyboard_to_wheel_scale) &&
+           nearly_equal(offset, multiply(forward_before, step));
+}
+
+[[nodiscard]] bool
+has_keyboard_backward(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
+                      const KeyboardTestContext& context, elf3d::Float3 position_before,
+                      elf3d::Float3 forward_before, float distance_before)
+{
+    const float base_multiplier = std::exp(context.navigation.settings().zoom_sensitivity);
+    const float expected_multiplier =
+        1.0F + (base_multiplier - 1.0F) * 0.5F * expected_keyboard_to_wheel_scale;
+    return update &&
+           nearly_equal(context.navigation.snapshot().distance,
+                        distance_before * expected_multiplier) &&
+           dot(subtract(camera_position(context.fixture.scene, context.fixture.camera),
+                        position_before),
+               forward_before) < 0.0F;
+}
+
+[[nodiscard]] bool
+has_keyboard_release(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
+                     const KeyboardTestContext& context, elf3d::Float3 position_before)
+{
+    return update && !update.value().click_position_pixels.has_value() &&
+           nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                        position_before);
+}
+
+[[nodiscard]] int verify_keyboard_forward(KeyboardTestContext& context)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 75;
+    }
+
+    const elf3d::NavigationSnapshot before = context.navigation.snapshot();
+    const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
+    const elf3d::Float3 forward = camera_forward(context.fixture.scene, context.fixture.camera);
+    if (!context.navigation.set_screen_anchor(context.fixture.scene, context.fixture.camera,
+                                              before.pivot)) {
+        return 130;
+    }
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.move_forward_down = true;
+    if (!has_keyboard_start(update_navigation(context, input), context)) {
+        return 76;
+    }
+    if (!has_expected_keyboard_forward(context, before, position, forward)) {
+        return 77;
+    }
+    input.move_forward_down = false;
+    input.move_backward_down = true;
+    const elf3d::Float3 backward_position =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    const elf3d::Float3 backward_forward =
+        camera_forward(context.fixture.scene, context.fixture.camera);
+    const float backward_distance = context.navigation.snapshot().distance;
+    if (!has_keyboard_backward(update_navigation(context, input), context, backward_position,
+                               backward_forward, backward_distance)) {
+        return 78;
+    }
+    input.orbit_down = false;
+    input.move_backward_down = false;
+    const elf3d::Float3 release_position =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    if (!has_keyboard_release(update_navigation(context, input), context, release_position)) {
+        return 86;
+    }
+    input.orbit_down = true;
+    input.move_forward_down = true;
+    const auto reentry = update_navigation(context, input);
+    if (!reentry || !reentry.value().orbit_start_position_pixels.has_value()) {
+        return 131;
+    }
+    input.orbit_down = false;
+    input.move_forward_down = false;
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
+
+[[nodiscard]] int verify_local_keyboard_step(KeyboardTestContext& context)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 138;
+    }
+
+    const elf3d::NavigationSnapshot before = context.navigation.snapshot();
+    const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
+    const elf3d::Float3 far_anchor =
+        add(position, multiply(camera_forward(context.fixture.scene, context.fixture.camera),
+                               before.distance * 1000.0F));
+    if (!context.navigation.set_screen_anchor(context.fixture.scene, context.fixture.camera,
+                                              far_anchor)) {
+        return 139;
+    }
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.move_forward_down = true;
+    const auto update = update_navigation(context, input);
+    const float base_multiplier = std::exp(-context.navigation.settings().zoom_sensitivity);
+    const float reference_multiplier =
+        1.0F + (base_multiplier - 1.0F) * 0.5F * expected_keyboard_to_wheel_scale;
+    const float expected_step = before.distance * (1.0F - reference_multiplier);
+    const float actual_step = before.distance - context.navigation.snapshot().distance;
+    if (!update || !update.value().orbit_start_position_pixels.has_value() ||
+        context.navigation.has_screen_anchor() ||
+        !nearly_equal(actual_step, expected_step, 0.0005F)) {
+        return 140;
+    }
+    input.orbit_down = false;
+    input.move_forward_down = false;
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
+
+[[nodiscard]] bool moved_camera(const elf3d::Result<elf3d::navigation::NavigationUpdate>& update,
+                                const KeyboardTestContext& context, elf3d::Float3 position_before)
+{
+    return update && !nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                                   position_before);
+}
+
+[[nodiscard]] bool moved_up(const KeyboardTestContext& context, elf3d::Float3 position_before)
+{
+    const elf3d::Float3 after = camera_position(context.fixture.scene, context.fixture.camera);
+    return after.y > position_before.y && nearly_equal(after.x, position_before.x) &&
+           nearly_equal(after.z, position_before.z);
+}
+
+[[nodiscard]] int verify_right_button_keyboard(KeyboardTestContext& context)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 99;
+    }
+    elf3d::NavigationInput input = hovered_input();
+    input.zoom_down = true;
+    input.move_forward_down = true;
+    const float distance = context.navigation.snapshot().distance;
+    const elf3d::Float3 forward_position =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    if (!moved_camera(update_navigation(context, input), context, forward_position) ||
+        context.navigation.snapshot().distance >= distance) {
+        return 100;
+    }
+    input.move_forward_down = false;
+    input.view_left_down = true;
+    const elf3d::Float3 pan_position =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    if (!moved_camera(update_navigation(context, input), context, pan_position)) {
+        return 101;
+    }
+    input.view_left_down = false;
+    input.world_up_down = true;
+    const elf3d::Float3 up_position =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    if (!update_navigation(context, input)) {
+        return 102;
+    }
+    if (!moved_up(context, up_position)) {
+        return 103;
+    }
+    input.zoom_down = false;
+    input.world_up_down = false;
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
+
+[[nodiscard]] int verify_forward_while_panning(KeyboardTestContext& context)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600}))
+        return 145;
+    auto input = hovered_input();
+    input.zoom_down = true; // Right button: pan, together with W for forward motion.
+    input.move_forward_down = true;
+    const auto forward = camera_forward(context.fixture.scene, context.fixture.camera);
+    constexpr std::array deltas{1.0F / 30.0F, 1.0F / 60.0F, 1.0F / 144.0F};
+    for (std::size_t frame = 0; frame < 240; ++frame) {
+        input.frame_delta_seconds = deltas[frame % deltas.size()];
+        input.pointer_delta_pixels = {frame % 2 == 0 ? 12.0F : -12.0F, 3.0F};
+        input.pointer_position_pixels.x += input.pointer_delta_pixels.x;
+        input.pointer_position_pixels.y += input.pointer_delta_pixels.y;
+        const auto before = camera_position(context.fixture.scene, context.fixture.camera);
+        if (!update_navigation(context, input))
+            return 146;
+        const auto displacement =
+            subtract(camera_position(context.fixture.scene, context.fixture.camera), before);
+        if (elf3d::math::dot(displacement, forward) <= 0.0F ||
+            !nearly_equal(camera_forward(context.fixture.scene, context.fixture.camera), forward))
+            return 147;
+    }
+    input.zoom_down = false;
+    input.move_forward_down = false;
+    input.pointer_delta_pixels = {};
+    return update_navigation(context, input) ? 0 : 148;
+}
+
+[[nodiscard]] int verify_mouse_pan_scaling(KeyboardTestContext& context)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 71;
+    }
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.pan_modifier_down = true;
+    static_cast<void>(update_navigation(context, input));
+    input.pointer_delta_pixels = {40.0F, 0.0F};
+    if (!update_navigation(context, input)) {
+        return 72;
+    }
+
+    const elf3d::Float3 expected_position =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 73;
+    }
+    input = hovered_input();
+    input.zoom_down = true;
+    static_cast<void>(update_navigation(context, input));
+    input.pointer_delta_pixels = {80.0F, 0.0F};
+    if (!update_navigation(context, input) ||
+        !nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                      expected_position)) {
+        return 74;
+    }
+    input.zoom_down = false;
+    input.pointer_delta_pixels = {};
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
+
+[[nodiscard]] int verify_keyboard_pan_scaling(KeyboardTestContext& context)
+{
+    constexpr float pan_step = 800.0F / expected_keyboard_pan_width_divisor;
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 79;
+    }
+
+    const elf3d::Float3 origin = camera_position(context.fixture.scene, context.fixture.camera);
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.pan_modifier_down = true;
+    static_cast<void>(update_navigation(context, input));
+    input.pointer_delta_pixels = {pan_step, 0.0F};
+    if (!update_navigation(context, input)) {
+        return 80;
+    }
+
+    const elf3d::Float3 expected_position =
+        camera_position(context.fixture.scene, context.fixture.camera);
+    input.orbit_down = false;
+    input.pan_modifier_down = false;
+    input.pointer_delta_pixels = {};
+    static_cast<void>(update_navigation(context, input));
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 87;
+    }
+    input = hovered_input();
+    input.orbit_down = true;
+    input.view_left_down = true;
+    if (!update_navigation(context, input) ||
+        !nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                      expected_position)) {
+        return 88;
+    }
+    input.orbit_down = false;
+    input.view_left_down = false;
+    static_cast<void>(update_navigation(context, input));
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return 141;
+    }
+    input = hovered_input();
+    input.orbit_down = true;
+    input.view_right_down = true;
+    const elf3d::Float3 expected_right_position = add(origin, subtract(origin, expected_position));
+    if (!update_navigation(context, input) ||
+        !nearly_equal(camera_position(context.fixture.scene, context.fixture.camera),
+                      expected_right_position)) {
+        return 142;
+    }
+    input.orbit_down = false;
+    input.view_right_down = false;
+    static_cast<void>(update_navigation(context, input));
+    return 0;
+}
+
+struct KeyboardPanReference final {
+    elf3d::Float3 origin{};
+    float step = 0.0F;
+};
+
+[[nodiscard]] std::optional<KeyboardPanReference>
+keyboard_pan_reference(KeyboardTestContext& context)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return std::nullopt;
+    }
+
+    const elf3d::Float3 origin = camera_position(context.fixture.scene, context.fixture.camera);
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.view_left_down = true;
+    const auto update = update_navigation(context, input);
+    const float step =
+        length(subtract(camera_position(context.fixture.scene, context.fixture.camera), origin));
+    input.orbit_down = false;
+    input.view_left_down = false;
+    static_cast<void>(update_navigation(context, input));
+    if (!update || !std::isfinite(step) || step <= 0.0F) {
+        return std::nullopt;
+    }
+    return KeyboardPanReference{origin, step};
+}
+
+[[nodiscard]] bool has_expected_world_up(KeyboardTestContext& context,
+                                         const KeyboardPanReference& reference)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return false;
+    }
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.world_up_down = true;
+    const auto update = update_navigation(context, input);
+    const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
+    input.orbit_down = false;
+    input.world_up_down = false;
+    static_cast<void>(update_navigation(context, input));
+    const elf3d::Float3 expected{reference.origin.x, reference.origin.y + reference.step,
+                                 reference.origin.z};
+    return update && nearly_equal(position, expected);
+}
+
+[[nodiscard]] bool has_expected_world_down(KeyboardTestContext& context,
+                                           const KeyboardPanReference& reference)
+{
+    if (!context.navigation.reset_view(context.fixture.scene, context.fixture.camera, {800, 600})) {
+        return false;
+    }
+    elf3d::NavigationInput input = hovered_input();
+    input.orbit_down = true;
+    input.world_down_down = true;
+    const auto update = update_navigation(context, input);
+    const elf3d::Float3 position = camera_position(context.fixture.scene, context.fixture.camera);
+    input.orbit_down = false;
+    input.world_down_down = false;
+    static_cast<void>(update_navigation(context, input));
+    const elf3d::Float3 expected{reference.origin.x, reference.origin.y - reference.step,
+                                 reference.origin.z};
+    return update && nearly_equal(position, expected);
+}
+
+[[nodiscard]] int verify_vertical_keyboard_pan(KeyboardTestContext& context)
+{
+    const std::optional<KeyboardPanReference> reference = keyboard_pan_reference(context);
+    if (!reference.has_value()) {
+        return 81;
+    }
+    if (!has_expected_world_up(context, *reference)) {
+        return 85;
+    }
+    if (!has_expected_world_down(context, *reference)) {
+        return 144;
+    }
+    return 0;
+}
+
+using KeyboardStep = int (*)(KeyboardTestContext&);
+
+[[nodiscard]] int run_keyboard_steps(KeyboardTestContext& context)
+{
+    constexpr std::array<KeyboardStep, 11> steps{{
+        verify_drag_pan,
+        verify_drag_zoom,
+        verify_wheel_zoom,
+        verify_scaled_wheel,
+        verify_keyboard_forward,
+        verify_local_keyboard_step,
+        verify_right_button_keyboard,
+        verify_forward_while_panning,
+        verify_mouse_pan_scaling,
+        verify_keyboard_pan_scaling,
+        verify_vertical_keyboard_pan,
+    }};
+    for (const KeyboardStep step : steps) {
+        const int result = step(context);
+        if (result != 0) {
+            return result;
+        }
+    }
+    return 0;
+}
+
+} // namespace
+
+int elf3d_navigation_keyboard_test()
+{
+    KeyboardTestContext context;
+    return run_keyboard_steps(context);
+}

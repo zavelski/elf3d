@@ -108,15 +108,25 @@ struct EntityHighlight {
     bool operator==(const EntityHighlight&) const = default;
 };
 
+struct SelectionHighlight {
+    Color4 color{1.0F, 0.55F, 0.05F, 1.0F};
+    float strength = 0.0F;
+    bool operator==(const SelectionHighlight&) const = default;
+};
+
 struct ViewportRenderOptions {
     std::optional<EntityHighlight> highlight;
+    // Applies to the Viewport's selected canonical primitive instances. Every
+    // runtime material group of an instance receives the same highlight.
+    std::optional<SelectionHighlight> primitive_highlight;
     std::span<const OverlayLineSegment> overlay_lines;
     std::span<const OverlayPointMarker> overlay_markers;
     RenderShadingMode shading_mode = RenderShadingMode::standard;
 
     [[nodiscard]] bool operator==(const ViewportRenderOptions& other) const noexcept
     {
-        return highlight == other.highlight && overlay_lines.data() == other.overlay_lines.data() &&
+        return highlight == other.highlight && primitive_highlight == other.primitive_highlight &&
+               overlay_lines.data() == other.overlay_lines.data() &&
                overlay_lines.size() == other.overlay_lines.size() &&
                overlay_markers.data() == other.overlay_markers.data() &&
                overlay_markers.size() == other.overlay_markers.size() &&

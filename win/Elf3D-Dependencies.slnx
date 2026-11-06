@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations><Platform Name="x64" /></Configurations>
+  <Project Path="projects/elf3d_third_party_zlib.vcxproj" Id="c705a940-dc4b-3213-a438-486210292b76" />
+  <Project Path="projects/elf3d_third_party_png.vcxproj" Id="8c3ddff9-d10b-3970-be86-a240ba2caf57" />
+  <Project Path="projects/elf3d_third_party_jpeg.vcxproj" Id="5144f451-926f-3e48-8fc7-e3474b94197b" />
+  <Project Path="projects/elf3d_third_party_cgltf.vcxproj" Id="a8ee92fb-7112-3b4a-9e6c-57f9f5774b80" />
+  <Project Path="projects/elf3d_third_party_mikktspace.vcxproj" Id="4e950c1a-a441-37f7-b78e-cd4dd24f4298" />
+  <Project Path="projects/elf3d_third_party_glad.vcxproj" Id="537e4a96-45f7-3f32-805d-672d2cf47664" />
+  <Project Path="projects/glfw.vcxproj" Id="1a65d4a4-3829-300f-8ea9-d1d77bfdd711" />
+</Solution>

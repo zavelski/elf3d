@@ -1,0 +1,26 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="projects/elf3d_external_measurement_tool.vcxproj" Id="2263c42b-c5da-39d5-86f6-0ab4b68b9c69" />
+  <Project Path="projects/elf3d_measurement_copy_adapt_test.vcxproj" Id="161f6eb2-cd08-3dbe-aabd-33f82e1fdc6c" />
+  <Project Path="projects/elf3d_model_quick_test.vcxproj" Id="e66ec1d9-9f90-3d6f-96a7-57b595113dc8" />
+  <Project Path="projects/elf3d_opengl_render_smoke_test.vcxproj" Id="0d195e73-f64d-39a5-9f04-697dd506d76b" />
+  <Project Path="projects/elf3d_public_api_examples.vcxproj" Id="c8d26e79-4219-3194-99b3-7442b8c918b4" />
+  <Project Path="projects/elf3d_public_api_test.vcxproj" Id="b98b3e4d-36ed-3ea3-ad27-b7bdada7f7be" />
+  <Project Path="projects/elf3d_allocation_failure_test.vcxproj" Id="dd233331-55f1-3f54-aa3d-d71e56e1251f" />
+  <Project Path="projects/elf3d_domain_tests.vcxproj" Id="ed1d606e-ae29-3c89-8b2b-a6456894d50e" />
+  <Project Path="projects/elf3d_foundation_tests.vcxproj" Id="eb7a3743-9a7e-318e-a76f-b5968db25990" />
+  <Project Path="projects/elf3d_import_tests.vcxproj" Id="bcd1ad29-465d-31e4-a859-0762f1852f9a" />
+  <Project Path="projects/elf3d_interaction_tests.vcxproj" Id="ba0cbd26-f5e2-35b3-8dc0-35af971c20fb" />
+  <Project Path="projects/elf3d_model_module_identity_test.vcxproj" Id="5d5da881-7207-302e-b6d6-d98552c573cb" />
+  <Project Path="projects/elf3d_model_module_provider.vcxproj" Id="a280c426-f469-3cc6-a4cd-73ac54504345" />
+  <Project Path="projects/elf3d_model_tests.vcxproj" Id="26352058-369f-3c60-8c36-85e43196931e" />
+  <Project Path="projects/elf3d_view_tests.vcxproj" Id="f3789c5c-3aa0-3147-b50f-864d5d91b0bd" />
+  <Project Path="projects/elf3d_app_smoke_test.vcxproj" Id="72ccd82b-6f86-3e48-8338-e29e89e65ecd" />
+  <Project Path="projects/elf3d_input_collector_tests.vcxproj" Id="a57d7d88-a243-32a2-9f44-bef70b7876a4" />
+  <Project Path="projects/elf3d_interaction_arbiter_tests.vcxproj" Id="ee7ef45a-c73c-375e-818b-dea23f1015f1" />
+  <Project Path="projects/elf3d_cmd_tests.vcxproj" Id="5d7d518b-3142-3253-bb35-a83e117216dd" />
+  <Project Path="projects/elf3d_viewer_behavior_tests.vcxproj" Id="7f34f38f-32e4-3eec-9843-2a29192a7bab" />
+  <Project Path="projects/elf3d_viewer_tools_tests.vcxproj" Id="84823aee-6506-3393-a61a-d4b67bd17bc1" />
+</Solution>

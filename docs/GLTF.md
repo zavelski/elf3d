@@ -20,7 +20,7 @@ restoration itself fails, the recovery backup is retained and reported.
 The exporter does not use runtime Scene, renderer, GPU, or viewer state.
 Import bounds each encoded image to 64 MiB and the total retained encoded/source
 image data to 512 MiB per document. Total decoded RGBA8 image data is bounded
-to 2 GiB in 64-bit builds and 512 MiB in 32-bit builds.
+to 8 GiB in 64-bit builds and 512 MiB in 32-bit builds.
 Source files and embedded GLB BIN chunks are bounded to 3 GiB; individual
 external buffers remain bounded to 1 GiB. Signed 32-bit size/offset overflow
 from affected GLB exporters is repaired only for an unambiguous sequential,
@@ -201,3 +201,15 @@ with a diagnostic; this is not general TIFF support or ICC color management.
 TIFF and EXR MIME types are corpus-specific additions beyond core glTF's PNG/JPEG
 image formats, and consumers must support them to display those resources.
 The TIFF layout follows [Adobe's TIFF specifications](https://www.adobe.com/support/downloads/dng/dng_sdk.html).
+
+
+## Tangent and mesh-name output
+
+File output omits authored and generated tangent values; runtime retains authored
+frames and generates tangent space for normal mapping when needed. Export uses
+stable nonempty mesh names and adds -0, -1, ... to collisions while preserving
+the Document's original names, IDs and relationships.
+
+Atlas export preserves source sampler filters and does not introduce a mip-level
+limit. The former `maxSafeLOD` atlas field is ignored on input and omitted from
+both output profiles. Atlas rendering uses the application's levels 0..2 profile.

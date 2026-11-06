@@ -1,0 +1,81 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C705A940-DC4B-3213-A438-486210292B76}</ProjectGuid>
+    <ProjectName>elf3d_third_party_zlib</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Dependencies</Elf3DPart>
+    <Elf3DModelTarget>true</Elf3DModelTarget>
+    <Elf3DThirdParty>true</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_third_party_zlib$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "$(Elf3DRoot)third_party/zlib"</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\third_party\zlib\adler32.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_adler32.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\compress.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_compress.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\crc32.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_crc32.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\deflate.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_deflate.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\infback.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_infback.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\inffast.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_inffast.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\inflate.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_inflate.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\inftrees.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_inftrees.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\trees.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_trees.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\uncompr.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_uncompr.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\zlib\zutil.c">
+      <ObjectFileName>$(IntDir)third_party_zlib_zutil.obj</ObjectFileName>
+    </ClCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup />
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

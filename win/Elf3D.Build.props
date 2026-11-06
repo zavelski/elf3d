@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Elf3DRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</Elf3DRoot>
+    <Elf3DWorkRoot Condition="'$(Elf3DWorkRoot)'==''">$(Elf3DRoot)out\</Elf3DWorkRoot>
+    <Elf3DProductRoot Condition="'$(Elf3DProductRoot)'==''">$(Elf3DRoot)x64\</Elf3DProductRoot>
+    <Elf3DVersion>$([System.IO.File]::ReadAllText('$(Elf3DRoot)VERSION').Trim())</Elf3DVersion>
+    <Elf3DRevision Condition="'$(Elf3DRevision)'==''">working-tree</Elf3DRevision>
+    <Elf3DSuffix Condition="'$(Configuration)'=='Debug'">D</Elf3DSuffix>
+    <Elf3DTestRoot>$(Elf3DWorkRoot)tests\$(Configuration)\</Elf3DTestRoot>
+    <Elf3DRootForward>$([System.String]::Copy('$(Elf3DRoot)').Replace('\','/').TrimEnd('/'))</Elf3DRootForward>
+    <Elf3DTestRootForward>$([System.String]::Copy('$(Elf3DTestRoot)').Replace('\','/').TrimEnd('/'))</Elf3DTestRootForward>
+    <IntDir>$(Elf3DWorkRoot)obj\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+    <OutDir>$(Elf3DProductRoot)</OutDir>
+    <OutDir Condition="'$(Elf3DOutputKind)'=='Test'">$(Elf3DTestRoot)</OutDir>
+    <OutDir Condition="'$(Elf3DOutputKind)'=='Tool'">$(Elf3DWorkRoot)tools\$(Configuration)\</OutDir>
+    <Elf3DSymbolRoot>$(Elf3DWorkRoot)symbols\$(Configuration)\</Elf3DSymbolRoot>
+    <Elf3DSymbolRoot Condition="'$(Elf3DOutputKind)'!='Product'">$(IntDir)</Elf3DSymbolRoot>
+    <LinkIncremental>false</LinkIncremental>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+    <LocalDebuggerWorkingDirectory>$(Elf3DWorkRoot)run</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerEnvironment>PATH=$(Elf3DProductRoot);%PATH%</LocalDebuggerEnvironment>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <Elf3DUsePch Condition="'$(Elf3DUsePch)'=='' and '$(Elf3DOutputKind)'=='Product' and '$(Elf3DThirdParty)'!='true' and '$(MSBuildProjectName)'!='elf3d_cmd'">true</Elf3DUsePch>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <ConformanceMode>true</ConformanceMode>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <WarningLevel Condition="'$(Elf3DThirdParty)'=='true'">Level1</WarningLevel>
+      <TreatWarningAsError Condition="'$(Elf3DThirdParty)'=='true'">false</TreatWarningAsError>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions Condition="'$(Configuration)'=='Release'">NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization Condition="'$(Configuration)'=='Debug'">Disabled</Optimization>
+      <Optimization Condition="'$(Configuration)'=='Release'">MaxSpeed</Optimization>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DebugInformationFormat Condition="'$(ConfigurationType)'=='StaticLibrary'">OldStyle</DebugInformationFormat>
+      <ProgramDataBaseFileName>$(IntDir)compiler.pdb</ProgramDataBaseFileName>
+      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Elf3DUsePch)'=='true'">Use</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Elf3DUsePch)'=='true'">$(MSBuildThisFileDirectory)pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles Condition="'$(Elf3DUsePch)'=='true'">$(MSBuildThisFileDirectory)pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <PrecompiledHeaderOutputFile>$(IntDir)private.pch</PrecompiledHeaderOutputFile>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ProgramDataBaseFile>$(Elf3DSymbolRoot)$(TargetName).pdb</ProgramDataBaseFile>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>$(Elf3DProductRoot);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <EnableCOMDATFolding Condition="'$(Configuration)'=='Release'">true</EnableCOMDATFolding>
+      <OptimizeReferences Condition="'$(Configuration)'=='Release'">true</OptimizeReferences>
+    </Link>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(IntDir);$(Elf3DRoot)src\engine;$(Elf3DRoot)src\renderer\assets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ResourceOutputFileName>$(IntDir)%(Filename).res</ResourceOutputFileName>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(Elf3DOutputKind)'=='Product' and ('$(ConfigurationType)'=='DynamicLibrary' or '$(ConfigurationType)'=='Application')">
+    <ResourceCompile Include="$(MSBuildThisFileDirectory)Elf3D.version.rc" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Elf3DUsePch)'=='true'">
+    <ClCompile Include="$(MSBuildThisFileDirectory)pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+      <ObjectFileName>$(IntDir)pch.obj</ObjectFileName>
+    </ClCompile>
+  </ItemGroup>
+</Project>

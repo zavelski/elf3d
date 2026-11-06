@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{2A08B620-DD67-3EC4-B403-CDD809B634B8}</ProjectGuid>
+    <ProjectName>elf3d_viewer</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Viewer</Elf3DPart>
+    <Elf3DModelTarget>false</Elf3DModelTarget>
+    <Elf3DThirdParty>false</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_viewer$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;$(Elf3DRoot)third_party\glfw\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;ELF3D_IMGUI_BRANCH="docking";ELF3D_IMGUI_COMMIT_SHA="036bf939b6f8d74ad76bcf926b757c56e68c54ff";ELF3D_VERSION="$(Elf3DVersion)";_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "$(Elf3DRoot)third_party/imgui" /external:I "$(Elf3DRoot)third_party/imgui/backends"</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>advapi32.lib;ole32.lib;shell32.lib;windowscodecs.lib;opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;oleaut32.lib;uuid.lib;comdlg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectReference Include="elf3d_app.vcxproj">
+      <Project>{C94AB015-BDCC-3C38-B295-B2551E05244C}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="elf3d_imgui.vcxproj">
+      <Project>{0D87B3B9-9835-399C-8FE9-E2254FC135B0}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d$(Elf3DSuffix).lib">
+      <Part>Engine</Part>
+      <Producer>elf3d</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_app$(Elf3DSuffix).lib">
+      <Part>Viewer</Part>
+      <Producer>elf3d_app</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_imgui$(Elf3DSuffix).lib">
+      <Part>Viewer</Part>
+      <Producer>elf3d_imgui</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_glad$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_glad</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_imgui$(Elf3DSuffix).lib">
+      <Part>ImGui</Part>
+      <Producer>elf3d_third_party_imgui</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)glfw3$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>glfw</Producer>
+    </Elf3DPrerequisite>
+  </ItemGroup>
+  <ItemGroup>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d$(Elf3DSuffix).lib">
+      <Producer>elf3d</Producer>
+      <Part>Engine</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_app$(Elf3DSuffix).lib">
+      <Producer>elf3d_app</Producer>
+      <Part>Viewer</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_imgui$(Elf3DSuffix).lib">
+      <Producer>elf3d_imgui</Producer>
+      <Part>Viewer</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_glad$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_glad</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_imgui$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_imgui</Producer>
+      <Part>ImGui</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)glfw3$(Elf3DSuffix).lib">
+      <Producer>glfw</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+  </ItemGroup>
+  <ItemGroup>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_model$(Elf3DSuffix).lib">
+      <Producer>elf3d_model</Producer>
+      <Part>Engine</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_cgltf$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_cgltf</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_png$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_png</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_jpeg$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_jpeg</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_mikktspace$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_mikktspace</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_zlib$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_zlib</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\viewer\main.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_main.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_appearance.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_appearance.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_appearance.h" />
+    <ClInclude Include="..\..\src\viewer\viewer_application.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_assets.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_assets.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_assets.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_browser.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_browser.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_browser.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_browser_context.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_browser_context.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_browser_directory.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_browser_directory.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_browser_directory.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_browser_locations.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_browser_locations.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_browser_platform.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_browser_platform.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_browser_selection.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_browser_selection.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_browser_table.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_browser_table.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_browser_table.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_chrome.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_chrome.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_chrome.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_command_execution.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_command_execution.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_commands.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_commands.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_commands.hpp" />
+    <ClInclude Include="..\..\src\viewer\viewer_component_state.hpp" />
+    <ClInclude Include="..\..\src\viewer\viewer_components.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_document_browser.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_document_browser.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_document_browser.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_document_browser_filter.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_document_browser_filter.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_document_browser_properties.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_document_browser_properties.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_document_browser_resource_visibility.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_document_browser_resource_visibility.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_document_browser_resource_widgets.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_document_browser_resource_widgets.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_document_browser_rows.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_document_browser_rows.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_document_browser_ui.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_document_browser_visibility.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_document_browser_visibility.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_document_browser_widgets.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_document_browser_widgets.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_file_paths.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_file_paths.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_graphics.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_graphics.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_graphics.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_input_math.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_input_math.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_input_math.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_layout.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_layout.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_layout.hpp" />
+    <ClInclude Include="..\..\src\viewer\viewer_load_benchmark.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_measurement_tool.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_measurement_tool.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_panels.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_panels.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_preferences.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_preferences.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_preferences_store.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_preferences_store.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_preferences_store.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_rendering_controls.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_rendering_controls.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_rendering_controls.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_resource_instances.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_resource_instances.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_retained_frame.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_retained_frame.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_runtime.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_runtime.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_runtime_context.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_runtime_context.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_runtime_state.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_scene_panels.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_scene_panels.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_scene_session.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_scene_statistics.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_scene_statistics.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_selection_tool.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_selection_tool.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewer\viewer_status.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_status.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_tool_style.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_tools.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_tools.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_tools.hpp" />
+    <ClInclude Include="..\..\src\viewer\viewer_ui.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_viewport.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_viewport.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_viewport.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_workflow_execution.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_workflow_execution.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_workflow_execution.hpp" />
+    <ClCompile Include="..\..\src\viewer\viewer_workflows.cpp">
+      <ObjectFileName>$(IntDir)src_viewer_viewer_workflows.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\viewer\viewer_workflows.hpp" />
+  </ItemGroup>
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

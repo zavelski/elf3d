@@ -1,0 +1,119 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{161F6EB2-CD08-3DBE-AABD-33F82E1FDC6C}</ProjectGuid>
+    <ProjectName>elf3d_measurement_copy_adapt_test</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Test</Elf3DOutputKind>
+    <Elf3DPart>Tests</Elf3DPart>
+    <Elf3DModelTarget>false</Elf3DModelTarget>
+    <Elf3DThirdParty>false</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_measurement_copy_adapt_test$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectReference Include="elf3d_external_measurement_tool.vcxproj">
+      <Project>{2263C42B-C5DA-39D5-86F6-0AB4B68B9C69}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\tests\integration\measurement_copy_adapt_test.cpp">
+      <ObjectFileName>$(IntDir)tests_integration_measurement_copy_adapt_test.obj</ObjectFileName>
+    </ClCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d$(Elf3DSuffix).lib">
+      <Part>Engine</Part>
+      <Producer>elf3d</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_app$(Elf3DSuffix).lib">
+      <Part>Viewer</Part>
+      <Producer>elf3d_app</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DTestRoot)elf3d_external_measurement_tool$(Elf3DSuffix).lib">
+      <Part>Tests</Part>
+      <Producer>elf3d_external_measurement_tool</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_imgui$(Elf3DSuffix).lib">
+      <Part>Viewer</Part>
+      <Producer>elf3d_imgui</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_glad$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_glad</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_imgui$(Elf3DSuffix).lib">
+      <Part>ImGui</Part>
+      <Producer>elf3d_third_party_imgui</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)glfw3$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>glfw</Producer>
+    </Elf3DPrerequisite>
+  </ItemGroup>
+  <ItemGroup>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d$(Elf3DSuffix).lib">
+      <Producer>elf3d</Producer>
+      <Part>Engine</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_app$(Elf3DSuffix).lib">
+      <Producer>elf3d_app</Producer>
+      <Part>Viewer</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DTestRoot)elf3d_external_measurement_tool$(Elf3DSuffix).lib">
+      <Producer>elf3d_external_measurement_tool</Producer>
+      <Part>Tests</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_imgui$(Elf3DSuffix).lib">
+      <Producer>elf3d_imgui</Producer>
+      <Part>Viewer</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_glad$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_glad</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_imgui$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_imgui</Producer>
+      <Part>ImGui</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)glfw3$(Elf3DSuffix).lib">
+      <Producer>glfw</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+  </ItemGroup>
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

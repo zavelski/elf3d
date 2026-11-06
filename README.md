@@ -31,8 +31,7 @@ licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0<
 
 Elf3D is a ready-to-run model inspector and a reusable 3D application platform.
 Open a `.gltf` or `.glb`, explore its hierarchy and materials, select or hide
-objects, measure surfaces, and cut through geometry with section planes and
-clipping boxes.
+objects, measure surfaces, and inspect rendering and model statistics.
 
 The standard application framework owns the native window, event loop, OpenGL
 context, normalized input, frame sequence, final presentation, and teardown.
@@ -48,8 +47,8 @@ All graphical applications, including hidden capture and benchmark tools, use
 - **Interactive inspection** РІР‚вЂќ hierarchy browsing, orbit/pan/dolly navigation,
   GPU-assisted picking, selection, visibility, isolation, visible bounds, and
   model statistics.
-- **Analysis tools** РІР‚вЂќ point-to-point surface measurement, one section plane,
-  up to three clipping boxes, and backend-neutral helper overlays.
+- **Analysis tools** РІР‚вЂќ point-to-point surface measurement with
+  backend-neutral line and marker overlays.
 - **OpenGL 4.1 rendering** РІР‚вЂќ metallic/roughness material values, base-color,
   emissive and occlusion textures, vertex color, unlit materials, alpha mask
   and blend paths, and off-screen viewport output.
@@ -65,14 +64,14 @@ All graphical applications, including hidden capture and benchmark tools, use
 | --- | --- |
 | `elf3d_cmd` | A console application rotating and exporting glTF/GLB through the CPU-only Model SDK. |
 | `elf3d_viewer` | A Windows desktop application for opening, inspecting, and exporting models. |
-| `elf3d_app` / `elf3d::app` | The canonical desktop lifecycle with normalized input and queued viewport rendering. |
-| `elf3d` / `elf3d::elf3d` | The shared Runtime SDK: Scene, Viewport, rendering, picking, navigation, and general mechanisms. |
-| `elf3d_model` / `elf3d::model` | A static CPU-only `Document` library for construction, validation, processing, and glTF/GLB import/export. |
-| `elf3d_imgui` / `elf3d::imgui` | Named Dear ImGui presentation integration used by the standard desktop framework. |
+| `elf3d_app` | The canonical desktop lifecycle with normalized input and queued viewport rendering. |
+| `elf3d` | The shared Runtime SDK: Scene, Viewport, rendering, picking, navigation, and general mechanisms. |
+| `elf3d_model` | A static CPU-only `Document` library for construction, validation, processing, and glTF/GLB import/export. |
+| `elf3d_imgui` | Named Dear ImGui presentation integration used by the standard desktop framework. |
 
 ## Download the viewer
 
-This source version is **0.11.5**. Download a published
+This source version is **0.13.0**. Download a published
 [Windows x64 viewer package](https://github.com/zavelski/elf3d/releases/latest),
 extract it, and run `elf3d_viewer.exe`.
 
@@ -89,37 +88,29 @@ retained model as `.gltf` or `.glb`.
 
 ## Build from source
 
-Install Visual Studio 2026 or newer with Desktop development with C++ (native
-MSVC 19.50 or newer), standalone CMake 4.4.3, and PowerShell 7.6.5 or newer.
-The current presets select v145/x64 and generate `.slnx` solutions. Recreate
-existing build directories when upgrading the toolchain. From the repository root:
+Install Visual Studio 2026 with Desktop C++, v145, Windows SDK 10.0.26100.0,
+and PowerShell 7.6.5 or newer. `.vsconfig` lists the required VS components.
+The checked-in `.slnx` and `.vcxproj` files build directly through MSBuild.
 
 ```powershell
-.\cmake\configure-win.ps1
+.\tools\build.ps1 -Configuration Debug
+.\tools\test.ps1 -Configuration Debug -Build -Headers
 ```
 
-Open and build `win/dependencies/Elf3D-Dependencies.slnx`,
-`win/imgui/Elf3D-ImGui.slnx`, `win/engine/Elf3D-Engine.slnx`,
-`win/viewer/Elf3D-Viewer.slnx`, and `win/cmd/Elf3D-Cmd.slnx` in that order.
-Each solution contains both
-Debug and Release; select the same configuration in all five. They contain
-production projects only. In the Viewer solution, press F5 to launch.
+For manual builds, open the five solutions in `win`: Dependencies, Engine,
+ImGui, Viewer, and Cmd. Engine and ImGui can be built in either order after
+Dependencies. Production EXE, DLL and LIB files appear in `x64`; Debug files
+have a `D` suffix. Tests and intermediate files stay under `out`.
 
-The executable is `win/viewer/bin/<Configuration>/elf3d_viewer.exe`, with its
-matching DLL, assets, and Debug symbols. Downstream Rebuild/Clean leaves upstream
-components alone; rebuild affected components in order after upstream changes.
-
-Automated tests/tools use two separate configure profiles, `windows-full` and
-`windows-model`, under `out/build`. Existing Debug/Release build and test preset
-names remain available. See [Building Elf3D](docs/BUILDING.md) for manual
-rebuilds, automated validation, output paths, and debugging.
+See [Building](docs/BUILDING.md) for independent component builds, external
+application integration and cleanup, and [Testing](docs/TESTING.md) for checks.
 
 ## Architecture
 
 Elf3D preserves 18 architectural components through conventional headers and
 source files, explicit dependencies, and private implementation boundaries.
-Nine internal CMake `OBJECT` targets group those components for build and IDE
-scale. C++ Modules are prohibited; C++20 remains the language baseline.
+Model and a private Runtime archive group the components into native MSBuild
+projects, with a separate public facade DLL. C++ Modules are prohibited; C++20 remains the language baseline.
 
 ```mermaid
 flowchart TD
@@ -195,14 +186,14 @@ graphics behavior is in [Rendering reference](docs/RENDERING.md).
 | Path | Responsibility |
 | --- | --- |
 | `include/elf3d/` | Public C++ headers |
-| `facade/elf3d/` | Shared-library entry points and public/internal conversion |
-| `modules/` | Named modules, implementations, and focused tests |
-| `framework/app/` | Standard desktop application lifecycle and normalized input |
-| `integrations/imgui/` | Named Dear ImGui presentation integration |
-| `apps/viewer/` | Reference application assembly and runtime assets |
+| `src/engine/` | Shared-library entry points and public/internal conversion |
+| `src/` | Logical components and private implementation headers |
+| `src/app/` | Standard desktop application lifecycle and normalized input |
+| `src/imgui/` | Named Dear ImGui presentation integration |
+| `src/viewer/` | Reference application assembly and runtime assets |
 | `examples/` | Compile-checked public integration examples |
 | `tests/` | Public API, external copy/adapt, and real OpenGL integration tests |
-| `cmake/` | Target-scoped build configuration |
+| `win/` | Permanent VS solutions, native projects and shared MSBuild settings |
 | `third_party/` | Pinned vendored dependencies and license notices |
 | `docs/` | Viewer, API, format, rendering, build, and testing documentation |
 
@@ -243,4 +234,4 @@ Matrix edits retain owned extras and opaque extensions; the CPU SDK also retains
 material-volume factors and thickness textures for export.
 Read [CMD.md](docs/CMD.md) for diagnostics, metadata fidelity, output sidecars,
 and copying the processing source into an external application. The fifth manual
-solution is `win/cmd/Elf3D-Cmd.slnx`; CPU-only automation uses `windows-model`.
+solution is `win/Elf3D-Cmd.slnx`; CPU-only automation uses `tools/build.ps1 -Scope Model`.

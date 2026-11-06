@@ -16,24 +16,20 @@ Check project-owned C++ with the CI-pinned `clang-format` 23.1.0 before
 submitting:
 
 ```powershell
-.\cmake\check-format.ps1
+.\tools\check-format.ps1
 ```
 
 ## Build and Test
 
 ```powershell
-cmake --preset windows-full
-cmake --build --preset windows-debug --parallel
-ctest --preset windows-debug --output-on-failure
+.\tools\test.ps1 -Profile Full -Configuration Debug -Build -Headers
 ```
 
-Run the Release preset as well when changing compiler configuration,
+Run Release as well when changing compiler configuration,
 optimization-sensitive code, packaging, or runtime deployment:
 
 ```powershell
-cmake --preset windows-full
-cmake --build --preset windows-release --parallel
-ctest --preset windows-release --output-on-failure
+.\tools\test.ps1 -Profile Full -Configuration Release -Build -Headers
 ```
 
 For viewer or rendering changes, launch the viewer and describe the manual

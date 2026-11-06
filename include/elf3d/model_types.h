@@ -86,6 +86,14 @@ struct SamplerDescription {
 struct ModelLoadOptions {
     bool generate_missing_normals = true;
     bool import_node_names = true;
+    // Import supported detached nodes, meshes and resource tables as well.
+    // Scene roots are unchanged. Additional data uses the same validation and
+    // resource limits; unavailable resources can make this stricter load fail.
+    bool preserve_unreferenced_data = false;
+    // Editors may retain empty scenes/cameras after all geometry is removed.
+    // Validation and feature diagnostics still apply; default loading continues
+    // to require supported triangle geometry.
+    bool allow_empty_geometry = false;
 };
 
 } // namespace elf3d

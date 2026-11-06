@@ -1,0 +1,255 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{F151F146-F1CE-3DB8-94F6-033CE27F8454}</ProjectGuid>
+    <ProjectName>elf3d_model</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Engine</Elf3DPart>
+    <Elf3DModelTarget>true</Elf3DModelTarget>
+    <Elf3DThirdParty>false</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_model$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;$(Elf3DRoot)third_party\cgltf;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;ELF3D_BUILDING_LIBRARY;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/external:I "$(Elf3DRoot)third_party/glm" /external:I "$(Elf3DRoot)third_party/png" /external:I "$(Elf3DRoot)third_party/jpeg" /external:I "$(Elf3DRoot)third_party/zlib" %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\core\diagnostics.cpp">
+      <ObjectFileName>$(IntDir)src_core_diagnostics.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\math\conventions.cpp">
+      <ObjectFileName>$(IntDir)src_math_conventions.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document.cpp">
+      <ObjectFileName>$(IntDir)src_model_document.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_index.cpp"><ObjectFileName>$(IntDir)src_model_document_index.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\model\document_hierarchy.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_hierarchy.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_hierarchy_builder.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_hierarchy_builder.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_clone.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_clone.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_material.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_material.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_camera.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_camera.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_image.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_image.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_metadata.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_metadata.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_mutation.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_mutation.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_validation.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_validation.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_views.cpp">
+      <ObjectFileName>$(IntDir)src_model_document_views.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\model\document_write_source.cpp"><ObjectFileName>$(IntDir)src_model_document_write_source.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\model\document_write_source_records.cpp"><ObjectFileName>$(IntDir)src_model_document_write_source_records.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\model\document_write_source_text.cpp"><ObjectFileName>$(IntDir)src_model_document_write_source_text.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\model\document_write_source_data.cpp"><ObjectFileName>$(IntDir)src_model_document_write_source_data.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\model\document_write_source.h" />
+    <ClInclude Include="..\..\src\model\document_write_source_internal.h" />
+    <ClCompile Include="..\..\src\image\image_decoder.cpp">
+      <ObjectFileName>$(IntDir)src_image_image_decoder.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\image\tiff_decoder.cpp">
+      <ObjectFileName>$(IntDir)src_image_tiff_decoder.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\file_path.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_file_path.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\json_file_output.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_json_file_output.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_write_packets.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_write_packets.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_metadata_cursor.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_metadata_cursor.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\gltf\exporter_metadata_cursor.h" />
+    <ClCompile Include="..\..\src\gltf\exporter_write_sdk.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_write_sdk.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\gltf\exporter_write_sdk.h" />
+    <ClInclude Include="..\..\include\elf3d\model_write.h" />
+    <ClCompile Include="..\..\src\gltf\exporter_file_writer.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_file_writer.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_file_policy.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_file_policy.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_file_images.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_file_images.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_file_output.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_file_output.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_file_validation.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_file_validation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_file_assets.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_file_assets.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\gltf\exporter_file_writer.h" />
+    <ClInclude Include="..\..\src\gltf\exporter_file_validation.h" />
+    <ClInclude Include="..\..\src\gltf\exporter_metadata_view.h" />
+    <ClCompile Include="..\..\src\gltf\exporter_binary_spool.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_binary_spool.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_container.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_container.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_source_metadata.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_source_metadata.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_source_metadata_values.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_source_metadata_values.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\gltf\exporter_source_metadata.h" />
+    <ClInclude Include="..\..\src\gltf\exporter_binary_spool.hpp" />
+    <ClInclude Include="..\..\src\gltf\exporter_container.hpp" />
+    <ClInclude Include="..\..\src\gltf\exporter_output.hpp" />
+    <ClInclude Include="..\..\src\gltf\exporter_geometry_input.h" />
+    <ClInclude Include="..\..\src\gltf\exporter_index_output.h" />
+    <ClInclude Include="..\..\src\gltf\exporter_png_encoder.h" />
+    <ClInclude Include="..\..\src\gltf\exporter_image_input.h" />
+    <ClCompile Include="..\..\src\gltf\exporter_image_input.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_image_input.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_png_encoder.cpp"><ObjectFileName>$(IntDir)src_gltf_exporter_png_encoder.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_geometry.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter_geometry.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_image.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter_image.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_json.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter_json.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_camera.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter_camera.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_json_material.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter_json_material.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_json_format.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter_json_format.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\json_document.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_json_document.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\json_normalize.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_json_normalize.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_json_writer.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter_json_writer.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\exporter_output.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_exporter_output.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_encoding.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_encoding.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_assets.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_assets.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_camera.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_camera.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_json_strings.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_json_strings.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_document.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_document.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_geometry.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_geometry.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_geometry_build.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_geometry_build.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_input.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_input.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_material.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_material.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_metadata.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_metadata.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_texture.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_texture.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer_validation.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer_validation.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\gltf\importer.cpp">
+      <ObjectFileName>$(IntDir)src_gltf_importer.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\core\exception_boundary.h" />
+    <ClInclude Include="..\..\src\math\glm_helpers.h" />
+    <ClInclude Include="..\..\src\math\glm_config.h" />
+    <ClInclude Include="..\..\src\math\math.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\model\document_builder.h" />
+    <ClInclude Include="..\..\src\model\document_handle_access.h" />
+    <ClInclude Include="..\..\src\model\document_storage.h" />
+    <ClInclude Include="..\..\src\model\document_hierarchy_storage.h" />
+    <ClInclude Include="..\..\src\model\image_payload.h" />
+    <ClInclude Include="..\..\src\model\imported_metadata.h" />
+    <ClInclude Include="..\..\src\image\image.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\image\tiff_decoder.h" />
+    <ClInclude Include="..\..\src\gltf\buffer_layout_repair.hpp" />
+    <ClInclude Include="..\..\src\gltf\exporter_internal.hpp" />
+    <ClInclude Include="..\..\src\gltf\exporter_json_internal.hpp" />
+    <ClInclude Include="..\..\src\gltf\importer_internal.hpp" />
+    <ClInclude Include="..\..\src\gltf\file_path.hpp" />
+    <ClInclude Include="..\..\src\gltf\json_document.h" />
+    <ClInclude Include="..\..\src\gltf\gltf.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_jpeg$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_jpeg</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_png$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_png</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_zlib$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_zlib</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_cgltf$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_cgltf</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_mikktspace$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_mikktspace</Producer>
+    </Elf3DPrerequisite>
+  </ItemGroup>
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

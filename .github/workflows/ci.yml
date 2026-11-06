@@ -1,5 +1,4 @@
 name: CI
-
 on:
   push:
     branches: [master]
@@ -8,152 +7,55 @@ on:
   schedule:
     - cron: "17 3 * * 1"
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  ELF3D_CMAKE_VERSION: "4.4.3"
-  ELF3D_CLANG_FORMAT_VERSION: "23.1.0"
-
 jobs:
   quality:
-    name: Quality contracts
     runs-on: windows-2025-vs2026
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14.7'
-      - name: Install pinned build tools
+      - name: Install formatter
         run: |
           python -m venv out/ci-tools
-          .\out\ci-tools\Scripts\python.exe -m pip install `
-            --disable-pip-version-check --no-deps `
-            "cmake==$env:ELF3D_CMAKE_VERSION" `
-            "clang-format==$env:ELF3D_CLANG_FORMAT_VERSION"
-          (Resolve-Path .\out\ci-tools\Scripts).Path |
-            Add-Content -Path $env:GITHUB_PATH
-      - name: Verify toolchain
-        run: .\cmake\check-windows-environment.ps1
-      - name: Check C++ formatting
+          .\out\ci-tools\Scripts\python.exe -m pip install --disable-pip-version-check --no-deps clang-format==23.1.0
+      - name: Check native build contracts
+        run: .\tools\check-build.ps1 -CheckFixtures
+      - name: Check formatting
+        run: .\tools\check-format.ps1 -ClangFormatExecutable .\out\ci-tools\Scripts\clang-format.exe
+      - name: Check internal architecture and policies
         run: |
-          .\cmake\check-format.ps1 `
-            -ClangFormatExecutable .\out\ci-tools\Scripts\clang-format.exe
-      - name: Validate preset contracts
-        run: .\cmake\check-preset-contracts.ps1
-
-  windows-debug:
-    name: Windows full Debug
+          if (Test-Path .internal/architecture/module-graph.json) {
+            ./tools/module-graph/check-module-graph.ps1 -CheckFixtures
+            ./tools/green-profile/check-green-profile.ps1 -CheckFixtures
+            ./tools/policy-derivation/check-policy-access.ps1 -CheckFixtures
+          }
+  windows:
     runs-on: windows-2025-vs2026
     timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.14.7'
-      - name: Install pinned CMake
-        run: |
-          python -m venv out/ci-cmake
-          .\out\ci-cmake\Scripts\python.exe -m pip install `
-            --disable-pip-version-check --no-deps `
-            "cmake==$env:ELF3D_CMAKE_VERSION"
-          (Resolve-Path .\out\ci-cmake\Scripts).Path |
-            Add-Content -Path $env:GITHUB_PATH
-      - name: Verify toolchain
-        run: .\cmake\check-windows-environment.ps1
-      - name: Configure
-        run: cmake --preset windows-full
-      - name: Build
-        run: cmake --build --preset windows-debug --parallel 4
-      - name: Test
-        run: ctest --preset windows-debug --output-on-failure
-      - name: Configure external application
-        run: >-
-          cmake -S examples/external_application -B out/build/external-application
-          -G "Visual Studio 18 2026" -A x64 -T v145,host=x64
-          "-DELF3D_SOURCE_DIR=$env:GITHUB_WORKSPACE"
-      - name: Build external application
-        run: >-
-          cmake --build out/build/external-application --config Debug
-          --target elf3d_external_application --parallel 4
-      - name: Test external application
-        run: ctest --test-dir out/build/external-application -C Debug --output-on-failure
-
-  windows-model-debug:
-    name: Windows model-only Debug
-    runs-on: windows-2025-vs2026
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.14.7'
-      - name: Install pinned CMake
-        run: |
-          python -m venv out/ci-cmake
-          .\out\ci-cmake\Scripts\python.exe -m pip install `
-            --disable-pip-version-check --no-deps `
-            "cmake==$env:ELF3D_CMAKE_VERSION"
-          (Resolve-Path .\out\ci-cmake\Scripts).Path |
-            Add-Content -Path $env:GITHUB_PATH
-      - name: Verify toolchain
-        run: .\cmake\check-windows-environment.ps1
-      - name: Configure
-        run: cmake --preset windows-model
-      - name: Build
-        run: cmake --build --preset windows-model-debug --parallel 4
-      - name: Test
-        run: ctest --preset windows-model-debug --output-on-failure
-
-      - name: Configure external Model application
-        run: >-
-          cmake -S examples/external_model -B out/build/external-model
-          -G "Visual Studio 18 2026" -A x64 -T v145,host=x64
-          "-DELF3D_SOURCE_DIR=$env:GITHUB_WORKSPACE"
-      - name: Build external Model application
-        run: cmake --build out/build/external-model --config Debug --parallel 4
-      - name: Test external Model application
-        run: ctest --test-dir out/build/external-model -C Debug --output-on-failure
-
-  windows-release:
-    name: Windows Release profiles
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: windows-2025-vs2026
-    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - profile: full
-            preset: windows-release
-            configure: windows-full
-          - profile: model-only
-            preset: windows-model-release
-            configure: windows-model
+        profile: [Model, Full]
+        configuration: [Debug, Release]
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.14.7'
-      - name: Install pinned CMake
+        if: matrix.configuration == 'Debug' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      - name: Build and test
+        if: matrix.configuration == 'Debug' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
-          python -m venv out/ci-cmake
-          .\out\ci-cmake\Scripts\python.exe -m pip install `
-            --disable-pip-version-check --no-deps `
-            "cmake==$env:ELF3D_CMAKE_VERSION"
-          (Resolve-Path .\out\ci-cmake\Scripts).Path |
-            Add-Content -Path $env:GITHUB_PATH
-      - name: Verify toolchain
-        run: .\cmake\check-windows-environment.ps1
-      - name: Configure
-        run: cmake --preset ${{ matrix.configure }}
-      - name: Build
-        run: cmake --build --preset ${{ matrix.preset }} --parallel 4
-      - name: Test
-        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+          $source = $PWD.Path
+          if (Test-Path .internal/publication/public-files.txt) {
+            $source = Join-Path $PWD 'out/public/ci-source'
+            ./.agents/skills/elf3d-github-release/scripts/export-public-source.ps1 -RepositoryRoot $PWD -SourceRef HEAD -Destination $source
+          }
+          "ELF3D_CI_SOURCE=$source" >> $env:GITHUB_ENV
+          & "$source/tools/test.ps1" -RepositoryRoot $source -Profile ${{ matrix.profile }} -Configuration ${{ matrix.configuration }} -Build -Headers
+      - name: Check external consumers
+        if: matrix.configuration == 'Debug' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: '& "$env:ELF3D_CI_SOURCE/tools/check-examples.ps1" -RepositoryRoot $env:ELF3D_CI_SOURCE -Profile ${{ matrix.profile }} -Configuration ${{ matrix.configuration }}'

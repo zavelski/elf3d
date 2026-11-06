@@ -12,6 +12,7 @@
 #include <elf3d/scene.h>
 #include <elf3d/selection.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -62,6 +63,11 @@ class ELF3D_API Viewport final {
 
     void set_render_shading_mode(RenderShadingMode mode) noexcept;
     [[nodiscard]] RenderShadingMode render_shading_mode() const noexcept;
+    // View-local override: enabled respects material sidedness; disabled draws
+    // both faces. Picking and navigation depth use the same setting. Materials
+    // in the Document remain unchanged. Changing it invalidates retained frames.
+    void set_backface_culling_enabled(bool enabled) noexcept;
+    [[nodiscard]] bool backface_culling_enabled() const noexcept;
     // Monotonically increases when viewport-owned state changes the next 3D frame.
     [[nodiscard]] std::uint64_t render_revision() const noexcept;
 
@@ -73,6 +79,16 @@ class ELF3D_API Viewport final {
     [[nodiscard]] Result<void> set_examine_pivot(Scene& scene, EntityId camera_entity,
                                                  Float3 world_position) noexcept;
     [[nodiscard]] Result<void> fit_to_scene(Scene& scene, EntityId camera_entity) noexcept;
+    // Fits the visible, unclipped portions of these active instances. Selection,
+    // masks, isolation and persistent model data remain unchanged.
+    [[nodiscard]] Result<void>
+    fit_to_primitives(Scene& scene, EntityId camera_entity,
+                      std::span<const PrimitiveInstance> primitives) noexcept;
+    // Fits the visible, unclipped union of these entities and their subtrees.
+    // Works without a retained Document. Isolation, selection and masks stay
+    // unchanged. Empty/invalid input or no visible bounds preserves the camera.
+    [[nodiscard]] Result<void> fit_to_entities(Scene& scene, EntityId camera_entity,
+                                               std::span<const EntityId> roots) noexcept;
     [[nodiscard]] Result<void> reset_view(Scene& scene, EntityId camera_entity) noexcept;
     [[nodiscard]] Result<void> synchronize_navigation(const Scene& scene,
                                                       EntityId camera_entity) noexcept;
@@ -104,6 +120,14 @@ class ELF3D_API Viewport final {
     [[nodiscard]] std::optional<EntityId> selected_entity() const noexcept;
     [[nodiscard]] std::optional<PickHit> selection_hit() const noexcept;
     [[nodiscard]] SelectionSnapshot selection_snapshot() const noexcept;
+    // Replaces entity/hit selection with canonical primitive instances. Copies
+    // IDs only, normalizes duplicates, and rejects invalid input transactionally.
+    // Empty input clears selection. Visibility does not change selection.
+    [[nodiscard]] Result<void>
+    set_selected_primitives(const Scene& scene,
+                            std::span<const PrimitiveInstance> primitives) noexcept;
+    [[nodiscard]] std::size_t selected_primitive_count() const noexcept;
+    [[nodiscard]] Result<PrimitiveInstance> selected_primitive_at(std::size_t index) const noexcept;
 
     // Projection and surface visibility are stateless mechanism queries.
     [[nodiscard]] Result<ProjectedViewportPoint>
@@ -116,9 +140,31 @@ class ELF3D_API Viewport final {
     // operations mutate persistent local visibility in the supplied Scene.
     [[nodiscard]] Result<void> isolate_entity(const Scene& scene,
                                               EntityId isolated_entity) noexcept;
+    // Copies the roots and shows their subtree union, subject to Scene visibility.
+    // Empty input clears isolation. Invalid/foreign roots leave it unchanged.
+    [[nodiscard]] Result<void> isolate_entities(const Scene& scene,
+                                                std::span<const EntityId> roots) noexcept;
     void clear_isolation() noexcept;
     [[nodiscard]] bool is_isolating() const noexcept;
     [[nodiscard]] std::optional<EntityId> isolated_entity() const noexcept;
+    // The singular getter returns the first root when several are isolated.
+    [[nodiscard]] std::size_t isolated_entity_count() const noexcept;
+    // View-local masks for canonical primitives. Each instance includes all
+    // runtime material groups mapped to that primitive. Invalid/foreign input
+    // leaves the state unchanged; Document data and normal Save are unaffected.
+    [[nodiscard]] Result<void> set_primitive_local_visibility(
+        const Scene& scene, std::span<const PrimitiveInstance> primitives, bool visible) noexcept;
+    [[nodiscard]] Result<bool>
+    primitive_local_visibility(const Scene& scene, PrimitiveInstance primitive) const noexcept;
+    // Combines the local mask, Scene visibility and isolation. Clipping and
+    // graphics readiness are separate from these visibility flags.
+    [[nodiscard]] Result<bool>
+    primitive_effective_visibility(const Scene& scene, PrimitiveInstance primitive) const noexcept;
+    void clear_primitive_visibility() noexcept;
+    // Replaces entity/primitive isolation; empty input clears isolation.
+    [[nodiscard]] Result<void>
+    isolate_primitives(const Scene& scene, std::span<const PrimitiveInstance> primitives) noexcept;
+    [[nodiscard]] std::size_t isolated_primitive_count() const noexcept;
     [[nodiscard]] Result<std::optional<Bounds3>> visible_bounds(const Scene& scene) const noexcept;
     [[nodiscard]] Result<std::optional<Bounds3>>
     unclipped_visible_bounds(const Scene& scene) const noexcept;

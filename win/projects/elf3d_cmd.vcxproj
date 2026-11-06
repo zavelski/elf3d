@@ -1,0 +1,119 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{147BDE48-1C85-302A-BFD3-801808D5BF6D}</ProjectGuid>
+    <ProjectName>elf3d_cmd</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Cmd</Elf3DPart>
+    <Elf3DModelTarget>true</Elf3DModelTarget>
+    <Elf3DThirdParty>false</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_cmd$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\cmd\main.cpp">
+      <ObjectFileName>$(IntDir)src_cmd_main.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cmd\arguments.cpp">
+      <ObjectFileName>$(IntDir)src_cmd_arguments.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cmd\rotate_document.cpp">
+      <ObjectFileName>$(IntDir)src_cmd_rotate_document.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cmd\diagnostics.cpp">
+      <ObjectFileName>$(IntDir)src_cmd_diagnostics.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\cmd\arguments.h" />
+    <ClInclude Include="..\..\src\cmd\rotate_document.h" />
+    <ClInclude Include="..\..\src\cmd\diagnostics.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_model$(Elf3DSuffix).lib">
+      <Part>Engine</Part>
+      <Producer>elf3d_model</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_cgltf$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_cgltf</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_jpeg$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_jpeg</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_mikktspace$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_mikktspace</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_png$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_png</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_zlib$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_zlib</Producer>
+    </Elf3DPrerequisite>
+  </ItemGroup>
+  <ItemGroup>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_model$(Elf3DSuffix).lib">
+      <Producer>elf3d_model</Producer>
+      <Part>Engine</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_cgltf$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_cgltf</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_jpeg$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_jpeg</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_mikktspace$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_mikktspace</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_png$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_png</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_zlib$(Elf3DSuffix).lib">
+      <Producer>elf3d_third_party_zlib</Producer>
+      <Part>Dependencies</Part>
+    </Elf3DLibrary>
+  </ItemGroup>
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

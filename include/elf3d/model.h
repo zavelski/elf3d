@@ -18,6 +18,11 @@
 
 namespace elf3d {
 
+namespace model::detail {
+class DocumentWriteSource;
+class DocumentBuilder;
+} // namespace model::detail
+
 enum class ModelImageMimeType {
     none,
     png,
@@ -54,6 +59,15 @@ struct ModelJsonMetadata {
 struct ModelJsonMetadataView {
     std::optional<std::string_view> extras_json;
     std::span<const ModelJsonExtension> extensions;
+};
+
+enum class PrimitiveMetadataPolicy {
+    invalidate,
+    // Caller has checked every retained metadata scope against this operation.
+    // No retained payload may refer to changed vertex/triangle identities.
+    // Object/resource table identities remain unchanged. Existing stale state
+    // is never cleared; this is not metadata validation or remapping.
+    preserve_verified_references,
 };
 
 struct ModelCameraImageBasedLightingDescription {
@@ -385,6 +399,7 @@ enum class ModelLoadDiagnosticCode {
     skipped_unsupported_primitive,
     metadata_not_preserved,
     repaired_signed_buffer_layout,
+    ignored_vertex_attribute,
 };
 
 struct ModelLoadDiagnostic {
@@ -400,6 +415,42 @@ struct ModelLoadReport {
 };
 
 class DocumentView;
+class DocumentHierarchySnapshot;
+
+// Borrowed source/destination ID pairs for one verified reconstruction. Multiple
+// destinations may inherit one source; each destination may occur only once.
+// Unlisted objects receive no metadata. Opaque references are caller-verified,
+// not rewritten by this operation. Names and typed camera/resource fields are
+// ordinary model data and must already be built by the caller.
+struct ModelMetadataMapping {
+    std::span<const std::pair<DocumentSceneId, DocumentSceneId>> scenes;
+    std::span<const std::pair<NodeId, NodeId>> nodes;
+    std::span<const std::pair<MeshId, MeshId>> meshes;
+    std::span<const std::pair<PrimitiveId, PrimitiveId>> primitives;
+    std::span<const std::pair<MaterialId, MaterialId>> materials;
+    std::span<const std::pair<ImageId, ImageId>> images;
+    std::span<const std::pair<TextureId, TextureId>> textures;
+    std::span<const std::pair<SamplerId, SamplerId>> samplers;
+};
+
+// Owned metadata for a completed, unannotated Document. Every target ID belongs
+// to that Document. The caller has verified JSON syntax and retained opaque
+// references against its current topology; no source Document is required.
+struct ModelDocumentMetadata {
+    ModelJsonMetadata root;
+    ModelJsonMetadata asset;
+    std::vector<std::string> required_extensions;
+    std::vector<std::pair<DocumentSceneId, ModelJsonMetadata>> scenes;
+    std::vector<std::pair<NodeId, ModelJsonMetadata>> nodes;
+    std::vector<std::pair<NodeId, ModelJsonMetadata>> cameras;
+    std::vector<std::pair<NodeId, ModelJsonMetadata>> camera_projections;
+    std::vector<std::pair<MeshId, ModelJsonMetadata>> meshes;
+    std::vector<std::pair<PrimitiveId, ModelJsonMetadata>> primitives;
+    std::vector<std::pair<MaterialId, ModelJsonMetadata>> materials;
+    std::vector<std::pair<ImageId, ModelJsonMetadata>> images;
+    std::vector<std::pair<TextureId, ModelJsonMetadata>> textures;
+    std::vector<std::pair<SamplerId, ModelJsonMetadata>> samplers;
+};
 
 class Document final {
   public:
@@ -412,6 +463,11 @@ class Document final {
     Document& operator=(Document&&) noexcept;
 
     [[nodiscard]] DocumentView view() const noexcept;
+    // Persistent data revision; separate from Scene/view revisions. Zero for a
+    // moved-from owner. Revisions are comparable only within the same owner.
+    [[nodiscard]] std::uint64_t revision() const noexcept;
+    // Synchronous wrapper around the bounded snapshot builder below.
+    [[nodiscard]] Result<DocumentHierarchySnapshot> hierarchy_snapshot() const noexcept;
     [[nodiscard]] DocumentStatistics statistics() const noexcept;
     [[nodiscard]] std::optional<DocumentSceneId> default_scene() const noexcept;
     [[nodiscard]] ModelJsonMetadataView root_metadata() const noexcept;
@@ -426,6 +482,13 @@ class Document final {
     [[nodiscard]] std::size_t image_count() const noexcept;
     [[nodiscard]] std::size_t texture_count() const noexcept;
     [[nodiscard]] std::size_t sampler_count() const noexcept;
+    // Constant-sized owner/liveness checks. Zero-based positions in this
+    // Document's current tables, never persistent identities or output-file
+    // indices. Keep IDs and revision when capturing positions for later work.
+    [[nodiscard]] Result<std::size_t> index_of(NodeId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> index_of(MeshId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> index_of(PrimitiveId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> index_of(MaterialId id) const noexcept;
     [[nodiscard]] Result<DocumentSceneView> scene_at(std::size_t index) const noexcept;
     [[nodiscard]] Result<NodeView> node_at(std::size_t index) const noexcept;
     [[nodiscard]] Result<MeshView> mesh_at(std::size_t index) const noexcept;
@@ -450,6 +513,30 @@ class Document final {
     [[nodiscard]] Result<MaterialId>
     create_material(const ModelMaterialDescription& description = {}) noexcept;
     [[nodiscard]] Result<ImageId> create_image(const ModelImageDescription& description) noexcept;
+    // Fresh ID and independent record; shares only immutable image payload.
+    // Does not copy opaque metadata. Source must outlive this synchronous call,
+    // but may be destroyed immediately afterward. Invalid IDs leave target intact.
+    [[nodiscard]] Result<ImageId> create_image_snapshot(DocumentView source,
+                                                        ImageId image) noexcept;
+    // Attach root/asset/required declarations and mapped object/camera metadata
+    // after building a complete fresh document. Reject stale source metadata,
+    // an already annotated target, foreign IDs, duplicate destinations or
+    // incompatible camera presence. Failure leaves target untouched. The caller
+    // has verified retained opaque references against the resulting topology.
+    [[nodiscard]] Result<void> copy_verified_metadata(DocumentView source,
+                                                      const ModelMetadataMapping& mapping) noexcept;
+    // Consume caller-verified JSON into a valid, completely built, unannotated
+    // target. Checks byte/name budgets, owner-scoped IDs, duplicate targets and
+    // camera presence before any mutation. Does not parse/remap opaque JSON or
+    // clear stale metadata. Failure leaves the target unchanged; later structural
+    // edits follow the ordinary metadata invalidation rules.
+    [[nodiscard]] Result<void> attach_verified_metadata(ModelDocumentMetadata metadata) noexcept;
+    // Copies new bytes before replacing this owner's image; snapshots keep their
+    // old payload. Retains the ID and references, invalidates opaque metadata.
+    // Invalid descriptions/foreign IDs leave the document unchanged. EXR cannot
+    // replace an image referenced by a material texture. Image views expire.
+    [[nodiscard]] Result<void> replace_image(ImageId image,
+                                             const ModelImageDescription& description) noexcept;
     [[nodiscard]] Result<SamplerId>
     create_sampler(const SamplerDescription& description = {}) noexcept;
     [[nodiscard]] Result<TextureId>
@@ -473,16 +560,23 @@ class Document final {
     set_node_camera_properties(NodeId node,
                                const ModelCameraPropertiesDescription& description) noexcept;
     [[nodiscard]] Result<void> clear_node_perspective_camera(NodeId node) noexcept;
-    [[nodiscard]] Result<void> replace_primitive(PrimitiveId primitive,
-                                                 const PrimitiveDataView& data) noexcept;
-    [[nodiscard]] Result<void> replace_primitive(PrimitiveId primitive,
-                                                 PrimitiveData&& data) noexcept;
+    [[nodiscard]] Result<void> replace_primitive(
+        PrimitiveId primitive, const PrimitiveDataView& data,
+        PrimitiveMetadataPolicy metadata = PrimitiveMetadataPolicy::invalidate) noexcept;
+    [[nodiscard]] Result<void> replace_primitive(
+        PrimitiveId primitive, PrimitiveData&& data,
+        PrimitiveMetadataPolicy metadata = PrimitiveMetadataPolicy::invalidate) noexcept;
 
   private:
     friend class DocumentView;
+    friend class DocumentHierarchySnapshot;
     friend class model::detail::DocumentMetadataAccess;
     friend class model::detail::DocumentValidation;
+    friend class model::detail::DocumentWriteSource;
+    friend class model::detail::DocumentBuilder;
     friend DocumentValidationReport validate_document(DocumentView document) noexcept;
+    friend Result<Document> clone_document(DocumentView document) noexcept;
+    friend Result<Document> snapshot_document(DocumentView document) noexcept;
 
     class Storage;
     std::unique_ptr<Storage> storage_;
@@ -491,6 +585,8 @@ class Document final {
 class DocumentView final {
   public:
     DocumentView() noexcept = default;
+
+    [[nodiscard]] std::uint64_t revision() const noexcept;
 
     [[nodiscard]] DocumentStatistics statistics() const noexcept;
     [[nodiscard]] std::optional<DocumentSceneId> default_scene() const noexcept;
@@ -506,6 +602,10 @@ class DocumentView final {
     [[nodiscard]] std::size_t image_count() const noexcept;
     [[nodiscard]] std::size_t texture_count() const noexcept;
     [[nodiscard]] std::size_t sampler_count() const noexcept;
+    [[nodiscard]] Result<std::size_t> index_of(NodeId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> index_of(MeshId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> index_of(PrimitiveId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> index_of(MaterialId id) const noexcept;
     [[nodiscard]] Result<DocumentSceneView> scene_at(std::size_t index) const noexcept;
     [[nodiscard]] Result<NodeView> node_at(std::size_t index) const noexcept;
     [[nodiscard]] Result<MeshView> mesh_at(std::size_t index) const noexcept;
@@ -526,12 +626,91 @@ class DocumentView final {
 
   private:
     friend class Document;
+    friend class DocumentHierarchySnapshot;
     friend class model::detail::DocumentValidation;
+    friend class model::detail::DocumentWriteSource;
     friend DocumentValidationReport validate_document(DocumentView document) noexcept;
+    friend Result<Document> clone_document(DocumentView document) noexcept;
+    friend Result<Document> snapshot_document(DocumentView document) noexcept;
 
     explicit DocumentView(const Document* document) noexcept;
 
     const Document* document_ = nullptr;
+};
+
+struct DocumentHierarchyScene {
+    DocumentSceneId id;
+    std::string_view name;
+    std::span<const NodeId> roots;
+};
+
+struct DocumentHierarchyNode {
+    NodeId id;
+    std::string_view name;
+    std::optional<NodeId> parent;
+    std::span<const NodeId> children;
+    std::optional<MeshId> mesh;
+    bool has_camera = false;
+    bool has_areal_light = false;
+    bool in_authored_scene = false;
+};
+
+struct DocumentHierarchyMesh {
+    MeshId id;
+    std::string_view name;
+    std::span<const PrimitiveId> primitives;
+    // All authored users, including nodes outside scenes; empty means unused.
+    std::span<const NodeId> users;
+};
+
+struct DocumentHierarchyPrimitive {
+    PrimitiveId id;
+    MeshId mesh;
+    MaterialId material;
+    std::uint64_t vertices = 0;
+    std::uint64_t triangles = 0;
+};
+
+// Owns metadata only. No Document, geometry, image payload or borrowed view is
+// retained. Completed views borrow this snapshot and survive source destruction.
+// Scene roots plus canonical node links define occurrence identity: a GUI may
+// present a node in multiple scenes without copying the node's metadata.
+class DocumentHierarchySnapshot final {
+  public:
+    DocumentHierarchySnapshot() noexcept;
+    ~DocumentHierarchySnapshot() noexcept;
+    DocumentHierarchySnapshot(const DocumentHierarchySnapshot&) = delete;
+    DocumentHierarchySnapshot& operator=(const DocumentHierarchySnapshot&) = delete;
+    DocumentHierarchySnapshot(DocumentHierarchySnapshot&&) noexcept;
+    DocumentHierarchySnapshot& operator=(DocumentHierarchySnapshot&&) noexcept;
+
+    // Creation captures identity/revision and reserves metadata tables only.
+    // Call advance on the source's owning thread, or on an exclusive CPU owner.
+    [[nodiscard]] static Result<DocumentHierarchySnapshot> create(DocumentView source) noexcept;
+    // Each work unit copies at most 4096 name bytes or 64 relationships, or
+    // processes one small record. Allocator calls and per-node supported-light
+    // inspection are indivisible. Zero budget and changed/foreign sources fail.
+    // No partial views are exposed; true means both projections are complete.
+    [[nodiscard]] Result<bool> advance(DocumentView source, std::size_t work_units = 128) noexcept;
+    [[nodiscard]] bool ready() const noexcept;
+    [[nodiscard]] bool matches_document(DocumentView source) const noexcept;
+    [[nodiscard]] std::uint64_t document_revision() const noexcept;
+    [[nodiscard]] std::optional<DocumentSceneId> default_scene() const noexcept;
+    [[nodiscard]] std::size_t scene_count() const noexcept;
+    [[nodiscard]] std::size_t node_count() const noexcept;
+    [[nodiscard]] std::size_t mesh_count() const noexcept;
+    [[nodiscard]] std::size_t primitive_count() const noexcept;
+    [[nodiscard]] Result<DocumentHierarchyScene> scene_at(std::size_t index) const noexcept;
+    [[nodiscard]] Result<DocumentHierarchyNode> node_at(std::size_t index) const noexcept;
+    [[nodiscard]] Result<DocumentHierarchyMesh> mesh_at(std::size_t index) const noexcept;
+    [[nodiscard]] Result<DocumentHierarchyPrimitive> primitive_at(std::size_t index) const noexcept;
+    [[nodiscard]] Result<DocumentHierarchyNode> node(NodeId id) const noexcept;
+    [[nodiscard]] Result<DocumentHierarchyMesh> mesh(MeshId id) const noexcept;
+    [[nodiscard]] Result<DocumentHierarchyPrimitive> primitive(PrimitiveId id) const noexcept;
+
+  private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 struct LoadedDocument {
@@ -541,6 +720,18 @@ struct LoadedDocument {
 };
 
 [[nodiscard]] DocumentValidationReport validate_document(DocumentView document) noexcept;
+// Synchronous complete copy, with independent storage and fresh owner-scoped IDs.
+// Preserves enumeration order and raw metadata, including its stale state; does
+// not interpret opaque JSON references. The source must stay alive and unmodified
+// during the call. Empty/moved-from views or validation errors return invalid_argument;
+// a live empty Document is supported. Allocation failure follows the SDK fatal policy.
+[[nodiscard]] Result<Document> clone_document(DocumentView document) noexcept;
+// Same validation, fresh IDs and independent tables/geometry/metadata as clone,
+// but shares immutable encoded/decoded image bytes. Either owner may outlive the
+// other or move to a different thread after this synchronous call. No mutable
+// data aliases; image replacement allocates a new block for that owner only.
+// No GPU sharing or thread-safety for concurrent access to the SAME Document.
+[[nodiscard]] Result<Document> snapshot_document(DocumentView document) noexcept;
 [[nodiscard]] Result<LoadedDocument> load_document(std::string_view path_utf8,
                                                    const ModelLoadOptions& options = {}) noexcept;
 [[nodiscard]] Result<ModelWriteReport>

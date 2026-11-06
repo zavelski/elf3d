@@ -1,0 +1,4 @@
+<Solution>
+  <Configurations><Platform Name="x64" /></Configurations>
+  <Project Path="projects/elf3d_cmd.vcxproj" DefaultStartup="true" Id="147bde48-1c85-302a-bfd3-801808d5bf6d" />
+</Solution>

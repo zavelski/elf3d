@@ -8,10 +8,10 @@
 
 namespace elf3d {
 
-[[noreturn]] ELF3D_API void fatal_error(std::string_view message) noexcept;
+[[noreturn]] ELF3D_CORE_API void fatal_error(std::string_view message) noexcept;
 
-[[noreturn]] ELF3D_API void assertion_failed(const char* expression, const char* file,
-                                             std::uint32_t line) noexcept;
+[[noreturn]] ELF3D_CORE_API void assertion_failed(const char* expression, const char* file,
+                                                  std::uint32_t line) noexcept;
 
 } // namespace elf3d
 

@@ -1,0 +1,981 @@
+[
+  {
+    "name": "elf3d.graphics_service",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 180,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{ToolRoot}/elf3d_render_benchmark{Suffix}.exe",
+    "arguments": [
+      "--service",
+      "large-mesh",
+      "32",
+      "2",
+      "{RunRoot}/graphics-service.csv"
+    ]
+  },
+  {
+    "name": "elf3d.model_write_source",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_model_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_write_source"
+    ]
+  },
+  {
+    "name": "elf3d.model_hierarchy",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_model_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_hierarchy"
+    ]
+  },
+  {
+    "name": "elf3d.model_module_identity",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_model_module_identity_test{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.allocation_failure",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "fatal",
+    "program": "{TestRoot}/elf3d_allocation_failure_test{Suffix}.exe",
+    "arguments": [],
+    "scenarios": [
+      "document_create",
+      "document_node",
+      "document_validation",
+      "document_clone",
+      "unexpected"
+    ]
+  },
+  {
+    "name": "elf3d.core_vocabulary",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_foundation_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "core_vocabulary"
+    ]
+  },
+  {
+    "name": "elf3d.math_conventions",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_foundation_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "math_conventions"
+    ]
+  },
+  {
+    "name": "elf3d.interaction",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_domain_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "interaction"
+    ]
+  },
+  {
+    "name": "elf3d.assets",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_domain_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "assets"
+    ]
+  },
+  {
+    "name": "elf3d.clipping",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_domain_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "clipping"
+    ]
+  },
+  {
+    "name": "elf3d.scene",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_domain_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "scene"
+    ]
+  },
+  {
+    "name": "elf3d.scene_runtime_adapter_depth",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_domain_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "scene_runtime_adapter_depth"
+    ]
+  },
+  {
+    "name": "elf3d.image_decode",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_import_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "image_decode"
+    ]
+  },
+  {
+    "name": "elf3d.model_gltf_export",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_import_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_gltf_export"
+    ]
+  },
+  {
+    "name": "elf3d.model_gltf_import",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_import_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_gltf_import"
+    ]
+  },
+  {
+    "name": "elf3d.model_gltf_tangent",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_import_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_gltf_tangent"
+    ]
+  },
+  {
+    "name": "elf3d.model_gltf_metadata",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_import_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "gltf_metadata"
+    ]
+  },
+  {
+    "name": "elf3d.model_gltf_json_format",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_import_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "gltf_json_format"
+    ]
+  },
+  {
+    "name": "elf3d.model_gltf_optical_material",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_import_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "optical_material"
+    ]
+  },
+  {
+    "name": "elf3d.model_document",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_model_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_document"
+    ]
+  },
+  {
+    "name": "elf3d.model_clone",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_model_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_clone"
+    ]
+  },
+  {
+    "name": "elf3d.model_processing",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_model_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_processing"
+    ]
+  },
+  {
+    "name": "elf3d.model_tangent",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_model_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "model_tangent"
+    ]
+  },
+  {
+    "name": "elf3d.navigation",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_interaction_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "navigation"
+    ]
+  },
+  {
+    "name": "elf3d.picking",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_interaction_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "picking"
+    ]
+  },
+  {
+    "name": "elf3d.selection",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_interaction_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "selection"
+    ]
+  },
+  {
+    "name": "elf3d.visibility",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_interaction_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "visibility"
+    ]
+  },
+  {
+    "name": "elf3d.clipping_runtime",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_interaction_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "clipping"
+    ]
+  },
+  {
+    "name": "elf3d.renderer",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_view_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "renderer"
+    ]
+  },
+  {
+    "name": "elf3d.renderer_layout",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_view_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "renderer_layout"
+    ]
+  },
+  {
+    "name": "elf3d.renderer_frustum",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_view_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "renderer_frustum"
+    ]
+  },
+  {
+    "name": "elf3d.renderer_document",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_view_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "renderer_document"
+    ]
+  },
+  {
+    "name": "elf3d.renderer_optical",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_view_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "renderer_optical"
+    ]
+  },
+  {
+    "name": "elf3d.scene_tangents",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_view_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "scene_tangents"
+    ]
+  },
+  {
+    "name": "elf3d.display_transform",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_view_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "display_transform"
+    ]
+  },
+  {
+    "name": "elf3d.viewport_lifetime",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_view_tests{Suffix}.exe",
+    "arguments": [
+      "--case",
+      "viewport_lifetime"
+    ]
+  },
+  {
+    "name": "elf3d.application_smoke",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_app_smoke_test{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.interaction_arbiter",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_interaction_arbiter_tests{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.input_collector",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_input_collector_tests{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.viewer_behavior",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_viewer_behavior_tests{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.viewer_tools",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_viewer_tools_tests{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.viewer_smoke",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{ProductRoot}/elf3d_viewer{Suffix}.exe",
+    "arguments": [
+      "--smoke"
+    ]
+  },
+  {
+    "name": "elf3d.cmd_arguments",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_cmd_tests{Suffix}.exe",
+    "arguments": [
+      "arguments"
+    ]
+  },
+  {
+    "name": "elf3d.cmd_rotation",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_cmd_tests{Suffix}.exe",
+    "arguments": [
+      "rotation"
+    ]
+  },
+  {
+    "name": "elf3d.cmd_round_trip",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "pwsh",
+    "arguments": [
+      "-NoProfile",
+      "-File",
+      "{Root}/tests/cmd/round_trip.ps1",
+      "-Executable",
+      "{ProductRoot}/elf3d_cmd{Suffix}.exe",
+      "-Verifier",
+      "{TestRoot}/elf3d_cmd_tests{Suffix}.exe",
+      "-WorkRoot",
+      "{RunRoot}/cmd"
+    ]
+  },
+  {
+    "name": "elf3d.public_api_contract",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_public_api_test{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.measurement_copy_adapt",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_measurement_copy_adapt_test{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.opengl_render_smoke",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_opengl_render_smoke_test{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.scene_allocation_failure",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "fatal",
+    "program": "{TestRoot}/elf3d_opengl_render_smoke_test{Suffix}.exe",
+    "arguments": [
+      "--allocation-failure"
+    ],
+    "scenarios": [
+      "scene_create",
+      "scene_snapshot",
+      "scene_name",
+      "scene_visibility",
+      "scene_bounds"
+    ]
+  },
+  {
+    "name": "elf3d.engine_model_integration",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{TestRoot}/elf3d_model_quick_test{Suffix}.exe",
+    "arguments": []
+  },
+  {
+    "name": "elf3d.render_quality_material_pixels",
+    "profiles": [
+      "Full"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "{ToolRoot}/elf3d_render_quality_capture{Suffix}.exe",
+    "arguments": [
+      "--model",
+      "procedural-material",
+      "--extent",
+      "1280x720",
+      "--camera",
+      "fit-front",
+      "--output",
+      "{RunRoot}/render-quality-test/material.png",
+      "--metadata",
+      "{RunRoot}/render-quality-test/material.json",
+      "--validate-material",
+      "true"
+    ]
+  },
+  {
+    "name": "elf3d.msbuild_contracts",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "pwsh",
+    "arguments": [
+      "-NoProfile",
+      "-File",
+      "{Root}/tools/check-build.ps1",
+      "-RepositoryRoot",
+      "{Root}",
+      "-CheckFixtures"
+    ]
+  },
+  {
+    "name": "elf3d.cleanup_contracts",
+    "profiles": [
+      "Full",
+      "Model"
+    ],
+    "configurations": [
+      "Debug",
+      "Release"
+    ],
+    "timeout": 120,
+    "skipCode": 77,
+    "kind": "process",
+    "program": "pwsh",
+    "arguments": [
+      "-NoProfile",
+      "-File",
+      "{Root}/tests/build/cleanup_test.ps1",
+      "-RepositoryRoot",
+      "{Root}"
+    ]
+  }
+]

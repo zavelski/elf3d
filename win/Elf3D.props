@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Elf3DSourceRoot Condition="'$(Elf3DSourceRoot)'==''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</Elf3DSourceRoot>
+    <Elf3DProductRoot Condition="'$(Elf3DProductRoot)'==''">$(Elf3DSourceRoot)x64\</Elf3DProductRoot>
+    <Elf3DComponent Condition="'$(Elf3DComponent)'==''">Runtime</Elf3DComponent>
+    <Elf3DSuffix Condition="'$(Configuration)'=='Debug'">D</Elf3DSuffix>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DSourceRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Elf3DComponent)'=='App'">$(Elf3DSourceRoot)include;$(Elf3DSourceRoot)third_party\imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies Condition="'$(Elf3DComponent)'=='App'">opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(Elf3DComponent)'=='Model'">
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_model$(Elf3DSuffix).lib"><Producer>elf3d_model</Producer><Part>Engine</Part></Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_cgltf$(Elf3DSuffix).lib;$(Elf3DProductRoot)elf3d_third_party_png$(Elf3DSuffix).lib;$(Elf3DProductRoot)elf3d_third_party_jpeg$(Elf3DSuffix).lib;$(Elf3DProductRoot)elf3d_third_party_mikktspace$(Elf3DSuffix).lib;$(Elf3DProductRoot)elf3d_third_party_zlib$(Elf3DSuffix).lib"><Part>Dependencies</Part></Elf3DLibrary>
+  </ItemGroup>
+  <ItemGroup Condition="'$(Elf3DComponent)'=='Runtime' or '$(Elf3DComponent)'=='App'">
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d$(Elf3DSuffix).lib"><Producer>elf3d</Producer><Part>Engine</Part></Elf3DLibrary>
+  </ItemGroup>
+  <ItemGroup Condition="'$(Elf3DComponent)'=='App'">
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_app$(Elf3DSuffix).lib;$(Elf3DProductRoot)elf3d_imgui$(Elf3DSuffix).lib"><Part>Viewer</Part></Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)elf3d_third_party_imgui$(Elf3DSuffix).lib"><Part>ImGui</Part></Elf3DLibrary>
+    <Elf3DLibrary Include="$(Elf3DProductRoot)glfw3$(Elf3DSuffix).lib;$(Elf3DProductRoot)elf3d_third_party_glad$(Elf3DSuffix).lib"><Part>Dependencies</Part></Elf3DLibrary>
+  </ItemGroup>
+  <ItemGroup><Link Include="@(Elf3DLibrary)" /></ItemGroup>
+  <Target Name="Elf3DValidateConsumer" BeforeTargets="ClCompile;Link">
+    <Error Condition="'$(Platform)'!='x64' or '$(PlatformToolset)'!='v145'" Text="The Elf3D SDK requires x64 / v145." />
+    <Error Condition="'$(Configuration)'!='Debug' and '$(Configuration)'!='Release'" Text="The Elf3D SDK supports Debug and Release." />
+    <Error Condition="!Exists('%(Elf3DLibrary.Identity)')" Text="Missing %(Elf3DLibrary.Identity). Build Elf3D-%(Elf3DLibrary.Part).slnx for $(Configuration)|x64 first." />
+    <Error Condition="'$(Elf3DComponent)'!='Model' and '$(Elf3DComponent)'!='Runtime' and '$(Elf3DComponent)'!='App'" Text="Elf3DComponent must be Model, Runtime, or App." />
+    <Error Condition="'%(ClCompile.RuntimeLibrary)'!='MultiThreadedDebugDLL' and '$(Configuration)'=='Debug'" Text="The Elf3D Debug SDK requires /MDd." />
+    <Error Condition="'%(ClCompile.RuntimeLibrary)'!='MultiThreadedDLL' and '$(Configuration)'=='Release'" Text="The Elf3D Release SDK requires /MD." />
+  </Target>
+</Project>

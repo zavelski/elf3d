@@ -57,10 +57,9 @@ The main window is a dockable workspace:
   settings;
 - **Rendering** controls the background color and lighting;
 - **Measurement** controls distance measurement and its overlay;
-- **Clipping** controls the section plane and clipping boxes;
 - **Navigation Settings** controls navigation sensitivity and shows the current
   camera state;
-- **Status Bar** shows the active tool, selection, clipping, viewport, and
+- **Status Bar** shows the active tool, selection, viewport, and
   performance information.
 
 Panels can be shown or hidden from **View**. Use **View > Reset Layout** if the
@@ -150,18 +149,21 @@ The **Selection** panel shows:
 - highlight color and strength;
 - selection diagnostics.
 
-There is only one selection at a time. Press `Escape` to clear it, unless an
-incomplete measurement is active.
+Use `Ctrl` + `Shift` + viewport click, or `Ctrl`/`Shift` + hierarchy row
+click, to toggle an entity in the selection. **Select All** selects the current
+hierarchy. The tree shows all selected entities, while the primary entity
+receives the viewport highlight. Press `Escape` to clear the selection, unless
+an incomplete measurement is active.
 
 ## Visibility and Isolation
 
 Useful commands are available in the **Selection** menu, toolbar, and Scene
 Hierarchy:
 
-- **Hide Selected** persistently hides the selected entity;
-- **Show Selected** shows it and any hidden ancestors;
-- **Show All** restores persistent visibility for all entities;
-- **Isolate Selected** temporarily displays only the selected hierarchy branch;
+- **Hide Selected** persistently hides all selected entities;
+- **Show Selected** shows selected entities and any hidden ancestors;
+- **Show All** restores persistent visibility for all entities and exits isolation;
+- **Isolate Selected** temporarily displays the union of selected hierarchy branches;
 - **Exit Isolation** returns to ordinary visibility.
 
 You can also:
@@ -170,8 +172,8 @@ You can also:
 - use each hierarchy row's **Hide/Show** button;
 - right-click a hierarchy row for Select, Hide, Show, and Isolate commands.
 
-Isolation is separate from scene visibility. Consequently, **Show All** does
-not exit isolation; use **Exit Isolation** as well.
+Isolation is separate from scene visibility. **Show All** resets both states.
+Selection and view hiding do not remove geometry from **Save As** output.
 
 The hierarchy distinguishes:
 
@@ -212,52 +214,9 @@ Shortcuts:
 Switching back to Select also cancels an incomplete first point. A completed
 measurement remains visible when changing tools.
 
-Measurement points follow their scene geometry. Hidden, isolated, or clipped
-geometry cannot be picked. If an existing anchor becomes hidden or clipped, the
+Measurement points follow their scene geometry. Hidden or isolated
+geometry cannot be picked. If an existing anchor becomes hidden or isolated, the
 measurement remains stored but its overlay is suppressed.
-
-## Clipping the Scene
-
-Open the **Clipping** panel from the toolbar, **Tools > Clipping**, or
-**View > Clipping**.
-
-### Section Plane
-
-Enable **Section Plane**, then configure:
-
-- **Point**: a point through which the plane passes;
-- **Normal**: the plane direction;
-- **Retained side**: the positive or negative half-space.
-
-The `X`, `Y`, and `Z` buttons align the normal to a world axis. **Center** moves
-the plane to the center of the currently visible bounds. **Clear** removes it.
-
-The toolbar's section-plane button enables the plane and initially centers it
-on visible content. **Flip Section Side** quickly swaps which side remains
-visible.
-
-### Clipping Boxes
-
-Choose **Add Box from Visible Bounds** to create a box covering the current
-visible content. You can then edit its minimum and maximum coordinates.
-
-Each box can be enabled, reset to visible bounds, or removed. Up to three boxes
-are supported.
-
-Multiple enabled boxes use union semantics: geometry inside any enabled box
-remains eligible. The box union and section plane are then combined by
-intersection, so geometry must also be on the retained side of the section
-plane.
-
-Use:
-
-- **Show helpers** to display plane and box outlines;
-- **Fit to Clipped Content** to frame only what remains visible;
-- **Clear Boxes** to remove boxes only;
-- **Clear Clipping** to remove the plane and all boxes.
-
-Clipping affects rendering, picking, selection, measurement, visible bounds,
-Fit, and Reset; it does not merely mask the displayed pixels.
 
 ## Rendering and Model Information
 
@@ -285,7 +244,6 @@ incomplete. It reports:
 - primitives, vertices, indices, and triangles;
 - model bounds;
 - draw calls and GPU texture activity;
-- clipping statistics;
 - import compatibility diagnostics.
 
 A model can load successfully while still producing compatibility or
@@ -297,8 +255,7 @@ resource-limit diagnostics.
   loaded model as `.gltf` or `.glb` and asks before replacing an existing file.
 - **View**: show or hide panels and the status bar, open the ImGui demo, and
   reset the layout.
-- **Tools**: Select, Measure Distance, and open Clipping.
-- **Clipping**: section plane, side flip, add box, helpers, fit, and clear.
+- **Tools**: Select and Measure Distance.
 - **Camera**: Fit, Reset, enable navigation, and navigation settings.
 - **Selection**: clear, hide, show, isolate, show all, and settings.
 - **Measurement**: cancel, clear, and settings.

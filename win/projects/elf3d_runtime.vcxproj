@@ -1,0 +1,307 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{3DA2D2BB-7B21-567B-BBF4-184D01690607}</ProjectGuid>
+    <ProjectName>elf3d_runtime</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Engine</Elf3DPart>
+    <Elf3DModelTarget>false</Elf3DModelTarget>
+    <Elf3DThirdParty>false</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_runtime$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;ELF3D_BUILDING_LIBRARY;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/external:I "$(Elf3DRoot)third_party/mikktspace" /external:I "$(Elf3DRoot)third_party/glad/include" %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectReference Include="elf3d_model.vcxproj">
+      <Project>{F151F146-F1CE-3DB8-94F6-033CE27F8454}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\interaction\viewport_interaction.cpp">
+      <ObjectFileName>$(IntDir)src_interaction_viewport_interaction.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\assets\storage.cpp">
+      <ObjectFileName>$(IntDir)src_assets_storage.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\clipping\filter.cpp">
+      <ObjectFileName>$(IntDir)src_clipping_filter.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\runtime_adapter.cpp">
+      <ObjectFileName>$(IntDir)src_scene_runtime_adapter.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\runtime_material.cpp">
+      <ObjectFileName>$(IntDir)src_scene_runtime_material.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\spatial.cpp">
+      <ObjectFileName>$(IntDir)src_scene_spatial.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\storage.cpp">
+      <ObjectFileName>$(IntDir)src_scene_storage.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\document_mapping.cpp">
+      <ObjectFileName>$(IntDir)src_scene_document_mapping.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\document_geometry.cpp">
+      <ObjectFileName>$(IntDir)src_scene_document_geometry.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\tangent_space.cpp">
+      <ObjectFileName>$(IntDir)src_scene_tangent_space.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\surface_anchor.cpp">
+      <ObjectFileName>$(IntDir)src_scene_surface_anchor.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene\primitive_visibility.cpp"><ObjectFileName>$(IntDir)src_scene_primitive_visibility.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\scene\visibility.cpp">
+      <ObjectFileName>$(IntDir)src_scene_visibility.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\graphics\device.cpp">
+      <ObjectFileName>$(IntDir)src_graphics_device.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_indexed_draw.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device_indexed_draw.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_overlay.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device_overlay.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_picking.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device_picking.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_resources.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device_resources.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_mesh.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_mesh.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_mesh_preparation.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_mesh_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\graphics\mesh_preparation.cpp"><ObjectFileName>$(IntDir)src_graphics_mesh_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\graphics\texture_preparation.cpp"><ObjectFileName>$(IntDir)src_graphics_texture_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_pipeline_preparation.cpp"><ObjectFileName>$(IntDir)src_renderer_renderer_pipeline_preparation.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\renderer\renderer_pipeline_preparation.h" />
+    <ClCompile Include="..\..\src\graphics\pipeline_preparation.cpp"><ObjectFileName>$(IntDir)src_graphics_pipeline_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_shared_preparation.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_shared_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_shared_resources.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_shared_resources.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_shared_uniforms.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_shared_uniforms.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\backend_opengl\device_shared_preparation.h" />
+    <ClInclude Include="..\..\src\backend_opengl\device_shared_resources.h" />
+    <ClCompile Include="..\..\src\backend_opengl\device_pipeline_preparation.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_pipeline_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_pipeline_uniforms.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_pipeline_uniforms.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\graphics\pipeline_preparation.h"><Elf3DContract>true</Elf3DContract></ClInclude>
+    <ClInclude Include="..\..\src\backend_opengl\device_pipeline_preparation.h" />
+    <ClCompile Include="..\..\src\graphics\cube_preparation.cpp"><ObjectFileName>$(IntDir)src_graphics_cube_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_environment_preparation.cpp"><ObjectFileName>$(IntDir)src_renderer_environment_preparation.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\renderer\renderer_environment_preparation.h" />
+    <ClCompile Include="..\..\src\backend_opengl\device_cube_preparation.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_cube_preparation.obj</ObjectFileName></ClCompile>
+    <ClInclude Include="..\..\src\backend_opengl\device_cube.h" />
+    <ClInclude Include="..\..\src\backend_opengl\device_texture_state.h" />
+    <ClInclude Include="..\..\src\graphics\cube_preparation.h"><Elf3DContract>true</Elf3DContract></ClInclude>
+    <ClCompile Include="..\..\src\backend_opengl\device_texture.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_texture.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_texture_preparation.cpp"><ObjectFileName>$(IntDir)src_backend_opengl_device_texture_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_pipeline.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device_pipeline.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_state.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device_state.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_targets.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device_targets.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\backend_opengl\device_readback.cpp">
+      <ObjectFileName>$(IntDir)src_backend_opengl_device_readback.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\navigation\orbit_navigation_state.cpp">
+      <ObjectFileName>$(IntDir)src_navigation_orbit_navigation_state.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\navigation\orbit_navigation.cpp">
+      <ObjectFileName>$(IntDir)src_navigation_orbit_navigation.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\navigation\orbit_navigation_update.cpp">
+      <ObjectFileName>$(IntDir)src_navigation_orbit_navigation_update.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\picking\service_geometry.cpp">
+      <ObjectFileName>$(IntDir)src_picking_service_geometry.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\picking\service.cpp">
+      <ObjectFileName>$(IntDir)src_picking_service.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\picking\acceleration.cpp">
+      <ObjectFileName>$(IntDir)src_picking_acceleration.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\selection\selection_controller.cpp">
+      <ObjectFileName>$(IntDir)src_selection_selection_controller.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\visibility\primitive_visibility.cpp"><ObjectFileName>$(IntDir)src_visibility_primitive_visibility.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\visibility\visibility_controller.cpp">
+      <ObjectFileName>$(IntDir)src_visibility_visibility_controller.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\clipping_runtime\clipping_controller.cpp">
+      <ObjectFileName>$(IntDir)src_clipping_runtime_clipping_controller.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\renderer\gpu_picking.cpp">
+      <ObjectFileName>$(IntDir)src_renderer_gpu_picking.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\renderer\main_shader_source.cpp">
+      <ObjectFileName>$(IntDir)src_renderer_main_shader_source.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\renderer\model_rendering.cpp">
+      <ObjectFileName>$(IntDir)src_renderer_model_rendering.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_vertex_packing.cpp"><ObjectFileName>$(IntDir)src_renderer_renderer_vertex_packing.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_mesh_preparation.cpp"><ObjectFileName>$(IntDir)src_renderer_renderer_mesh_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_texture_preparation.cpp"><ObjectFileName>$(IntDir)src_renderer_renderer_texture_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_scene_preparation.cpp"><ObjectFileName>$(IntDir)src_renderer_renderer_scene_preparation.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_retirement.cpp"><ObjectFileName>$(IntDir)src_renderer_renderer_retirement.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\picking\picking_cache.cpp"><ObjectFileName>$(IntDir)src_picking_picking_cache.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_mesh_cache.cpp"><ObjectFileName>$(IntDir)src_renderer_renderer_mesh_cache.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="..\..\src\renderer\render_list.cpp">
+      <ObjectFileName>$(IntDir)src_renderer_render_list.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer.cpp">
+      <ObjectFileName>$(IntDir)src_renderer_renderer.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\renderer\renderer_texture_cache.cpp">
+      <ObjectFileName>$(IntDir)src_renderer_renderer_texture_cache.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\renderer\studio_environment.cpp">
+      <ObjectFileName>$(IntDir)src_renderer_studio_environment.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewport\offscreen_viewport.cpp">
+      <ObjectFileName>$(IntDir)src_viewport_offscreen_viewport.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewport\offscreen_viewport_navigation.cpp">
+      <ObjectFileName>$(IntDir)src_viewport_offscreen_viewport_navigation.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewport\offscreen_viewport_picking.cpp">
+      <ObjectFileName>$(IntDir)src_viewport_offscreen_viewport_picking.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewport\offscreen_viewport_projection.cpp">
+      <ObjectFileName>$(IntDir)src_viewport_offscreen_viewport_projection.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\viewport\offscreen_viewport_render_settings.cpp">
+      <ObjectFileName>$(IntDir)src_viewport_offscreen_viewport_render_settings.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\src\scene\tangent_space.h" />
+    <ClInclude Include="..\..\src\interaction\interaction.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\assets\assets.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\clipping\clipping.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\scene\scene.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\scene\scene_runtime.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\graphics\graphics.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\backend_opengl\device_internal.hpp" />
+    <ClInclude Include="..\..\src\backend_opengl\device_display_shaders.hpp" />
+    <ClInclude Include="..\..\src\backend_opengl\backend_opengl.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\navigation\orbit_navigation_detail.h" />
+    <ClInclude Include="..\..\src\picking\geometry_detail.h" />
+    <ClInclude Include="..\..\src\picking\acceleration_detail.h" />
+    <ClInclude Include="..\..\src\navigation\navigation.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\picking\picking.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\selection\selection.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\visibility\visibility.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\clipping_runtime\clipping_runtime.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\renderer\renderer_cache.hpp" />
+    <ClInclude Include="..\..\src\renderer\renderer_vertex_packing.h" />
+    <ClInclude Include="..\..\src\renderer\renderer_mesh_preparation.h" />
+    <ClInclude Include="..\..\src\renderer\renderer_texture_preparation.h" />
+    <ClInclude Include="..\..\src\renderer\renderer_scene_preparation.h" />
+    <ClInclude Include="..\..\src\picking\picking_cache.h" />
+    <ClInclude Include="..\..\src\graphics\mesh_preparation.h"><Elf3DContract>true</Elf3DContract></ClInclude>
+    <ClInclude Include="..\..\src\graphics\texture_preparation.h"><Elf3DContract>true</Elf3DContract></ClInclude>
+    <ClInclude Include="..\..\src\graphics\resource_retirement.h"><Elf3DContract>true</Elf3DContract></ClInclude>
+    <ClInclude Include="..\..\src\backend_opengl\device_texture.h"><Elf3DContract>true</Elf3DContract></ClInclude>
+    <ClInclude Include="..\..\src\backend_opengl\device_mesh.h"><Elf3DContract>true</Elf3DContract></ClInclude>
+    <ClInclude Include="..\..\src\renderer\renderer_detail.h" />
+    <ClInclude Include="..\..\src\renderer\renderer_picking.h"><Elf3DContract>true</Elf3DContract></ClInclude>
+    <ClInclude Include="..\..\src\renderer\renderer.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+    <ClInclude Include="..\..\src\viewport\viewport.h">
+      <Elf3DContract>true</Elf3DContract>
+    </ClInclude>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_model$(Elf3DSuffix).lib">
+      <Part>Engine</Part>
+      <Producer>elf3d_model</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_mikktspace$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_mikktspace</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_glad$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_glad</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_zlib$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_zlib</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_png$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_png</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_jpeg$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_jpeg</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_cgltf$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>elf3d_third_party_cgltf</Producer>
+    </Elf3DPrerequisite>
+  </ItemGroup>
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

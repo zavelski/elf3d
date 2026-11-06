@@ -1,9 +1,7 @@
 /out/
-/win/
 /build/
 /.local/
 /.vs/
-/CMakeUserPresets.json
 /imgui.ini
 /.idea/
 CMakeCache.txt
@@ -27,3 +25,7 @@ CMakeFiles/
 *.tar.gz
 *.user
 *.suo
+
+/x64/
+/win/.vs/
+**/.vs/

@@ -14,7 +14,7 @@ runtime assets retain their own licenses and notices.
 | zlib | 1.3.1 | zlib | `third_party/zlib/LICENSE` |
 | libpng | 1.6.58 | PNG Reference Library License 2.0 | `third_party/png/LICENSE` |
 | IJG libjpeg | 10 | IJG license | `third_party/jpeg/README` |
-| Droid Sans | Android Open Source Project revision `dba35c0` | Apache 2.0 | `apps/viewer/assets/font/DroidSans-LICENSE-APACHE-2.0.txt` |
+| Droid Sans | Android Open Source Project revision `dba35c0` | Apache 2.0 | `src/viewer/assets/font/DroidSans-LICENSE-APACHE-2.0.txt` |
 | Madame Walker Theatre README screenshot subject | IUPUI University Library | CC BY 4.0 | `docs/assets/readme/ATTRIBUTION.md` |
 
 The corresponding source and notices are included in the repository and in the

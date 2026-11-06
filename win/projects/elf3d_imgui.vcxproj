@@ -1,0 +1,73 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{0D87B3B9-9835-399C-8FE9-E2254FC135B0}</ProjectGuid>
+    <ProjectName>elf3d_imgui</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Viewer</Elf3DPart>
+    <Elf3DModelTarget>false</Elf3DModelTarget>
+    <Elf3DThirdParty>false</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_imgui$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;$(Elf3DRoot)src\imgui;$(Elf3DRoot)src\engine;$(Elf3DRoot)third_party\glfw\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "$(Elf3DRoot)third_party/imgui" /external:I "$(Elf3DRoot)third_party/imgui/backends"</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\imgui\context.cpp">
+      <ObjectFileName>$(IntDir)src_imgui_context.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\imgui\texture.cpp">
+      <ObjectFileName>$(IntDir)src_imgui_texture.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\include\elf3d\imgui\context.h" />
+    <ClInclude Include="..\..\include\elf3d\imgui\texture.h" />
+    <ClInclude Include="..\..\src\imgui\context_owner.h" />
+    <ClInclude Include="..\..\src\imgui\viewport_texture.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d$(Elf3DSuffix).lib">
+      <Part>Engine</Part>
+      <Producer>elf3d</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)elf3d_third_party_imgui$(Elf3DSuffix).lib">
+      <Part>ImGui</Part>
+      <Producer>elf3d_third_party_imgui</Producer>
+    </Elf3DPrerequisite>
+    <Elf3DPrerequisite Include="$(Elf3DProductRoot)glfw3$(Elf3DSuffix).lib">
+      <Part>Dependencies</Part>
+      <Producer>glfw</Producer>
+    </Elf3DPrerequisite>
+  </ItemGroup>
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

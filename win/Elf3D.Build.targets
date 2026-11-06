@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Link Include="@(Elf3DLibrary)" />
+  </ItemGroup>
+  <Target Name="Elf3DValidateEnvironment" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(Platform)'!='x64' or '$(PlatformToolset)'!='v145' or '$(VisualStudioVersion)'!='18.0'" Text="Elf3D requires Visual Studio 2026 / v145 / x64." />
+    <Error Condition="'$(Configuration)'!='Debug' and '$(Configuration)'!='Release'" Text="Elf3D supports Debug and Release only." />
+    <MakeDir Directories="$(Elf3DSymbolRoot);$(Elf3DWorkRoot)run;$(Elf3DWorkRoot)state\$(Configuration)" />
+  </Target>
+  <Target Name="Elf3DPrepareVersion" BeforeTargets="ResourceCompile" Condition="'$(Elf3DOutputKind)'=='Product' and ('$(ConfigurationType)'=='DynamicLibrary' or '$(ConfigurationType)'=='Application')">
+    <PropertyGroup>
+      <_Elf3DVersionMajor>$([System.Version]::Parse('$(Elf3DVersion)').Major)</_Elf3DVersionMajor>
+      <_Elf3DVersionMinor>$([System.Version]::Parse('$(Elf3DVersion)').Minor)</_Elf3DVersionMinor>
+      <_Elf3DVersionPatch>$([System.Version]::Parse('$(Elf3DVersion)').Build)</_Elf3DVersionPatch>
+    </PropertyGroup>
+    <ItemGroup>
+      <_Elf3DVersionHeader Include="#define ELF3D_FILE_VERSION $(_Elf3DVersionMajor),$(_Elf3DVersionMinor),$(_Elf3DVersionPatch),0" />
+      <_Elf3DVersionHeader Include="#define ELF3D_VERSION_STRING &quot;$(Elf3DVersion)&quot;" />
+      <_Elf3DVersionHeader Include="#define ELF3D_BINARY_NAME &quot;$(TargetName)$(TargetExt)&quot;" />
+      <_Elf3DVersionHeader Include="#define ELF3D_VERSION_DEBUG 1" Condition="'$(Configuration)'=='Debug'" />
+      <_Elf3DVersionHeader Include="#define ELF3D_VERSION_DLL 1" Condition="'$(ConfigurationType)'=='DynamicLibrary'" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntDir)elf3d_version.h" Lines="@(_Elf3DVersionHeader)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <Target Name="Elf3DCheckPrerequisites" BeforeTargets="ClCompile;Link;Lib" DependsOnTargets="ResolveProjectReferences">
+    <Error Condition="'%(Elf3DPrerequisite.Identity)'!='' and !Exists('%(Elf3DPrerequisite.Identity)')" Text="Missing %(Elf3DPrerequisite.Identity). Build Elf3D-%(Elf3DPrerequisite.Part).slnx for $(Configuration)|x64 first." />
+    <Error Condition="'%(Elf3DPrerequisite.Producer)'!='' and !Exists('$(Elf3DWorkRoot)state\$(Configuration)\%(Elf3DPrerequisite.Producer).txt')" Text="Producer metadata is missing for %(Elf3DPrerequisite.Identity). Rebuild Elf3D-%(Elf3DPrerequisite.Part).slnx for $(Configuration)|x64." />
+    <ReadLinesFromFile File="$(Elf3DWorkRoot)state\$(Configuration)\%(Elf3DPrerequisite.Producer).txt" Condition="'%(Elf3DPrerequisite.Producer)'!=''">
+      <Output TaskParameter="Lines" ItemName="_Elf3DProducerStamp" />
+    </ReadLinesFromFile>
+    <Error Condition="'%(_Elf3DProducerStamp.Identity)'!='' and '%(_Elf3DProducerStamp.Identity)'!='$(VCToolsVersion)' and '%(_Elf3DProducerStamp.Identity)'!='$(Elf3DVersion)' and '%(_Elf3DProducerStamp.Identity)'!='$(Platform)' and '%(_Elf3DProducerStamp.Identity)'!='$(Elf3DRoot)'" Text="Incompatible producer compiler/version/source: %(_Elf3DProducerStamp.Identity). Rebuild matching producer solutions before this component." />
+  </Target>
+  <Target Name="Elf3DFinishOutputs" AfterTargets="Build">
+    <Copy Condition="'$(ConfigurationType)'=='DynamicLibrary'" SourceFiles="$(IntDir)$(TargetName).lib" DestinationFiles="$(OutDir)$(TargetName).lib" SkipUnchangedFiles="true" />
+    <ItemGroup Condition="'$(MSBuildProjectName)'=='elf3d_viewer'">
+      <Elf3DAsset Include="$(Elf3DRoot)src\viewer\assets\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(Elf3DAsset)" DestinationFiles="@(Elf3DAsset->'$(Elf3DProductRoot)assets\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(Elf3DAsset)'!=''" />
+    <WriteLinesToFile File="$(Elf3DWorkRoot)state\$(Configuration)\$(MSBuildProjectName).txt" Lines="$(VCToolsVersion);$(Elf3DVersion);$(Platform);$(Elf3DRoot)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <Target Name="Elf3DCleanPublishedOutputs" AfterTargets="Clean">
+    <Delete Condition="'$(ConfigurationType)'=='DynamicLibrary'" Files="$(OutDir)$(TargetName).lib" />
+    <Delete Files="$(Elf3DWorkRoot)state\$(Configuration)\$(MSBuildProjectName).txt" />
+  </Target>
+</Project>

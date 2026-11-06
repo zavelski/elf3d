@@ -1,0 +1,186 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{5144F451-926F-3E48-8FC7-E3474B94197B}</ProjectGuid>
+    <ProjectName>elf3d_third_party_jpeg</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Dependencies</Elf3DPart>
+    <Elf3DModelTarget>true</Elf3DModelTarget>
+    <Elf3DThirdParty>true</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>elf3d_third_party_jpeg$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "$(Elf3DRoot)third_party/jpeg"</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\third_party\jpeg\jaricom.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jaricom.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcapimin.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcapimin.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcapistd.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcapistd.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcarith.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcarith.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jccoefct.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jccoefct.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jccolor.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jccolor.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcdctmgr.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcdctmgr.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jchuff.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jchuff.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcinit.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcinit.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcmainct.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcmainct.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcmarker.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcmarker.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcmaster.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcmaster.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcomapi.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcomapi.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcparam.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcparam.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcprepct.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcprepct.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jcsample.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jcsample.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jctrans.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jctrans.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdapimin.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdapimin.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdapistd.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdapistd.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdarith.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdarith.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdatadst.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdatadst.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdatasrc.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdatasrc.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdcoefct.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdcoefct.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdcolor.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdcolor.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jddctmgr.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jddctmgr.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdhuff.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdhuff.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdinput.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdinput.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdmainct.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdmainct.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdmarker.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdmarker.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdmaster.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdmaster.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdmerge.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdmerge.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdpostct.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdpostct.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdsample.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdsample.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jdtrans.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jdtrans.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jerror.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jerror.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jfdctflt.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jfdctflt.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jfdctfst.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jfdctfst.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jfdctint.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jfdctint.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jidctflt.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jidctflt.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jidctfst.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jidctfst.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jidctint.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jidctint.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jmemmgr.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jmemmgr.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jmemnobs.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jmemnobs.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jquant1.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jquant1.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jquant2.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jquant2.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\jpeg\jutils.c">
+      <ObjectFileName>$(IntDir)third_party_jpeg_jutils.obj</ObjectFileName>
+    </ClCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup />
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

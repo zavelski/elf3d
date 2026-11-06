@@ -4,9 +4,11 @@
 #include <elf3d/assets.h>
 #include <elf3d/core/api.h>
 #include <elf3d/core/result.h>
-#include <elf3d/model_types.h>
+#include <elf3d/model.h>
+#include <elf3d/scene_load.h>
 #include <elf3d/surface_anchor.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -21,6 +23,7 @@ class Access;
 }
 
 class Engine;
+class Scene;
 struct PickHit;
 
 struct SceneStatistics {
@@ -58,6 +61,15 @@ struct EntityInfo {
     bool operator==(const EntityInfo&) const = default;
 };
 
+// One canonical Document primitive instantiated by a runtime model entity.
+// All material groups originating from that primitive share this identity.
+struct PrimitiveInstance {
+    EntityId entity;
+    PrimitiveId primitive;
+
+    bool operator==(const PrimitiveInstance&) const = default;
+};
+
 struct SceneHierarchyItem {
     EntityId entity;
     std::optional<EntityId> parent;
@@ -91,6 +103,81 @@ struct SceneHierarchyStatistics {
 #pragma warning(push)
 #pragma warning(disable : 4251)
 #endif
+// Exclusive CPU-only payload of a retired Scene. Contains no Engine, renderer,
+// graphics resource or live Scene owner. It may be moved to a CPU worker and
+// destroyed there while the producing Elf3D/Model modules remain loaded.
+class ELF3D_API SceneCpuRetirement final {
+  public:
+    SceneCpuRetirement() noexcept;
+    ~SceneCpuRetirement() noexcept;
+    SceneCpuRetirement(const SceneCpuRetirement&) = delete;
+    SceneCpuRetirement& operator=(const SceneCpuRetirement&) = delete;
+    SceneCpuRetirement(SceneCpuRetirement&&) noexcept;
+    SceneCpuRetirement& operator=(SceneCpuRetirement&&) noexcept;
+    [[nodiscard]] bool empty() const noexcept;
+    [[nodiscard]] bool has_document() const noexcept;
+    // Optional synchronous recovery of the canonical owner; releases all other
+    // retired CPU state on the calling thread. Error leaves this owner intact.
+    [[nodiscard]] Result<Document> take_document() noexcept;
+
+  private:
+    friend class Scene;
+    class Impl;
+    explicit SceneCpuRetirement(std::unique_ptr<Impl> impl) noexcept;
+    std::unique_ptr<Impl> impl_;
+};
+
+struct ScenePreparationOptions {
+    // Allocate headroom on the CPU preparation lane for application runtime
+    // entities, such as a view camera. No canonical Document records are added.
+    std::size_t additional_runtime_entities = 0;
+};
+
+// Exclusive CPU preparation with a reserved future Scene identity. Contains no
+// live Scene, Engine observer, release ticket or graphics object. Reserve on the
+// Engine thread, move to an application CPU lane, prepare there, then transfer
+// back for installation. All operations require exclusive access to this owner.
+class ELF3D_API PreparedSceneDocument final {
+  public:
+    PreparedSceneDocument() noexcept;
+    ~PreparedSceneDocument() noexcept;
+    PreparedSceneDocument(const PreparedSceneDocument&) = delete;
+    PreparedSceneDocument& operator=(const PreparedSceneDocument&) = delete;
+    PreparedSceneDocument(PreparedSceneDocument&&) noexcept;
+    PreparedSceneDocument& operator=(PreparedSceneDocument&&) noexcept;
+    [[nodiscard]] bool empty() const noexcept;
+    [[nodiscard]] bool ready() const noexcept;
+    // Runs validation and all Document-to-runtime CPU derivation on the calling
+    // thread. Success adopts the sole Document; an error preserves its owner,
+    // payloads and IDs. A successful preparation cannot be overwritten.
+    [[nodiscard]] Result<void> prepare(Document&& document, DocumentSceneId selected_scene,
+                                       const ScenePreparationOptions& options = {}) noexcept;
+    // Reads/parses/decodes and prepares on the calling CPU thread. A failure
+    // leaves the reservation unused; no partial Document is published. Reports
+    // retain the same supported-data diagnostics as Engine::load_scene.
+    [[nodiscard]] Result<SceneLoadReport>
+    load(std::string_view path_utf8, const ModelLoadOptions& options = {},
+         const ScenePreparationOptions& preparation = {}) noexcept;
+    // Operation-scoped observation on this owner's current thread only. The
+    // view expires on recovery, installation or destruction, not on a move.
+    [[nodiscard]] std::optional<DocumentView> document() const noexcept;
+    [[nodiscard]] SceneStatistics statistics() const noexcept;
+    [[nodiscard]] std::optional<Bounds3> world_bounds() const noexcept;
+    // Recovers the exact canonical owner and consumes this preparation. Derived
+    // CPU data is released on the calling thread. Error preserves this owner.
+    [[nodiscard]] Result<Document> take_document() noexcept;
+
+  private:
+    friend class Engine;
+    friend class Scene;
+    class Impl;
+    explicit PreparedSceneDocument(std::unique_ptr<Impl> impl) noexcept;
+    [[nodiscard]] static Result<PreparedSceneDocument> reserve(std::uint64_t engine_token,
+                                                               std::uint64_t scene_value) noexcept;
+    [[nodiscard]] bool belongs_to_engine(std::uint64_t engine_token) const noexcept;
+    std::unique_ptr<Impl> impl_;
+};
+
 class ELF3D_API SceneHierarchySnapshot final {
   public:
     SceneHierarchySnapshot() noexcept;
@@ -101,6 +188,15 @@ class ELF3D_API SceneHierarchySnapshot final {
     SceneHierarchySnapshot(SceneHierarchySnapshot&&) noexcept;
     SceneHierarchySnapshot& operator=(SceneHierarchySnapshot&&) noexcept;
 
+    // Captures metadata on the Scene-owning thread, with no retained Scene
+    // borrow or geometry/image payload copy. Creation reserves metadata only.
+    [[nodiscard]] static Result<SceneHierarchySnapshot> create(const Scene& source) noexcept;
+    // One unit advances a structural action or copies at most 1024 name bytes.
+    // Changing hierarchy or visibility requires a fresh capture. Camera motion
+    // does not invalidate capture. Results become readable only when ready.
+    [[nodiscard]] Result<bool> advance(const Scene& source, std::size_t work_units = 256) noexcept;
+    [[nodiscard]] bool ready() const noexcept;
+    [[nodiscard]] bool matches_scene(const Scene& source) const noexcept;
     [[nodiscard]] std::size_t size() const noexcept;
     [[nodiscard]] Result<SceneHierarchyItem> item_at(std::size_t index) const noexcept;
     [[nodiscard]] Result<std::string_view> name_at(std::size_t index) const noexcept;
@@ -158,6 +254,19 @@ class ELF3D_API Scene final {
     [[nodiscard]] Result<void> set_entity_name(EntityId entity, std::string_view name) noexcept;
     [[nodiscard]] Result<std::string_view> entity_name(EntityId entity) const noexcept;
     [[nodiscard]] Result<EntityInfo> entity_info(EntityId entity) const noexcept;
+    // Authored identity is distinct from runtime entities. A valid inactive or
+    // detached Document node has no runtime entity; runtime-only entities have
+    // no Document node. Foreign/stale identifiers fail explicitly.
+    [[nodiscard]] Result<std::optional<EntityId>>
+    entity_for_document_node(NodeId node) const noexcept;
+    [[nodiscard]] Result<std::optional<NodeId>> document_node(EntityId entity) const noexcept;
+    // Runtime material grouping may split one canonical primitive. The index is
+    // a runtime model binding index, never a glTF primitive table index.
+    [[nodiscard]] Result<std::optional<PrimitiveId>>
+    document_primitive(EntityId entity, std::uint32_t runtime_primitive_index) const noexcept;
+    // Also validates the hit's runtime mesh binding before resolving provenance.
+    [[nodiscard]] Result<std::optional<PrimitiveId>>
+    document_primitive(const PickHit& hit) const noexcept;
     [[nodiscard]] Result<SceneHierarchySnapshot> hierarchy_snapshot() const noexcept;
     [[nodiscard]] SceneHierarchyStatistics hierarchy_statistics() const noexcept;
     [[nodiscard]] std::uint64_t hierarchy_revision() const noexcept;
@@ -208,8 +317,26 @@ class ELF3D_API Scene final {
     [[nodiscard]] std::optional<Bounds3> world_bounds() const noexcept;
     [[nodiscard]] std::optional<Bounds3> visible_bounds() const noexcept;
     [[nodiscard]] SceneStatistics statistics() const noexcept;
-    // Exports the canonical document retained by a loaded scene. Scene-created
+    // Read-only canonical data; absent for procedural or retired Scenes. The
+    // borrowed view and its children expire on take_document() or destruction.
+    // Runtime entity/asset edits are not written back to this Document.
+    [[nodiscard]] std::optional<DocumentView> document() const noexcept;
+    // Transfers canonical ownership without copying and retires this Scene,
+    // releasing its GPU/picking caches. All Scene IDs/handles/views are invalid
+    // afterward; Document IDs survive. Error leaves the Scene unchanged.
+    // Requires the creating Engine/context to be live on the owning thread.
+    [[nodiscard]] Result<Document> take_document() noexcept;
+    // On the framework/context thread, releases GPU/picking bindings and moves
+    // all canonical/derived CPU storage without cloning payloads. This Scene
+    // becomes retired; all its IDs/handles/views expire before return. The
+    // returned owner has no context/thread affinity for CPU-only destruction.
+    // Call only after the current frame's Scene observers have expired.
+    // An error leaves the Scene unchanged. Graphics release is currently
+    // synchronous.
+    [[nodiscard]] Result<SceneCpuRetirement> retire_cpu_state() noexcept;
+    // Exports the canonical document retained by a loaded/in-memory scene. Scene-created
     // compatibility assets and runtime-only visibility/tool state are not exported.
+    // Use save_document with document() for the complete ModelWriteReport.
     [[nodiscard]] Result<void> export_loaded_document(std::string_view path_utf8) const noexcept;
 
     explicit Scene(ConstructionKey, std::unique_ptr<Impl> impl) noexcept;
@@ -238,6 +365,8 @@ class ELF3D_API Scene final {
     [[nodiscard]] static Result<std::unique_ptr<Scene>>
     create(std::uint64_t engine_token, std::uint64_t scene_value,
            ReleaseContext release_context) noexcept;
+    [[nodiscard]] static Result<std::unique_ptr<Scene>>
+    create(PreparedSceneDocument&& prepared, ReleaseContext release_context) noexcept;
 
     std::unique_ptr<Impl> impl_;
 };

@@ -1,3 +1,4 @@
+#include "service_benchmark.h"
 #include <elf3d/app/application.h>
 #include <elf3d/elf3d.h>
 
@@ -675,6 +676,8 @@ class BenchmarkApplication final : public elf3d::Application {
 
 int main(int count, char** values)
 {
+    if (count > 1 && std::string_view{values[1]} == "--service")
+        return elf3d::tools::run_service_benchmark(count, values);
     const std::optional<Options> options = parse_options(count, values);
     if (!options.has_value()) {
         print_usage();

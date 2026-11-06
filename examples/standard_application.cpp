@@ -33,6 +33,15 @@ class MinimalApplication final : public elf3d::Application {
         scene_.reset();
     }
 
+    [[nodiscard]] elf3d::Result<bool>
+    close_requested(elf3d::ApplicationUpdateContext&) noexcept override
+    {
+        // This read-only example can close immediately (also the default).
+        // An editor returns false while showing an unsaved-work dialog, then
+        // calls request_exit() from update after the user approves shutdown.
+        return true;
+    }
+
   private:
     std::unique_ptr<elf3d::Scene> scene_;
 };

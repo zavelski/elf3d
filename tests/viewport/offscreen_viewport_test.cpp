@@ -1,0 +1,576 @@
+#include <elf3d/assets.h>
+#include <elf3d/clipping.h>
+#include <elf3d/core/result.h>
+#include <elf3d/graphics.h>
+#include <elf3d/navigation.h>
+#include <elf3d/picking.h>
+#include <elf3d/projection.h>
+#include <elf3d/scene.h>
+#include <elf3d/selection.h>
+#include <elf3d/surface_anchor.h>
+#include <elf3d/viewport.h>
+
+#include <array>
+#include <assets/assets.h>
+#include <cmath>
+#include <cstdint>
+#include <graphics/graphics.h>
+#include <limits>
+#include <memory>
+#include <optional>
+#include <picking/picking.h>
+#include <renderer/renderer.h>
+#include <scene/scene.h>
+#include <utility>
+#include <vector>
+#include <viewport/viewport.h>
+
+#include "../renderer/studio_environment_test_source.h"
+#include "viewport_scenario_support.h"
+
+namespace elf3d::viewport::tests::scenario {
+
+using elf3d::viewport::tests::FakeDevice;
+using elf3d::viewport::tests::FakeDeviceState;
+using elf3d::viewport::tests::FakePickingTarget;
+
+[[nodiscard]] int prepare_viewport_context(ViewportContext& context)
+{
+    auto owned_device = std::make_unique<FakeDevice>();
+    auto renderer = elf3d::renderer::Renderer::create(
+        std::move(owned_device), 1, elf3d::renderer::tests::make_test_studio_environment_source());
+    if (!renderer) {
+        return 1;
+    }
+    context.renderer = std::move(renderer).value();
+
+    const auto camera =
+        context.scene.create_perspective_camera(elf3d::PerspectiveCameraDescription{});
+    const std::array<elf3d::VertexPositionNormal, 3> vertices{{
+        {{-0.5F, -0.5F, -2.0F}, {0.0F, 0.0F, 1.0F}},
+        {{0.5F, -0.5F, -2.0F}, {0.0F, 0.0F, 1.0F}},
+        {{0.0F, 0.5F, -2.0F}, {0.0F, 0.0F, 1.0F}},
+    }};
+    const std::array<std::uint32_t, 3> indices{{0, 1, 2}};
+    const auto mesh = context.scene.create_mesh({vertices, indices});
+    const auto material = context.scene.create_material({});
+    if (!camera) {
+        return 2;
+    }
+    if (!mesh || !material) {
+        return 21;
+    }
+
+    const auto model = context.scene.create_model(mesh.value(), material.value());
+    if (!model) {
+        return 21;
+    }
+    context.camera = camera.value();
+    context.model = model.value();
+
+    auto viewport =
+        elf3d::viewport::OffscreenViewport::create(context.renderer->device(), elf3d::Extent2D{});
+    if (!viewport) {
+        return 3;
+    }
+    context.viewport = std::move(viewport).value();
+    return 0;
+}
+
+[[nodiscard]] bool has_backface_fallback(ViewportContext& context, bool visible)
+{
+    const elf3d::viewport::ViewportPickRequest request{context.camera, {320, 180}, {}};
+    const auto hit =
+        context.viewport->pick(*context.renderer, context.picking_service, context.scene, request);
+    const auto statistics = context.viewport->picking_statistics(context.picking_service);
+    return hit && hit.value().has_value() == visible &&
+           context.device_state().latest_picking_double_sided == visible &&
+           statistics.latest_cpu_fallbacks == 1;
+}
+[[nodiscard]] int verify_culling_fallback()
+{
+    ViewportContext context;
+    if (const int prepared = prepare_viewport_context(context); prepared != 0)
+        return prepared;
+    elf3d::Float4x4 camera;
+    camera.elements[0] = -1;
+    camera.elements[10] = -1;
+    camera.elements[14] = -4;
+    if (!context.viewport->resize({640, 360}) ||
+        !context.scene.set_local_matrix(context.camera, camera))
+        return 890;
+    context.device_state().picking_read_failure = true;
+    if (!has_backface_fallback(context, false))
+        return 891;
+    context.viewport->set_backface_culling_enabled(false);
+    if (!has_backface_fallback(context, true))
+        return 892;
+    return 0;
+}
+
+[[nodiscard]] bool has_initial_picking_targets(const FakeDeviceState& state)
+{
+    return state.picking_targets.size() == 2 &&
+           state.picking_targets[0].front().extent() == elf3d::Extent2D{320, 180} &&
+           state.picking_targets[1].front().extent() == elf3d::Extent2D{256, 144} &&
+           state.picking_targets[0].front().resize_count == 1 &&
+           state.picking_targets[1].front().resize_count == 1;
+}
+
+[[nodiscard]] int verify_empty_and_resize(ViewportContext& context)
+{
+    if (context.viewport->framebuffer_valid() || context.viewport->color_texture().is_valid()) {
+        return 4;
+    }
+    if (!context.viewport->render(*context.renderer, context.scene, context.camera)) {
+        return 5;
+    }
+    if (!context.viewport->resize({640, 360}) || !context.viewport->resize({640, 360}) ||
+        !context.viewport->framebuffer_valid() ||
+        context.viewport->extent() != elf3d::Extent2D{640, 360}) {
+        return 6;
+    }
+    if (!has_initial_picking_targets(context.device_state())) {
+        return 61;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_viewport_settings(ViewportContext& context)
+{
+    const std::uint64_t initial_revision = context.viewport->render_revision();
+    context.viewport->set_clear_color({-1.0F, 2.0F, std::numeric_limits<float>::quiet_NaN(),
+                                       std::numeric_limits<float>::infinity()});
+    const elf3d::Color4 expected{0.0F, 1.0F, 0.0F, 1.0F};
+    if (context.viewport->clear_color() != expected ||
+        !context.viewport->render(*context.renderer, context.scene, context.camera)) {
+        return 7;
+    }
+    elf3d::BasicLighting lighting;
+    lighting.direction = {0.0F, 3.0F, 4.0F};
+    lighting.ambient_intensity = 5.0F;
+    lighting.diffuse_intensity = 20.0F;
+    context.viewport->set_basic_lighting(lighting);
+    const elf3d::BasicLighting sanitized = context.viewport->basic_lighting();
+    if (sanitized.direction != elf3d::Float3{0.0F, 0.6F, 0.8F} ||
+        sanitized.ambient_intensity != 2.0F || sanitized.diffuse_intensity != 10.0F) {
+        return 8;
+    }
+    context.viewport->set_render_shading_mode(elf3d::RenderShadingMode::unlit);
+    if (context.viewport->render_shading_mode() != elf3d::RenderShadingMode::unlit ||
+        context.viewport->render_revision() <= initial_revision) {
+        return 81;
+    }
+    context.viewport->set_render_shading_mode(elf3d::RenderShadingMode::standard);
+    return 0;
+}
+
+[[nodiscard]] int verify_environment_settings(ViewportContext& context)
+{
+    const std::uint64_t environment_revision = context.viewport->render_revision();
+    elf3d::EnvironmentLighting environment;
+    environment.intensity = 20.0F;
+    environment.rotation_radians = 9.42477796077F;
+    context.viewport->set_environment_lighting(environment);
+    const elf3d::EnvironmentLighting sanitized_environment =
+        context.viewport->environment_lighting();
+    if (sanitized_environment.intensity != 8.0F ||
+        !nearly_equal(std::abs(sanitized_environment.rotation_radians), 3.14159265359F) ||
+        context.viewport->render_revision() != environment_revision + 1) {
+        return 82;
+    }
+    context.viewport->set_environment_lighting(environment);
+    if (context.viewport->render_revision() != environment_revision + 1) {
+        return 83;
+    }
+    environment.intensity = std::numeric_limits<float>::quiet_NaN();
+    environment.rotation_radians = std::numeric_limits<float>::infinity();
+    context.viewport->set_environment_lighting(environment);
+    if (context.viewport->environment_lighting() != elf3d::EnvironmentLighting{}) {
+        return 84;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool has_sanitized_display(const ViewportContext& context,
+                                         std::uint64_t expected_revision)
+{
+    const elf3d::DisplayTransform display = context.viewport->display_transform();
+    return display.exposure_ev == 8.0F &&
+           display.tone_mapping == elf3d::ToneMappingMode::standard &&
+           context.viewport->render_revision() == expected_revision;
+}
+
+[[nodiscard]] bool has_independent_default_viewport()
+{
+    FakeDevice second_device;
+    auto second = elf3d::viewport::OffscreenViewport::create(second_device, elf3d::Extent2D{});
+    return second && second.value()->environment_lighting() == elf3d::EnvironmentLighting{} &&
+           second.value()->display_transform() == elf3d::DisplayTransform{} &&
+           second.value()->basic_lighting().ambient_intensity == 0.0F &&
+           second.value()->basic_lighting().diffuse_intensity == 2.0F;
+}
+
+[[nodiscard]] int verify_display_settings(ViewportContext& context)
+{
+    const std::uint64_t display_revision = context.viewport->render_revision();
+    elf3d::DisplayTransform display;
+    display.exposure_ev = 20.0F;
+    display.tone_mapping = static_cast<elf3d::ToneMappingMode>(255);
+    context.viewport->set_display_transform(display);
+    if (!has_sanitized_display(context, display_revision + 1)) {
+        return 85;
+    }
+    context.viewport->set_display_transform(display);
+    if (context.viewport->render_revision() != display_revision + 1) {
+        return 86;
+    }
+    display.exposure_ev = -20.0F;
+    display.tone_mapping = elf3d::ToneMappingMode::none;
+    context.viewport->set_display_transform(display);
+    if (context.viewport->display_transform().exposure_ev != -8.0F ||
+        context.device_state().render_target.empty() ||
+        context.device_state().render_target.front().display_transform !=
+            context.viewport->display_transform()) {
+        return 87;
+    }
+    if (!has_independent_default_viewport()) {
+        return 88;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool has_expected_selection(const ViewportContext& context)
+{
+    return context.viewport->has_selection() &&
+           context.viewport->selected_entity() == context.model;
+}
+
+[[nodiscard]] bool has_expected_pick_statistics(const elf3d::PickingStatistics& statistics)
+{
+    return statistics.latest_gpu_requests == 1 && statistics.latest_gpu_hits == 1 &&
+           statistics.latest_gpu_misses == 0 && statistics.latest_cpu_refinements == 1 &&
+           statistics.latest_cpu_fallbacks == 0 && statistics.latest_triangle_tests == 1;
+}
+
+[[nodiscard]] bool has_expected_scaled_pick_position(const FakeDeviceState& state)
+{
+    return nearly_equal(state.last_picking_read_position.x, 159.5F, 0.001F) &&
+           nearly_equal(state.last_picking_read_position.y, 89.5F, 0.001F);
+}
+
+[[nodiscard]] int verify_explicit_selection_command(ViewportContext& context)
+{
+    constexpr elf3d::Float2 pointer_position{319.5F, 179.5F};
+    context.device_state().picking_pixel = elf3d::graphics::PickingPixel{1U, 0U, 0U, 0.5F};
+    const elf3d::Result<std::optional<elf3d::PickHit>> selected =
+        context.viewport->select_at(*context.renderer, context.picking_service, context.scene,
+                                    context.camera, pointer_position);
+    if (!selected || !selected.value().has_value()) {
+        return 82;
+    }
+    if (!has_expected_selection(context)) {
+        return 82;
+    }
+
+    const elf3d::PickingStatistics statistics =
+        context.viewport->picking_statistics(context.picking_service);
+    if (!has_expected_pick_statistics(statistics)) {
+        return 824;
+    }
+    if (!has_expected_scaled_pick_position(context.device_state())) {
+        return 865;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool has_hidden_selection(ViewportContext& context, const elf3d::Result<void>& hidden)
+{
+    return hidden && context.viewport->has_selection() &&
+           !context.scene.entity_effective_visibility(context.model).value();
+}
+
+[[nodiscard]] int verify_hidden_surface_anchor(ViewportContext& context,
+                                               const elf3d::ResolvedSurfaceAnchor& resolved)
+{
+    if (!context.scene.set_entity_visible(context.model, false)) {
+        return 868;
+    }
+
+    const auto hidden = context.viewport->surface_anchor_visible(context.scene, resolved);
+    if (!hidden || hidden.value() || !context.scene.show_all_entities()) {
+        return 869;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_clipped_surface_anchor(ViewportContext& context,
+                                                const elf3d::ResolvedSurfaceAnchor& resolved)
+{
+    elf3d::SectionPlane excluding_plane;
+    excluding_plane.enabled = true;
+    excluding_plane.point = {1.0F, 0.0F, -2.0F};
+    excluding_plane.normal = {1.0F, 0.0F, 0.0F};
+    if (!context.viewport->set_section_plane(excluding_plane)) {
+        return 870;
+    }
+
+    const auto clipped = context.viewport->surface_anchor_visible(context.scene, resolved);
+    context.viewport->clear_section_plane();
+    if (!clipped || clipped.value()) {
+        return 871;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_surface_anchor_visibility(ViewportContext& context)
+{
+    const std::optional<elf3d::PickHit> hit = context.viewport->selection_hit();
+    if (!hit.has_value()) {
+        return 866;
+    }
+
+    const auto anchor = context.scene.create_surface_anchor(*hit);
+    const auto resolved = anchor ? context.scene.resolve_surface_anchor(anchor.value())
+                                 : elf3d::Result<elf3d::ResolvedSurfaceAnchor>{anchor.error()};
+    const auto initially_visible =
+        resolved ? context.viewport->surface_anchor_visible(context.scene, resolved.value())
+                 : elf3d::Result<bool>{resolved.error()};
+    if (!initially_visible || !initially_visible.value()) {
+        return 867;
+    }
+
+    const int hidden = verify_hidden_surface_anchor(context, resolved.value());
+    return hidden != 0 ? hidden : verify_clipped_surface_anchor(context, resolved.value());
+}
+
+[[nodiscard]] bool has_hidden_render(ViewportContext& context, const elf3d::Result<void>& render)
+{
+    return render && context.viewport->statistics().draw_calls == 0;
+}
+
+[[nodiscard]] bool has_shown_selection(ViewportContext& context, const elf3d::Result<void>& shown)
+{
+    return shown && context.scene.entity_effective_visibility(context.model).value();
+}
+
+[[nodiscard]] bool has_isolated_selection(ViewportContext& context,
+                                          const elf3d::Result<void>& isolated)
+{
+    return isolated && context.viewport->is_isolating() &&
+           context.viewport->isolated_entity() == context.model;
+}
+
+[[nodiscard]] int verify_visibility_commands(ViewportContext& context)
+{
+    const auto hidden = context.scene.set_entity_visible(context.model, false);
+    if (!has_hidden_selection(context, hidden)) {
+        return 821;
+    }
+
+    const auto hidden_render =
+        context.viewport->render(*context.renderer, context.scene, context.camera);
+    if (!has_hidden_render(context, hidden_render)) {
+        return 822;
+    }
+
+    const auto shown = context.scene.show_entity_and_ancestors(context.model);
+    if (!has_shown_selection(context, shown)) {
+        return 823;
+    }
+
+    const auto isolated = context.viewport->isolate_entity(context.scene, context.model);
+    if (!has_isolated_selection(context, isolated)) {
+        return 824;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool has_bounds(const elf3d::Result<std::optional<elf3d::Bounds3>>& bounds)
+{
+    return bounds && bounds.value().has_value();
+}
+
+[[nodiscard]] bool has_x_bounds(const elf3d::Result<std::optional<elf3d::Bounds3>>& bounds,
+                                float minimum, float maximum)
+{
+    return has_bounds(bounds) && nearly_equal(bounds.value()->minimum.x, minimum) &&
+           nearly_equal(bounds.value()->maximum.x, maximum);
+}
+
+[[nodiscard]] int verify_visible_bounds_and_plane(ViewportContext& context)
+{
+    if (!has_bounds(context.viewport->visible_bounds(context.scene))) {
+        return 825;
+    }
+    elf3d::SectionPlane plane;
+    plane.enabled = true;
+    plane.point = {0.0F, 0.0F, -2.0F};
+    plane.normal = {1.0F, 0.0F, 0.0F};
+    const std::uint64_t revision = context.viewport->clipping_snapshot().revision;
+    if (!context.viewport->set_section_plane(plane) ||
+        context.viewport->clipping_snapshot().revision != revision + 1U) {
+        return 827;
+    }
+    if (!has_x_bounds(context.viewport->visible_bounds(context.scene), 0.0F, 0.5F)) {
+        return 828;
+    }
+    if (!has_x_bounds(context.viewport->unclipped_visible_bounds(context.scene), -0.5F, 0.5F)) {
+        return 834;
+    }
+    return 0;
+}
+
+[[nodiscard]] bool
+has_independent_box_configuration(const elf3d::Result<std::uint32_t>& added_box,
+                                  const ViewportContext& first,
+                                  const elf3d::viewport::OffscreenViewport& second)
+{
+    return added_box && added_box.value() == 0 &&
+           first.viewport->clipping_snapshot().section_plane.enabled &&
+           first.viewport->clipping_snapshot().box_count == 0 &&
+           !second.clipping_snapshot().section_plane.enabled &&
+           second.clipping_snapshot().box_count == 1;
+}
+
+[[nodiscard]] bool isolation_is_independent(ViewportContext& context,
+                                            elf3d::viewport::OffscreenViewport& second)
+{
+    if (!context.viewport->is_isolating() || second.is_isolating() ||
+        !second.isolate_entity(context.scene, context.model)) {
+        return false;
+    }
+
+    second.clear_isolation();
+    return context.viewport->is_isolating() && !second.is_isolating();
+}
+
+[[nodiscard]] int verify_independent_clipping(ViewportContext& context)
+{
+    auto second_device = std::make_unique<FakeDevice>();
+    auto second_renderer = elf3d::renderer::Renderer::create(
+        std::move(second_device), 1, elf3d::renderer::tests::make_test_studio_environment_source());
+    if (!second_renderer) {
+        return 829;
+    }
+    auto second_viewport =
+        elf3d::viewport::OffscreenViewport::create(second_renderer.value()->device(), {640, 360});
+    if (!second_viewport) {
+        return 829;
+    }
+    if (!isolation_is_independent(context, *second_viewport.value())) {
+        return 835;
+    }
+    if (!has_x_bounds(second_viewport.value()->visible_bounds(context.scene), -0.5F, 0.5F)) {
+        return 830;
+    }
+
+    const elf3d::ClippingBox centered_box{{-0.25F, -0.25F, -2.25F}, {0.25F, 0.25F, -1.75F}, true};
+    const auto added_box = second_viewport.value()->add_clipping_box(centered_box);
+    if (!has_independent_box_configuration(added_box, context, *second_viewport.value())) {
+        return 831;
+    }
+    if (!has_x_bounds(second_viewport.value()->visible_bounds(context.scene), -0.25F, 0.25F)) {
+        return 832;
+    }
+    context.viewport->clear_clipping();
+    if (!has_x_bounds(context.viewport->visible_bounds(context.scene), -0.5F, 0.5F)) {
+        return 833;
+    }
+    context.viewport->clear_isolation();
+    if (context.viewport->is_isolating()) {
+        return 826;
+    }
+    return 0;
+}
+
+[[nodiscard]] elf3d::NavigationInput center_input()
+{
+    elf3d::NavigationInput input;
+    input.region_focused = true;
+    input.pointer_hovered = true;
+    input.pointer_position_pixels = {319.5F, 179.5F};
+    return input;
+}
+
+[[nodiscard]] int verify_drag_does_not_select(ViewportContext& context)
+{
+    context.viewport->clear_selection();
+    elf3d::NavigationInput input = center_input();
+    input.orbit_down = true;
+    if (!update_navigation(context, input)) {
+        return 83;
+    }
+    input.pointer_delta_pixels = {10.0F, 0.0F};
+    input.pointer_position_pixels = {329.5F, 179.5F};
+    if (!update_navigation(context, input)) {
+        return 84;
+    }
+    input.orbit_down = false;
+    input.pointer_delta_pixels = {};
+    if (!update_navigation(context, input) || context.viewport->has_selection()) {
+        return 85;
+    }
+    return 0;
+}
+
+[[nodiscard]] int verify_zero_width(ViewportContext& context)
+{
+    if (!context.viewport->resize({0, 360}) || context.viewport->framebuffer_valid() ||
+        context.viewport->color_texture().is_valid()) {
+        return 10;
+    }
+
+    const auto& targets = context.device_state().picking_targets;
+    if (targets.size() != 2 || targets[0].front().extent() != elf3d::Extent2D{0, 180} ||
+        targets[1].front().extent() != elf3d::Extent2D{} || targets[0].front().resize_count != 2 ||
+        targets[1].front().resize_count != 2) {
+        return 101;
+    }
+    return 0;
+}
+
+using ViewportStep = int (*)(ViewportContext&);
+
+[[nodiscard]] int run_viewport_steps(ViewportContext& context)
+{
+    constexpr std::array<ViewportStep, 15> steps{{
+        verify_empty_and_resize,
+        verify_viewport_settings,
+        verify_environment_settings,
+        verify_display_settings,
+        verify_dynamic_anchor_navigation,
+        verify_eye_orbit,
+        verify_disabled_focus_depth,
+        verify_explicit_examine_pivot,
+        verify_explicit_selection_command,
+        verify_surface_anchor_visibility,
+        verify_visibility_commands,
+        verify_visible_bounds_and_plane,
+        verify_independent_clipping,
+        verify_drag_does_not_select,
+        verify_zero_width,
+    }};
+    for (const ViewportStep step : steps) {
+        const int result = step(context);
+        if (result != 0) {
+            return result;
+        }
+    }
+    return 0;
+}
+
+} // namespace elf3d::viewport::tests::scenario
+
+int elf3d_viewport_lifetime_test()
+{
+    using namespace elf3d::viewport::tests::scenario;
+    if (const int culling = verify_culling_fallback(); culling != 0)
+        return culling;
+    ViewportContext context;
+    const int prepared = prepare_viewport_context(context);
+    if (prepared != 0) {
+        return prepared;
+    }
+    return run_viewport_steps(context);
+}

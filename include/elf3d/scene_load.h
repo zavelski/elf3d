@@ -46,6 +46,7 @@ enum class SceneLoadDiagnosticCode {
     skipped_unsupported_primitive,
     metadata_not_preserved,
     repaired_signed_buffer_layout,
+    ignored_vertex_attribute,
 };
 
 struct SceneLoadDiagnosticView {
@@ -77,6 +78,7 @@ class ELF3D_API SceneLoadReport final {
 
   private:
     friend class Engine;
+    friend class PreparedSceneDocument;
 
     class Impl;
     explicit SceneLoadReport(std::unique_ptr<Impl> impl) noexcept;

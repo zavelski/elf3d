@@ -31,27 +31,31 @@ installed EmEditor, Notepad, or Notepad++. Missing editors are shown disabled.
 | Area | Purpose |
 | --- | --- |
 | **3D View** | Scene display and pointer navigation |
-| **Scene Hierarchy** | Entity hierarchy, selection, and visibility |
+| **Scene Browser** | Authored objects, mesh resources, selection, and visibility |
 | **Model Information** | Scene statistics and load diagnostics |
-| **Selection** | Selected object and highlight settings |
+| **Properties** | Selected object/resource details and highlight settings |
 | **Rendering** | Background, studio lighting, display transform, and camera evidence |
 | **Measurement** | Distance tool, units, and overlay style |
-| **Clipping** | Section plane and clipping boxes |
 | **Navigation Settings** | Navigation sensitivity and camera state |
 | **Status Bar** | Active tool, viewport, and frame information |
 
-Use **View** to show or hide panels. **View > Reset Layout** restores the default
+Use **Window** to show or hide panels. **Window > Reset Layout** restores the default
 docking arrangement. The 3D viewport tab displays the loaded model filename,
 including its extension, and uses **3D View** when the scene is empty.
 
-## Performance Diagnostics
+Docking is saved separately beside the viewer preferences, with a versioned
+`.layout` file. Existing supported layouts keep their positions and docking when
+panel names migrate. A newer unsupported layout is preserved until explicit
+**Reset Layout**; ordinary preference changes do not replace it.
 
-The **Rendering** panel includes a diagnostic section with VSync, standard PBR
-or unlit shading, 100%, 50%, and 25% render scales, rolling average, median,
-p95, p99, maximum frame time, CPU/GPU phase timings, context details, resource
-and residency counters, and CSV capture. VSync, standard PBR, and 100% scale
-are the defaults. Idle 3D content reuses its last resolved texture while event
+## Rendering Controls
+
+The **Rendering** panel provides VSync, standard PBR or unlit shading, and
+100%, 50%, and 25% render scales. VSync, standard PBR, and 100% scale are
+the defaults. Idle 3D content reuses its last resolved texture while event
 processing, the interface, and window presentation continue normally.
+**Model Information** shows current geometry/material/image statistics and
+renderer resource counters.
 
 The viewport clear color starts at RGBA `(213, 227, 240, 255)`.
 
@@ -107,18 +111,41 @@ Activate selection with `S`, **Tools > Select**, or the Select toolbar button.
 
 | Input or command | Action |
 | --- | --- |
-| `Ctrl` + left click | Select visible geometry |
-| Hierarchy row click | Select an entity |
+| `Ctrl` + left click | Replace selection with visible geometry |
+| `Ctrl` + `Shift` + left click | Toggle visible geometry in the selection |
+| Browser row click | Replace selection with the authored object or resource |
+| `Ctrl` + browser row click | Toggle membership |
+| `Shift` + browser row click | Select a range in the current visible list |
+| **Select All** / **Clear Selection** | Select the current hierarchy / clear selection |
 | `Escape` | Clear selection |
 | `Shift` + left click | Hide visible geometry |
-| **Hide Selected** | Hide the selected entity |
-| **Show Selected** | Show the selected entity and required ancestors |
-| **Show All** | Restore scene visibility |
-| **Isolate Selected** | Display only the selected hierarchy branch |
+| **Hide Selected** | Hide all selected entities |
+| **Show Selected** | Show selected entities and required ancestors |
+| **Show All** | Restore scene visibility and exit isolation |
+| **Isolate Selected** | Display the union of selected hierarchy branches |
 | **Exit Isolation** | Return to normal scene visibility |
 
-Isolation is independent of persistent scene visibility. Use **Exit Isolation**
-after **Show All** when both states were active.
+**Objects** shows authored scenes, detached forests under **Outside Scenes**,
+and **Runtime Objects** such as the application camera. **Meshes** shows the
+retained Document mesh table and its primitives, including unused resources.
+The viewer retains its existing default import policy, so this tab covers the
+supported resources retained by that policy. A Scene without a Document keeps
+its runtime tree and explains why resource data is unavailable.
+
+Search keeps matching ancestors. Type filters, Expand/Collapse, keyboard
+navigation and explicit reveal between object/resource details are available.
+Names are compact, with ellipsis and complete tooltips; names never identify an
+object. Resource selection highlights its active primitive instances while
+remaining separate from object selection. Resource context actions explicitly
+frame, hide, show or isolate all active instances of the clicked row in the
+current view. Unused resources remain inspectable without spatial actions.
+Switching tabs preserves the semantic selection domain.
+
+Selection stores validated typed IDs. The primary active selected object receives
+the viewport highlight; the tree shows the entire selection. Isolation is
+independent of object visibility, and **Show All** also exits isolation and
+clears view-local primitive masks.
+Selection and view hiding do not remove geometry from **Save As** output.
 
 ## Measurement
 
@@ -133,28 +160,13 @@ Use `Escape` to cancel an incomplete measurement and `Delete` to clear the
 measurement. The panel provides automatic metric, meter, centimeter,
 millimeter, foot, and inch display modes plus overlay style controls.
 
-## Clipping
-
-Open the **Clipping** panel from the toolbar, **Tools**, or **View**.
-
-The section plane is defined by a point, a normal, and the retained side. Axis
-buttons align it to X, Y, or Z; **Center** places it at the center of visible
-content; **Flip Section Side** changes the retained half-space.
-
-Up to three enabled axis-aligned boxes can be edited. Content inside any
-enabled box is retained, then combined with the section-plane result. Use
-**Show helpers**, **Fit to Clipped Content**, **Clear Boxes**, and
-**Clear Clipping** as needed.
-
 ## Menus
 
-- **File**: Open, Save As, Reload, Close Scene, Exit.
-- **View**: panels, status bar, demo window, reset layout.
-- **Tools**: Select, Measure Distance, Clipping.
-- **Clipping**: section plane, flip, add box, helpers, fit, clear.
-- **Camera**: Fit, Reset, navigation enable, navigation settings.
-- **Selection**: clear, hide, show, isolate, show all, settings.
-- **Measurement**: cancel, clear, settings.
+- **File**: Open, Save, Save As, Reload, Close Scene, Exit.
+- **View**: Standard PBR, Unlit and camera/navigation controls.
+- **Window**: panels, status bar, layout reset, theme, UI scale and fonts.
+- **Tools**: Select, Measure Distance and measurement actions/settings.
+- **Selection**: select all, clear, hide, show, isolate, show all, settings.
 - **Help**: About Elf3D.
 
 Keyboard shortcuts are suspended while a modal dialog or text editor has input
@@ -166,3 +178,14 @@ area. **About Elf3D** shows the viewer version, supported model and graphics
 formats, platform, license, and expandable build details.
 The last folder of a successfully opened or saved model is remembered in the
 current user's application settings and restored on the next launch.
+
+Window > Theme switches between Light and Dark. UI Scale adjusts interface
+spacing and fonts together; Fonts > Text Size adjusts text independently. These
+settings are remembered without resetting your docking layout or changing the
+model. Light and 100% are the defaults. Repeated scale changes derive from the
+original style, rather than accumulating rounding changes.
+
+Backface Culling is a per-Viewport view override, available through the View
+menu and Rendering panel. It defaults to respecting authored material sidedness.
+Disabling it displays and picks both faces, including navigation focus depth,
+without editing materials or changing normal Save output.

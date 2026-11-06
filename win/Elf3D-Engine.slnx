@@ -1,0 +1,6 @@
+<Solution>
+  <Configurations><Platform Name="x64" /></Configurations>
+  <Project Path="projects/elf3d_model.vcxproj" Id="f151f146-f1ce-3db8-94f6-033ce27f8454" />
+  <Project Path="projects/elf3d_runtime.vcxproj" Id="3da2d2bb-7b21-567b-bbf4-184d01690607" />
+  <Project Path="projects/elf3d.vcxproj" Id="b3255ef8-4810-3949-972b-79be72972444" />
+</Solution>

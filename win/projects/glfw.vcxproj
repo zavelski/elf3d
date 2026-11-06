@@ -1,0 +1,122 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{1A65D4A4-3829-300F-8EA9-D1D77BFDD711}</ProjectGuid>
+    <ProjectName>glfw</ProjectName>
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Elf3DOutputKind>Product</Elf3DOutputKind>
+    <Elf3DPart>Dependencies</Elf3DPart>
+    <Elf3DModelTarget>false</Elf3DModelTarget>
+    <Elf3DThirdParty>true</Elf3DThirdParty>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\Elf3D.Build.props" />
+  <PropertyGroup>
+    <TargetName>glfw3$(Elf3DSuffix)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Elf3DRoot)include;$(Elf3DRoot)src;$(Elf3DRoot)third_party\glfw\include;$(Elf3DRoot)third_party\glfw\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_GLFW_WIN32;UNICODE;_UNICODE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\third_party\glfw\src\context.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_context.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\init.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_init.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\input.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_input.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\monitor.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_monitor.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\platform.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_platform.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\vulkan.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_vulkan.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\window.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_window.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\egl_context.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_egl_context.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\osmesa_context.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_osmesa_context.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\null_init.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_null_init.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\null_monitor.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_null_monitor.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\null_window.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_null_window.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\null_joystick.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_null_joystick.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\win32_module.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_win32_module.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\win32_time.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_win32_time.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\win32_thread.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_win32_thread.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\win32_init.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_win32_init.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\win32_joystick.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_win32_joystick.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\win32_monitor.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_win32_monitor.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\win32_window.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_win32_window.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\glfw\src\wgl_context.c">
+      <ObjectFileName>$(IntDir)third_party_glfw_src_wgl_context.obj</ObjectFileName>
+    </ClCompile>
+    <ClInclude Include="..\..\third_party\glfw\include\GLFW\glfw3.h" />
+    <ClInclude Include="..\..\third_party\glfw\include\GLFW\glfw3native.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\internal.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\platform.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\mappings.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\null_platform.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\null_joystick.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\win32_time.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\win32_thread.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\win32_platform.h" />
+    <ClInclude Include="..\..\third_party\glfw\src\win32_joystick.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup />
+  <Import Project="..\Elf3D.Build.targets" />
+</Project>

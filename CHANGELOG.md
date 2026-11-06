@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.13.0
+
+- Add explicit CPU Scene preparation and retirement owners. Applications can
+  prepare a Document on an exclusive CPU worker and install its completed
+  runtime data without copying canonical geometry or image payloads.
+- Add budgeted graphics preparation and deferred resource retirement, including
+  model geometry, textures, shader pipelines and the built-in environment.
+  Expose progress, resource accounting and retained failure diagnostics.
+- Increase shared defaults to 8 MiB vertex-packing portions, 32 MiB transfers
+  and a 20 ms service target. Group OpenGL setup, avoid redundant decoded-image
+  copies and reuse validation results for unchanged Documents.
+- Add revision-bound Document and Scene hierarchy snapshots and constant-sized
+  canonical index queries. Expand Viewer browsing with Objects and Meshes tabs,
+  resource details, search, filtering and explicit instance actions.
+- Add primitive-instance selection, highlighting, visibility, isolation and
+  framing. Apply view-local backface-culling settings consistently to rendering,
+  picking and navigation depth.
+- Add an explicitly driven streaming Model file writer with owned input
+  packets, progress, cancellation and transactional output cleanup. Preserve
+  current image pixels and reuse original encoded streams when they match.
+- Report completed frame presentation timestamps through the application
+  framework. Rebuild C++ consumers for the expanded public structures and API.
+
+## 0.12.1
+
+- Replace the project-owned CMake build with checked-in Visual Studio 2026/v145
+  x64 solutions and MSBuild projects. CMake, CTest and CPack are no longer
+  required for supported Windows builds.
+- Consolidate implementation under `src`, public headers under `include/elf3d`,
+  and test sources under `tests`, preserving public include paths and the 18
+  architectural component boundaries.
+- Keep Dependencies, Engine, ImGui, Viewer and Cmd independently buildable.
+  Engine uses Model and private Runtime archives plus the public facade DLL;
+  tests and developer tools have separate solutions.
+- Place production programs and libraries in `x64`, with a `D` suffix for Debug.
+  Keep test/tool binaries, objects, PCH and generated files under `out` and
+  retain current symbols separately.
+- Add native build/test/cleanup commands and the `win/Elf3D.props` consumer
+  integration sheet. Preserve CPU-only Model/Cmd builds and independent header,
+  ODR, graphics, external-consumer and architecture checks.
+- Build public release packages from audited source projections with compiler,
+  source-tree and file-hash provenance. Cleanup previews preserve production
+  outputs, current symbols, release archives, reference data and IDE settings.
+
+## 0.12.0
+
+- Add complete Document cloning and snapshots with fresh owner-scoped IDs.
+  Snapshots share immutable image bytes while retaining independent tables,
+  geometry and metadata; image replacement preserves other snapshots.
+- Transfer canonical Documents into runtime Scenes and extract them again
+  without copying canonical payloads. Failed creation restores the input owner;
+  extraction retires runtime state and keeps the CPU Document alive.
+- Support editor imports that retain supported unreferenced resources and
+  detached nodes, optionally accept empty geometry, and preserve authored child
+  order. Report unsupported vertex attributes explicitly.
+- Add verified metadata transfer for reconstructed Documents and an explicit
+  metadata-preservation policy for audited primitive replacement.
+- Distinguish IDs created by independently linked Model implementations and
+  support mixed static Model/runtime consumers without a global static macro.
+  Rebuild all C++ consumers for the changed API and ID layout.
+- Let applications defer a platform close request through `close_requested`
+  while keeping normal frame processing and approved shutdown behavior.
+
 ## 0.11.5
 
 - Render optical transmission independently of alpha coverage, with roughness
